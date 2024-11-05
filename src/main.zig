@@ -7,6 +7,7 @@ const Lexer = @import("lexer.zig").Lexer;
 const TokenKind = @import("lexer.zig").TokenKind;
 const Report = @import("reporter.zig").Report;
 const ReportLevel = Report.Level;
+const Reporter = @import("reporter.zig").Reporter;
 
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
@@ -93,12 +94,14 @@ fn repl(allocator: Allocator) !void {
         try input.append('\n');
 
         lexer.init(input.items);
+
         while (true) {
             const tk = lexer.next();
-            print("Token: {}\n", .{tk});
 
             if (tk.kind == .Eof) break;
+
             if (tk.kind == .Error) {
+                const reporter = Reporter.init(input.items);
                 const report = Report.new(
                     ReportLevel.Error,
                     "unterminated string",
@@ -106,7 +109,7 @@ fn repl(allocator: Allocator) !void {
                     tk.lexeme.len,
                     "close the opening one",
                 );
-                report.display(allocator, input.items) catch unreachable;
+                try reporter.report_all(&[1]Report{report});
             }
         }
     }

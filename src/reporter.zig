@@ -1,6 +1,9 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
+const Writer = std.fs.File.Writer;
+const WriteError = std.posix.WriteError;
 
 const BoxChar = enum {
     BottomLeft,
@@ -49,6 +52,59 @@ fn color(clr: Color) []const u8 {
 const err_msg = color(.Red) ++ "Error:" ++ color(.NoColor);
 const warning_msg = color(.Yellow) ++ "Warning:" ++ color(.NoColor);
 
+pub const Reporter = struct {
+    source: []const u8,
+    writer: WriterType,
+
+    pub const WriterType = union(enum) {
+        StdOut: std.fs.File.Writer,
+        Custom: WindowsReporter,
+
+        pub fn write(self: *const WriterType, bytes: []const u8) !usize {
+            return switch (self.*) {
+                inline else => |writer| writer.write(bytes),
+            };
+        }
+    };
+
+    pub fn init(source: []const u8) Reporter {
+        var writer: WriterType = undefined;
+
+        if (builtin.os.tag == .windows) {
+            writer = .{ .Custom = WindowsReporter.init() };
+        } else {
+            writer = .{ .StdOut = std.io.getStdOut().writer() };
+        }
+
+        return .{ .writer = writer, .source = source };
+    }
+
+    pub fn report_all(self: *const Reporter, reports: []const Report) !void {
+        for (reports) |report| {
+            try report.display(self.source, "stdin", &self.writer);
+        }
+    }
+};
+
+const WindowsReporter = struct {
+    prev_cp: c_uint,
+
+    const Self = @This();
+
+    pub fn init() Self {
+        return .{ .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
+    }
+
+    pub fn write(self: Self, bytes: []const u8) !usize {
+        const stdout = std.io.getStdOut().writer();
+
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+        const count = try stdout.write(bytes);
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
+        return count;
+    }
+};
+
 pub const Report = struct {
     msg: []const u8,
     start: usize,
@@ -82,12 +138,19 @@ pub const Report = struct {
         };
     }
 
-    pub fn display(self: *const Self, allocator: Allocator, source: []const u8) !void {
+    pub fn display(
+        self: *const Self,
+        source: []const u8,
+        file_name: []const u8,
+        writer: *const Reporter.WriterType,
+    ) !void {
         var current: usize = 0;
         var line_start: usize = 0;
         var line_count: usize = 0;
         var previous_line: ?[]const u8 = null;
 
+        // Looking for current line where it occured and buffers the previous one
+        // for context
         while (true) {
             if (source[current] == '\n') {
                 if (current >= self.start) break;
@@ -100,49 +163,72 @@ pub const Report = struct {
             current += 1;
         }
 
-        print("{s} {s}\n", .{ self.level.get_msg(), self.msg });
+        var buf: [1024]u8 = undefined;
+        // We consider the maximum line number being 99 999. The extra space
+        // is for space between line number and gutter
+        const buf2: [6]u8 = [_]u8{' '} ** 6;
 
+        // Gets line number digit count
+        var written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
+        const line_digit_count = written.len;
+        const left_padding = buf2[0 .. written.len + 1];
+
+        // Prints the error part
+        //  Error: <err-msg>
+        written = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ self.level.get_msg(), self.msg });
+        _ = try writer.write(written);
+
+        // Prints file name and location infos
+        //  ╭─[file_name.rz:1:5]
+        written = try std.fmt.bufPrint(
+            buf[0..],
+            "{s}{s}{s}[{s}.rz:{}:{}]\n",
+            .{ left_padding, box_char(.UpperLeft), box_char(.Horitzontal), file_name, line_count, line_start },
+        );
+        _ = try writer.write(written);
+
+        // Prints previous line number, separation and line itself
+        //  56 | var a = 3
         if (previous_line) |pl| {
-            print(" {} | {s}\n", .{ line_count - 1, pl });
+            try Report.print_line(line_count - 1, pl, line_digit_count, writer);
         }
 
-        print("{s} {} | {s}\n", .{ box_char(.UpperLeft), line_count, source[line_start..current] });
+        // Prints current line number, separation and line
+        //  57 | fn add(a, b c)
+        try Report.print_line(line_count, source[line_start..current], line_digit_count, writer);
 
-        const h_count = self.start - line_start;
-        const buf = try allocator.alloc(u8, h_count);
-        defer allocator.free(buf);
-        // @memset(buf, box_char(.Horitzontal));
+        // Underlines the problem
+        // Takes padding into account + separator + space
+        written = try std.fmt.bufPrint(buf[0..], "{s}{s} ", .{ left_padding, box_char(.Vertical) });
+        _ = try writer.write(written);
 
-        print("{s}{s}\n", .{ box_char(.LeftT), buf });
+        // We get the length of the error code and the half to underline it
+        const h_count = @max(self.start - line_start, 1);
+        const half = @divFloor(h_count, 2);
+
+        for (0..h_count) |i| {
+            if (i == half) {
+                _ = try writer.write(box_char(.UnderT));
+            } else {
+                _ = try writer.write(box_char(.Horitzontal));
+            }
+        }
+        _ = try writer.write("\n");
+    }
+
+    // Limitation of Zig, can only use comptime known strings for formatting...
+    fn print_line(line_nb: usize, line: []const u8, digit_count: usize, writer: *const Reporter.WriterType) !void {
+        var buf: [1024]u8 = undefined;
+
+        const written = switch (digit_count) {
+            1 => try std.fmt.bufPrint(&buf, "{:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            2 => try std.fmt.bufPrint(&buf, "{:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            3 => try std.fmt.bufPrint(&buf, "{:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            4 => try std.fmt.bufPrint(&buf, "{:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            5 => try std.fmt.bufPrint(&buf, "{:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            else => unreachable,
+        };
+
+        _ = try writer.write(written);
     }
 };
-
-// NOTE:
-// This works, using utf-8 representation. Adjust the allocated size with the
-// code points number and here we go
-// const std = @import("std");
-//
-// pub fn main() !void {
-//     const allocator = std.heap.page_allocator; // or your chosen allocator
-//     const line_start = 0; // Example value
-//     const self_start = 10; // Example value
-//     const h_count = self_start - line_start; // The size of the buffer
-//
-//     // Allocate the buffer
-//     const buf = try allocator.alloc(u8, h_count * 3);
-//     defer allocator.free(buf);
-//
-//     // Define the UTF-8 representation of the Unicode character "─"
-//     const char_to_fill: [3]u8 = [_]u8{ 0xE2, 0x94, 0x80 }; // UTF-8 for "─"
-//
-//     // Fill the buffer with the character
-//     for (buf, 0..) |*byte, index| {
-//         const char_index = index % 3; // Cycle through the character bytes
-//         byte.* = char_to_fill[char_index];
-//     }
-//
-//     // Optional: Print the buffer to verify it contains the desired character
-//     const stdout = std.io.getStdOut().writer();
-//     try stdout.writeAll(buf[0..h_count*3]); // Write the buffer to stdout
-//     try stdout.writeAll("\n"); // Write a newline for clarity
-// }
