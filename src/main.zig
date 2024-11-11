@@ -6,7 +6,6 @@ const clap = @import("clap");
 const Lexer = @import("lexer.zig").Lexer;
 const TokenKind = @import("lexer.zig").TokenKind;
 const Report = @import("reporter.zig").Report;
-const ReportLevel = Report.Level;
 const Reporter = @import("reporter.zig").Reporter;
 
 pub fn main() !void {
@@ -82,7 +81,7 @@ fn repl(allocator: Allocator) !void {
 
     var lexer = Lexer.new();
 
-    _ = try stdout.write("\t\tGlyph language REPL\n");
+    _ = try stdout.write("\t\tRover language REPL\n");
 
     while (true) {
         _ = try stdout.write("\n> ");
@@ -97,17 +96,17 @@ fn repl(allocator: Allocator) !void {
 
         while (true) {
             const tk = lexer.next();
+            print("tk: {any}\n", .{tk});
 
             if (tk.kind == .Eof) break;
 
             if (tk.kind == .Error) {
                 const reporter = Reporter.init(input.items);
-                const report = Report.new(
-                    ReportLevel.Error,
-                    "unterminated string",
+                const report = Report.err(
+                    .UnterminatedStr,
                     tk.start,
-                    tk.lexeme.len,
-                    "close the opening one",
+                    tk.start + 1,
+                    null,
                 );
                 try reporter.report_all(&[1]Report{report});
             }

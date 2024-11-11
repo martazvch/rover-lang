@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const Writer = std.fs.File.Writer;
 const WriteError = std.posix.WriteError;
+const ErrorKind = @import("errors.zig").ErrKind;
+const error_infos = @import("errors.zig").error_infos;
 
 const BoxChar = enum {
     BottomLeft,
@@ -49,8 +51,15 @@ fn color(clr: Color) []const u8 {
     };
 }
 
-const err_msg = color(.Red) ++ "Error:" ++ color(.NoColor);
-const warning_msg = color(.Yellow) ++ "Warning:" ++ color(.NoColor);
+fn generate_msg(comptime msg: []const u8, comptime clr: Color) []const u8 {
+    return color(clr) ++ msg ++ color(.NoColor);
+}
+
+const err_msg = generate_msg("Error:", .Red);
+const help_msg = generate_msg("help:", .Green);
+const warning_msg = generate_msg("Warning:", .Yellow);
+const corner_to_hint = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 4;
+const corner_to_end = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 2;
 
 pub const Reporter = struct {
     source: []const u8,
@@ -105,12 +114,22 @@ const WindowsReporter = struct {
     }
 };
 
+/// Error report used en each step of the Rover language:
+/// lexing, parsing, compiling, executing, ...
+/// It has:
+///  - msg: Current message to display a the beginning
+///  - level: warning or error
+///  - start: starting byte offset from source of the error
+///  - end: ending byte offset from source of the error
+///  - hint: message under the error
+///  - help: optional message at the end to help solve
 pub const Report = struct {
     msg: []const u8,
-    start: usize,
-    len: usize,
-    hint: ?[]const u8,
     level: Level,
+    start: usize,
+    end: usize,
+    hint: []const u8,
+    help: ?[]const u8,
 
     pub const Level = enum {
         Error,
@@ -128,14 +147,37 @@ pub const Report = struct {
 
     const Self = @This();
 
-    pub fn new(level: Level, msg: []const u8, start: usize, len: usize, hint: ?[]const u8) Self {
+    pub fn init(
+        level: Level,
+        msg: []const u8,
+        start: usize,
+        end: usize,
+        hint: []const u8,
+        help: ?[]const u8,
+    ) Self {
         return .{
             .level = level,
             .msg = msg,
             .start = start,
-            .len = len,
+            .end = end,
             .hint = hint,
+            .help = help,
         };
+    }
+
+    /// Creates an error associated with the kind. If *msg* is not null
+    /// overrides the message in the template.
+    pub fn err(
+        kind: ErrorKind,
+        start: usize,
+        end: usize,
+        msg: ?[]const u8,
+    ) Self {
+        var infos = error_infos(kind);
+
+        if (msg) |m| infos.msg = m;
+
+        return Report.init(.Error, infos.msg, start, end, infos.hint, infos.help);
     }
 
     pub fn display(
@@ -165,13 +207,13 @@ pub const Report = struct {
 
         var buf: [1024]u8 = undefined;
         // We consider the maximum line number being 99 999. The extra space
-        // is for space between line number and gutter
-        const buf2: [6]u8 = [_]u8{' '} ** 6;
+        // is for space between line number and gutter and the one at the beginning
+        const buf2: [7]u8 = [_]u8{' '} ** 7;
 
         // Gets line number digit count
         var written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
         const line_digit_count = written.len;
-        const left_padding = buf2[0 .. written.len + 1];
+        const left_padding = buf2[0 .. written.len + 2];
 
         // Prints the error part
         //  Error: <err-msg>
@@ -182,8 +224,8 @@ pub const Report = struct {
         //  ╭─[file_name.rz:1:5]
         written = try std.fmt.bufPrint(
             buf[0..],
-            "{s}{s}{s}[{s}.rz:{}:{}]\n",
-            .{ left_padding, box_char(.UpperLeft), box_char(.Horitzontal), file_name, line_count, line_start },
+            "{s}{s}{s}[{s}{s}.rz{s}:{}:{}]\n",
+            .{ left_padding, box_char(.UpperLeft), box_char(.Horitzontal), color(.Blue), file_name, color(.NoColor), line_count, line_start },
         );
         _ = try writer.write(written);
 
@@ -199,14 +241,25 @@ pub const Report = struct {
 
         // Underlines the problem
         // Takes padding into account + separator + space
-        written = try std.fmt.bufPrint(buf[0..], "{s}{s} ", .{ left_padding, box_char(.Vertical) });
+        //  <space><space> |
+        var buf3: [1024]u8 = undefined;
+        written = try std.fmt.bufPrint(&buf3, "{s}{s} ", .{ left_padding, box_char(.Vertical) });
         _ = try writer.write(written);
 
         // We get the length of the error code and the half to underline it
-        const h_count = @max(self.start - line_start, 1);
-        const half = @divFloor(h_count, 2);
+        var buf4: [1024]u8 = [_]u8{' '} ** 1024;
+        const start_space = self.start - line_start;
+        const lexeme_len = self.end - self.start;
+        const half = @divFloor(lexeme_len, 2);
 
-        for (0..h_count) |i| {
+        // Prints initial space
+        _ = try writer.write(buf4[0..start_space]);
+
+        // We write in yellow
+        _ = try writer.write(color(.Yellow));
+
+        // Prints ─┬─
+        for (0..lexeme_len) |i| {
             if (i == half) {
                 _ = try writer.write(box_char(.UnderT));
             } else {
@@ -214,6 +267,26 @@ pub const Report = struct {
             }
         }
         _ = try writer.write("\n");
+
+        // We switch back to no color
+        _ = try writer.write(color(.NoColor));
+
+        // Prints to indication (written state is the good one at this stage
+        // for the beginning of the sequence to print)
+        //  <space><space> | ╰─── <indication txt>
+        _ = try writer.write(written);
+        _ = try writer.write(buf4[0..start_space]);
+
+        _ = try writer.write(color(.Yellow));
+        const hint = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ corner_to_hint, self.hint });
+        _ = try writer.write(hint);
+        _ = try writer.write(color(.NoColor));
+
+        if (self.help) |h_msg| {
+            _ = try writer.write(left_padding);
+            const help = try std.fmt.bufPrint(&buf, "{s}\n  {s} {s}\n", .{ corner_to_end, help_msg, h_msg });
+            _ = try writer.write(help);
+        }
     }
 
     // Limitation of Zig, can only use comptime known strings for formatting...
@@ -221,11 +294,11 @@ pub const Report = struct {
         var buf: [1024]u8 = undefined;
 
         const written = switch (digit_count) {
-            1 => try std.fmt.bufPrint(&buf, "{:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            2 => try std.fmt.bufPrint(&buf, "{:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            3 => try std.fmt.bufPrint(&buf, "{:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            4 => try std.fmt.bufPrint(&buf, "{:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            5 => try std.fmt.bufPrint(&buf, "{:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            1 => try std.fmt.bufPrint(&buf, " {:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            2 => try std.fmt.bufPrint(&buf, " {:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            3 => try std.fmt.bufPrint(&buf, " {:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            4 => try std.fmt.bufPrint(&buf, " {:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            5 => try std.fmt.bufPrint(&buf, " {:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
             else => unreachable,
         };
 

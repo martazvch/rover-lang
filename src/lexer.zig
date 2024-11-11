@@ -10,14 +10,21 @@ pub const TokenKind = enum {
     RightParen,
     LeftBrace,
     RightBrace,
+
     Colon,
     Comma,
     Dot,
+    DotStar,
+    DotBang,
+    DotQuestionMark,
+    DotDot,
+    DotDotDot,
 
     Plus,
     Minus,
     Star,
     Slash,
+    Modulo,
 
     Bang,
     Equal,
@@ -28,6 +35,8 @@ pub const TokenKind = enum {
     EqualEqual,
     BangEqual,
 
+    QuestionMark,
+
     Identifier,
     Int,
     Float,
@@ -36,19 +45,28 @@ pub const TokenKind = enum {
     And,
     Else,
     False,
+    Or,
+    True,
+
+    IfNull,
+
+    As,
+    If,
     For,
     Fn,
-    If,
     In,
     Null,
-    Or,
     Print,
     Return,
     Self,
     Struct,
-    True,
     Var,
     While,
+
+    IntKw,
+    FloatKw,
+    UintKw,
+    BoolKw,
 
     NewLine,
     Error,
@@ -109,7 +127,7 @@ pub const Lexer = struct {
             '}' => self.make_token(.RightBrace),
             ':' => self.make_token(.Colon),
             ',' => self.make_token(.Comma),
-            '.' => self.make_token(.Dot),
+            '.' => self.dot(),
             '+' => self.make_token(.Plus),
             '-' => self.make_token(.Minus),
             '*' => self.make_token(.Star),
@@ -118,6 +136,7 @@ pub const Lexer = struct {
             '>' => self.make_if_equal_or_else(.GreaterEqual, .Greater),
             '!' => self.make_if_equal_or_else(.BangEqual, .Bang),
             '=' => self.make_if_equal_or_else(.EqualEqual, .Equal),
+            '?' => self.make_token(.QuestionMark),
             '"' => self.string(),
             '\n' => self.make_token(.NewLine),
             else => self.error_token("Unexpected character"),
@@ -216,6 +235,24 @@ pub const Lexer = struct {
         }
 
         return .Identifier;
+    }
+
+    // Handles all the dot syntaxes: .., ..., .*, .?, .!
+    fn dot(self: *Self) Token {
+        if (self.match('.')) {
+            if (self.match('.')) {
+                return self.make_token(.DotDotDot);
+            }
+            return self.make_token(.DotDot);
+        } else if (self.match('*')) {
+            return self.make_token(.DotStar);
+        } else if (self.match('?')) {
+            return self.make_token(.DotQuestionMark);
+        } else if (self.match('!')) {
+            return self.make_token(.DotBang);
+        } else {
+            return self.make_token(.Dot);
+        }
     }
 
     fn peek(self: *const Self) u8 {
@@ -369,4 +406,19 @@ test "unterminated string" {
 
     const tk = lexer.next();
     try expect(tk.kind == res);
+}
+
+test "dot" {
+    var lexer = Lexer.new();
+    lexer.init(". .. ... .! .? .* ...? ....!");
+
+    const res = [_]TokenKind{
+        .Dot,     .DotDot,    .DotDotDot,    .DotBang,   .DotQuestionMark,
+        .DotStar, .DotDotDot, .QuestionMark, .DotDotDot, .DotBang,
+    };
+
+    for (0..res.len) |i| {
+        const tk = lexer.next();
+        try expect(tk.kind == res[i]);
+    }
 }
