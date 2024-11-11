@@ -3,10 +3,9 @@ const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
-const Lexer = @import("lexer.zig").Lexer;
-const TokenKind = @import("lexer.zig").TokenKind;
-const Report = @import("reporter.zig").Report;
 const Reporter = @import("reporter.zig").Reporter;
+const Parser = @import("parser.zig").Parser;
+const AstPrinter = @import("ast_print.zig").AstPrinter;
 
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
@@ -24,8 +23,9 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit.
-        \\-f, --file <FILE>       Path to the file to execute
+        \\-h, --help             Display this help and exit
+        \\-f, --file <FILE>      Path to the file to execute
+        \\--print-ast            Prints the AST
     );
 
     const parsers = comptime .{
@@ -51,7 +51,7 @@ pub fn main() !void {
     if (res.args.file) |f| {
         try run_file(allocator, f);
     } else {
-        try repl(allocator);
+        try repl(allocator, if (res.args.@"print-ast" == 1) true else false);
     }
 }
 
@@ -72,14 +72,15 @@ fn run_file(allocator: Allocator, filename: []const u8) !void {
     _ = try file.readAll(buf);
 }
 
-fn repl(allocator: Allocator) !void {
+fn repl(allocator: Allocator, print_ast: bool) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
     var input = std.ArrayList(u8).init(allocator);
     defer input.deinit();
 
-    var lexer = Lexer.new();
+    var parser = Parser.init(allocator);
+    var ast_printer = AstPrinter{};
 
     _ = try stdout.write("\t\tRover language REPL\n");
 
@@ -92,24 +93,11 @@ fn repl(allocator: Allocator) !void {
 
         try input.append('\n');
 
-        lexer.init(input.items);
+        parser.reinit();
+        try parser.parse(input.items);
+        const reporter = Reporter.init(input.items);
+        try reporter.report_all(parser.errs.items);
 
-        while (true) {
-            const tk = lexer.next();
-            print("tk: {any}\n", .{tk});
-
-            if (tk.kind == .Eof) break;
-
-            if (tk.kind == .Error) {
-                const reporter = Reporter.init(input.items);
-                const report = Report.err(
-                    .UnterminatedStr,
-                    tk.start,
-                    tk.start + 1,
-                    null,
-                );
-                try reporter.report_all(&[1]Report{report});
-            }
-        }
+        if (print_ast) ast_printer.print_ast(parser.stmts.items);
     }
 }

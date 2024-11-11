@@ -1,9 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-
-pub const LexerErr = error{
-    UnterminatedString,
-};
+const ErrorKind = @import("errors.zig").ErrKind;
 
 pub const TokenKind = enum {
     LeftParen,
@@ -88,6 +85,11 @@ pub const Lexer = struct {
     current: usize,
     offset: usize,
 
+    pub const Error = error{
+        UnterminatedString,
+        UnexpectedCharacter,
+    };
+
     const Self = @This();
 
     pub fn new() Self {
@@ -104,7 +106,7 @@ pub const Lexer = struct {
         self.offset = 0;
     }
 
-    pub fn next(self: *Self) Token {
+    pub fn next(self: *Self) Error!Token {
         self.skip_space();
         self.offset += self.current;
 
@@ -137,19 +139,19 @@ pub const Lexer = struct {
             '!' => self.make_if_equal_or_else(.BangEqual, .Bang),
             '=' => self.make_if_equal_or_else(.EqualEqual, .Equal),
             '?' => self.make_token(.QuestionMark),
-            '"' => self.string(),
+            '"' => try self.string(),
             '\n' => self.make_token(.NewLine),
-            else => self.error_token("Unexpected character"),
+            else => return error.UnexpectedCharacter,
         };
     }
 
-    fn string(self: *Self) Token {
+    fn string(self: *Self) Error!Token {
         while (!self.eof() and self.peek() != '"') {
             _ = self.advance();
         }
 
         if (self.eof()) {
-            return self.error_token("unterminated string");
+            return error.UnterminatedString;
         }
 
         _ = self.advance();

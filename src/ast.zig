@@ -11,7 +11,7 @@ pub const VarType = union(enum) {
 
 pub const Stmt = union(enum) {
     VarDecl: VarDecl,
-    Expr: Expr,
+    Expr: *Expr,
 };
 
 pub const VarDecl = struct {
@@ -21,12 +21,22 @@ pub const VarDecl = struct {
     value: ?*Expr,
 };
 
+// Expressions
 pub const Expr = union(enum) {
-    BoolLit: BoolLit,
-    FloatLit: FloatLit,
+    // BoolLit: BoolLit,
+    // FloatLit: FloatLit,
     IntLit: IntLit,
-    UintLit: UintLit,
+    // UintLit: UintLit,
     BinOp: BinOp,
+    Unary: Unary,
+
+    pub fn accept(self: *const Expr, visitor: anytype) void {
+        switch (self.*) {
+            .BinOp => |e| visitor.binop_expr(e),
+            .IntLit => |e| visitor.int_expr(e),
+            .Unary => |e| visitor.unary_expr(e),
+        }
+    }
 };
 
 pub const BoolLit = struct {
@@ -43,6 +53,11 @@ pub const IntLit = struct {
 
 pub const UintLit = struct {
     value: u64,
+};
+
+pub const Unary = struct {
+    op: Token,
+    rhs: *Expr,
 };
 
 pub const BinOp = struct {
