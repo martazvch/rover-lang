@@ -81,7 +81,8 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
 
     var parser = Parser.init(allocator);
     defer parser.deinit();
-    var ast_printer = AstPrinter{};
+    var ast_printer = AstPrinter.init(allocator);
+    defer ast_printer.deinit();
 
     _ = try stdout.write("\t\tRover language REPL\n");
 
@@ -99,6 +100,9 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
         const reporter = Reporter.init(input.items);
         try reporter.report_all(parser.errs.items);
 
-        if (print_ast) ast_printer.print_ast(parser.stmts.items);
+        if (print_ast) {
+            try ast_printer.parse_ast(parser.stmts.items);
+            ast_printer.display();
+        }
     }
 }

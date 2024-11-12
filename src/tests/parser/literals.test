@@ -1,0 +1,17 @@
+# Tests all literals
+
+## Int
+code:
+1
+
+expect:
+[Int literal 1]
+
+================
+
+code:
+    687945
+
+expect:
+[Int literal 687945]
+

@@ -10,10 +10,8 @@ pub const ErrKind = enum {
     UnexpectedChar,
 
     // Parser
-    // ExpectExpr,
-    // InvalidAssignTarget,
-    // BinopInvalidOp,
     ChainingCmpOp,
+    UnclosedParen,
     UnexpectedEof,
 };
 
@@ -33,24 +31,14 @@ pub fn error_infos(kind: ErrKind) ErrorInfo {
             .hint = "this one is not allowed",
             .help = "split your comparison with 'and' and 'or' operators",
         },
+        .UnclosedParen => .{
+            .msg = "unclosed parenthesis",
+            .hint = "here",
+            .help = "close the opening parenthesis",
+        },
         .UnexpectedEof => .{
             .msg = "unexpected end of file",
             .hint = "",
         },
-        // .ExpectExpr => .{
-        //     .msg = "expect expression",
-        //     .hint = "not an expression",
-        //     .help = "line must start with a valid statement or expression",
-        // },
-        // .InvalidAssignTarget => .{
-        //     .msg = "invalid assignment target",
-        //     .hint = "left hand side of expression",
-        //     .help = "assignemnts can only be done on variables and structure fields",
-        // },
-        // .BinopInvalidOp => .{
-        //     .msg = "invalid binary operator",
-        //     .hint = "here",
-        //     .help = "valid ones are: +, -, *, /, %",
-        // },
     };
 }

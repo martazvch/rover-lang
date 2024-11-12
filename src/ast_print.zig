@@ -46,47 +46,87 @@ const Stmt = Ast.Stmt;
 
 pub const AstPrinter = struct {
     indent_level: u8 = 0,
+    tree: std.ArrayList(u8),
+    allocator: std.mem.Allocator,
 
     const indent_size: u8 = 2;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
+
+    const Error = std.mem.Allocator.Error || std.fmt.BufPrintError;
     const Self = @This();
 
-    pub fn print_ast(self: *Self, nodes: []const Stmt) void {
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{
+            .indent_level = 0,
+            .tree = std.ArrayList(u8).init(allocator),
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.tree.deinit();
+    }
+
+    pub fn parse_ast(self: *Self, nodes: []const Stmt) !void {
         for (nodes) |node| {
-            switch (node) {
+            try switch (node) {
                 .Expr => |e| self.print_expr(e),
                 else => @panic("todo"),
-            }
+            };
         }
     }
 
-    fn print_expr(self: *Self, expr: *const Expr) void {
-        switch (expr.*) {
+    pub fn display(self: *const Self) void {
+        print("{s}", .{self.tree.items});
+    }
+
+    fn print_expr(self: *Self, expr: *const Expr) Error!void {
+        try switch (expr.*) {
+            .BinOp => |*e| self.binop_expr(e),
+            .Grouping => |*e| self.grouping_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .Unary => |*e| self.unary_expr(e),
-            .BinOp => |*e| self.binop_expr(e),
-        }
+        };
     }
 
-    pub fn int_expr(self: *Self, expr: *const Ast.IntLit) void {
+    fn binop_expr(self: *Self, expr: *const Ast.BinOp) Error!void {
         self.indent();
-        print("[Int literal {}]\n", .{expr.value});
-    }
 
-    pub fn unary_expr(self: *Self, expr: *const Ast.Unary) void {
-        self.indent();
-        print("[Unary {s}]\n", .{expr.op.lexeme});
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.lexeme});
+        try self.tree.appendSlice(written);
+
         self.indent_level += 1;
-        self.print_expr(expr.rhs);
+        try self.print_expr(expr.rhs);
+        try self.print_expr(expr.lhs);
         self.indent_level -= 1;
     }
 
-    pub fn binop_expr(self: *Self, expr: *const Ast.BinOp) void {
+    fn grouping_expr(self: *Self, expr: *const Ast.Grouping) Error!void {
         self.indent();
-        print("[Binop {s}]\n", .{expr.op.lexeme});
+        try self.tree.appendSlice("[Grouping]\n");
+
         self.indent_level += 1;
-        self.print_expr(expr.rhs);
-        self.print_expr(expr.lhs);
+        try self.print_expr(expr.expr);
+        self.indent_level -= 1;
+    }
+
+    fn int_expr(self: *Self, expr: *const Ast.IntLit) Error!void {
+        self.indent();
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Int literal {}]\n", .{expr.value});
+        try self.tree.appendSlice(written);
+    }
+
+    fn unary_expr(self: *Self, expr: *const Ast.Unary) Error!void {
+        self.indent();
+
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.lexeme});
+        try self.tree.appendSlice(written);
+
+        self.indent_level += 1;
+        try self.print_expr(expr.rhs);
         self.indent_level -= 1;
     }
 

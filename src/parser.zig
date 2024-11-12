@@ -33,64 +33,7 @@ pub const Parser = struct {
     previous: Token,
     panic_mode: bool,
 
-    const Error = error{err} || Allocator.Error;
-
-    // const Rule = struct {
-    //     prefix: ?*const fn (*Parser, bool) Error!void = null,
-    //     infix: ?*const fn (*Parser, bool) Error!void = null,
-    //     precedence: Precedence = .None,
-    // };
-    //
-    // const rule_table = std.EnumArray(TokenKind, Rule).init(.{
-    //     .And = Rule{ .infix = Self.and_, .precedence = .And },
-    //     .Bang = Rule{ .prefix = Self.unary },
-    //     .BangEqual = Rule{ .infix = Self.binary, .precedence = .Equality },
-    //     .Colon = Rule{},
-    //     .Comma = Rule{},
-    //     .Dot = Rule{ .infix = Self.dot, .precedence = .Call },
-    //     .DotDot = Rule{},
-    //     .DotDotDot = Rule{ .prefix = Self.unzip },
-    //     .DotStar = Rule{ .infix = Self.deref, .precedence = .Call },
-    //     .DotBang = Rule{ .infix = Self.unsafe_access, .precedence = .Call },
-    //     .DotQuestionMark = Rule{ .infix = Self.safe_access, .precedence = .Call },
-    //     .Else = Rule{},
-    //     .Eof = Rule{},
-    //     .Equal = Rule{},
-    //     .EqualEqual = Rule{ .infix = Self.binary, .precedence = .Equality },
-    //     .Error = Rule{},
-    //     .False = Rule{ .prefix = Self.identifier },
-    //     .Float = Rule{ .prefix = Self.float },
-    //     .Fn = Rule{},
-    //     .For = Rule{},
-    //     .Greater = Rule{ .infix = Self.binary, .precedence = .Comparison },
-    //     .GreaterEqual = Rule{ .infix = Self.binary, .precedence = .Comparison },
-    //     .Identifier = Rule{ .prefix = Self.identifier },
-    //     .If = Rule{ .prefix = Self.if_ },
-    //     .In = Rule{},
-    //     .Int = Rule{ .prefix = Self.int },
-    //     .LeftBrace = Rule{},
-    //     .LeftParen = Rule{ .prefix = Self.grouping, .infix = Self.call, .precedence = .Call },
-    //     .Less = Rule{ .infix = Self.binary, .precedence = .Comparison },
-    //     .LessEqual = Rule{ .infix = Self.binary, .precedence = .Comparison },
-    //     .Minus = Rule{ .prefix = Self.unary, .infix = Self.binary, .precedence = .Term },
-    //     .NewLine = Rule{},
-    //     .Null = Rule{ .prefix = Self.identifier },
-    //     .Or = Rule{ .infix = Self.or_, .precedence = .Or },
-    //     .Plus = Rule{ .infix = Self.binary, .precedence = .Term },
-    //     .Print = Rule{},
-    //     .Return = Rule{},
-    //     .RightParen = Rule{},
-    //     .RightBrace = Rule{},
-    //     .Slash = Rule{ .infix = Self.binary, .precedence = .Factor },
-    //     .Star = Rule{ .infix = Self.binary, .precedence = .Factor },
-    //     .String = Rule{ .prefix = Self.string },
-    //     .Struct = Rule{},
-    //     .Self = Rule{ .prefix = Self.self_ },
-    //     .True = Rule{ .prefix = Self.identifier },
-    //     .Var = Rule{},
-    //     .While = Rule{},
-    // });
-
+    const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
     const Self = @This();
 
     pub fn init(allocator: Allocator) Self {
@@ -121,9 +64,9 @@ pub const Parser = struct {
     pub fn parse(self: *Self, source: []const u8) !void {
         self.lexer.init(source);
         try self.advance();
+        try self.skip_new_lines();
 
         while (!try self.match(.Eof)) {
-            try self.skip_new_lines();
             const stmt = self.declaration() catch |e| switch (e) {
                 Error.err => {
                     try self.synchronize();
@@ -132,6 +75,7 @@ pub const Parser = struct {
                 else => return e,
             };
             try self.stmts.append(stmt);
+            try self.skip_new_lines();
         }
     }
 
@@ -172,12 +116,12 @@ pub const Parser = struct {
     /// Expect a specific type, otherwise it's an error and we enter
     /// *panic* mode
     fn expect(self: *Self, kind: TokenKind, error_kind: ErrorKind) !void {
-        if (self.match(kind)) {
-            self.advance();
+        if (try self.match(kind)) {
             return;
         }
 
         try self.error_at_current(error_kind, null);
+        return Error.err;
     }
 
     fn error_at_current(self: *Self, error_kind: ErrorKind, msg: ?[]const u8) !void {
@@ -228,72 +172,49 @@ pub const Parser = struct {
         }
     }
 
-    // fn get_rule(kind: TokenKind) *const Rule {
-    //     return rule_table.getPtrConst(kind);
-    // }
-
-    // fn parse_precedence(self: *Self, precedence: Precedence) !void {
-    //     self.advance();
-    //     const prefix_rule = get_rule(self.previous.kind).prefix orelse {
-    //         self.error_at_prev(.ExpectExpr, null);
-    //         return;
-    //     };
-    //
-    //     // We can assign only if already in assignment or expr_stmt
-    //     const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
-    //     try prefix_rule(self, can_assign);
-    //
-    //     while (@intFromEnum(precedence) <= @intFromEnum(get_rule(self.current.kind).precedence)) {
-    //         self.advance();
-    //
-    //         // Here we can safely use unreachable because if the token is unknown,
-    //         // the lexer will tell us before. All the tokens we use here are validated
-    //         // by the lexer so we are going to find a rule
-    //         const infix_rule = get_rule(self.parser.previous.kind).infix orelse unreachable;
-    //
-    //         try infix_rule(self, can_assign);
-    //     }
-    //
-    //     // If we went through all the loop and that we tried to assign with
-    //     // a wrong target, nobody will have consumed the '='. It means the
-    //     // assignment target was invalid
-    //     if (can_assign and self.match(.Equal)) {
-    //         self.error_at_prev(.InvalidAssignTarget, null);
-    //     }
-    // }
-
     const Assoc = enum { Left, None };
 
     const Rule = struct { prec: i8, assoc: Assoc = .Left };
 
     const rules = std.enums.directEnumArrayDefault(TokenKind, Rule, .{ .prec = -1, .assoc = .Left }, 0, .{
+        .LeftParen = .{ .prec = 30 },
+        .Minus = .{ .prec = 60 },
         .Plus = .{ .prec = 60 },
+        .Slash = .{ .prec = 70 },
+        .Star = .{ .prec = 70 },
     });
 
-    var banned_prec: i8 = -1;
-
-    fn parse_precedence_expr(self: *Self, prec_min: i8) !*Expr {
+    fn parse_precedence_expr(self: *Self, prec_min: i8) Error!*Expr {
         try self.advance();
+        std.debug.print("begin prec: {any}\n", .{self.previous});
         var node = try self.parse_prefix_expr();
 
-        while (true) {
-            try self.advance();
+        var banned_prec: i8 = -1;
 
-            const next_rule = rules[@as(usize, @intFromEnum(self.previous.kind))];
+        while (true) {
+            // We check the current before consuming it
+            const next_rule = rules[@as(usize, @intFromEnum(self.current.kind))];
+            std.debug.print("next rule: {}\n", .{next_rule.prec});
 
             if (next_rule.prec < prec_min) break;
 
             if (next_rule.prec == banned_prec) {
-                try self.error_at_prev(.ChainingCmpOp, null);
+                try self.error_at_current(.ChainingCmpOp, null);
+                return error.err;
             }
 
-            const rhs = try self.parse_precedence_expr(prec_min + 1);
+            std.debug.print("gonna recurs\n", .{});
+
+            // Here, we can safely use it
+            try self.advance();
+            const op = self.previous;
+            const rhs = try self.parse_precedence_expr(next_rule.prec);
 
             const expr = try self.allocator.create(Expr);
             expr.* = .{ .BinOp = .{
                 .lhs = node,
                 .rhs = rhs,
-                .op = self.previous,
+                .op = op,
             } };
 
             node = expr;
@@ -306,20 +227,9 @@ pub const Parser = struct {
         return node;
     }
 
-    // fn assemble_expr(self: *Self, rhs: *Expr, lhs: *Expr, op: *Token) *Expr {
-    //     switch (op.kind) {
-    //         .Plus => {
-    //             var expr = try self.allocator.create(Expr.BinOp);
-    //             expr.rhs = rhs;
-    //             expr.op = op.kind;
-    //             expr.lhs = lhs;
-    //             return expr;
-    //         },
-    //         else => unreachable,
-    //     }
-    // }
-
-    fn parse_prefix_expr(self: *Self) !*Expr {
+    /// Parses a prefix expression. If we hit a unary first, we recurse
+    /// to form an expression
+    fn parse_prefix_expr(self: *Self) Error!*Expr {
         const unary_expr = switch (self.previous.kind) {
             .Minus => try self.allocator.create(Expr),
             else => return try self.parse_primary_expr(),
@@ -328,6 +238,7 @@ pub const Parser = struct {
         const op = self.previous;
         try self.advance();
 
+        // Recursion appens here
         unary_expr.* = .{ .Unary = .{
             .op = op,
             .rhs = try self.parse_prefix_expr(),
@@ -336,9 +247,11 @@ pub const Parser = struct {
         return unary_expr;
     }
 
-    fn parse_primary_expr(self: *Self) !*Expr {
+    fn parse_primary_expr(self: *Self) Error!*Expr {
         return switch (self.previous.kind) {
+            .LeftParen => try self.grouping(),
             .Int => try self.int(),
+
             else => {
                 try self.error_at_current(.UnexpectedEof, null);
                 return error.err;
@@ -346,92 +259,25 @@ pub const Parser = struct {
         };
     }
 
-    fn int(self: *Self) !*Expr {
+    fn grouping(self: *Self) Error!*Expr {
+        const expr = try self.allocator.create(Expr);
+        expr.* = .{ .Grouping = .{ .expr = try self.parse_precedence_expr(0) } };
+        try self.expect(.RightParen, .UnclosedParen);
+        return expr;
+    }
+
+    fn int(self: *Self) Error!*Expr {
         const value = try std.fmt.parseInt(i64, self.previous.lexeme, 10);
         const expr = try self.allocator.create(Expr);
         expr.* = .{ .IntLit = .{ .value = value } };
 
         return expr;
     }
-
-    //     fn expression(self: *Self) !Expr {
-    //         _ = self;
-    //         return Expr{ .IntLit = .{ .value = 0 } };
-    //     }
-    //
-    //     fn if_(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn call(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn unzip(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn safe_access(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn unsafe_access(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn deref(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn dotdotdot(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn dot(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn and_(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn or_(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn self_(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn grouping(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn unary(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn binary(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn identifier(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn string(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn float(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn int(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
-    //
-    //     fn uint(self: *Self, _: bool) Error!Expr {
-    //         _ = self;
-    //     }
 };
+
+// Tests
+test "literals" {
+    const test_file = @import("tests/parser/test_parser.zig").test_file;
+    const file_name = "literals.test";
+    try test_file(file_name);
+}

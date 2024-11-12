@@ -23,12 +23,19 @@ pub const VarDecl = struct {
 
 // Expressions
 pub const Expr = union(enum) {
+    BinOp: BinOp,
     // BoolLit: BoolLit,
     // FloatLit: FloatLit,
+    Grouping: Grouping,
     IntLit: IntLit,
     // UintLit: UintLit,
-    BinOp: BinOp,
     Unary: Unary,
+};
+
+pub const BinOp = struct {
+    lhs: *Expr,
+    rhs: *Expr,
+    op: Token,
 };
 
 pub const BoolLit = struct {
@@ -37,6 +44,10 @@ pub const BoolLit = struct {
 
 pub const FloatLit = struct {
     value: f64,
+};
+
+pub const Grouping = struct {
+    expr: *Expr,
 };
 
 pub const IntLit = struct {
@@ -50,10 +61,4 @@ pub const UintLit = struct {
 pub const Unary = struct {
     op: Token,
     rhs: *Expr,
-};
-
-pub const BinOp = struct {
-    lhs: *Expr,
-    rhs: *Expr,
-    op: Token,
 };
