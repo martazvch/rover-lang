@@ -80,6 +80,7 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
     defer input.deinit();
 
     var parser = Parser.init(allocator);
+    defer parser.deinit();
     var ast_printer = AstPrinter{};
 
     _ = try stdout.write("\t\tRover language REPL\n");

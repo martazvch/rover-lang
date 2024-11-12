@@ -14,6 +14,7 @@ pub const ErrKind = enum {
     // InvalidAssignTarget,
     // BinopInvalidOp,
     ChainingCmpOp,
+    UnexpectedEof,
 };
 
 pub fn error_infos(kind: ErrKind) ErrorInfo {
@@ -31,6 +32,10 @@ pub fn error_infos(kind: ErrKind) ErrorInfo {
             .msg = "chaining comparison operators",
             .hint = "this one is not allowed",
             .help = "split your comparison with 'and' and 'or' operators",
+        },
+        .UnexpectedEof => .{
+            .msg = "unexpected end of file",
+            .hint = "",
         },
         // .ExpectExpr => .{
         //     .msg = "expect expression",

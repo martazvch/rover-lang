@@ -33,7 +33,7 @@ pub const Parser = struct {
     previous: Token,
     panic_mode: bool,
 
-    const Error = Allocator.Error;
+    const Error = error{err} || Allocator.Error;
 
     // const Rule = struct {
     //     prefix: ?*const fn (*Parser, bool) Error!void = null,
@@ -105,26 +105,33 @@ pub const Parser = struct {
         };
     }
 
-    pub fn reinit(self: *Self) void {
-        self.stmts.clearRetainingCapacity();
-        self.errs.clearRetainingCapacity();
-    }
-
     pub fn deinit(self: *Self) void {
         self.stmts.deinit();
         self.errs.deinit();
     }
 
+    pub fn reinit(self: *Self) void {
+        self.panic_mode = false;
+        self.previous = Token.empty();
+        self.current = Token.empty();
+        self.stmts.clearRetainingCapacity();
+        self.errs.clearRetainingCapacity();
+    }
+
     pub fn parse(self: *Self, source: []const u8) !void {
         self.lexer.init(source);
         try self.advance();
-        try self.skip_new_lines();
 
         while (!try self.match(.Eof)) {
-            try self.stmts.append(try self.declaration());
             try self.skip_new_lines();
-
-            if (self.panic_mode) try self.synchronize();
+            const stmt = self.declaration() catch |e| switch (e) {
+                Error.err => {
+                    try self.synchronize();
+                    continue;
+                },
+                else => return e,
+            };
+            try self.stmts.append(stmt);
         }
     }
 
@@ -132,18 +139,11 @@ pub const Parser = struct {
         self.previous = self.current;
 
         while (true) {
-            self.current = self.lexer.next() catch |e| switch (e) {
-                Lexer.Error.UnterminatedString => {
-                    try self.error_at_current(.UnterminatedStr, null);
-                    continue;
-                },
-                Lexer.Error.UnexpectedCharacter => {
-                    try self.error_at_current(.UnexpectedChar, null);
-                    continue;
-                },
-            };
+            self.current = self.lexer.next();
 
-            if (!self.check(.Error)) break;
+            if (self.check(.Error)) {
+                try self.err_from_lexer();
+            } else break;
         }
     }
 
@@ -188,6 +188,14 @@ pub const Parser = struct {
         try self.error_at(&self.previous, error_kind, msg);
     }
 
+    /// Error coming from Error tokens. We use the *start* field to retreive the
+    /// enum value of the error and set it to the real value of the lexer
+    fn err_from_lexer(self: *Self) !void {
+        const err_kind: ErrorKind = @enumFromInt(self.current.start);
+        self.current.start = self.lexer.offset;
+        try self.error_at_current(err_kind, null);
+    }
+
     /// If error already encountered and in the same statement parsing,
     /// we exit, let synchronize and resume. It is likely that if we
     /// are already in panic mode, the following errors are just
@@ -197,7 +205,7 @@ pub const Parser = struct {
 
         self.panic_mode = true;
 
-        const report = Report.err(error_kind, token.start, token.lexeme.len, msg);
+        const report = Report.err(error_kind, token.start, token.start + token.lexeme.len, msg);
         try self.errs.append(report);
     }
 
@@ -216,7 +224,6 @@ pub const Parser = struct {
         if (self.check(.Var)) {
             unreachable;
         } else {
-            try self.advance();
             return .{ .Expr = try self.parse_precedence_expr(0) };
         }
     }
@@ -266,7 +273,7 @@ pub const Parser = struct {
     var banned_prec: i8 = -1;
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) !*Expr {
-        // try self.advance();
+        try self.advance();
         var node = try self.parse_prefix_expr();
 
         while (true) {
@@ -333,8 +340,8 @@ pub const Parser = struct {
         return switch (self.previous.kind) {
             .Int => try self.int(),
             else => {
-                std.debug.print("prev: {any}\n", .{self.previous});
-                unreachable;
+                try self.error_at_current(.UnexpectedEof, null);
+                return error.err;
             },
         };
     }

@@ -29,14 +29,6 @@ pub const Expr = union(enum) {
     // UintLit: UintLit,
     BinOp: BinOp,
     Unary: Unary,
-
-    pub fn accept(self: *const Expr, visitor: anytype) void {
-        switch (self.*) {
-            .BinOp => |e| visitor.binop_expr(e),
-            .IntLit => |e| visitor.int_expr(e),
-            .Unary => |e| visitor.unary_expr(e),
-        }
-    }
 };
 
 pub const BoolLit = struct {

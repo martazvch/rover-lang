@@ -249,7 +249,7 @@ pub const Report = struct {
         // We get the length of the error code and the half to underline it
         var buf4: [1024]u8 = [_]u8{' '} ** 1024;
         const start_space = self.start - line_start;
-        const lexeme_len = self.end - self.start;
+        const lexeme_len = @max(self.end - self.start, 1);
         const half = @divFloor(lexeme_len, 2);
 
         // Prints initial space

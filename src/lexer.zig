@@ -78,17 +78,16 @@ pub const Token = struct {
     pub fn empty() Token {
         return .{ .kind = .Null, .lexeme = undefined, .start = 0 };
     }
+
+    pub fn empty_at(at: usize) Token {
+        return .{ .kind = .Null, .lexeme = " ", .start = at };
+    }
 };
 
 pub const Lexer = struct {
     start: []const u8,
     current: usize,
     offset: usize,
-
-    pub const Error = error{
-        UnterminatedString,
-        UnexpectedCharacter,
-    };
 
     const Self = @This();
 
@@ -106,7 +105,7 @@ pub const Lexer = struct {
         self.offset = 0;
     }
 
-    pub fn next(self: *Self) Error!Token {
+    pub fn next(self: *Self) Token {
         self.skip_space();
         self.offset += self.current;
 
@@ -139,19 +138,19 @@ pub const Lexer = struct {
             '!' => self.make_if_equal_or_else(.BangEqual, .Bang),
             '=' => self.make_if_equal_or_else(.EqualEqual, .Equal),
             '?' => self.make_token(.QuestionMark),
-            '"' => try self.string(),
+            '"' => self.string(),
             '\n' => self.make_token(.NewLine),
-            else => return error.UnexpectedCharacter,
+            else => Lexer.error_token(.UnexpectedChar),
         };
     }
 
-    fn string(self: *Self) Error!Token {
+    fn string(self: *Self) Token {
         while (!self.eof() and self.peek() != '"') {
             _ = self.advance();
         }
 
         if (self.eof()) {
-            return error.UnterminatedString;
+            return Lexer.error_token(.UnterminatedStr);
         }
 
         _ = self.advance();
@@ -289,11 +288,14 @@ pub const Lexer = struct {
         }
     }
 
-    fn error_token(self: *const Self, msg: []const u8) Token {
+    /// Error token use the *start* field to encode the enum value of the error.
+    /// It is later recomputed by the parser to have the real start. We put an
+    /// empty *lexeme* so that the len is 0 when the reporter uses it
+    fn error_token(error_kind: ErrorKind) Token {
         return .{
             .kind = .Error,
-            .lexeme = msg,
-            .start = self.offset,
+            .lexeme = "",
+            .start = @intFromEnum(error_kind),
         };
     }
 
