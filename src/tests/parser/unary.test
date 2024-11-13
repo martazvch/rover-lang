@@ -1,0 +1,32 @@
+# Tests unary expressions
+
+code:
+-1
+
+expect:
+[Unary -]
+    [Int literal 1]
+
+================
+
+code:
+--1
+
+expect:
+[Unary -]
+    [Unary -]
+        [Int literal 1]
+
+================
+
+code:
+-5*3
+
+expect:
+[Binop *]
+    [Unary -]
+        [Int literal 5]
+    [Int literal 3]
+ 
+================
+

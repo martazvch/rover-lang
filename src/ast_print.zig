@@ -49,7 +49,7 @@ pub const AstPrinter = struct {
     tree: std.ArrayList(u8),
     allocator: std.mem.Allocator,
 
-    const indent_size: u8 = 2;
+    const indent_size: u8 = 4;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
 
     const Error = std.mem.Allocator.Error || std.fmt.BufPrintError;
@@ -90,20 +90,20 @@ pub const AstPrinter = struct {
     }
 
     fn binop_expr(self: *Self, expr: *const Ast.BinOp) Error!void {
-        self.indent();
+        try self.indent();
 
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.lexeme});
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
-        try self.print_expr(expr.rhs);
         try self.print_expr(expr.lhs);
+        try self.print_expr(expr.rhs);
         self.indent_level -= 1;
     }
 
     fn grouping_expr(self: *Self, expr: *const Ast.Grouping) Error!void {
-        self.indent();
+        try self.indent();
         try self.tree.appendSlice("[Grouping]\n");
 
         self.indent_level += 1;
@@ -112,14 +112,14 @@ pub const AstPrinter = struct {
     }
 
     fn int_expr(self: *Self, expr: *const Ast.IntLit) Error!void {
-        self.indent();
+        try self.indent();
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Int literal {}]\n", .{expr.value});
         try self.tree.appendSlice(written);
     }
 
     fn unary_expr(self: *Self, expr: *const Ast.Unary) Error!void {
-        self.indent();
+        try self.indent();
 
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.lexeme});
@@ -130,7 +130,7 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
-    fn indent(self: *const Self) void {
-        print("{s}", .{Self.spaces[0 .. self.indent_level * Self.indent_size]});
+    fn indent(self: *Self) !void {
+        try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
     }
 };

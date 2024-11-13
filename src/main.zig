@@ -79,8 +79,10 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
     var input = std.ArrayList(u8).init(allocator);
     defer input.deinit();
 
-    var parser = Parser.init(allocator);
+    var parser: Parser = undefined;
+    parser.init(allocator);
     defer parser.deinit();
+
     var ast_printer = AstPrinter.init(allocator);
     defer ast_printer.deinit();
 
@@ -105,4 +107,9 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
             ast_printer.display();
         }
     }
+}
+
+test {
+    _ = @import("lexer.zig");
+    _ = @import("parser.zig");
 }

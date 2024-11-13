@@ -1,4 +1,5 @@
 const std = @import("std");
+const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Ast = @import("ast.zig");
@@ -27,6 +28,7 @@ const Precedence = enum {
 pub const Parser = struct {
     stmts: ArrayList(Stmt),
     errs: ArrayList(Report),
+    arena: ArenaAllocator,
     allocator: Allocator,
     lexer: Lexer,
     current: Token,
@@ -36,21 +38,24 @@ pub const Parser = struct {
     const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
     const Self = @This();
 
-    pub fn init(allocator: Allocator) Self {
-        return .{
-            .stmts = ArrayList(Stmt).init(allocator),
-            .errs = ArrayList(Report).init(allocator),
-            .allocator = allocator,
-            .lexer = Lexer.new(),
-            .current = Token.empty(),
-            .previous = Token.empty(),
-            .panic_mode = false,
-        };
+    /// Initialize an instance of Parser. Use it as:
+    /// `var parser: Parser = undefined;`
+    /// `parser.init(allocator);`
+    pub fn init(self: *Self, allocator: Allocator) void {
+        self.arena = ArenaAllocator.init(allocator);
+        self.allocator = self.arena.allocator();
+        self.stmts = ArrayList(Stmt).init(self.allocator);
+        self.errs = ArrayList(Report).init(self.allocator);
+        self.lexer = Lexer.new();
+        self.current = Token.empty();
+        self.previous = Token.empty();
+        self.panic_mode = false;
     }
 
     pub fn deinit(self: *Self) void {
-        self.stmts.deinit();
-        self.errs.deinit();
+        self.arena.deinit();
+        // self.stmts.deinit();
+        // self.errs.deinit();
     }
 
     pub fn reinit(self: *Self) void {
@@ -68,6 +73,7 @@ pub const Parser = struct {
 
         while (!try self.match(.Eof)) {
             const stmt = self.declaration() catch |e| switch (e) {
+                // If it's our own error, we continue on parsing
                 Error.err => {
                     try self.synchronize();
                     continue;
@@ -186,7 +192,6 @@ pub const Parser = struct {
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!*Expr {
         try self.advance();
-        std.debug.print("begin prec: {any}\n", .{self.previous});
         var node = try self.parse_prefix_expr();
 
         var banned_prec: i8 = -1;
@@ -194,7 +199,6 @@ pub const Parser = struct {
         while (true) {
             // We check the current before consuming it
             const next_rule = rules[@as(usize, @intFromEnum(self.current.kind))];
-            std.debug.print("next rule: {}\n", .{next_rule.prec});
 
             if (next_rule.prec < prec_min) break;
 
@@ -202,8 +206,6 @@ pub const Parser = struct {
                 try self.error_at_current(.ChainingCmpOp, null);
                 return error.err;
             }
-
-            std.debug.print("gonna recurs\n", .{});
 
             // Here, we can safely use it
             try self.advance();
@@ -232,7 +234,7 @@ pub const Parser = struct {
     fn parse_prefix_expr(self: *Self) Error!*Expr {
         const unary_expr = switch (self.previous.kind) {
             .Minus => try self.allocator.create(Expr),
-            else => return try self.parse_primary_expr(),
+            else => return self.parse_primary_expr(),
         };
 
         const op = self.previous;
@@ -249,9 +251,8 @@ pub const Parser = struct {
 
     fn parse_primary_expr(self: *Self) Error!*Expr {
         return switch (self.previous.kind) {
-            .LeftParen => try self.grouping(),
-            .Int => try self.int(),
-
+            .LeftParen => self.grouping(),
+            .Int => self.int(),
             else => {
                 try self.error_at_current(.UnexpectedEof, null);
                 return error.err;
@@ -276,8 +277,7 @@ pub const Parser = struct {
 };
 
 // Tests
-test "literals" {
-    const test_file = @import("tests/parser/test_parser.zig").test_file;
-    const file_name = "literals.test";
-    try test_file(file_name);
+test Parser {
+    const test_all = @import("tests/parser/test_parser.zig").test_all;
+    try test_all();
 }
