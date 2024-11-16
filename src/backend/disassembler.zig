@@ -25,7 +25,7 @@ pub const Disassembler = struct {
 
     pub fn dis_instruction(self: *const Self, offset: usize) usize {
         // print("{:0>4} ", .{offset});
-        print("{:0>4}  ", .{offset});
+        print("{:0>4} ", .{offset});
 
         // if (offset > 0 and self.chunk.lines.items[offset] == self.chunk.lines.items[offset - 1]) {
         //     print("   | ", .{});
@@ -85,8 +85,8 @@ pub const Disassembler = struct {
             // .Not => simple_instruction("OP_NOT", offset),
             // .Null => simple_instruction("OP_NULL", offset),
             // .Pop => simple_instruction("OP_POP", offset),
-            // .Print => simple_instruction("OP_PRINT", offset),
-            // .Return => simple_instruction("OP_RETURN", offset),
+            .Print => simple_instruction("OP_PRINT", offset),
+            .Return => simple_instruction("OP_RETURN", offset),
             // .SetGlobal => self.constant_instruction("OP_SET_GLOBAL", offset),
             // .SetLocal => self.byte_instruction("OP_SET_LOCAL", offset),
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
@@ -104,7 +104,7 @@ pub const Disassembler = struct {
 
     fn constant_instruction(self: *const Self, name: []const u8, offset: usize) usize {
         const constant = self.chunk.code.items[offset + 1];
-        const value = self.chunk.constants.get(constant);
+        const value = self.chunk.constants[constant];
         print("{s:<16} index: {:<4} value: ", .{ name, constant });
         value.log();
         print("\n", .{});

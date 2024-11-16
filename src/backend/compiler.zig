@@ -55,6 +55,8 @@ pub const Compiler = struct {
                 .Expr => |expr| self.expression(expr),
             };
         }
+
+        try self.chunk.write_op(.Return);
     }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {

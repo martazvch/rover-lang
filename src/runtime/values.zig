@@ -21,6 +21,10 @@ pub const Value = union(enum) {
         return .{ .Int = value };
     }
 
+    pub fn null_() Self {
+        return .{ .Null = undefined };
+    }
+
     pub fn log(self: *const Value) void {
         switch (self.*) {
             .Int => |v| print("{}", .{v}),

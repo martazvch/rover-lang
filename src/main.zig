@@ -8,6 +8,7 @@ const Parser = @import("frontend/parser.zig").Parser;
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
+const Vm = @import("runtime/vm.zig").Vm;
 
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
@@ -107,6 +108,11 @@ fn run_file(
         var dis = Disassembler.init(&compiler.chunk);
         try dis.dis_chunk("main");
     }
+
+    var vm = Vm.new(allocator, &compiler.chunk);
+    vm.init();
+    defer vm.deinit();
+    try vm.run();
 }
 
 fn repl(allocator: Allocator, print_ast: bool) !void {

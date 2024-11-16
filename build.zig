@@ -1,25 +1,27 @@
 const std = @import("std");
 
-pub const BuildOptions = struct {
-    tracing: bool = false,
-    print_stack: bool = false,
-    print_code: bool = false,
+// pub const BuildOptions = struct {
+//     print_instr: bool = false,
+//     print_stack: bool = false,
+//     print_code: bool = false,
+//
+//     fn from_builder(b: *std.Build) BuildOptions {
+//         const print_instr = b.option(bool, "print_instr", "prints the current instruction") orelse false;
+//         const print_stack = b.option(bool, "print_stack", "prints the stack on each instruction") orelse false;
+//
+//         return .{ .print_instr = print_instr, .print_stack = print_stack };
+//     }
+// };
 
-    fn from_builder(b: *std.Build) BuildOptions {
-        const tracing = b.option(bool, "tracing", "trace execution of each instruction") orelse false;
-        const print_stack = b.option(bool, "print_stack", "prints the stack on each instruction") orelse false;
-
-        return .{ .tracing = tracing, .print_stack = print_stack };
-    }
-};
-
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
-    // const options = b.addOptions();
+    const options = b.addOptions();
     // const opts = BuildOptions.from_builder(b);
-    // options.addOption(@TypeOf(opts.tracing), "TRACING", opts.tracing);
+
+    const print_instr = b.option(bool, "print-instr", "prints the current instruction") orelse false;
+    options.addOption(bool, "print_instr", print_instr);
+
+    const print_stack = b.option(bool, "print-stack", "prints the stack on each instruction") orelse false;
+    options.addOption(bool, "print_stack", print_stack);
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -33,6 +35,7 @@ pub fn build(b: *std.Build) void {
 
     const clap = b.dependency("clap", .{});
     exe.root_module.addImport("clap", clap.module("clap"));
+    exe.root_module.addOptions("config", options);
 
     b.installArtifact(exe);
 
@@ -53,7 +56,7 @@ pub fn build(b: *std.Build) void {
         .target = b.host,
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
-    // exe_check.root_module.addOptions("config", options);
+    exe_check.root_module.addOptions("config", options);
 
     // These two lines you might want to copy
     // (make sure to rename 'exe_check')

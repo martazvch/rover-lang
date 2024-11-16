@@ -9,21 +9,25 @@ pub const OpCode = enum(u8) {
     Divide,
     Multiply,
     Negate,
+    Print,
+    Return,
     Subtract,
 };
 
 pub const Chunk = struct {
     code: ArrayList(u8),
-    constants: std.BoundedArray(Value, CONST_MAX + 1),
+    constants: [CONST_MAX]Value,
+    constant_count: u8,
 
     const Self = @This();
-    const CONST_MAX = std.math.maxInt(u8);
-    pub const Error = error{Overflow} || Allocator.Error;
+    const CONST_MAX = std.math.maxInt(u8) + 1;
+    pub const Error = error{TooManyConst} || Allocator.Error;
 
     pub fn init(allocator: Allocator) Self {
         return .{
             .code = ArrayList(u8).init(allocator),
-            .constants = std.BoundedArray(Value, 256).init(0) catch unreachable,
+            .constants = undefined,
+            .constant_count = 0,
         };
     }
 
@@ -40,7 +44,12 @@ pub const Chunk = struct {
     }
 
     pub fn write_constant(self: *Self, value: Value) Error!u8 {
-        try self.constants.append(value);
-        return @truncate(self.constants.len - 1);
+        if (self.constant_count == CONST_MAX) {
+            return error.TooManyConst;
+        }
+
+        self.constants[self.constant_count] = value;
+        self.constant_count += 1;
+        return self.constant_count - 1;
     }
 };
