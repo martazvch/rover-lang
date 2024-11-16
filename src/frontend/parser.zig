@@ -5,11 +5,11 @@ const ArrayList = std.ArrayList;
 const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
-const Report = @import("reporter.zig").Report;
+const Report = @import("../reporter.zig").Report;
 const Token = @import("lexer.zig").Token;
 const TokenKind = @import("lexer.zig").TokenKind;
 const Lexer = @import("lexer.zig").Lexer;
-const ErrorKind = @import("errors.zig").ErrKind;
+const ErrorKind = @import("../errors.zig").ErrKind;
 
 const Precedence = enum {
     None,
@@ -278,6 +278,6 @@ pub const Parser = struct {
 
 // Tests
 test Parser {
-    const test_all = @import("tests/parser/test_parser.zig").test_all;
+    const test_all = @import("test_parser.zig").test_all;
     try test_all();
 }

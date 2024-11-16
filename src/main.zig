@@ -4,8 +4,8 @@ const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
 const Reporter = @import("reporter.zig").Reporter;
-const Parser = @import("parser.zig").Parser;
-const AstPrinter = @import("ast_print.zig").AstPrinter;
+const Parser = @import("frontend/parser.zig").Parser;
+const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
@@ -110,6 +110,6 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
 }
 
 test {
-    _ = @import("lexer.zig");
-    _ = @import("parser.zig");
+    _ = @import("frontend/lexer.zig");
+    _ = @import("frontend/parser.zig");
 }

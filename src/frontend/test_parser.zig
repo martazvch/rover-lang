@@ -3,12 +3,12 @@ const print = std.debug.print;
 const testing = std.testing;
 const expect = testing.expect;
 const allocator = testing.allocator;
-const Parser = @import("../../parser.zig").Parser;
-const AstPrinter = @import("../../ast_print.zig").AstPrinter;
+const Parser = @import("parser.zig").Parser;
+const AstPrinter = @import("ast_print.zig").AstPrinter;
 
 pub fn test_all() !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{
-        "src", "tests", "parser",
+        "tests", "parser",
     });
     defer allocator.free(path);
 

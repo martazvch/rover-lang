@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ErrorKind = @import("errors.zig").ErrKind;
+const ErrorKind = @import("../errors.zig").ErrKind;
 
 pub const TokenKind = enum {
     LeftParen,
