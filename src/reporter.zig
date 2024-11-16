@@ -5,7 +5,7 @@ const print = std.debug.print;
 const Writer = std.fs.File.Writer;
 const WriteError = std.posix.WriteError;
 const ErrorKind = @import("errors.zig").ErrKind;
-const error_infos = @import("errors.zig").error_infos;
+const Token = @import("frontend/lexer.zig").Token;
 
 const BoxChar = enum {
     BottomLeft,
@@ -88,9 +88,13 @@ pub const Reporter = struct {
         return .{ .writer = writer, .source = source };
     }
 
-    pub fn report_all(self: *const Reporter, reports: []const Report) !void {
+    pub fn report_all(self: *const Reporter, file_name: []const u8, reports: []const Report) !void {
+        const sep = if (builtin.os.tag == .windows) '\\' else '/';
+        var iter = std.mem.splitBackwardsScalar(u8, file_name, sep);
+        const name = iter.first();
+
         for (reports) |report| {
-            try report.display(self.source, "stdin", &self.writer);
+            try report.display(self.source, name, &self.writer);
         }
     }
 };
@@ -173,11 +177,16 @@ pub const Report = struct {
         end: usize,
         msg: ?[]const u8,
     ) Self {
-        var infos = error_infos(kind);
+        var infos = kind.get_infos();
 
         if (msg) |m| infos.msg = m;
 
         return Report.init(.Error, infos.msg, start, end, infos.hint, infos.help);
+    }
+
+    /// Creates an error at the given token
+    pub fn err_at_token(kind: ErrorKind, token: *const Token, msg: ?[]const u8) Self {
+        return Self.err(kind, token.start, token.start + token.lexeme.len, msg);
     }
 
     pub fn display(
@@ -197,13 +206,18 @@ pub const Report = struct {
             if (source[current] == '\n') {
                 if (current >= self.start) break;
 
+                const end = if (source[current - 1] == '\r') current - 1 else current;
+                previous_line = source[line_start..end];
+
                 line_count += 1;
-                previous_line = source[line_start..current];
-                line_start = current;
+                // Skip the \n
+                line_start = current + 1;
             }
 
             current += 1;
         }
+        // Line index start to 1
+        line_count += 1;
 
         var buf: [1024]u8 = undefined;
         // We consider the maximum line number being 99 999. The extra space
@@ -221,11 +235,20 @@ pub const Report = struct {
         _ = try writer.write(written);
 
         // Prints file name and location infos
-        //  ╭─[file_name.rz:1:5]
+        //  ╭─[file_name.rv:1:5]
         written = try std.fmt.bufPrint(
             buf[0..],
-            "{s}{s}{s}[{s}{s}.rz{s}:{}:{}]\n",
-            .{ left_padding, box_char(.UpperLeft), box_char(.Horitzontal), color(.Blue), file_name, color(.NoColor), line_count, line_start },
+            "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
+            .{
+                left_padding,
+                box_char(.UpperLeft),
+                box_char(.Horitzontal),
+                color(.Blue),
+                file_name,
+                color(.NoColor),
+                line_count,
+                self.end - line_start + 1,
+            },
         );
         _ = try writer.write(written);
 
@@ -282,9 +305,12 @@ pub const Report = struct {
         _ = try writer.write(hint);
         _ = try writer.write(color(.NoColor));
 
+        _ = try writer.write(left_padding);
+        const corner = try std.fmt.bufPrint(&buf, "{s}\n", .{corner_to_end});
+        _ = try writer.write(corner);
+
         if (self.help) |h_msg| {
-            _ = try writer.write(left_padding);
-            const help = try std.fmt.bufPrint(&buf, "{s}\n  {s} {s}\n", .{ corner_to_end, help_msg, h_msg });
+            const help = try std.fmt.bufPrint(&buf, "  {s} {s}\n", .{ help_msg, h_msg });
             _ = try writer.write(help);
         }
     }

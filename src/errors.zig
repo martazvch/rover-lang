@@ -13,32 +13,45 @@ pub const ErrKind = enum {
     ChainingCmpOp,
     UnclosedParen,
     UnexpectedEof,
-};
 
-pub fn error_infos(kind: ErrKind) ErrorInfo {
-    return switch (kind) {
-        .UnterminatedStr => .{
-            .msg = "unterminated string",
-            .hint = "here",
-            .help = "close the opening quote",
-        },
-        .UnexpectedChar => .{
-            .msg = "unexpected character",
-            .hint = "here",
-        },
-        .ChainingCmpOp => .{
-            .msg = "chaining comparison operators",
-            .hint = "this one is not allowed",
-            .help = "split your comparison with 'and' and 'or' operators",
-        },
-        .UnclosedParen => .{
-            .msg = "unclosed parenthesis",
-            .hint = "here",
-            .help = "close the opening parenthesis",
-        },
-        .UnexpectedEof => .{
-            .msg = "unexpected end of file",
-            .hint = "",
-        },
-    };
-}
+    // Compiler
+    TooManyConst,
+
+    pub fn get_infos(self: *const ErrKind) ErrorInfo {
+        return switch (self.*) {
+            // Lexer
+            .UnterminatedStr => .{
+                .msg = "unterminated string",
+                .hint = "here",
+                .help = "close the opening quote",
+            },
+            .UnexpectedChar => .{
+                .msg = "unexpected character",
+                .hint = "here",
+            },
+
+            // Parser
+            .ChainingCmpOp => .{
+                .msg = "chaining comparison operators",
+                .hint = "this one is not allowed",
+                .help = "split your comparison with 'and' and 'or' operators",
+            },
+            .UnclosedParen => .{
+                .msg = "unclosed parenthesis",
+                .hint = "here",
+                .help = "close the opening parenthesis",
+            },
+            .UnexpectedEof => .{
+                .msg = "unexpected end of file",
+                .hint = "",
+            },
+
+            // Compiler
+            .TooManyConst => .{
+                .msg = "too many constant in this chunk (max 256)",
+                .hint = "this one",
+                .help = "try to split your code into smaller chunks",
+            },
+        };
+    }
+};

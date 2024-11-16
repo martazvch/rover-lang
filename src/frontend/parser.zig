@@ -155,7 +155,7 @@ pub const Parser = struct {
 
         self.panic_mode = true;
 
-        const report = Report.err(error_kind, token.start, token.start + token.lexeme.len, msg);
+        const report = Report.err_at_token(error_kind, token, msg);
         try self.errs.append(report);
     }
 

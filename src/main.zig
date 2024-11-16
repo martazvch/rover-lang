@@ -6,6 +6,8 @@ const clap = @import("clap");
 const Reporter = @import("reporter.zig").Reporter;
 const Parser = @import("frontend/parser.zig").Parser;
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
+const Compiler = @import("backend/compiler.zig").Compiler;
+const Disassembler = @import("backend/disassembler.zig").Disassembler;
 
 pub fn main() !void {
     if (builtin.os.tag == .windows) {
@@ -26,6 +28,7 @@ pub fn main() !void {
         \\-h, --help             Display this help and exit
         \\-f, --file <FILE>      Path to the file to execute
         \\--print-ast            Prints the AST
+        \\--print-bytecode       Prints the compiled bytecode
     );
 
     const parsers = comptime .{
@@ -48,14 +51,22 @@ pub fn main() !void {
 
     if (res.args.help != 0) return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
 
+    const print_ast = if (res.args.@"print-ast" == 1) true else false;
+    const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
+
     if (res.args.file) |f| {
-        try run_file(allocator, f);
+        try run_file(allocator, f, print_ast, print_bytecode);
     } else {
-        try repl(allocator, if (res.args.@"print-ast" == 1) true else false);
+        try repl(allocator, print_ast);
     }
 }
 
-fn run_file(allocator: Allocator, filename: []const u8) !void {
+fn run_file(
+    allocator: Allocator,
+    filename: []const u8,
+    print_ast: bool,
+    print_bytecode: bool,
+) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
         _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, filename });
@@ -65,11 +76,37 @@ fn run_file(allocator: Allocator, filename: []const u8) !void {
     defer file.close();
 
     const size = try file.getEndPos();
-
     const buf = try allocator.alloc(u8, size);
     defer allocator.free(buf);
 
     _ = try file.readAll(buf);
+
+    var parser: Parser = undefined;
+    parser.init(allocator);
+    defer parser.deinit();
+
+    parser.reinit();
+
+    try parser.parse(buf);
+    const reporter = Reporter.init(buf);
+    try reporter.report_all(filename, parser.errs.items);
+
+    if (print_ast) {
+        var ast_printer = AstPrinter.init(allocator);
+        defer ast_printer.deinit();
+
+        try ast_printer.parse_ast(parser.stmts.items);
+        ast_printer.display();
+    }
+
+    var compiler = Compiler.init(allocator);
+    defer compiler.deinit();
+    try compiler.compile(parser.stmts.items);
+
+    if (print_bytecode) {
+        var dis = Disassembler.init(&compiler.chunk);
+        try dis.dis_chunk("main");
+    }
 }
 
 fn repl(allocator: Allocator, print_ast: bool) !void {
@@ -100,7 +137,7 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
         parser.reinit();
         try parser.parse(input.items);
         const reporter = Reporter.init(input.items);
-        try reporter.report_all(parser.errs.items);
+        try reporter.report_all("stdin", parser.errs.items);
 
         if (print_ast) {
             try ast_printer.parse_ast(parser.stmts.items);
