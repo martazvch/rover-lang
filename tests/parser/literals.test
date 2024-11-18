@@ -1,6 +1,6 @@
-# Tests all literals
+// Tests all literals
 
-## Int
+// Int
 code:
 1
 

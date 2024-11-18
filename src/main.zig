@@ -58,7 +58,7 @@ pub fn main() !void {
     if (res.args.file) |f| {
         try run_file(allocator, f, print_ast, print_bytecode);
     } else {
-        try repl(allocator, print_ast);
+        try repl(allocator, print_ast, print_bytecode);
     }
 }
 
@@ -86,11 +86,11 @@ fn run_file(
     parser.init(allocator);
     defer parser.deinit();
 
-    parser.reinit();
+    // parser.reinit();
 
     try parser.parse(buf);
-    const reporter = Reporter.init(buf);
-    try reporter.report_all(filename, parser.errs.items);
+    var reporter = Reporter.init(buf);
+    try reporter.report_all(filename, parser.errs.items, parser.errs_extra.items);
 
     if (print_ast) {
         var ast_printer = AstPrinter.init(allocator);
@@ -115,7 +115,7 @@ fn run_file(
     try vm.run();
 }
 
-fn repl(allocator: Allocator, print_ast: bool) !void {
+fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
@@ -142,13 +142,28 @@ fn repl(allocator: Allocator, print_ast: bool) !void {
 
         parser.reinit();
         try parser.parse(input.items);
-        const reporter = Reporter.init(input.items);
-        try reporter.report_all("stdin", parser.errs.items);
+        var reporter = Reporter.init(input.items);
+        try reporter.report_all("stdin", parser.errs.items, parser.errs_extra.items);
 
         if (print_ast) {
+            ast_printer.reinit();
             try ast_printer.parse_ast(parser.stmts.items);
             ast_printer.display();
         }
+
+        var compiler = Compiler.init(allocator);
+        defer compiler.deinit();
+        try compiler.compile(parser.stmts.items);
+
+        if (print_bytecode) {
+            var dis = Disassembler.init(&compiler.chunk);
+            try dis.dis_chunk("main");
+        }
+
+        var vm = Vm.new(allocator, &compiler.chunk);
+        vm.init();
+        defer vm.deinit();
+        try vm.run();
     }
 }
 

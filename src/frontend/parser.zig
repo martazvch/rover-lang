@@ -10,6 +10,7 @@ const Token = @import("lexer.zig").Token;
 const TokenKind = @import("lexer.zig").TokenKind;
 const Lexer = @import("lexer.zig").Lexer;
 const ErrorKind = @import("../errors.zig").ErrKind;
+const IterList = @import("../iter_list.zig").IterList;
 
 const Precedence = enum {
     None,
@@ -28,6 +29,7 @@ const Precedence = enum {
 pub const Parser = struct {
     stmts: ArrayList(Stmt),
     errs: ArrayList(Report),
+    errs_extra: ArrayList([]const u8),
     arena: ArenaAllocator,
     allocator: Allocator,
     lexer: Lexer,
@@ -46,6 +48,7 @@ pub const Parser = struct {
         self.allocator = self.arena.allocator();
         self.stmts = ArrayList(Stmt).init(self.allocator);
         self.errs = ArrayList(Report).init(self.allocator);
+        self.errs_extra = ArrayList([]const u8).init(self.allocator);
         self.lexer = Lexer.new();
         self.current = Token.empty();
         self.previous = Token.empty();
@@ -54,8 +57,6 @@ pub const Parser = struct {
 
     pub fn deinit(self: *Self) void {
         self.arena.deinit();
-        // self.stmts.deinit();
-        // self.errs.deinit();
     }
 
     pub fn reinit(self: *Self) void {
@@ -130,7 +131,17 @@ pub const Parser = struct {
         return Error.err;
     }
 
-    fn error_at_current(self: *Self, error_kind: ErrorKind, msg: ?[]const u8) !void {
+    /// Expecy a specific type, otherwise it's an error and we enter
+    /// *panic* mode. Allow to pass a token to be marked as initial error
+    /// (usefull for example when unclosed parenthesis, we give the first)
+    fn expect_or_err_at(self: *Self, kind: TokenKind, error_kind: ErrorKind, tk: *const Token) !void {
+        if (try self.match(kind)) return;
+
+        try self.error_at(tk, error_kind, null);
+        return error.err;
+    }
+
+    fn error_at_current(self: *Self, error_kind: ErrorKind, msg: ?[]const u8) Error!void {
         try self.error_at(&self.current, error_kind, msg);
     }
 
@@ -182,10 +193,18 @@ pub const Parser = struct {
 
     const Rule = struct { prec: i8, assoc: Assoc = .Left };
 
-    const rules = std.enums.directEnumArrayDefault(TokenKind, Rule, .{ .prec = -1, .assoc = .Left }, 0, .{
-        .LeftParen = .{ .prec = 30 },
+    const rules = std.enums.directEnumArrayDefault(TokenKind, Rule, .{ .prec = -1 }, 0, .{
+        .EqualEqual = .{ .prec = 30, .assoc = .None },
+        .BangEqual = .{ .prec = 30, .assoc = .None },
+
+        .Greater = .{ .prec = 40, .assoc = .None },
+        .GreaterEqual = .{ .prec = 40, .assoc = .None },
+        .Less = .{ .prec = 40, .assoc = .None },
+        .LessEqual = .{ .prec = 40, .assoc = .None },
+
         .Minus = .{ .prec = 60 },
         .Plus = .{ .prec = 60 },
+
         .Slash = .{ .prec = 70 },
         .Star = .{ .prec = 70 },
     });
@@ -210,7 +229,7 @@ pub const Parser = struct {
             // Here, we can safely use it
             try self.advance();
             const op = self.previous;
-            const rhs = try self.parse_precedence_expr(next_rule.prec);
+            const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
 
             const expr = try self.allocator.create(Expr);
             expr.* = .{ .BinOp = .{
@@ -254,16 +273,22 @@ pub const Parser = struct {
             .LeftParen => self.grouping(),
             .Int => self.int(),
             else => {
-                try self.error_at_current(.UnexpectedEof, null);
+                if (self.previous.kind == .Eof) {
+                    try self.error_at_prev(.UnexpectedEof, null);
+                } else {
+                    try self.errs_extra.append(self.previous.lexeme);
+                    try self.error_at_prev(.ExpectExpr, null);
+                }
                 return error.err;
             },
         };
     }
 
     fn grouping(self: *Self) Error!*Expr {
+        const opening = &self.previous;
         const expr = try self.allocator.create(Expr);
         expr.* = .{ .Grouping = .{ .expr = try self.parse_precedence_expr(0) } };
-        try self.expect(.RightParen, .UnclosedParen);
+        try self.expect_or_err_at(.RightParen, .UnclosedParen, opening);
         return expr;
     }
 

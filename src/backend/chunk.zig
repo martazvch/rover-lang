@@ -7,11 +7,30 @@ pub const OpCode = enum(u8) {
     Add,
     Constant,
     Divide,
+    False,
     Multiply,
     Negate,
+    Not,
+    Null,
     Print,
     Return,
     Subtract,
+    True,
+};
+
+/// All lhs and rhs types in binop
+/// If *Other*, it means it calls the Add trait
+pub const BinOpType = enum {
+    IntInt,
+    IntFloat,
+    IntUint,
+    FloatInt,
+    UintInt,
+    UintFloat,
+    FloatUint,
+    FloatFloat,
+    UintUint,
+    Other,
 };
 
 pub const Chunk = struct {

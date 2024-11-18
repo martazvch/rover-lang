@@ -1,0 +1,13 @@
+// Binary operations with scalar types
+
+// Ints
+
+code:
+print 1 + 1
+print 5 * (4 - 6 / 3)
+
+expect:
+2
+10
+
+================

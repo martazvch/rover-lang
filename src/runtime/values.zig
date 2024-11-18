@@ -5,6 +5,7 @@ pub const Value = union(enum) {
     Bool: bool,
     Float: f64,
     Int: i64,
+    Uint: u64,
     Null,
 
     const Self = @This();
@@ -21,16 +22,21 @@ pub const Value = union(enum) {
         return .{ .Int = value };
     }
 
+    pub fn uint(value: u64) Self {
+        return .{ .Uint = value };
+    }
+
     pub fn null_() Self {
         return .{ .Null = undefined };
     }
 
     pub fn log(self: *const Value) void {
         switch (self.*) {
-            .Int => |v| print("{}", .{v}),
-            .Float => |v| print("{d}", .{v}),
             .Bool => |v| print("{}", .{v}),
+            .Float => |v| print("{d}", .{v}),
+            .Int => |v| print("{}", .{v}),
             .Null => print("null", .{}),
+            .Uint => |v| print("{}", .{v}),
             // .Obj => |v| v.log(),
         }
     }

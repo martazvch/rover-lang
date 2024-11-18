@@ -6,6 +6,7 @@ const Writer = std.fs.File.Writer;
 const WriteError = std.posix.WriteError;
 const ErrorKind = @import("errors.zig").ErrKind;
 const Token = @import("frontend/lexer.zig").Token;
+const IterList = @import("iter_list.zig").IterList;
 
 const BoxChar = enum {
     BottomLeft,
@@ -64,6 +65,7 @@ const corner_to_end = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 2;
 pub const Reporter = struct {
     source: []const u8,
     writer: WriterType,
+    extra: IterList([]const u8),
 
     pub const WriterType = union(enum) {
         StdOut: std.fs.File.Writer,
@@ -85,16 +87,23 @@ pub const Reporter = struct {
             writer = .{ .StdOut = std.io.getStdOut().writer() };
         }
 
-        return .{ .writer = writer, .source = source };
+        return .{ .writer = writer, .source = source, .extra = undefined };
     }
 
-    pub fn report_all(self: *const Reporter, file_name: []const u8, reports: []const Report) !void {
+    pub fn report_all(
+        self: *Reporter,
+        file_name: []const u8,
+        reports: []const Report,
+        extra_infos: []const []const u8,
+    ) !void {
         const sep = if (builtin.os.tag == .windows) '\\' else '/';
         var iter = std.mem.splitBackwardsScalar(u8, file_name, sep);
         const name = iter.first();
 
-        for (reports) |report| {
-            try report.display(self.source, name, &self.writer);
+        self.extra = IterList([]const u8).init(extra_infos);
+
+        for (reports) |*report| {
+            try report.display(self.source, name, &self.writer, &self.extra);
         }
     }
 };
@@ -121,19 +130,18 @@ const WindowsReporter = struct {
 /// Error report used en each step of the Rover language:
 /// lexing, parsing, compiling, executing, ...
 /// It has:
-///  - msg: Current message to display a the beginning
+///  - kind: error kind of type *ErrorKind*
 ///  - level: warning or error
 ///  - start: starting byte offset from source of the error
 ///  - end: ending byte offset from source of the error
 ///  - hint: message under the error
 ///  - help: optional message at the end to help solve
 pub const Report = struct {
-    msg: []const u8,
+    kind: ErrorKind,
     level: Level,
     start: usize,
     end: usize,
-    hint: []const u8,
-    help: ?[]const u8,
+    msg: ?[]const u8,
 
     pub const Level = enum {
         Error,
@@ -152,36 +160,31 @@ pub const Report = struct {
     const Self = @This();
 
     pub fn init(
+        kind: ErrorKind,
         level: Level,
-        msg: []const u8,
         start: usize,
         end: usize,
-        hint: []const u8,
-        help: ?[]const u8,
+        msg: ?[]const u8,
     ) Self {
         return .{
+            .kind = kind,
             .level = level,
-            .msg = msg,
             .start = start,
             .end = end,
-            .hint = hint,
-            .help = help,
+            .msg = msg,
         };
     }
 
     /// Creates an error associated with the kind. If *msg* is not null
     /// overrides the message in the template.
+    // TODO: make last agrs being arguments for formatting
     pub fn err(
         kind: ErrorKind,
         start: usize,
         end: usize,
         msg: ?[]const u8,
     ) Self {
-        var infos = kind.get_infos();
-
-        if (msg) |m| infos.msg = m;
-
-        return Report.init(.Error, infos.msg, start, end, infos.hint, infos.help);
+        return Report.init(kind, .Error, start, end, msg);
     }
 
     /// Creates an error at the given token
@@ -194,6 +197,7 @@ pub const Report = struct {
         source: []const u8,
         file_name: []const u8,
         writer: *const Reporter.WriterType,
+        extra: *IterList([]const u8),
     ) !void {
         var current: usize = 0;
         var line_start: usize = 0;
@@ -229,10 +233,18 @@ pub const Report = struct {
         const line_digit_count = written.len;
         const left_padding = buf2[0 .. written.len + 2];
 
+        const infos = self.kind.get_infos();
+
         // Prints the error part
         //  Error: <err-msg>
-        written = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ self.level.get_msg(), self.msg });
+        written = try std.fmt.bufPrint(&buf, "{s} {s}", .{ self.level.get_msg(), infos.msg });
         _ = try writer.write(written);
+
+        // Could be extra informations, like token lexeme
+        if (try self.kind.extra(&buf, extra)) |w| {
+            _ = try writer.write(w);
+        }
+        _ = try writer.write("\n");
 
         // Prints file name and location infos
         //  ╭─[file_name.rv:1:5]
@@ -301,7 +313,7 @@ pub const Report = struct {
         _ = try writer.write(buf4[0..start_space]);
 
         _ = try writer.write(color(.Yellow));
-        const hint = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ corner_to_hint, self.hint });
+        const hint = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ corner_to_hint, infos.hint });
         _ = try writer.write(hint);
         _ = try writer.write(color(.NoColor));
 
@@ -309,7 +321,7 @@ pub const Report = struct {
         const corner = try std.fmt.bufPrint(&buf, "{s}\n", .{corner_to_end});
         _ = try writer.write(corner);
 
-        if (self.help) |h_msg| {
+        if (infos.help) |h_msg| {
             const help = try std.fmt.bufPrint(&buf, "  {s} {s}\n", .{ help_msg, h_msg });
             _ = try writer.write(help);
         }

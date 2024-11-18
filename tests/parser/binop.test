@@ -1,0 +1,48 @@
+// Tests binary operations
+
+code:
+1+7
+
+expect:
+[Binop +]
+    [Int literal 1]
+    [Int literal 7]
+
+================
+
+code:
+5+2*3/4-6
+
+expect:
+[Binop -]
+    [Binop +]
+        [Int literal 5]
+        [Binop /]
+            [Binop *]
+                [Int literal 2]
+                [Int literal 3]
+            [Int literal 4]
+    [Int literal 6]
+
+================
+
+code:
+1 + - - - 5
+
+expect:
+[Binop +]
+    [Int literal 1]
+    [Unary -]
+        [Unary -]
+            [Unary -]
+                [Int literal 5]
+
+================
+
+code:
+1 + + 1
+
+error:
+ExpectExpr, +
+
+================

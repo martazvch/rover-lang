@@ -6,6 +6,7 @@ const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
+const BinOpType = @import("chunk.zig").BinOpType;
 const Report = @import("../reporter.zig").Report;
 const Value = @import("../runtime/values.zig").Value;
 
@@ -79,6 +80,8 @@ pub const Compiler = struct {
             .Slash => self.chunk.write_op(.Divide),
             else => unreachable,
         };
+
+        try self.chunk.write_byte(@intFromEnum(BinOpType.IntInt));
     }
 
     fn grouping(self: *Self, expr: *const Ast.Grouping) !void {
@@ -92,6 +95,7 @@ pub const Compiler = struct {
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
         try switch (expr.op.kind) {
             .Minus => self.chunk.write_op(.Negate),
+            .Not => self.chunk.write_op(.Not),
             else => unreachable,
         };
     }

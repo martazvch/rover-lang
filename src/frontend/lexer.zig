@@ -3,71 +3,62 @@ const Allocator = std.mem.Allocator;
 const ErrorKind = @import("../errors.zig").ErrKind;
 
 pub const TokenKind = enum {
-    LeftParen,
-    RightParen,
-    LeftBrace,
-    RightBrace,
-
+    And,
+    As,
+    Bang,
+    BangEqual,
+    BoolKw,
     Colon,
     Comma,
     Dot,
-    DotStar,
     DotBang,
-    DotQuestionMark,
     DotDot,
     DotDotDot,
-
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Modulo,
-
-    Bang,
-    Equal,
-    Less,
-    Greater,
-    LessEqual,
-    GreaterEqual,
-    EqualEqual,
-    BangEqual,
-
-    QuestionMark,
-
-    Identifier,
-    Int,
-    Float,
-    String,
-
-    And,
+    DotQuestionMark,
+    DotStar,
     Else,
+    Eof,
+    Equal,
+    EqualEqual,
+    Error,
     False,
-    Or,
-    True,
-
-    IfNull,
-
-    As,
-    If,
-    For,
+    Float,
+    FloatKw,
     Fn,
+    For,
+    Greater,
+    GreaterEqual,
+    Identifier,
+    If,
+    IfNull,
     In,
+    Int,
+    IntKw,
+    LeftBrace,
+    LeftParen,
+    Less,
+    LessEqual,
+    Minus,
+    Modulo,
+    NewLine,
+    Not,
     Null,
+    Or,
+    Plus,
     Print,
+    QuestionMark,
     Return,
+    RightBrace,
+    RightParen,
     Self,
+    Slash,
+    Star,
+    String,
     Struct,
+    True,
+    UintKw,
     Var,
     While,
-
-    IntKw,
-    FloatKw,
-    UintKw,
-    BoolKw,
-
-    NewLine,
-    Error,
-    Eof,
 };
 
 pub const Token = struct {
@@ -208,7 +199,17 @@ pub const Lexer = struct {
                     break :blk .Identifier;
                 }
             },
-            'n' => self.check_keyword(1, 3, "ull", .Null),
+            'n' => blk: {
+                if (self.current > 1) {
+                    break :blk switch (self.start[1]) {
+                        'o' => self.check_keyword(2, 1, "t", .Not),
+                        'u' => self.check_keyword(2, 2, "ll", .Null),
+                        else => .Identifier,
+                    };
+                } else {
+                    break :blk .Identifier;
+                }
+            },
             'o' => self.check_keyword(1, 1, "r", .Or),
             'p' => self.check_keyword(1, 4, "rint", .Print),
             'r' => self.check_keyword(1, 5, "eturn", .Return),
@@ -392,9 +393,12 @@ test "tokens" {
 
 test "keywords" {
     var lexer = Lexer.new();
-    lexer.init("and else false for fn if in null or print return self struct true var while");
+    lexer.init("and else false for fn if in null or print return self struct true var while not");
 
-    const res = [_]TokenKind{ .And, .Else, .False, .For, .Fn, .If, .In, .Null, .Or, .Print, .Return, .Self, .Struct, .True, .Var, .While, .Eof };
+    const res = [_]TokenKind{
+        .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null, .Or, .Print,
+        .Return, .Self, .Struct, .True, .Var, .While, .Not, .Eof,
+    };
 
     for (0..res.len) |i| {
         const tk = lexer.next();

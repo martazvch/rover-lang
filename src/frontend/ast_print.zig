@@ -63,6 +63,10 @@ pub const AstPrinter = struct {
         };
     }
 
+    pub fn reinit(self: *Self) void {
+        self.tree.clearRetainingCapacity();
+    }
+
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
     }
