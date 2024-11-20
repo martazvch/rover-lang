@@ -32,7 +32,6 @@ pub const Parser = struct {
     errs_extra: ArrayList([]const u8),
     arena: ArenaAllocator,
     allocator: Allocator,
-    lexer: Lexer,
     current: Token,
     previous: Token,
     panic_mode: bool,
@@ -49,7 +48,6 @@ pub const Parser = struct {
         self.stmts = ArrayList(Stmt).init(self.allocator);
         self.errs = ArrayList(Report).init(self.allocator);
         self.errs_extra = ArrayList([]const u8).init(self.allocator);
-        self.lexer = Lexer.new();
         self.current = Token.empty();
         self.previous = Token.empty();
         self.panic_mode = false;
@@ -68,6 +66,12 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Self, source: []const u8) !void {
+        var lexer = Lexer.init(source[0.. :0]);
+
+        while (true) {
+            _ = lexer.next();
+        }
+
         self.lexer.init(source);
         try self.advance();
         try self.skip_new_lines();

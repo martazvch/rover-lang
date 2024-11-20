@@ -2,338 +2,390 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ErrorKind = @import("../errors.zig").ErrKind;
 
-pub const TokenKind = enum {
-    And,
-    As,
-    Bang,
-    BangEqual,
-    BoolKw,
-    Colon,
-    Comma,
-    Dot,
-    DotBang,
-    DotDot,
-    DotDotDot,
-    DotQuestionMark,
-    DotStar,
-    Else,
-    Eof,
-    Equal,
-    EqualEqual,
-    Error,
-    False,
-    Float,
-    FloatKw,
-    Fn,
-    For,
-    Greater,
-    GreaterEqual,
-    Identifier,
-    If,
-    IfNull,
-    In,
-    Int,
-    IntKw,
-    LeftBrace,
-    LeftParen,
-    Less,
-    LessEqual,
-    Minus,
-    Modulo,
-    NewLine,
-    Not,
-    Null,
-    Or,
-    Plus,
-    Print,
-    QuestionMark,
-    Return,
-    RightBrace,
-    RightParen,
-    Self,
-    Slash,
-    Star,
-    String,
-    Struct,
-    True,
-    UintKw,
-    Var,
-    While,
-};
-
 pub const Token = struct {
-    kind: TokenKind,
-    lexeme: []const u8,
-    start: usize,
+    kind: Kind,
+    loc: Loc,
+
+    pub const Loc = struct {
+        start: usize,
+        end: usize,
+    };
+
+    const keywords = std.StaticStringMap(Kind).initComptime(.{
+        .{ "and", .And },
+        .{ "as", .As },
+        .{ "bool", .Bool },
+        .{ "else", .Else },
+        .{ "error", .Error },
+        .{ "false", .False },
+        .{ "float", .FloatKw },
+        .{ "fn", .Fn },
+        .{ "for", .For },
+        .{ "if", .If },
+        .{ "ifnull", .IfNull },
+        .{ "in", .In },
+        .{ "int", .IntKw },
+        .{ "not", .Not },
+        .{ "null", .Null },
+        .{ "or", .Or },
+        .{ "print", .Print },
+        .{ "return", .Return },
+        .{ "self", .Self },
+        .{ "struct", .Struct },
+        .{ "true", .True },
+        .{ "var", .Var },
+        .{ "while", .While },
+    });
+
+    pub const Kind = enum {
+        And,
+        As,
+        Bang,
+        BangEqual,
+        Bool,
+        Colon,
+        Comma,
+        Dot,
+        DotBang,
+        DotDot,
+        DotDotDot,
+        DotQuestionMark,
+        DotStar,
+        Else,
+        Eof,
+        Equal,
+        EqualEqual,
+        Error,
+        False,
+        Float,
+        FloatKw,
+        Fn,
+        For,
+        Greater,
+        GreaterEqual,
+        Identifier,
+        If,
+        IfNull,
+        In,
+        Int,
+        IntKw,
+        LeftBrace,
+        LeftParen,
+        Less,
+        LessEqual,
+        Minus,
+        Modulo,
+        NewLine,
+        Not,
+        Null,
+        Or,
+        Plus,
+        Print,
+        QuestionMark,
+        Return,
+        RightBrace,
+        RightParen,
+        Self,
+        Slash,
+        Star,
+        String,
+        Struct,
+        True,
+        UintKw,
+        Var,
+        While,
+
+        // Errors
+        UnterminatedStr,
+        UnexpectedChar,
+    };
+
+    pub fn get_keyword(ident: []const u8) ?Kind {
+        return keywords.get(ident);
+    }
 
     pub fn empty() Token {
-        return .{ .kind = .Null, .lexeme = undefined, .start = 0 };
+        return .{ .kind = .Null, .loc = Loc{ .start = 0, .end = 0 } };
     }
 
-    pub fn empty_at(at: usize) Token {
-        return .{ .kind = .Null, .lexeme = " ", .start = at };
-    }
+    // pub fn empty_at(at: usize) Token {
+    //     return .{ .kind = .Null, .loc = Loc{ .start = at, .end = 0 } };
+    // }
 };
 
 pub const Lexer = struct {
-    start: []const u8,
-    current: usize,
-    offset: usize,
+    source: [:0]const u8,
+    index: usize,
 
     const Self = @This();
 
-    pub fn new() Self {
-        return .{
-            .start = undefined,
-            .current = 0,
-            .offset = 0,
-        };
-    }
+    const State = enum {
+        Bang,
+        Comment,
+        Dot,
+        DotDot,
+        Equal,
+        Float,
+        Greater,
+        Identifier,
+        Int,
+        Invalid,
+        Less,
+        Slash,
+        Start,
+        String,
+    };
 
-    pub fn init(self: *Self, source: []const u8) void {
-        self.start = source;
-        self.current = 0;
-        self.offset = 0;
+    pub fn init(source: [:0]const u8) Self {
+        return .{
+            .source = source,
+            .index = 0,
+        };
     }
 
     pub fn next(self: *Self) Token {
-        self.skip_space();
-        self.offset += self.current;
+        var res = Token{
+            .kind = undefined,
 
-        self.start = self.start[self.current..];
-        self.current = 0;
-
-        if (self.eof()) {
-            return self.make_token(.Eof);
-        }
-
-        const c = self.advance();
-
-        if (is_alpha(c)) return self.identifier();
-        if (std.ascii.isDigit(c)) return self.number();
-
-        return switch (c) {
-            '(' => self.make_token(.LeftParen),
-            ')' => self.make_token(.RightParen),
-            '{' => self.make_token(.LeftBrace),
-            '}' => self.make_token(.RightBrace),
-            ':' => self.make_token(.Colon),
-            ',' => self.make_token(.Comma),
-            '.' => self.dot(),
-            '+' => self.make_token(.Plus),
-            '-' => self.make_token(.Minus),
-            '*' => self.make_token(.Star),
-            '/' => self.make_token(.Slash),
-            '<' => self.make_if_equal_or_else(.LessEqual, .Less),
-            '>' => self.make_if_equal_or_else(.GreaterEqual, .Greater),
-            '!' => self.make_if_equal_or_else(.BangEqual, .Bang),
-            '=' => self.make_if_equal_or_else(.EqualEqual, .Equal),
-            '?' => self.make_token(.QuestionMark),
-            '"' => self.string(),
-            '\n' => self.make_token(.NewLine),
-            else => Lexer.error_token(.UnexpectedChar),
+            .loc = .{
+                .start = self.index,
+                .end = undefined,
+            },
         };
-    }
 
-    fn string(self: *Self) Token {
-        while (!self.eof() and self.peek() != '"') {
-            _ = self.advance();
-        }
-
-        if (self.eof()) {
-            return Lexer.error_token(.UnterminatedStr);
-        }
-
-        _ = self.advance();
-        return self.make_token(.String);
-    }
-
-    fn number(self: *Self) Token {
-        while (!self.eof() and std.ascii.isDigit(self.peek())) {
-            _ = self.advance();
-        }
-
-        if (self.match('.')) {
-            while (!self.eof() and std.ascii.isDigit(self.peek())) {
-                _ = self.advance();
-            }
-
-            return self.make_token(.Float);
-        }
-
-        return self.make_token(.Int);
-    }
-
-    fn identifier(self: *Self) Token {
-        while (!self.eof() and (is_alpha(self.peek()) or std.ascii.isDigit(self.peek()))) {
-            _ = self.advance();
-        }
-
-        return self.make_token(self.identifier_type());
-    }
-
-    fn identifier_type(self: *Self) TokenKind {
-        return switch (self.start[0]) {
-            'a' => self.check_keyword(1, 2, "nd", .And),
-            'e' => self.check_keyword(1, 3, "lse", .Else),
-            'f' => blk: {
-                if (self.current > 1) {
-                    break :blk switch (self.start[1]) {
-                        'a' => self.check_keyword(2, 3, "lse", .False),
-                        'o' => self.check_keyword(2, 1, "r", .For),
-                        'n' => self.check_keyword(2, 0, "", .Fn),
-                        else => .Identifier,
-                    };
-                } else {
-                    break :blk .Identifier;
+        state: switch (State.Start) {
+            .Start => {
+                switch (self.source[self.index]) {
+                    'a'...'z', 'A'...'Z', '_' => {
+                        res.kind = .Identifier;
+                        continue :state .Identifier;
+                    },
+                    ' ', '\t', '\r' => {
+                        self.index += 1;
+                        res.loc.start = self.index;
+                        continue :state .Start;
+                    },
+                    '(' => {
+                        res.kind = .LeftParen;
+                        self.index += 1;
+                    },
+                    ')' => {
+                        res.kind = .RightParen;
+                        self.index += 1;
+                    },
+                    '{' => {
+                        res.kind = .LeftBrace;
+                        self.index += 1;
+                    },
+                    '}' => {
+                        res.kind = .RightBrace;
+                        self.index += 1;
+                    },
+                    ':' => {
+                        res.kind = .Colon;
+                        self.index += 1;
+                    },
+                    ',' => {
+                        res.kind = .Comma;
+                        self.index += 1;
+                    },
+                    '+' => {
+                        res.kind = .Plus;
+                        self.index += 1;
+                    },
+                    '-' => {
+                        res.kind = .Minus;
+                        self.index += 1;
+                    },
+                    '*' => {
+                        res.kind = .Star;
+                        self.index += 1;
+                    },
+                    '/' => continue :state .Slash,
+                    '\n' => {
+                        res.kind = .NewLine;
+                        self.index += 1;
+                    },
+                    '<' => continue :state .Less,
+                    '>' => continue :state .Greater,
+                    '!' => continue :state .Bang,
+                    '=' => continue :state .Equal,
+                    '.' => continue :state .Dot,
+                    '"' => {
+                        res.kind = .String;
+                        continue :state .String;
+                    },
+                    '1'...'9' => {
+                        res.kind = .Int;
+                        self.index += 1;
+                        continue :state .Int;
+                    },
+                    0 => {
+                        if (self.index == self.source.len) {
+                            return .{
+                                .kind = .Eof,
+                                .loc = .{ .start = self.index, .end = self.index },
+                            };
+                        } else continue :state .Invalid;
+                    },
+                    else => res.kind = .UnexpectedChar,
                 }
             },
-            'i' => blk: {
-                if (self.current > 1) {
-                    break :blk switch (self.start[1]) {
-                        'f' => self.check_keyword(2, 0, "", .If),
-                        'n' => self.check_keyword(2, 0, "", .In),
-                        else => .Identifier,
-                    };
-                } else {
-                    break :blk .Identifier;
+            .Bang => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    '=' => {
+                        res.kind = .BangEqual;
+                        self.index += 1;
+                    },
+                    else => res.kind = .Bang,
                 }
             },
-            'n' => blk: {
-                if (self.current > 1) {
-                    break :blk switch (self.start[1]) {
-                        'o' => self.check_keyword(2, 1, "t", .Not),
-                        'u' => self.check_keyword(2, 2, "ll", .Null),
-                        else => .Identifier,
-                    };
-                } else {
-                    break :blk .Identifier;
+            .Comment => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    '\n' => continue :state .Start,
+                    else => continue :state .Comment,
                 }
             },
-            'o' => self.check_keyword(1, 1, "r", .Or),
-            'p' => self.check_keyword(1, 4, "rint", .Print),
-            'r' => self.check_keyword(1, 5, "eturn", .Return),
-            's' => blk: {
-                if (self.current > 1) {
-                    break :blk switch (self.start[1]) {
-                        't' => self.check_keyword(2, 4, "ruct", .Struct),
-                        'e' => self.check_keyword(2, 2, "lf", .Self),
-                        else => .Identifier,
-                    };
-                } else {
-                    break :blk .Identifier;
+            .Dot => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    '.' => continue :state .DotDot,
+                    '*' => {
+                        res.kind = .DotStar;
+                        self.index += 1;
+                    },
+                    '?' => {
+                        res.kind = .DotQuestionMark;
+                        self.index += 1;
+                    },
+                    '!' => {
+                        res.kind = .DotBang;
+                        self.index += 1;
+                    },
+                    else => res.kind = .Dot,
                 }
             },
-            't' => self.check_keyword(1, 3, "rue", .True),
-            'v' => self.check_keyword(1, 2, "ar", .Var),
-            'w' => self.check_keyword(1, 4, "hile", .While),
-            else => .Identifier,
-        };
-    }
+            .DotDot => {
+                self.index += 1;
 
-    fn check_keyword(self: *const Self, start: u8, len: u8, rest: []const u8, kind: TokenKind) TokenKind {
-        if (self.current - start == len and std.mem.eql(u8, self.start[start .. start + len], rest)) {
-            return kind;
-        }
+                switch (self.source[self.index]) {
+                    '.' => {
+                        res.kind = .DotDotDot;
+                        self.index += 1;
+                    },
+                    else => res.kind = .DotDot,
+                }
+            },
+            .Equal => {
+                self.index += 1;
 
-        return .Identifier;
-    }
+                switch (self.source[self.index]) {
+                    '=' => {
+                        res.kind = .EqualEqual;
+                        self.index += 1;
+                    },
+                    else => res.kind = .Equal,
+                }
+            },
+            .Float => {
+                self.index += 1;
 
-    // Handles all the dot syntaxes: .., ..., .*, .?, .!
-    fn dot(self: *Self) Token {
-        if (self.match('.')) {
-            if (self.match('.')) {
-                return self.make_token(.DotDotDot);
-            }
-            return self.make_token(.DotDot);
-        } else if (self.match('*')) {
-            return self.make_token(.DotStar);
-        } else if (self.match('?')) {
-            return self.make_token(.DotQuestionMark);
-        } else if (self.match('!')) {
-            return self.make_token(.DotBang);
-        } else {
-            return self.make_token(.Dot);
-        }
-    }
+                switch (self.source[self.index]) {
+                    '0'...'9' => continue :state .Float,
+                    else => res.kind = .Float,
+                }
+            },
+            .Greater => {
+                self.index += 1;
 
-    fn peek(self: *const Self) u8 {
-        return self.start[self.current];
-    }
+                switch (self.source[self.index]) {
+                    '=' => {
+                        res.kind = .GreaterEqual;
+                        self.index += 1;
+                    },
+                    else => res.kind = .Greater,
+                }
+            },
+            .Identifier => {
+                self.index += 1;
 
-    fn peek_next(self: *const Self) u8 {
-        if (self.current + 1 >= self.start.len) {
-            return 0;
-        }
+                switch (self.source[self.index]) {
+                    'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .Identifier,
+                    else => {
+                        const ident = self.source[res.loc.start..self.index];
 
-        return self.start[self.current + 1];
-    }
-
-    fn advance(self: *Self) u8 {
-        self.current += 1;
-        return self.start[self.current - 1];
-    }
-
-    fn make_token(self: *const Self, kind: TokenKind) Token {
-        return .{
-            .kind = kind,
-            .lexeme = self.start[0..self.current],
-            .start = self.offset,
-        };
-    }
-    fn make_if_equal_or_else(self: *Self, if_equal: TokenKind, else_: TokenKind) Token {
-        if (self.match('=')) {
-            return self.make_token(if_equal);
-        } else {
-            return self.make_token(else_);
-        }
-    }
-
-    /// Error token use the *start* field to encode the enum value of the error.
-    /// It is later recomputed by the parser to have the real start. We put an
-    /// empty *lexeme* so that the len is 0 when the reporter uses it
-    fn error_token(error_kind: ErrorKind) Token {
-        return .{
-            .kind = .Error,
-            .lexeme = "",
-            .start = @intFromEnum(error_kind),
-        };
-    }
-
-    fn match(self: *Self, char: u8) bool {
-        if (self.eof()) return false;
-        if (self.start[self.current] != char) return false;
-
-        self.current += 1;
-        return true;
-    }
-
-    fn skip_space(self: *Self) void {
-        while (!self.eof()) {
-            const c = self.peek();
-
-            switch (c) {
-                ' ', '\r' => _ = self.advance(),
-                '/' => {
-                    if (self.peek_next() == '/') {
-                        while (!self.eof() and self.peek() != '\n') {
-                            _ = self.advance();
+                        if (Token.get_keyword(ident)) |kw| {
+                            res.kind = kw;
                         }
-                    } else break;
-                },
-                else => break,
-            }
-        }
-    }
+                    },
+                }
+            },
+            .Int => {
+                switch (self.source[self.index]) {
+                    '0'...'9' => {
+                        self.index += 1;
+                        continue :state .Int;
+                    },
+                    '.' => continue :state .Float,
+                    else => {},
+                }
+            },
+            .Invalid => {
+                self.index += 1;
 
-    fn eof(self: *const Self) bool {
-        return self.current >= self.start.len;
+                switch (self.source[self.index]) {
+                    0 => {
+                        if (self.index == self.source.len) {
+                            res.kind = .Eof;
+                        } else continue :state .Invalid;
+                    },
+                    ' ' => res.kind = .Error,
+                    else => continue :state .Invalid,
+                }
+            },
+            .Less => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    '=' => {
+                        res.kind = .LessEqual;
+                        self.index += 1;
+                    },
+                    else => res.kind = .Less,
+                }
+            },
+            .Slash => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    '/' => continue :state .Comment,
+                    else => res.kind = .Slash,
+                }
+            },
+            .String => {
+                self.index += 1;
+
+                switch (self.source[self.index]) {
+                    0 => {
+                        if (self.index == self.source.len) {
+                            res.kind = .UnterminatedStr;
+                        }
+                    },
+                    '"' => self.index += 1,
+                    else => continue :state .String,
+                }
+            },
+        }
+
+        res.loc.end = self.index;
+        return res;
     }
 };
-
-fn is_alpha(c: u8) bool {
-    return std.ascii.isAlphabetic(c) or c == '_';
-}
 
 // ------------
 //  Tests
@@ -341,45 +393,44 @@ fn is_alpha(c: u8) bool {
 const expect = std.testing.expect;
 
 test "ident and strings" {
-    var lexer = Lexer.new();
-    lexer.init("foo bar variable truth");
+    var lexer = Lexer.init("foo bar variable  truth");
 
     const res = [_]Token{
-        .{ .kind = .Identifier, .lexeme = "foo", .start = 0 },
-        .{ .kind = .Identifier, .lexeme = "bar", .start = 4 },
-        .{ .kind = .Identifier, .lexeme = "variable", .start = 8 },
-        .{ .kind = .Identifier, .lexeme = "truth", .start = 17 },
+        .{ .kind = .Identifier, .loc = .{ .start = 0, .end = 3 } },
+        .{ .kind = .Identifier, .loc = .{ .start = 4, .end = 7 } },
+        .{ .kind = .Identifier, .loc = .{ .start = 8, .end = 16 } },
+        .{ .kind = .Identifier, .loc = .{ .start = 18, .end = 23 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.next();
         try expect(tk.kind == res[i].kind);
-        try expect(std.mem.eql(u8, tk.lexeme, res[i].lexeme));
+        try expect(tk.loc.start == res[i].loc.start);
+        try expect(tk.loc.end == res[i].loc.end);
     }
 }
 
 test "numbers" {
-    var lexer = Lexer.new();
-    lexer.init("123 45.6 7.");
+    var lexer = Lexer.init("123 45.6 7.");
 
     const res = [3]Token{
-        .{ .kind = .Int, .lexeme = "123", .start = 0 },
-        .{ .kind = .Float, .lexeme = "45.6", .start = 4 },
-        .{ .kind = .Float, .lexeme = "7.", .start = 9 },
+        .{ .kind = .Int, .loc = .{ .start = 0, .end = 3 } },
+        .{ .kind = .Float, .loc = .{ .start = 4, .end = 8 } },
+        .{ .kind = .Float, .loc = .{ .start = 9, .end = 11 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.next();
         try expect(tk.kind == res[i].kind);
-        try expect(std.mem.eql(u8, tk.lexeme, res[i].lexeme));
+        try expect(tk.loc.start == res[i].loc.start);
+        try expect(tk.loc.end == res[i].loc.end);
     }
 }
 
 test "tokens" {
-    var lexer = Lexer.new();
-    lexer.init("(){}.:,=!< ><= >= !=+-*/");
+    var lexer = Lexer.init("(){}.:,=!< ><= >= !=+-*/");
 
-    const res = [_]TokenKind{
+    const res = [_]Token.Kind{
         .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
         .Comma,        .Equal,      .Bang,      .Less,       .Greater, .LessEqual,
         .GreaterEqual, .BangEqual,  .Plus,      .Minus,      .Star,    .Slash,
@@ -392,10 +443,9 @@ test "tokens" {
 }
 
 test "keywords" {
-    var lexer = Lexer.new();
-    lexer.init("and else false for fn if in null or print return self struct true var while not");
+    var lexer = Lexer.init("and else false for fn if in null or print return self struct true var while not");
 
-    const res = [_]TokenKind{
+    const res = [_]Token.Kind{
         .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null, .Or, .Print,
         .Return, .Self, .Struct, .True, .Var, .While, .Not, .Eof,
     };
@@ -407,22 +457,19 @@ test "keywords" {
 }
 
 test "unterminated string" {
-    var lexer = Lexer.new();
-    lexer.init("\"blabla bli blop");
+    var lexer = Lexer.init("\"blabla bli blop");
 
-    const res: TokenKind = .Error;
-
+    const res: Token.Kind = .UnterminatedStr;
     const tk = lexer.next();
     try expect(tk.kind == res);
 }
 
 test "dot" {
-    var lexer = Lexer.new();
-    lexer.init(". .. ... .! .? .* ...? ....!");
+    var lexer = Lexer.init(". .. ... .! .? .* ....!");
 
-    const res = [_]TokenKind{
-        .Dot,     .DotDot,    .DotDotDot,    .DotBang,   .DotQuestionMark,
-        .DotStar, .DotDotDot, .QuestionMark, .DotDotDot, .DotBang,
+    const res = [_]Token.Kind{
+        .Dot,     .DotDot,    .DotDotDot, .DotBang, .DotQuestionMark,
+        .DotStar, .DotDotDot, .DotBang,
     };
 
     for (0..res.len) |i| {
