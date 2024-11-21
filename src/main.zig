@@ -11,12 +11,12 @@ const Disassembler = @import("backend/disassembler.zig").Disassembler;
 const Vm = @import("runtime/vm.zig").Vm;
 
 pub fn main() !void {
-    if (builtin.os.tag == .windows) {
-        // NOTE: it changes for the whole execution, so some characters won't
-        // be printed out correctly. Maybe change just before / after printing
-        // with 'GetConsoleOutputCP' and changing back to it after
-        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-    }
+    // if (builtin.os.tag == .windows) {
+    //     // NOTE: it changes for the whole execution, so some characters won't
+    //     // be printed out correctly. Maybe change just before / after printing
+    //     // with 'GetConsoleOutputCP' and changing back to it after
+    //     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+    // }
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -77,26 +77,30 @@ fn run_file(
     defer file.close();
 
     const size = try file.getEndPos();
-    const buf = try allocator.alloc(u8, size);
+    const buf = try allocator.alloc(u8, size + 1);
     defer allocator.free(buf);
 
     _ = try file.readAll(buf);
+    buf[size] = 0;
+    const zt = buf[0.. :0];
 
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
 
-    // parser.reinit();
+    try parser.parse(zt);
 
-    try parser.parse(buf);
-    var reporter = Reporter.init(buf);
-    try reporter.report_all(filename, parser.errs.items, parser.errs_extra.items);
+    if (parser.errs.items.len > 0) {
+        var reporter = Reporter.init(zt, parser.tokens.items);
+        try reporter.report_all(filename, parser.errs.items);
+        return;
+    }
 
     if (print_ast) {
         var ast_printer = AstPrinter.init(allocator);
         defer ast_printer.deinit();
 
-        try ast_printer.parse_ast(parser.stmts.items);
+        try ast_printer.parse_ast(buf, parser.stmts.items);
         ast_printer.display();
     }
 
@@ -138,16 +142,21 @@ fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
         try stdin.streamUntilDelimiter(input.writer(), '\n', null);
         // const trimmed = std.mem.trimRight(u8, input.items, "\r");
 
-        try input.append('\n');
-
         parser.reinit();
-        try parser.parse(input.items);
-        var reporter = Reporter.init(input.items);
-        try reporter.report_all("stdin", parser.errs.items, parser.errs_extra.items);
+
+        try input.append(0);
+        const zt = input.items[0 .. input.items.len - 1 :0];
+        try parser.parse(zt);
+
+        if (parser.errs.items.len > 0) {
+            var reporter = Reporter.init(zt, parser.tokens.items);
+            try reporter.report_all("stdin", parser.errs.items);
+            continue;
+        }
 
         if (print_ast) {
             ast_printer.reinit();
-            try ast_printer.parse_ast(parser.stmts.items);
+            try ast_printer.parse_ast(input.items, parser.stmts.items);
             ast_printer.display();
         }
 

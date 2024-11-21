@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ErrorKind = @import("../errors.zig").ErrKind;
 
 pub const Token = struct {
     kind: Kind,
@@ -98,7 +97,75 @@ pub const Token = struct {
         // Errors
         UnterminatedStr,
         UnexpectedChar,
+
+        //         pub fn symbol(self: Kind) []const u8 {
+        //             switch (self) {
+        //         .And => ,
+        //         .As => ,
+        //         .Bang => ,
+        //         .BangEqual => ,
+        //         .Bool => ,
+        //         .Colon => ,
+        //         .Comma => ,
+        //         .Dot => ,
+        //         .DotBang => ,
+        // .        DotDot => ,
+        //         .DotDotDot => ,
+        //         .DotQuestionMark => ,
+        //         .DotStar => ,
+        //         .Else => ,
+        //         .Eof => ,
+        //         .Equal => ,
+        //         .EqualEqual => ,
+        //         .Error => ,
+        //         .False => ,
+        //         .Float => ,
+        //         .FloatKw => ,
+        //         .Fn => ,
+        //         .For => ,
+        //         .Greater => ,
+        //         .GreaterEqual => ,
+        //         .Identifier => ,
+        //         .If => ,
+        //         .IfNull => ,
+        //         .In => ,
+        //         .Int => ,
+        //         .IntKw => ,
+        //         .LeftBrace => ,
+        //         .LeftParen => ,
+        //         .Less => ,
+        //         .LessEqual => ,
+        //         .Minus => ,
+        //         .Modulo => ,
+        //         .NewLine => ,
+        //         .Not => ,
+        //         .Null => ,
+        //         .Or => ,
+        //         .Plus => ,
+        //         .Print => ,
+        //         .QuestionMark => ,
+        //         .Return => ,
+        //         .RightBrace => ,
+        //         .RightParen => ,
+        //         .Self => ,
+        //         .Slash => ,
+        //         .Star => ,
+        //         .String => ,
+        //         .Struct => ,
+        //         .True => ,
+        //         .UintKw => ,
+        //         .Var => ,
+        //         .While => ,
+        // .        UnterminatedStr => ,
+        //         .UnexpectedChar => ,
+        //
+        //
+        //             }
     };
+
+    pub fn from_source(self: *const Token, source: []const u8) []const u8 {
+        return source[self.loc.start..self.loc.end];
+    }
 
     pub fn get_keyword(ident: []const u8) ?Kind {
         return keywords.get(ident);
@@ -107,10 +174,6 @@ pub const Token = struct {
     pub fn empty() Token {
         return .{ .kind = .Null, .loc = Loc{ .start = 0, .end = 0 } };
     }
-
-    // pub fn empty_at(at: usize) Token {
-    //     return .{ .kind = .Null, .loc = Loc{ .start = at, .end = 0 } };
-    // }
 };
 
 pub const Lexer = struct {
@@ -228,7 +291,10 @@ pub const Lexer = struct {
                             };
                         } else continue :state .Invalid;
                     },
-                    else => res.kind = .UnexpectedChar,
+                    else => {
+                        res.kind = .UnexpectedChar;
+                        self.index += 1;
+                    },
                 }
             },
             .Bang => {
@@ -373,7 +439,14 @@ pub const Lexer = struct {
                 switch (self.source[self.index]) {
                     0 => {
                         if (self.index == self.source.len) {
-                            res.kind = .UnterminatedStr;
+                            // For error reporting, one byte length
+                            return .{
+                                .kind = .UnterminatedStr,
+                                .loc = .{
+                                    .start = res.loc.start,
+                                    .end = res.loc.start + 1,
+                                },
+                            };
                         }
                     },
                     '"' => self.index += 1,

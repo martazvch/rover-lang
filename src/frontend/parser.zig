@@ -7,10 +7,7 @@ const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Report = @import("../reporter.zig").Report;
 const Token = @import("lexer.zig").Token;
-const TokenKind = @import("lexer.zig").TokenKind;
 const Lexer = @import("lexer.zig").Lexer;
-const ErrorKind = @import("../errors.zig").ErrKind;
-const IterList = @import("../iter_list.zig").IterList;
 
 const Precedence = enum {
     None,
@@ -27,29 +24,30 @@ const Precedence = enum {
 };
 
 pub const Parser = struct {
+    source: []const u8,
     stmts: ArrayList(Stmt),
     errs: ArrayList(Report),
-    errs_extra: ArrayList([]const u8),
     arena: ArenaAllocator,
     allocator: Allocator,
-    current: Token,
-    previous: Token,
+    tokens: ArrayList(Token),
+    token_id: usize,
     panic_mode: bool,
 
     const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
     const Self = @This();
 
     /// Initialize an instance of Parser. Use it as:
-    /// `var parser: Parser = undefined;`
-    /// `parser.init(allocator);`
+    /// ```
+    /// var parser: Parser = undefined;
+    /// parser.init(allocator);
+    /// ```
     pub fn init(self: *Self, allocator: Allocator) void {
         self.arena = ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
         self.stmts = ArrayList(Stmt).init(self.allocator);
         self.errs = ArrayList(Report).init(self.allocator);
-        self.errs_extra = ArrayList([]const u8).init(self.allocator);
-        self.current = Token.empty();
-        self.previous = Token.empty();
+        self.tokens = ArrayList(Token).init(self.allocator);
+        self.token_id = 0;
         self.panic_mode = false;
     }
 
@@ -59,128 +57,134 @@ pub const Parser = struct {
 
     pub fn reinit(self: *Self) void {
         self.panic_mode = false;
-        self.previous = Token.empty();
-        self.current = Token.empty();
         self.stmts.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
+        self.tokens.clearRetainingCapacity();
+        self.token_id = 0;
     }
 
-    pub fn parse(self: *Self, source: []const u8) !void {
-        var lexer = Lexer.init(source[0.. :0]);
+    pub fn parse(self: *Self, source: [:0]const u8) !void {
+        self.source = source;
+
+        var lexer = Lexer.init(source);
 
         while (true) {
-            _ = lexer.next();
+            const tk = lexer.next();
+
+            try switch (tk.kind) {
+                .UnterminatedStr => self.error_at(&tk, .UnterminatedStr, null),
+                .UnexpectedChar => self.error_at(&tk, .UnexpectedChar, null),
+                else => self.tokens.append(tk),
+            };
+
+            if (tk.kind == .Eof) break;
         }
 
-        self.lexer.init(source);
-        try self.advance();
-        try self.skip_new_lines();
+        self.skip_new_lines();
 
-        while (!try self.match(.Eof)) {
+        while (!self.match(.Eof)) {
             const stmt = self.declaration() catch |e| switch (e) {
                 // If it's our own error, we continue on parsing
                 Error.err => {
-                    try self.synchronize();
+                    self.synchronize();
                     continue;
                 },
                 else => return e,
             };
             try self.stmts.append(stmt);
-            try self.skip_new_lines();
+            self.skip_new_lines();
         }
     }
 
-    fn advance(self: *Self) !void {
-        self.previous = self.current;
+    fn current(self: *const Self) *const Token {
+        return &self.tokens.items[self.token_id];
+    }
 
-        while (true) {
-            self.current = self.lexer.next();
+    fn prev(self: *const Self) Token {
+        return self.tokens.items[self.token_id - 1];
+    }
 
-            if (self.check(.Error)) {
-                try self.err_from_lexer();
-            } else break;
-        }
+    fn advance(self: *Self) void {
+        self.token_id += 1;
     }
 
     /// Returns *true* if the current token is of the asked type and
     /// advance the `current` field to next one. Otherwise, returns *false*
-    fn match(self: *Self, kind: TokenKind) !bool {
+    fn match(self: *Self, kind: Token.Kind) bool {
         if (!self.check(kind)) {
             return false;
         }
 
-        try self.advance();
+        self.advance();
         return true;
     }
 
     /// Checks if we currently are at a token
-    fn check(self: *const Self, kind: TokenKind) bool {
-        return self.current.kind == kind;
+    fn check(self: *const Self, kind: Token.Kind) bool {
+        return self.current().kind == kind;
     }
 
-    fn skip_new_lines(self: *Self) !void {
+    fn skip_new_lines(self: *Self) void {
         while (self.check(.NewLine)) {
-            try self.advance();
+            self.advance();
         }
     }
 
     /// Expect a specific type, otherwise it's an error and we enter
     /// *panic* mode
-    fn expect(self: *Self, kind: TokenKind, error_kind: ErrorKind) !void {
-        if (try self.match(kind)) {
+    fn expect(self: *Self, kind: Token.Kind, error_kind: Report.Tag) !void {
+        if (self.match(kind)) {
             return;
         }
 
-        try self.error_at_current(error_kind, null);
+        try self.error_at_current(error_kind);
         return Error.err;
     }
 
     /// Expecy a specific type, otherwise it's an error and we enter
     /// *panic* mode. Allow to pass a token to be marked as initial error
     /// (usefull for example when unclosed parenthesis, we give the first)
-    fn expect_or_err_at(self: *Self, kind: TokenKind, error_kind: ErrorKind, tk: *const Token) !void {
-        if (try self.match(kind)) return;
+    fn expect_or_err_at(
+        self: *Self,
+        kind: Token.Kind,
+        error_kind: Report.Tag,
+        tk: *const Token,
+        extra: ?usize,
+    ) !void {
+        if (self.match(kind)) return;
 
-        try self.error_at(tk, error_kind, null);
+        try self.error_at(tk, error_kind, extra);
         return error.err;
     }
 
-    fn error_at_current(self: *Self, error_kind: ErrorKind, msg: ?[]const u8) Error!void {
-        try self.error_at(&self.current, error_kind, msg);
+    fn error_at_current(self: *Self, error_kind: Report.Tag, extra: ?usize) Error!void {
+        try self.error_at(&self.prev(), error_kind, extra);
     }
 
-    fn error_at_prev(self: *Self, error_kind: ErrorKind, msg: ?[]const u8) !void {
-        try self.error_at(&self.previous, error_kind, msg);
-    }
-
-    /// Error coming from Error tokens. We use the *start* field to retreive the
-    /// enum value of the error and set it to the real value of the lexer
-    fn err_from_lexer(self: *Self) !void {
-        const err_kind: ErrorKind = @enumFromInt(self.current.start);
-        self.current.start = self.lexer.offset;
-        try self.error_at_current(err_kind, null);
+    fn error_at_prev(self: *Self, error_kind: Report.Tag, extra: ?usize) !void {
+        try self.error_at(&self.prev(), error_kind, extra);
     }
 
     /// If error already encountered and in the same statement parsing,
     /// we exit, let synchronize and resume. It is likely that if we
     /// are already in panic mode, the following errors are just
     /// consequencies of actual bad statement
-    fn error_at(self: *Self, token: *const Token, error_kind: ErrorKind, msg: ?[]const u8) !void {
+    fn error_at(self: *Self, token: *const Token, error_kind: Report.Tag, extra: ?usize) !void {
         if (self.panic_mode) return;
 
         self.panic_mode = true;
 
-        const report = Report.err_at_token(error_kind, token, msg);
+        const report = Report.err_at_token(error_kind, token, extra);
         try self.errs.append(report);
     }
 
-    fn synchronize(self: *Self) !void {
+    fn synchronize(self: *Self) void {
         self.panic_mode = false;
 
         while (!self.check(.Eof)) {
-            switch (self.current.kind) {
+            switch (self.current().kind) {
                 .Fn, .For, .If, .Print, .Return, .Struct, .Var, .While => return,
-                else => try self.advance(),
+                else => self.advance(),
             }
         }
     }
@@ -197,7 +201,7 @@ pub const Parser = struct {
 
     const Rule = struct { prec: i8, assoc: Assoc = .Left };
 
-    const rules = std.enums.directEnumArrayDefault(TokenKind, Rule, .{ .prec = -1 }, 0, .{
+    const rules = std.enums.directEnumArrayDefault(Token.Kind, Rule, .{ .prec = -1 }, 0, .{
         .EqualEqual = .{ .prec = 30, .assoc = .None },
         .BangEqual = .{ .prec = 30, .assoc = .None },
 
@@ -214,14 +218,14 @@ pub const Parser = struct {
     });
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!*Expr {
-        try self.advance();
+        self.advance();
         var node = try self.parse_prefix_expr();
 
         var banned_prec: i8 = -1;
 
         while (true) {
             // We check the current before consuming it
-            const next_rule = rules[@as(usize, @intFromEnum(self.current.kind))];
+            const next_rule = rules[@as(usize, @intFromEnum(self.current().kind))];
 
             if (next_rule.prec < prec_min) break;
 
@@ -231,8 +235,8 @@ pub const Parser = struct {
             }
 
             // Here, we can safely use it
-            try self.advance();
-            const op = self.previous;
+            self.advance();
+            const op = self.prev();
             const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
 
             const expr = try self.allocator.create(Expr);
@@ -246,8 +250,10 @@ pub const Parser = struct {
 
             if (next_rule.assoc == .None) banned_prec = next_rule.prec;
 
-            try self.skip_new_lines();
+            self.skip_new_lines();
         }
+
+        std.debug.print("node: {any}\n", .{node});
 
         return node;
     }
@@ -255,13 +261,13 @@ pub const Parser = struct {
     /// Parses a prefix expression. If we hit a unary first, we recurse
     /// to form an expression
     fn parse_prefix_expr(self: *Self) Error!*Expr {
-        const unary_expr = switch (self.previous.kind) {
+        const unary_expr = switch (self.prev().kind) {
             .Minus => try self.allocator.create(Expr),
             else => return self.parse_primary_expr(),
         };
 
-        const op = self.previous;
-        try self.advance();
+        const op = self.prev();
+        self.advance();
 
         // Recursion appens here
         unary_expr.* = .{ .Unary = .{
@@ -273,14 +279,14 @@ pub const Parser = struct {
     }
 
     fn parse_primary_expr(self: *Self) Error!*Expr {
-        return switch (self.previous.kind) {
+        return switch (self.prev().kind) {
             .LeftParen => self.grouping(),
             .Int => self.int(),
-            else => {
-                if (self.previous.kind == .Eof) {
+            else => |k| {
+                if (k == .Eof) {
                     try self.error_at_prev(.UnexpectedEof, null);
                 } else {
-                    try self.errs_extra.append(self.previous.lexeme);
+                    // try self.errs_extra.append(self.prev().lexeme);
                     try self.error_at_prev(.ExpectExpr, null);
                 }
                 return error.err;
@@ -289,15 +295,17 @@ pub const Parser = struct {
     }
 
     fn grouping(self: *Self) Error!*Expr {
-        const opening = &self.previous;
+        const opening = self.prev();
         const expr = try self.allocator.create(Expr);
         expr.* = .{ .Grouping = .{ .expr = try self.parse_precedence_expr(0) } };
-        try self.expect_or_err_at(.RightParen, .UnclosedParen, opening);
+        try self.expect_or_err_at(.RightParen, .UnclosedParen, &opening, null);
         return expr;
     }
 
     fn int(self: *Self) Error!*Expr {
-        const value = try std.fmt.parseInt(i64, self.previous.lexeme, 10);
+        const previous = self.prev();
+        const lexeme = self.source[previous.loc.start..previous.loc.end];
+        const value = try std.fmt.parseInt(i64, lexeme, 10);
         const expr = try self.allocator.create(Expr);
         expr.* = .{ .IntLit = .{ .value = value } };
 

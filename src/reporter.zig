@@ -4,9 +4,7 @@ const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const Writer = std.fs.File.Writer;
 const WriteError = std.posix.WriteError;
-const ErrorKind = @import("errors.zig").ErrKind;
 const Token = @import("frontend/lexer.zig").Token;
-const IterList = @import("iter_list.zig").IterList;
 
 const BoxChar = enum {
     BottomLeft,
@@ -63,9 +61,9 @@ const corner_to_hint = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 4;
 const corner_to_end = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 2;
 
 pub const Reporter = struct {
-    source: []const u8,
+    source: [:0]const u8,
     writer: WriterType,
-    extra: IterList([]const u8),
+    tokens: []const Token,
 
     pub const WriterType = union(enum) {
         StdOut: std.fs.File.Writer,
@@ -76,52 +74,62 @@ pub const Reporter = struct {
                 inline else => |writer| writer.write(bytes),
             };
         }
+
+        pub fn print(self: *const WriterType, comptime format: []const u8, args: anytype) !void {
+            return switch (self.*) {
+                inline else => |writer| writer.print(format, args),
+            };
+        }
     };
 
-    pub fn init(source: []const u8) Reporter {
+    pub fn init(source: [:0]const u8, tokens: []const Token) Reporter {
         var writer: WriterType = undefined;
+        const stdout = std.io.getStdOut().writer();
 
         if (builtin.os.tag == .windows) {
-            writer = .{ .Custom = WindowsReporter.init() };
+            writer = .{ .Custom = WindowsReporter.init(stdout) };
         } else {
-            writer = .{ .StdOut = std.io.getStdOut().writer() };
+            writer = .{ .StdOut = stdout };
         }
 
-        return .{ .writer = writer, .source = source, .extra = undefined };
+        return .{ .writer = writer, .source = source, .tokens = tokens };
     }
 
     pub fn report_all(
         self: *Reporter,
         file_name: []const u8,
         reports: []const Report,
-        extra_infos: []const []const u8,
     ) !void {
         const sep = if (builtin.os.tag == .windows) '\\' else '/';
         var iter = std.mem.splitBackwardsScalar(u8, file_name, sep);
         const name = iter.first();
 
-        self.extra = IterList([]const u8).init(extra_infos);
-
         for (reports) |*report| {
-            try report.display(self.source, name, &self.writer, &self.extra);
+            try report.display(self.source, name, self.tokens, &self.writer);
         }
     }
 };
 
 const WindowsReporter = struct {
     prev_cp: c_uint,
+    writer: std.fs.File.Writer,
 
     const Self = @This();
 
-    pub fn init() Self {
-        return .{ .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
+    pub fn init(writer: std.fs.File.Writer) Self {
+        return .{ .writer = writer, .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
     }
 
     pub fn write(self: Self, bytes: []const u8) !usize {
-        const stdout = std.io.getStdOut().writer();
-
         _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-        const count = try stdout.write(bytes);
+        const count = try self.writer.write(bytes);
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
+        return count;
+    }
+
+    pub fn print(self: Self, comptime format: []const u8, args: anytype) !void {
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+        const count = try self.writer.print(format, args);
         _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
         return count;
     }
@@ -130,26 +138,25 @@ const WindowsReporter = struct {
 /// Error report used en each step of the Rover language:
 /// lexing, parsing, compiling, executing, ...
 /// It has:
-///  - kind: error kind of type *ErrorKind*
+///  - tag: error tag
 ///  - level: warning or error
 ///  - start: starting byte offset from source of the error
 ///  - end: ending byte offset from source of the error
-///  - hint: message under the error
-///  - help: optional message at the end to help solve
+///  - extra_id: token id for extra info to display
 pub const Report = struct {
-    kind: ErrorKind,
+    tag: Tag,
     level: Level,
     start: usize,
     end: usize,
-    msg: ?[]const u8,
+    extra_id: ?usize,
 
     pub const Level = enum {
         Error,
         Info,
         Warning,
 
-        pub fn get_msg(self: *const Level) []const u8 {
-            return switch (self.*) {
+        pub fn get_level_msg(self: Level) []const u8 {
+            return switch (self) {
                 .Error => err_msg,
                 .Info => @panic("not implemented yet"),
                 .Warning => warning_msg,
@@ -157,48 +164,105 @@ pub const Report = struct {
         }
     };
 
+    pub const Tag = enum {
+        // Lexer
+        UnterminatedStr,
+        UnexpectedChar,
+
+        // Parser
+        ChainingCmpOp,
+        ExpectExpr,
+        UnclosedParen,
+        UnexpectedEof,
+
+        // Compiler
+        TooManyConst,
+    };
+
     const Self = @This();
 
     pub fn init(
-        kind: ErrorKind,
+        tag: Tag,
         level: Level,
         start: usize,
         end: usize,
-        msg: ?[]const u8,
+        extra_id: ?usize,
     ) Self {
         return .{
-            .kind = kind,
+            .tag = tag,
             .level = level,
             .start = start,
             .end = end,
-            .msg = msg,
+            .extra_id = extra_id,
         };
     }
 
-    /// Creates an error associated with the kind. If *msg* is not null
+    /// Creates an error associated with the tag. If *msg* is not null
     /// overrides the message in the template.
-    // TODO: make last agrs being arguments for formatting
-    pub fn err(
-        kind: ErrorKind,
-        start: usize,
-        end: usize,
-        msg: ?[]const u8,
-    ) Self {
-        return Report.init(kind, .Error, start, end, msg);
+    pub fn err(tag: Tag, start: usize, end: usize, extra: ?usize) Self {
+        return Report.init(tag, .Error, start, end, extra);
     }
 
     /// Creates an error at the given token
-    pub fn err_at_token(kind: ErrorKind, token: *const Token, msg: ?[]const u8) Self {
-        return Self.err(kind, token.start, token.start + token.lexeme.len, msg);
+    pub fn err_at_token(tag: Tag, token: *const Token, extra: ?usize) Self {
+        return Self.err(tag, token.loc.start, token.loc.end, extra);
+    }
+
+    fn get_msg(self: *const Self, writer: anytype) !usize {
+        return switch (self.tag) {
+            // Lexer
+            .UnterminatedStr => writer.write("unterminated string"),
+            .UnexpectedChar => writer.write("unexpected character"),
+
+            // Parser
+            .ChainingCmpOp => writer.write("chaining comparison operators"),
+            .ExpectExpr => writer.write("expected expression, found "),
+            .UnclosedParen => writer.write("unclosed parenthesis"),
+            .UnexpectedEof => writer.write("unexpected end of file"),
+
+            // Compiler
+            .TooManyConst => writer.write("too many constant in this chunk (max 256)"),
+        };
+    }
+
+    fn get_hint(self: *const Self, writer: anytype) !usize {
+        return switch (self.tag) {
+            // Lexer
+            .UnterminatedStr, .UnexpectedChar, .ExpectExpr, .UnclosedParen => writer.write("here"),
+
+            // Parser
+            .ChainingCmpOp => writer.write("this one is not allowed"),
+
+            // Compiler
+            .TooManyConst => writer.write("this one"),
+            else => 0,
+        };
+    }
+
+    fn get_help(self: *const Self, writer: anytype) !usize {
+        return switch (self.tag) {
+            // Lexer
+            .UnterminatedStr => writer.write("close the opening quote"),
+
+            // Parser
+            .ChainingCmpOp => writer.write("split your comparison with 'and' and 'or' operators"),
+            .UnclosedParen => writer.write("close the opening parenthesis"),
+
+            // Compiler
+            .TooManyConst => writer.write("try to split your code into smaller chunks"),
+            else => 0,
+        };
     }
 
     pub fn display(
         self: *const Self,
-        source: []const u8,
+        source: [:0]const u8,
         file_name: []const u8,
-        writer: *const Reporter.WriterType,
-        extra: *IterList([]const u8),
+        tokens: []const Token,
+        writer: *Reporter.WriterType,
     ) !void {
+        _ = tokens;
+
         var current: usize = 0;
         var line_start: usize = 0;
         var line_count: usize = 0;
@@ -207,7 +271,7 @@ pub const Report = struct {
         // Looking for current line where it occured and buffers the previous one
         // for context
         while (true) {
-            if (source[current] == '\n') {
+            if (source[current] == 0) {
                 if (current >= self.start) break;
 
                 const end = if (source[current - 1] == '\r') current - 1 else current;
@@ -220,36 +284,29 @@ pub const Report = struct {
 
             current += 1;
         }
+
         // Line index start to 1
         line_count += 1;
 
-        var buf: [1024]u8 = undefined;
+        var buf: [10]u8 = undefined;
         // We consider the maximum line number being 99 999. The extra space
         // is for space between line number and gutter and the one at the beginning
         const buf2: [7]u8 = [_]u8{' '} ** 7;
 
         // Gets line number digit count
-        var written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
+        const written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
         const line_digit_count = written.len;
         const left_padding = buf2[0 .. written.len + 2];
 
-        const infos = self.kind.get_infos();
-
         // Prints the error part
         //  Error: <err-msg>
-        written = try std.fmt.bufPrint(&buf, "{s} {s}", .{ self.level.get_msg(), infos.msg });
-        _ = try writer.write(written);
-
-        // Could be extra informations, like token lexeme
-        if (try self.kind.extra(&buf, extra)) |w| {
-            _ = try writer.write(w);
-        }
+        try writer.print("{s} ", .{self.level.get_level_msg()});
+        _ = try self.get_msg(writer);
         _ = try writer.write("\n");
 
         // Prints file name and location infos
         //  ╭─[file_name.rv:1:5]
-        written = try std.fmt.bufPrint(
-            buf[0..],
+        try writer.print(
             "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
             .{
                 left_padding,
@@ -262,7 +319,6 @@ pub const Report = struct {
                 self.end - line_start + 1,
             },
         );
-        _ = try writer.write(written);
 
         // Prints previous line number, separation and line itself
         //  56 | var a = 3
@@ -277,18 +333,16 @@ pub const Report = struct {
         // Underlines the problem
         // Takes padding into account + separator + space
         //  <space><space> |
-        var buf3: [1024]u8 = undefined;
-        written = try std.fmt.bufPrint(&buf3, "{s}{s} ", .{ left_padding, box_char(.Vertical) });
-        _ = try writer.write(written);
+        try writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
 
         // We get the length of the error code and the half to underline it
-        var buf4: [1024]u8 = [_]u8{' '} ** 1024;
+        var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
         const start_space = self.start - line_start;
         const lexeme_len = @max(self.end - self.start, 1);
         const half = @divFloor(lexeme_len, 2);
 
         // Prints initial space
-        _ = try writer.write(buf4[0..start_space]);
+        _ = try writer.write(space_buf[0..start_space]);
 
         // We write in yellow
         _ = try writer.write(color(.Yellow));
@@ -309,37 +363,35 @@ pub const Report = struct {
         // Prints to indication (written state is the good one at this stage
         // for the beginning of the sequence to print)
         //  <space><space> | ╰─── <indication txt>
-        _ = try writer.write(written);
-        _ = try writer.write(buf4[0..start_space]);
+        try writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+        _ = try writer.write(space_buf[0..start_space]);
 
         _ = try writer.write(color(.Yellow));
-        const hint = try std.fmt.bufPrint(&buf, "{s} {s}\n", .{ corner_to_hint, infos.hint });
-        _ = try writer.write(hint);
+
+        try writer.print("{s} ", .{corner_to_hint});
+        _ = try self.get_hint(writer);
+        _ = try writer.write("\n");
         _ = try writer.write(color(.NoColor));
 
         _ = try writer.write(left_padding);
-        const corner = try std.fmt.bufPrint(&buf, "{s}\n", .{corner_to_end});
-        _ = try writer.write(corner);
+        try writer.print("{s}\n", .{corner_to_end});
 
-        if (infos.help) |h_msg| {
-            const help = try std.fmt.bufPrint(&buf, "  {s} {s}\n", .{ help_msg, h_msg });
-            _ = try writer.write(help);
+        var fba = try std.BoundedArray(u8, 10000).init(0);
+        const help_bytes = try self.get_help(fba.writer());
+        if (help_bytes > 0) {
+            try writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
         }
     }
 
     // Limitation of Zig, can only use comptime known strings for formatting...
-    fn print_line(line_nb: usize, line: []const u8, digit_count: usize, writer: *const Reporter.WriterType) !void {
-        var buf: [1024]u8 = undefined;
-
-        const written = switch (digit_count) {
-            1 => try std.fmt.bufPrint(&buf, " {:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            2 => try std.fmt.bufPrint(&buf, " {:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            3 => try std.fmt.bufPrint(&buf, " {:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            4 => try std.fmt.bufPrint(&buf, " {:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-            5 => try std.fmt.bufPrint(&buf, " {:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+    fn print_line(line_nb: usize, line: []const u8, digit_count: usize, writer: anytype) !void {
+        try switch (digit_count) {
+            1 => writer.print(" {:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            2 => writer.print(" {:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            3 => writer.print(" {:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            4 => writer.print(" {:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+            5 => writer.print(" {:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
             else => unreachable,
         };
-
-        _ = try writer.write(written);
     }
 };

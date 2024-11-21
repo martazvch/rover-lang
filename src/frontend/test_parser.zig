@@ -5,7 +5,6 @@ const expect = testing.expect;
 const allocator = testing.allocator;
 const Parser = @import("parser.zig").Parser;
 const AstPrinter = @import("ast_print.zig").AstPrinter;
-const IterList = @import("../iter_list.zig").IterList;
 
 const Err = struct { kind: []const u8, extra: ?[]const u8 };
 
@@ -34,8 +33,13 @@ fn test_file(dir: *std.fs.Dir, file_path: []const u8) !void {
     const file = try dir.openFile(file_path, .{ .mode = .read_only });
     defer file.close();
 
-    const content = try file.readToEndAlloc(allocator, 100000000);
+    const size = try file.getEndPos();
+    const content = try allocator.alloc(u8, size + 1);
     defer allocator.free(content);
+
+    _ = try file.readAll(content);
+    content[size] = 0;
+
     var lines = std.mem.splitScalar(u8, content, '\n');
 
     var code = std.ArrayList(u8).init(allocator);
@@ -63,7 +67,9 @@ fn test_file(dir: *std.fs.Dir, file_path: []const u8) !void {
             section = .Err;
             continue;
         } else if (std.mem.startsWith(u8, line, "==")) {
-            run_test(code.items, expects.items, errors.items) catch |e| {
+            try code.append(0);
+
+            run_test(code.items[0 .. code.items.len - 1 :0], expects.items, errors.items) catch |e| {
                 print("Error in test {} in file {s}\n\n", .{ test_count, file_path });
                 return e;
             };
@@ -87,7 +93,7 @@ fn test_file(dir: *std.fs.Dir, file_path: []const u8) !void {
     }
 }
 
-fn run_test(source: []const u8, expects: []const u8, errors: []const u8) !void {
+fn run_test(source: [:0]const u8, expects: []const u8, errors: []const u8) !void {
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
@@ -96,7 +102,7 @@ fn run_test(source: []const u8, expects: []const u8, errors: []const u8) !void {
     if (expects.len > 0) {
         var ast_printer = AstPrinter.init(allocator);
         defer ast_printer.deinit();
-        try ast_printer.parse_ast(parser.stmts.items);
+        try ast_printer.parse_ast(source, parser.stmts.items);
 
         expect(std.mem.eql(u8, ast_printer.tree.items, expects)) catch |e| {
             std.debug.print("expect:\n{s}\n", .{expects});
@@ -104,7 +110,6 @@ fn run_test(source: []const u8, expects: []const u8, errors: []const u8) !void {
             return e;
         };
     } else if (errors.len > 0) {
-        var iter_list = IterList([]const u8).init(parser.errs_extra.items);
         var all = std.mem.splitScalar(u8, errors, '\n');
 
         var i: usize = 0;
@@ -114,19 +119,19 @@ fn run_test(source: []const u8, expects: []const u8, errors: []const u8) !void {
             var extra = std.mem.splitScalar(u8, err, ',');
             const err_name = extra.next().?;
 
-            const got_name = @tagName(parser.errs.items[i].kind);
+            const got_name = @tagName(parser.errs.items[i].tag);
             expect(std.mem.eql(u8, err_name, got_name)) catch |e| {
                 print("expect error: {s}, got {s}\n", .{ err_name, got_name });
                 return e;
             };
 
-            if (extra.next()) |ex| {
-                const extra_arg = iter_list.next();
-                expect(std.mem.eql(u8, std.mem.trimLeft(u8, ex, " "), extra_arg)) catch |e| {
-                    print("expect error extra arg: {s}, got {s}\n", .{ ex, extra_arg });
-                    return e;
-                };
-            }
+            // if (extra.next()) |ex| {
+            //     const extra_arg = iter_list.next();
+            //     expect(std.mem.eql(u8, std.mem.trimLeft(u8, ex, " "), extra_arg)) catch |e| {
+            //         print("expect error extra arg: {s}, got {s}\n", .{ ex, extra_arg });
+            //         return e;
+            //     };
+            // }
         }
     } else {
         print("Error, no expect and no erros in test\n", .{});

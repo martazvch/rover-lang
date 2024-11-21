@@ -3,48 +3,9 @@ const print = std.debug.print;
 const Ast = @import("ast.zig");
 const Expr = Ast.Expr;
 const Stmt = Ast.Stmt;
-//
-// fn Visitor(
-//     comptime Ctx: type,
-//     comptime Res: type,
-// ) type {
-//     return struct {
-//         vtable: *const VTable,
-//
-//         const VTable = struct {
-//             int_expr: *const fn (*Ctx, Ast.IntLit) Res,
-//             unary_expr: *const fn (*Ctx, Ast.Unary) Res,
-//             binop_expr: *const fn (*Ctx, Ast.BinOp) Res,
-//         };
-//         const Self = @This();
-//
-//         fn int_expr(self: *const Self, expr: Ast.IntLit) Res {
-//             return self.vtable.int_expr(expr);
-//         }
-//
-//         fn unary_expr(self: *const Self, expr: Ast.Unary) Res {
-//             return self.vtable.unary_expr(expr);
-//         }
-//
-//         fn binop_expr(self: *const Self, expr: Ast.BinOp) Res {
-//             return self.vtable.binop_expr(expr);
-//         }
-//     };
-// }
-//
-// const AstPrinterVisitor = Visitor(AstPrinter, void);
-
-// pub fn visitor() AstPrinterVisitor {
-//     return .{
-//         .vtable = &.{
-//             .int_expr = Self.int_expr,
-//             .unary_expr = Self.unary_expr,
-//             .binop_expr = Self.binop_expr,
-//         },
-//     };
-// }
 
 pub const AstPrinter = struct {
+    source: []const u8,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
     allocator: std.mem.Allocator,
@@ -57,6 +18,7 @@ pub const AstPrinter = struct {
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
+            .source = undefined,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
             .allocator = allocator,
@@ -71,7 +33,9 @@ pub const AstPrinter = struct {
         self.tree.deinit();
     }
 
-    pub fn parse_ast(self: *Self, nodes: []const Stmt) !void {
+    pub fn parse_ast(self: *Self, source: []const u8, nodes: []const Stmt) !void {
+        self.source = source;
+
         for (nodes) |node| {
             try switch (node) {
                 .Expr => |e| self.print_expr(e),
@@ -97,7 +61,7 @@ pub const AstPrinter = struct {
         try self.indent();
 
         var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.lexeme});
+        const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.from_source(self.source)});
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
@@ -126,7 +90,7 @@ pub const AstPrinter = struct {
         try self.indent();
 
         var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.lexeme});
+        const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.from_source(self.source)});
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
