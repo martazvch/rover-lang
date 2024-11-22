@@ -5,6 +5,7 @@ const ArrayList = std.ArrayList;
 const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
+const Span = Ast.Span;
 const Report = @import("../reporter.zig").Report;
 const Token = @import("lexer.zig").Token;
 const Lexer = @import("lexer.zig").Lexer;
@@ -236,7 +237,7 @@ pub const Parser = struct {
 
             // Here, we can safely use it
             self.advance();
-            const op = self.prev();
+            const op = self.prev().kind;
             const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
 
             const expr = try self.allocator.create(Expr);
@@ -252,8 +253,6 @@ pub const Parser = struct {
 
             self.skip_new_lines();
         }
-
-        std.debug.print("node: {any}\n", .{node});
 
         return node;
     }
@@ -271,8 +270,12 @@ pub const Parser = struct {
 
         // Recursion appens here
         unary_expr.* = .{ .Unary = .{
-            .op = op,
+            .op = op.kind,
             .rhs = try self.parse_prefix_expr(),
+            .span = .{
+                .start = op.loc.start,
+                .end = self.current().loc.start,
+            },
         } };
 
         return unary_expr;
@@ -286,7 +289,6 @@ pub const Parser = struct {
                 if (k == .Eof) {
                     try self.error_at_prev(.UnexpectedEof, null);
                 } else {
-                    // try self.errs_extra.append(self.prev().lexeme);
                     try self.error_at_prev(.ExpectExpr, null);
                 }
                 return error.err;
@@ -297,7 +299,15 @@ pub const Parser = struct {
     fn grouping(self: *Self) Error!*Expr {
         const opening = self.prev();
         const expr = try self.allocator.create(Expr);
-        expr.* = .{ .Grouping = .{ .expr = try self.parse_precedence_expr(0) } };
+
+        expr.* = .{ .Grouping = .{
+            .expr = try self.parse_precedence_expr(0),
+            .span = .{
+                .start = opening.loc.start,
+                .end = self.current().loc.start,
+            },
+        } };
+
         try self.expect_or_err_at(.RightParen, .UnclosedParen, &opening, null);
         return expr;
     }
@@ -307,7 +317,14 @@ pub const Parser = struct {
         const lexeme = self.source[previous.loc.start..previous.loc.end];
         const value = try std.fmt.parseInt(i64, lexeme, 10);
         const expr = try self.allocator.create(Expr);
-        expr.* = .{ .IntLit = .{ .value = value } };
+
+        expr.* = .{ .IntLit = .{
+            .value = value,
+            .span = .{
+                .start = previous.loc.start,
+                .end = previous.loc.end,
+            },
+        } };
 
         return expr;
     }

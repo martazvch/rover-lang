@@ -9,6 +9,7 @@ const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
 const Vm = @import("runtime/vm.zig").Vm;
+const Analyzer = @import("frontend/analyzer.zig").Analyzer;
 
 pub fn main() !void {
     // if (builtin.os.tag == .windows) {
@@ -103,6 +104,10 @@ fn run_file(
         try ast_printer.parse_ast(buf, parser.stmts.items);
         ast_printer.display();
     }
+
+    var analyzer = Analyzer.init(allocator);
+    defer analyzer.deinit();
+    try analyzer.analyze(parser.stmts.items);
 
     var compiler = Compiler.init(allocator);
     defer compiler.deinit();

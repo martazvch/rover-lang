@@ -65,7 +65,32 @@ pub const Reporter = struct {
     writer: WriterType,
     tokens: []const Token,
 
-    pub const WriterType = union(enum) {
+    const WindowsReporter = struct {
+        prev_cp: c_uint,
+        writer: std.fs.File.Writer,
+
+        const Self = @This();
+
+        pub fn init(writer: std.fs.File.Writer) Self {
+            return .{ .writer = writer, .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
+        }
+
+        pub fn write(self: Self, bytes: []const u8) !usize {
+            _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+            const count = try self.writer.write(bytes);
+            _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
+            return count;
+        }
+
+        pub fn print(self: Self, comptime format: []const u8, args: anytype) !void {
+            _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+            const count = try self.writer.print(format, args);
+            _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
+            return count;
+        }
+    };
+
+    const WriterType = union(enum) {
         StdOut: std.fs.File.Writer,
         Custom: WindowsReporter,
 
@@ -107,31 +132,6 @@ pub const Reporter = struct {
         for (reports) |*report| {
             try report.display(self.source, name, self.tokens, &self.writer);
         }
-    }
-};
-
-const WindowsReporter = struct {
-    prev_cp: c_uint,
-    writer: std.fs.File.Writer,
-
-    const Self = @This();
-
-    pub fn init(writer: std.fs.File.Writer) Self {
-        return .{ .writer = writer, .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
-    }
-
-    pub fn write(self: Self, bytes: []const u8) !usize {
-        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-        const count = try self.writer.write(bytes);
-        _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
-        return count;
-    }
-
-    pub fn print(self: Self, comptime format: []const u8, args: anytype) !void {
-        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-        const count = try self.writer.print(format, args);
-        _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
-        return count;
     }
 };
 

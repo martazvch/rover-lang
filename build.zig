@@ -23,6 +23,9 @@ pub fn build(b: *std.Build) void {
     const print_stack = b.option(bool, "print-stack", "prints the stack on each instruction") orelse false;
     options.addOption(bool, "print_stack", print_stack);
 
+    // const log_analyzer = b.option(bool, "log-analyzer", "prints the analyzer's logs") orelse false;
+    // options.addOption(bool, "log_analyzer", log_analyzer);
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
