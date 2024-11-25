@@ -7,20 +7,23 @@ const Expr = Ast.Expr;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const BinOpType = @import("chunk.zig").BinOpType;
-const Report = @import("../reporter.zig").Report;
+const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
+const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
 pub const Compiler = struct {
     chunk: Chunk,
-    errs: ArrayList(Report),
+    errs: ArrayList(CompilerReport),
 
     const Self = @This();
     const Error = Chunk.Error;
 
+    const CompilerReport = GenReport(CompilerMsg);
+
     pub fn init(allocator: Allocator) Self {
         return .{
             .chunk = Chunk.init(allocator),
-            .errs = ArrayList(Report).init(allocator),
+            .errs = ArrayList(CompilerReport).init(allocator),
         };
     }
 
@@ -73,7 +76,7 @@ pub const Compiler = struct {
         try self.expression(expr.lhs);
         try self.expression(expr.rhs);
 
-        try switch (expr.op.kind) {
+        try switch (expr.op) {
             .Plus => self.chunk.write_op(.Add),
             .Minus => self.chunk.write_op(.Subtract),
             .Star => self.chunk.write_op(.Multiply),
@@ -93,7 +96,9 @@ pub const Compiler = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
-        try switch (expr.op.kind) {
+        try self.expression(expr.rhs);
+
+        try switch (expr.op) {
             .Minus => self.chunk.write_op(.Negate),
             .Not => self.chunk.write_op(.Not),
             else => unreachable,

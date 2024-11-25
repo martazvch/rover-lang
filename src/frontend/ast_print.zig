@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const Ast = @import("ast.zig");
 const Expr = Ast.Expr;
@@ -8,20 +9,18 @@ pub const AstPrinter = struct {
     source: []const u8,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
-    allocator: std.mem.Allocator,
 
     const indent_size: u8 = 4;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
 
-    const Error = std.mem.Allocator.Error || std.fmt.BufPrintError;
+    const Error = Allocator.Error || std.fmt.BufPrintError;
     const Self = @This();
 
-    pub fn init(allocator: std.mem.Allocator) Self {
+    pub fn init(allocator: Allocator) Self {
         return .{
             .source = undefined,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
-            .allocator = allocator,
         };
     }
 
@@ -61,7 +60,7 @@ pub const AstPrinter = struct {
         try self.indent();
 
         var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.from_source(self.source)});
+        const written = try std.fmt.bufPrint(&buf, "[Binop {s}]\n", .{expr.op.symbol()});
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
@@ -90,7 +89,7 @@ pub const AstPrinter = struct {
         try self.indent();
 
         var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.from_source(self.source)});
+        const written = try std.fmt.bufPrint(&buf, "[Unary {s}]\n", .{expr.op.symbol()});
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;

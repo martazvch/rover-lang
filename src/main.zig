@@ -3,22 +3,9 @@ const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
-const Reporter = @import("reporter.zig").Reporter;
-const Parser = @import("frontend/parser.zig").Parser;
-const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
-const Compiler = @import("backend/compiler.zig").Compiler;
-const Disassembler = @import("backend/disassembler.zig").Disassembler;
-const Vm = @import("runtime/vm.zig").Vm;
-const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+const Pipeline = @import("pipeline.zig").Pipeline;
 
 pub fn main() !void {
-    // if (builtin.os.tag == .windows) {
-    //     // NOTE: it changes for the whole execution, so some characters won't
-    //     // be printed out correctly. Maybe change just before / after printing
-    //     // with 'GetConsoleOutputCP' and changing back to it after
-    //     _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-    // }
-
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const status = gpa.deinit();
@@ -85,43 +72,9 @@ fn run_file(
     buf[size] = 0;
     const zt = buf[0.. :0];
 
-    var parser: Parser = undefined;
-    parser.init(allocator);
-    defer parser.deinit();
-
-    try parser.parse(zt);
-
-    if (parser.errs.items.len > 0) {
-        var reporter = Reporter.init(zt, parser.tokens.items);
-        try reporter.report_all(filename, parser.errs.items);
-        return;
-    }
-
-    if (print_ast) {
-        var ast_printer = AstPrinter.init(allocator);
-        defer ast_printer.deinit();
-
-        try ast_printer.parse_ast(buf, parser.stmts.items);
-        ast_printer.display();
-    }
-
-    var analyzer = Analyzer.init(allocator);
-    defer analyzer.deinit();
-    try analyzer.analyze(parser.stmts.items);
-
-    var compiler = Compiler.init(allocator);
-    defer compiler.deinit();
-    try compiler.compile(parser.stmts.items);
-
-    if (print_bytecode) {
-        var dis = Disassembler.init(&compiler.chunk);
-        try dis.dis_chunk("main");
-    }
-
-    var vm = Vm.new(allocator, &compiler.chunk);
-    vm.init();
-    defer vm.deinit();
-    try vm.run();
+    var pipeline = Pipeline.init(allocator, .{ .print_ast = print_ast, .print_bytecode = print_bytecode });
+    defer pipeline.deinit();
+    try pipeline.run(filename, zt);
 }
 
 fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
@@ -131,12 +84,8 @@ fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
     var input = std.ArrayList(u8).init(allocator);
     defer input.deinit();
 
-    var parser: Parser = undefined;
-    parser.init(allocator);
-    defer parser.deinit();
-
-    var ast_printer = AstPrinter.init(allocator);
-    defer ast_printer.deinit();
+    var pipeline = Pipeline.init(allocator, .{ .print_ast = print_ast, .print_bytecode = print_bytecode });
+    defer pipeline.deinit();
 
     _ = try stdout.write("\t\tRover language REPL\n");
 
@@ -147,37 +96,11 @@ fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
         try stdin.streamUntilDelimiter(input.writer(), '\n', null);
         // const trimmed = std.mem.trimRight(u8, input.items, "\r");
 
-        parser.reinit();
+        pipeline.reinit_frontend();
 
         try input.append(0);
         const zt = input.items[0 .. input.items.len - 1 :0];
-        try parser.parse(zt);
-
-        if (parser.errs.items.len > 0) {
-            var reporter = Reporter.init(zt, parser.tokens.items);
-            try reporter.report_all("stdin", parser.errs.items);
-            continue;
-        }
-
-        if (print_ast) {
-            ast_printer.reinit();
-            try ast_printer.parse_ast(input.items, parser.stmts.items);
-            ast_printer.display();
-        }
-
-        var compiler = Compiler.init(allocator);
-        defer compiler.deinit();
-        try compiler.compile(parser.stmts.items);
-
-        if (print_bytecode) {
-            var dis = Disassembler.init(&compiler.chunk);
-            try dis.dis_chunk("main");
-        }
-
-        var vm = Vm.new(allocator, &compiler.chunk);
-        vm.init();
-        defer vm.deinit();
-        try vm.run();
+        try pipeline.run("stdin", zt);
     }
 }
 

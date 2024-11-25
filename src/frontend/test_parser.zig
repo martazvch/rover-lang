@@ -3,6 +3,7 @@ const print = std.debug.print;
 const testing = std.testing;
 const expect = testing.expect;
 const allocator = testing.allocator;
+const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const AstPrinter = @import("ast_print.zig").AstPrinter;
 
@@ -94,10 +95,14 @@ fn test_file(dir: *std.fs.Dir, file_path: []const u8) !void {
 }
 
 fn run_test(source: [:0]const u8, expects: []const u8, errors: []const u8) !void {
+    var lexer = Lexer.init(allocator);
+    defer lexer.deinit();
+    try lexer.lex(source);
+
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
-    try parser.parse(source);
+    try parser.parse(source, lexer.tokens.items);
 
     if (expects.len > 0) {
         var ast_printer = AstPrinter.init(allocator);
@@ -119,7 +124,7 @@ fn run_test(source: [:0]const u8, expects: []const u8, errors: []const u8) !void
             var extra = std.mem.splitScalar(u8, err, ',');
             const err_name = extra.next().?;
 
-            const got_name = @tagName(parser.errs.items[i].tag);
+            const got_name = @tagName(parser.errs.items[i].report);
             expect(std.mem.eql(u8, err_name, got_name)) catch |e| {
                 print("expect error: {s}, got {s}\n", .{ err_name, got_name });
                 return e;

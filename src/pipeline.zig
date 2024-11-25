@@ -1,0 +1,109 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const GenReporter = @import("reporter.zig").GenReporter;
+const GenReport = @import("reporter.zig").GenReport;
+const Lexer = @import("frontend/lexer.zig").Lexer;
+const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
+const Token = @import("frontend/lexer.zig").Token;
+const Parser = @import("frontend/parser.zig").Parser;
+const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
+const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
+const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+const Compiler = @import("backend/compiler.zig").Compiler;
+const Vm = @import("runtime/vm.zig").Vm;
+const Disassembler = @import("backend/disassembler.zig").Disassembler;
+
+/// Complete interpreter pipeline:
+/// - Lexer
+/// - Parser
+/// - Analyzer
+/// - Compiler
+/// - Vm
+pub const Pipeline = struct {
+    allocator: Allocator,
+    config: Config,
+    lexer: Lexer,
+    parser: Parser,
+    analyzer: Analyzer,
+
+    const Self = @This();
+
+    pub const Config = struct {
+        print_ast: bool,
+        print_bytecode: bool,
+    };
+
+    pub fn init(allocator: Allocator, config: Config) Self {
+        return .{
+            .allocator = allocator,
+            .config = config,
+            .lexer = Lexer.init(allocator),
+            .parser = undefined,
+            .analyzer = Analyzer.init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        defer self.lexer.deinit();
+        self.parser.deinit();
+        self.analyzer.deinit();
+    }
+
+    /// Reinitialize the frontend only: lexer and parser.
+    /// Meant to be used in the *REPL*
+    pub fn reinit_frontend(self: *Self) void {
+        self.lexer.reinit();
+        self.parser.reinit();
+    }
+
+    /// Runs the pipeline
+    pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
+        // Lexer
+        try self.lexer.lex(source);
+
+        if (self.lexer.errs.items.len > 0) {
+            var reporter = GenReporter(Token, LexerMsg).init(source, self.lexer.tokens.items);
+            try reporter.report_all(filename, self.lexer.errs.items);
+            return;
+        }
+
+        // Parser
+        self.parser.init(self.allocator);
+        try self.parser.parse(source, self.lexer.tokens.items);
+
+        if (self.parser.errs.items.len > 0) {
+            var reporter = GenReporter(Token, ParserMsg).init(source, self.lexer.tokens.items);
+            try reporter.report_all(filename, self.parser.errs.items);
+            return;
+        }
+
+        // Printer
+        if (self.config.print_ast) {
+            var ast_printer = AstPrinter.init(self.allocator);
+            defer ast_printer.deinit();
+
+            try ast_printer.parse_ast(source, self.parser.stmts.items);
+            ast_printer.display();
+        }
+
+        // Analyzer
+        try self.analyzer.analyze(self.parser.stmts.items);
+
+        // Compiler
+        var compiler = Compiler.init(self.allocator);
+        defer compiler.deinit();
+        try compiler.compile(self.parser.stmts.items);
+
+        // Disassembler
+        if (self.config.print_bytecode) {
+            var dis = Disassembler.init(&compiler.chunk);
+            try dis.dis_chunk("main");
+        }
+
+        // Vm
+        var vm = Vm.new(self.allocator, &compiler.chunk);
+        vm.init();
+        defer vm.deinit();
+        try vm.run();
+    }
+};

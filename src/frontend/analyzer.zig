@@ -5,11 +5,12 @@ const StringHashMap = std.StringHashMap;
 const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
-const Report = @import("../reporter.zig").Report;
+const GenReport = @import("../reporter.zig").GenReport;
+const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 
 pub const Analyzer = struct {
     types: StringHashMap(Type),
-    errs: ArrayList(Report),
+    errs: ArrayList(AnalyzerReport),
 
     const Type = enum {
         Int,
@@ -20,16 +21,23 @@ pub const Analyzer = struct {
     const Error = error{Err} || Allocator.Error;
     const Self = @This();
 
+    const AnalyzerReport = GenReport(AnalyzerMsg);
+
     pub fn init(allocator: Allocator) Self {
         return .{
             .types = StringHashMap(Type).init(allocator),
-            .errs = ArrayList(Report).init(allocator),
+            .errs = ArrayList(AnalyzerReport).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.types.deinit();
         self.errs.deinit();
+    }
+
+    pub fn reinit(self: *Self) void {
+        self.types.clearRetainingCapacity();
+        self.errs.clearRetainingCapacity();
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt) !void {

@@ -1,5 +1,8 @@
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const GenReport = @import("../reporter.zig").GenReport;
+const LexerMsg = @import("lexer_msg.zig").LexerMsg;
 
 pub const Token = struct {
     kind: Kind,
@@ -94,73 +97,71 @@ pub const Token = struct {
         Var,
         While,
 
-        // Errors
         UnterminatedStr,
         UnexpectedChar,
 
-        //         pub fn symbol(self: Kind) []const u8 {
-        //             switch (self) {
-        //         .And => ,
-        //         .As => ,
-        //         .Bang => ,
-        //         .BangEqual => ,
-        //         .Bool => ,
-        //         .Colon => ,
-        //         .Comma => ,
-        //         .Dot => ,
-        //         .DotBang => ,
-        // .        DotDot => ,
-        //         .DotDotDot => ,
-        //         .DotQuestionMark => ,
-        //         .DotStar => ,
-        //         .Else => ,
-        //         .Eof => ,
-        //         .Equal => ,
-        //         .EqualEqual => ,
-        //         .Error => ,
-        //         .False => ,
-        //         .Float => ,
-        //         .FloatKw => ,
-        //         .Fn => ,
-        //         .For => ,
-        //         .Greater => ,
-        //         .GreaterEqual => ,
-        //         .Identifier => ,
-        //         .If => ,
-        //         .IfNull => ,
-        //         .In => ,
-        //         .Int => ,
-        //         .IntKw => ,
-        //         .LeftBrace => ,
-        //         .LeftParen => ,
-        //         .Less => ,
-        //         .LessEqual => ,
-        //         .Minus => ,
-        //         .Modulo => ,
-        //         .NewLine => ,
-        //         .Not => ,
-        //         .Null => ,
-        //         .Or => ,
-        //         .Plus => ,
-        //         .Print => ,
-        //         .QuestionMark => ,
-        //         .Return => ,
-        //         .RightBrace => ,
-        //         .RightParen => ,
-        //         .Self => ,
-        //         .Slash => ,
-        //         .Star => ,
-        //         .String => ,
-        //         .Struct => ,
-        //         .True => ,
-        //         .UintKw => ,
-        //         .Var => ,
-        //         .While => ,
-        // .        UnterminatedStr => ,
-        //         .UnexpectedChar => ,
-        //
-        //
-        //             }
+        pub fn symbol(self: Kind) []const u8 {
+            return switch (self) {
+                .And => "and",
+                .As => "as",
+                .Bang => "!",
+                .BangEqual => "!=",
+                .Bool => "boolean value",
+                .Colon => ":",
+                .Comma => ",",
+                .Dot => ".",
+                .DotBang => ".!",
+                .DotDot => "..",
+                .DotDotDot => "...",
+                .DotQuestionMark => ".?",
+                .DotStar => ".*",
+                .Else => "else",
+                .Eof => "eof",
+                .Equal => "=",
+                .EqualEqual => "==",
+                .Error => "error",
+                .False => "false",
+                .Float => "float value",
+                .FloatKw => "float",
+                .Fn => "fn",
+                .For => "for",
+                .Greater => ">",
+                .GreaterEqual => ">=",
+                .Identifier => "identifier",
+                .If => "if",
+                .IfNull => "ifnull",
+                .In => "in",
+                .Int => "int value",
+                .IntKw => "int",
+                .LeftBrace => "{",
+                .LeftParen => "(",
+                .Less => "<",
+                .LessEqual => "<=",
+                .Minus => "-",
+                .Modulo => "%",
+                .NewLine => "newline",
+                .Not => "not",
+                .Null => "null",
+                .Or => "or",
+                .Plus => "+",
+                .Print => "print",
+                .QuestionMark => "?",
+                .Return => "return",
+                .RightBrace => "}",
+                .RightParen => ")",
+                .Self => "self",
+                .Slash => "/",
+                .Star => "*",
+                .String => "string value",
+                .Struct => "struct",
+                .True => "true",
+                .UintKw => "uint",
+                .Var => "var",
+                .While => "while",
+
+                .UnexpectedChar, .UnterminatedStr => unreachable,
+            };
+        }
     };
 
     pub fn from_source(self: *const Token, source: []const u8) []const u8 {
@@ -179,8 +180,11 @@ pub const Token = struct {
 pub const Lexer = struct {
     source: [:0]const u8,
     index: usize,
+    tokens: ArrayList(Token),
+    errs: ArrayList(LexerReport),
 
     const Self = @This();
+    pub const LexerReport = GenReport(LexerMsg);
 
     const State = enum {
         Bang,
@@ -199,11 +203,45 @@ pub const Lexer = struct {
         String,
     };
 
-    pub fn init(source: [:0]const u8) Self {
+    pub fn init(allocator: Allocator) Self {
         return .{
-            .source = source,
+            .source = undefined,
             .index = 0,
+            .tokens = ArrayList(Token).init(allocator),
+            .errs = ArrayList(LexerReport).init(allocator),
         };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.tokens.deinit();
+        self.errs.deinit();
+    }
+
+    pub fn reinit(self: *Self) void {
+        self.index = 0;
+        self.tokens.clearRetainingCapacity();
+        self.errs.clearRetainingCapacity();
+    }
+
+    pub fn lex(self: *Self, source: [:0]const u8) !void {
+        self.source = source;
+
+        while (true) {
+            const tk = self.next();
+
+            try switch (tk.kind) {
+                .UnterminatedStr => self.error_at(.UnterminatedStr, &tk),
+                .UnexpectedChar => self.error_at(.UnexpectedChar, &tk),
+                else => self.tokens.append(tk),
+            };
+
+            if (tk.kind == .Eof) break;
+        }
+    }
+
+    fn error_at(self: *Self, kind: LexerMsg, token: *const Token) !void {
+        const report = LexerReport.err(kind, token.loc.start, token.loc.end, null);
+        try self.errs.append(report);
     }
 
     pub fn next(self: *Self) Token {
@@ -466,7 +504,9 @@ pub const Lexer = struct {
 const expect = std.testing.expect;
 
 test "ident and strings" {
-    var lexer = Lexer.init("foo bar variable  truth");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
         .{ .kind = .Identifier, .loc = .{ .start = 0, .end = 3 } },
@@ -476,7 +516,7 @@ test "ident and strings" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.next();
+        const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i].kind);
         try expect(tk.loc.start == res[i].loc.start);
         try expect(tk.loc.end == res[i].loc.end);
@@ -484,7 +524,9 @@ test "ident and strings" {
 }
 
 test "numbers" {
-    var lexer = Lexer.init("123 45.6 7.");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("123 45.6 7.");
 
     const res = [3]Token{
         .{ .kind = .Int, .loc = .{ .start = 0, .end = 3 } },
@@ -493,7 +535,7 @@ test "numbers" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.next();
+        const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i].kind);
         try expect(tk.loc.start == res[i].loc.start);
         try expect(tk.loc.end == res[i].loc.end);
@@ -501,7 +543,9 @@ test "numbers" {
 }
 
 test "tokens" {
-    var lexer = Lexer.init("(){}.:,=!< ><= >= !=+-*/");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("(){}.:,=!< ><= >= !=+-*/");
 
     const res = [_]Token.Kind{
         .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
@@ -510,13 +554,15 @@ test "tokens" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.next();
+        const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i]);
     }
 }
 
 test "keywords" {
-    var lexer = Lexer.init("and else false for fn if in null or print return self struct true var while not");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("and else false for fn if in null or print return self struct true var while not");
 
     const res = [_]Token.Kind{
         .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null, .Or, .Print,
@@ -524,21 +570,24 @@ test "keywords" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.next();
+        const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i]);
     }
 }
 
 test "unterminated string" {
-    var lexer = Lexer.init("\"blabla bli blop");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("\"blabla bli blop");
 
-    const res: Token.Kind = .UnterminatedStr;
-    const tk = lexer.next();
-    try expect(tk.kind == res);
+    const err = lexer.errs.items[0];
+    try expect(err.report == .UnterminatedStr);
 }
 
 test "dot" {
-    var lexer = Lexer.init(". .. ... .! .? .* ....!");
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex(". .. ... .! .? .* ....!");
 
     const res = [_]Token.Kind{
         .Dot,     .DotDot,    .DotDotDot, .DotBang, .DotQuestionMark,
@@ -546,7 +595,7 @@ test "dot" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.next();
+        const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i]);
     }
 }

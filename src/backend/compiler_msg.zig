@@ -1,4 +1,4 @@
-pub const LexerReport = enum {
+pub const CompilerMsg = enum {
     UnterminatedStr,
     UnexpectedChar,
 

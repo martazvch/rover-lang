@@ -6,9 +6,9 @@ const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Span = Ast.Span;
-const Report = @import("../reporter.zig").Report;
+const GenReport = @import("../reporter.zig").GenReport;
+const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Token = @import("lexer.zig").Token;
-const Lexer = @import("lexer.zig").Lexer;
 
 const Precedence = enum {
     None,
@@ -27,15 +27,17 @@ const Precedence = enum {
 pub const Parser = struct {
     source: []const u8,
     stmts: ArrayList(Stmt),
-    errs: ArrayList(Report),
+    errs: ArrayList(ParserReport),
     arena: ArenaAllocator,
     allocator: Allocator,
-    tokens: ArrayList(Token),
+    tokens: []const Token,
     token_id: usize,
     panic_mode: bool,
 
-    const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
     const Self = @This();
+    const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
+
+    pub const ParserReport = GenReport(ParserMsg);
 
     /// Initialize an instance of Parser. Use it as:
     /// ```
@@ -46,8 +48,7 @@ pub const Parser = struct {
         self.arena = ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
         self.stmts = ArrayList(Stmt).init(self.allocator);
-        self.errs = ArrayList(Report).init(self.allocator);
-        self.tokens = ArrayList(Token).init(self.allocator);
+        self.errs = ArrayList(ParserReport).init(self.allocator);
         self.token_id = 0;
         self.panic_mode = false;
     }
@@ -60,26 +61,13 @@ pub const Parser = struct {
         self.panic_mode = false;
         self.stmts.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
-        self.tokens.clearRetainingCapacity();
         self.token_id = 0;
     }
 
-    pub fn parse(self: *Self, source: [:0]const u8) !void {
+    /// Parses the while token stream
+    pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
         self.source = source;
-
-        var lexer = Lexer.init(source);
-
-        while (true) {
-            const tk = lexer.next();
-
-            try switch (tk.kind) {
-                .UnterminatedStr => self.error_at(&tk, .UnterminatedStr, null),
-                .UnexpectedChar => self.error_at(&tk, .UnexpectedChar, null),
-                else => self.tokens.append(tk),
-            };
-
-            if (tk.kind == .Eof) break;
-        }
+        self.tokens = tokens;
 
         self.skip_new_lines();
 
@@ -98,11 +86,13 @@ pub const Parser = struct {
     }
 
     fn current(self: *const Self) *const Token {
-        return &self.tokens.items[self.token_id];
+        // return &self.tokens.items[self.token_id];
+        return &self.tokens[self.token_id];
     }
 
     fn prev(self: *const Self) Token {
-        return self.tokens.items[self.token_id - 1];
+        // return self.tokens.items[self.token_id - 1];
+        return self.tokens[self.token_id - 1];
     }
 
     fn advance(self: *Self) void {
@@ -133,7 +123,7 @@ pub const Parser = struct {
 
     /// Expect a specific type, otherwise it's an error and we enter
     /// *panic* mode
-    fn expect(self: *Self, kind: Token.Kind, error_kind: Report.Tag) !void {
+    fn expect(self: *Self, kind: Token.Kind, error_kind: ParserMsg) !void {
         if (self.match(kind)) {
             return;
         }
@@ -148,7 +138,7 @@ pub const Parser = struct {
     fn expect_or_err_at(
         self: *Self,
         kind: Token.Kind,
-        error_kind: Report.Tag,
+        error_kind: ParserMsg,
         tk: *const Token,
         extra: ?usize,
     ) !void {
@@ -158,11 +148,11 @@ pub const Parser = struct {
         return error.err;
     }
 
-    fn error_at_current(self: *Self, error_kind: Report.Tag, extra: ?usize) Error!void {
+    fn error_at_current(self: *Self, error_kind: ParserMsg, extra: ?usize) Error!void {
         try self.error_at(&self.prev(), error_kind, extra);
     }
 
-    fn error_at_prev(self: *Self, error_kind: Report.Tag, extra: ?usize) !void {
+    fn error_at_prev(self: *Self, error_kind: ParserMsg, extra: ?usize) !void {
         try self.error_at(&self.prev(), error_kind, extra);
     }
 
@@ -170,12 +160,12 @@ pub const Parser = struct {
     /// we exit, let synchronize and resume. It is likely that if we
     /// are already in panic mode, the following errors are just
     /// consequencies of actual bad statement
-    fn error_at(self: *Self, token: *const Token, error_kind: Report.Tag, extra: ?usize) !void {
+    fn error_at(self: *Self, token: *const Token, error_kind: ParserMsg, extra: ?usize) !void {
         if (self.panic_mode) return;
 
         self.panic_mode = true;
 
-        const report = Report.err_at_token(error_kind, token, extra);
+        const report = ParserReport.err(error_kind, token.loc.start, token.loc.end, extra);
         try self.errs.append(report);
     }
 
