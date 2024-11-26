@@ -240,7 +240,7 @@ pub const Lexer = struct {
     }
 
     fn error_at(self: *Self, kind: LexerMsg, token: *const Token) !void {
-        const report = LexerReport.err(kind, token.loc.start, token.loc.end, null);
+        const report = LexerReport.err(kind, token.loc.start, token.loc.end);
         try self.errs.append(report);
     }
 

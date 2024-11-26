@@ -1,7 +1,7 @@
 const std = @import("std");
 const Token = @import("lexer.zig").Token;
 
-pub const SourceSpan = struct {
+pub const Span = struct {
     start: usize,
     end: usize,
 };
@@ -24,7 +24,7 @@ pub const VarDecl = struct {
     is_const: bool,
     type_: ?VarType,
     value: ?*Expr,
-    span: SourceSpan,
+    span: Span,
 };
 
 // Expressions
@@ -46,31 +46,31 @@ pub const BinOp = struct {
 
 pub const BoolLit = struct {
     value: bool,
-    spa: SourceSpan,
+    spa: Span,
 };
 
 pub const FloatLit = struct {
     value: f64,
-    span: SourceSpan,
+    span: Span,
 };
 
 pub const Grouping = struct {
     expr: *Expr,
-    span: SourceSpan,
+    span: Span,
 };
 
 pub const IntLit = struct {
     value: i64,
-    span: SourceSpan,
+    span: Span,
 };
 
 pub const UintLit = struct {
     value: u64,
-    span: SourceSpan,
+    span: Span,
 };
 
 pub const Unary = struct {
     op: Token.Kind,
     rhs: *Expr,
-    span: SourceSpan,
+    span: Span,
 };

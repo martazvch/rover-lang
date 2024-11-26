@@ -62,7 +62,7 @@ pub const Pipeline = struct {
         try self.lexer.lex(source);
 
         if (self.lexer.errs.items.len > 0) {
-            var reporter = GenReporter(Token, LexerMsg).init(source, self.lexer.tokens.items);
+            var reporter = GenReporter(LexerMsg).init(source, &[_][]u8{});
             try reporter.report_all(filename, self.lexer.errs.items);
             return;
         }
@@ -72,7 +72,7 @@ pub const Pipeline = struct {
         try self.parser.parse(source, self.lexer.tokens.items);
 
         if (self.parser.errs.items.len > 0) {
-            var reporter = GenReporter(Token, ParserMsg).init(source, self.lexer.tokens.items);
+            var reporter = GenReporter(ParserMsg).init(source, self.parser.extra_infos.items);
             try reporter.report_all(filename, self.parser.errs.items);
             return;
         }

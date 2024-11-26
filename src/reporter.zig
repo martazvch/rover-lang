@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const assert = std.debug.assert;
 const Writer = std.fs.File.Writer;
+const UnsafeIterStr = @import("unsafe_iter.zig").UnsafeIterStr;
 
 const BoxChar = enum {
     BottomLeft,
@@ -64,11 +65,11 @@ const corner_to_end = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 2;
 /// - get_msg
 /// - get_hint
 /// - get_help
-pub fn GenReporter(comptime Item: type, comptime Report: type) type {
+pub fn GenReporter(comptime Report: type) type {
     return struct {
         source: [:0]const u8,
         writer: WriterType,
-        items: []const Item,
+        extra: UnsafeIterStr,
 
         const Self = @This();
 
@@ -114,7 +115,7 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
             }
         };
 
-        pub fn init(source: [:0]const u8, items: []const Item) Self {
+        pub fn init(source: [:0]const u8, extra: []const []const u8) Self {
             var writer: WriterType = undefined;
             const stdout = std.io.getStdOut().writer();
 
@@ -124,7 +125,7 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
                 writer = .{ .StdOut = stdout };
             }
 
-            return .{ .writer = writer, .source = source, .items = items };
+            return .{ .writer = writer, .source = source, .extra = UnsafeIterStr.init(extra) };
         }
 
         /// Reports all the reports of type *Report*
@@ -138,7 +139,7 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
             }
         }
 
-        fn display(self: *const Self, report: *const GenReport(Report), file_name: []const u8) !void {
+        fn display(self: *Self, report: *const GenReport(Report), file_name: []const u8) !void {
             var current: usize = 0;
             var line_start: usize = 0;
             var line_count: usize = 0;
@@ -177,7 +178,7 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
             // Prints the error part
             //  Error: <err-msg>
             try self.writer.print("{s} ", .{report.level.get_level_msg()});
-            _ = try report.get_msg(self.writer);
+            try report.get_msg(self.writer, &self.extra);
             _ = try self.writer.write("\n");
 
             // Prints file name and location infos
@@ -240,12 +241,12 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
             // for the beginning of the sequence to print)
             //  <space><space> | ╰─── <indication txt>
             try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
-            _ = try self.writer.write(space_buf[0..start_space]);
+            _ = try self.writer.write(space_buf[0 .. start_space + half]);
 
             _ = try self.writer.write(color(.Yellow));
 
             try self.writer.print("{s} ", .{corner_to_hint});
-            _ = try report.get_hint(self.writer);
+            _ = try report.get_hint(self.writer, &self.extra);
             _ = try self.writer.write("\n");
             _ = try self.writer.write(color(.NoColor));
 
@@ -253,7 +254,7 @@ pub fn GenReporter(comptime Item: type, comptime Report: type) type {
             try self.writer.print("{s}\n", .{corner_to_end});
 
             var fba = try std.BoundedArray(u8, 10000).init(0);
-            const help_bytes = try report.get_help(fba.writer());
+            const help_bytes = try report.get_help(fba.writer(), &self.extra);
             if (help_bytes > 0) {
                 try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
             }
@@ -293,7 +294,6 @@ pub fn GenReport(comptime T: type) type {
         level: Level,
         start: usize,
         end: usize,
-        extra_id: ?usize,
 
         pub const Level = enum {
             Error,
@@ -311,38 +311,31 @@ pub fn GenReport(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn init(
-            report: T,
-            level: Level,
-            start: usize,
-            end: usize,
-            extra_id: ?usize,
-        ) Self {
+        pub fn init(report: T, level: Level, start: usize, end: usize) Self {
             return .{
                 .report = report,
                 .level = level,
                 .start = start,
                 .end = end,
-                .extra_id = extra_id,
             };
         }
 
         /// Creates an error associated with the tag. If *msg* is not null
         /// overrides the message in the template.
-        pub fn err(report: T, start: usize, end: usize, extra: ?usize) Self {
-            return Self.init(report, .Error, start, end, extra);
+        pub fn err(report: T, start: usize, end: usize) Self {
+            return Self.init(report, .Error, start, end);
         }
 
-        pub fn get_msg(self: *const Self, writer: anytype) !usize {
-            return self.report.get_msg(writer);
+        pub fn get_msg(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !void {
+            return self.report.get_msg(writer, extra);
         }
 
-        pub fn get_hint(self: *const Self, writer: anytype) !usize {
-            return self.report.get_hint(writer);
+        pub fn get_hint(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !usize {
+            return self.report.get_hint(writer, extra);
         }
 
-        pub fn get_help(self: *const Self, writer: anytype) !usize {
-            return self.report.get_help(writer);
+        pub fn get_help(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !usize {
+            return self.report.get_help(writer, extra);
         }
     };
 }

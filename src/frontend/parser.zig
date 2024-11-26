@@ -33,6 +33,7 @@ pub const Parser = struct {
     tokens: []const Token,
     token_id: usize,
     panic_mode: bool,
+    extra_infos: ArrayList([]const u8),
 
     const Self = @This();
     const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
@@ -51,6 +52,7 @@ pub const Parser = struct {
         self.errs = ArrayList(ParserReport).init(self.allocator);
         self.token_id = 0;
         self.panic_mode = false;
+        self.extra_infos = ArrayList([]const u8).init(self.allocator);
     }
 
     pub fn deinit(self: *Self) void {
@@ -61,6 +63,7 @@ pub const Parser = struct {
         self.panic_mode = false;
         self.stmts.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
+        self.extra_infos.clearRetainingCapacity();
         self.token_id = 0;
     }
 
@@ -68,6 +71,7 @@ pub const Parser = struct {
     pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
         self.source = source;
         self.tokens = tokens;
+        std.debug.print("tokens: {any}\n", .{tokens});
 
         self.skip_new_lines();
 
@@ -75,23 +79,27 @@ pub const Parser = struct {
             const stmt = self.declaration() catch |e| switch (e) {
                 // If it's our own error, we continue on parsing
                 Error.err => {
+                    // If last error was Eof, exit the parser
+                    if (self.errs.items[self.errs.items.len - 1].report == .UnexpectedEof) {
+                        return;
+                    }
+
                     self.synchronize();
                     continue;
                 },
                 else => return e,
             };
+
             try self.stmts.append(stmt);
             self.skip_new_lines();
         }
     }
 
     fn current(self: *const Self) *const Token {
-        // return &self.tokens.items[self.token_id];
         return &self.tokens[self.token_id];
     }
 
     fn prev(self: *const Self) Token {
-        // return self.tokens.items[self.token_id - 1];
         return self.tokens[self.token_id - 1];
     }
 
@@ -140,32 +148,31 @@ pub const Parser = struct {
         kind: Token.Kind,
         error_kind: ParserMsg,
         tk: *const Token,
-        extra: ?usize,
     ) !void {
         if (self.match(kind)) return;
 
-        try self.error_at(tk, error_kind, extra);
+        try self.error_at(tk, error_kind);
         return error.err;
     }
 
-    fn error_at_current(self: *Self, error_kind: ParserMsg, extra: ?usize) Error!void {
-        try self.error_at(&self.prev(), error_kind, extra);
+    fn error_at_current(self: *Self, error_kind: ParserMsg) Error!void {
+        try self.error_at(&self.prev(), error_kind);
     }
 
-    fn error_at_prev(self: *Self, error_kind: ParserMsg, extra: ?usize) !void {
-        try self.error_at(&self.prev(), error_kind, extra);
+    fn error_at_prev(self: *Self, error_kind: ParserMsg) !void {
+        try self.error_at(&self.prev(), error_kind);
     }
 
     /// If error already encountered and in the same statement parsing,
     /// we exit, let synchronize and resume. It is likely that if we
     /// are already in panic mode, the following errors are just
     /// consequencies of actual bad statement
-    fn error_at(self: *Self, token: *const Token, error_kind: ParserMsg, extra: ?usize) !void {
+    fn error_at(self: *Self, token: *const Token, error_kind: ParserMsg) !void {
         if (self.panic_mode) return;
 
         self.panic_mode = true;
 
-        const report = ParserReport.err(error_kind, token.loc.start, token.loc.end, extra);
+        const report = ParserReport.err(error_kind, token.loc.start, token.loc.end);
         try self.errs.append(report);
     }
 
@@ -221,7 +228,7 @@ pub const Parser = struct {
             if (next_rule.prec < prec_min) break;
 
             if (next_rule.prec == banned_prec) {
-                try self.error_at_current(.ChainingCmpOp, null);
+                try self.error_at_current(.ChainingCmpOp);
                 return error.err;
             }
 
@@ -277,9 +284,11 @@ pub const Parser = struct {
             .Int => self.int(),
             else => |k| {
                 if (k == .Eof) {
-                    try self.error_at_prev(.UnexpectedEof, null);
+                    try self.error_at_prev(.UnexpectedEof);
                 } else {
-                    try self.error_at_prev(.ExpectExpr, null);
+                    const p = self.prev().loc;
+                    try self.error_at_prev(.ExpectExpr);
+                    try self.extra_infos.append(self.source[p.start..p.end]);
                 }
                 return error.err;
             },
@@ -298,7 +307,7 @@ pub const Parser = struct {
             },
         } };
 
-        try self.expect_or_err_at(.RightParen, .UnclosedParen, &opening, null);
+        try self.expect_or_err_at(.RightParen, .UnclosedParen, &opening);
         return expr;
     }
 
