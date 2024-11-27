@@ -51,6 +51,7 @@ pub const AstPrinter = struct {
         try switch (expr.*) {
             .BinOp => |*e| self.binop_expr(e),
             .Grouping => |*e| self.grouping_expr(e),
+            .FloatLit => |*e| self.float_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .Unary => |*e| self.unary_expr(e),
         };
@@ -76,6 +77,13 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
         try self.print_expr(expr.expr);
         self.indent_level -= 1;
+    }
+
+    fn float_expr(self: *Self, expr: *const Ast.FloatLit) Error!void {
+        try self.indent();
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Float literal {d}]\n", .{expr.value});
+        try self.tree.appendSlice(written);
     }
 
     fn int_expr(self: *Self, expr: *const Ast.IntLit) Error!void {

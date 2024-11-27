@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const assert = std.debug.assert;
 const Writer = std.fs.File.Writer;
+const Span = @import("frontend/ast.zig").Span;
 const UnsafeIterStr = @import("unsafe_iter.zig").UnsafeIterStr;
 
 const BoxChar = enum {
@@ -69,7 +70,7 @@ pub fn GenReporter(comptime Report: type) type {
     return struct {
         source: [:0]const u8,
         writer: WriterType,
-        extra: UnsafeIterStr,
+        // extra: UnsafeIterStr,
 
         const Self = @This();
 
@@ -115,7 +116,8 @@ pub fn GenReporter(comptime Report: type) type {
             }
         };
 
-        pub fn init(source: [:0]const u8, extra: []const []const u8) Self {
+        // pub fn init(source: [:0]const u8, extra: []const []const u8) Self {
+        pub fn init(source: [:0]const u8) Self {
             var writer: WriterType = undefined;
             const stdout = std.io.getStdOut().writer();
 
@@ -125,7 +127,8 @@ pub fn GenReporter(comptime Report: type) type {
                 writer = .{ .StdOut = stdout };
             }
 
-            return .{ .writer = writer, .source = source, .extra = UnsafeIterStr.init(extra) };
+            // return .{ .writer = writer, .source = source, .extra = UnsafeIterStr.init(extra) };
+            return .{ .writer = writer, .source = source };
         }
 
         /// Reports all the reports of type *Report*
@@ -178,7 +181,7 @@ pub fn GenReporter(comptime Report: type) type {
             // Prints the error part
             //  Error: <err-msg>
             try self.writer.print("{s} ", .{report.level.get_level_msg()});
-            try report.get_msg(self.writer, &self.extra);
+            try report.get_msg(self.writer);
             _ = try self.writer.write("\n");
 
             // Prints file name and location infos
@@ -246,7 +249,7 @@ pub fn GenReporter(comptime Report: type) type {
             _ = try self.writer.write(color(.Yellow));
 
             try self.writer.print("{s} ", .{corner_to_hint});
-            _ = try report.get_hint(self.writer, &self.extra);
+            _ = try report.get_hint(self.writer);
             _ = try self.writer.write("\n");
             _ = try self.writer.write(color(.NoColor));
 
@@ -254,13 +257,17 @@ pub fn GenReporter(comptime Report: type) type {
             try self.writer.print("{s}\n", .{corner_to_end});
 
             var fba = try std.BoundedArray(u8, 10000).init(0);
-            const help_bytes = try report.get_help(fba.writer(), &self.extra);
-            if (help_bytes > 0) {
-                try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
+            // const help_bytes = try report.get_help(fba.writer());
+            try report.get_help(fba.writer());
+            // if (help_bytes > 0) {
+            if (fba.slice().len > 0) {
+                // try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
+                try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
             }
         }
 
         // Limitation of Zig, can only use comptime known strings for formatting...
+        // TODO: dynamic formatting
         fn print_line(self: *const Self, line_nb: usize, line: []const u8, digit_count: usize) !void {
             try switch (digit_count) {
                 1 => self.writer.print(" {:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
@@ -281,10 +288,8 @@ pub fn GenReporter(comptime Report: type) type {
 ///  - level: warning or error
 ///  - start: starting byte offset from source of the error
 ///  - end: ending byte offset from source of the error
-///  - extra_id: optional item id for extra info to display
-///
 pub fn GenReport(comptime T: type) type {
-    assert(@typeInfo(T) == .@"enum");
+    assert(@typeInfo(T) == .@"union");
     assert(@hasDecl(T, "get_msg"));
     assert(@hasDecl(T, "get_hint"));
     assert(@hasDecl(T, "get_help"));
@@ -320,22 +325,26 @@ pub fn GenReport(comptime T: type) type {
             };
         }
 
-        /// Creates an error associated with the tag. If *msg* is not null
-        /// overrides the message in the template.
-        pub fn err(report: T, start: usize, end: usize) Self {
-            return Self.init(report, .Error, start, end);
+        /// Creates an error associated with the tag
+        pub fn err(report: T, span: Span) Self {
+            return Self.init(report, .Error, span.start, span.end);
         }
 
-        pub fn get_msg(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !void {
-            return self.report.get_msg(writer, extra);
+        /// Creates warning associated with the tag
+        pub fn warn(report: T, span: Span) Self {
+            return Self.init(report, .Warning, span.start, span.end);
         }
 
-        pub fn get_hint(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !usize {
-            return self.report.get_hint(writer, extra);
+        pub fn get_msg(self: *const Self, writer: anytype) !void {
+            return self.report.get_msg(writer);
         }
 
-        pub fn get_help(self: *const Self, writer: anytype, extra: *UnsafeIterStr) !usize {
-            return self.report.get_help(writer, extra);
+        pub fn get_hint(self: *const Self, writer: anytype) !usize {
+            return self.report.get_hint(writer);
+        }
+
+        pub fn get_help(self: *const Self, writer: anytype) !void {
+            return self.report.get_help(writer);
         }
     };
 }

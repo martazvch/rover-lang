@@ -1,26 +1,24 @@
-pub const CompilerMsg = enum {
-    UnterminatedStr,
-    UnexpectedChar,
+pub const CompilerMsg = union(enum) {
+    ImplicitCast,
 
     const Self = @This();
 
-    pub fn get_msg(self: Self, writer: anytype) !usize {
-        return switch (self) {
-            .UnterminatedStr => writer.write("unterminated string"),
-            .UnexpectedChar => writer.write("unexpected character"),
+    pub fn get_msg(self: Self, writer: anytype) !void {
+        _ = try switch (self) {
+            .ImplicitCast => writer.write("implicit cast"),
         };
     }
 
     pub fn get_hint(self: Self, writer: anytype) !usize {
         return switch (self) {
-            .UnterminatedStr, .UnexpectedChar => writer.write("here"),
+            .ImplicitCast => writer.write("expressions have different types"),
         };
     }
 
-    pub fn get_help(self: Self, writer: anytype) !usize {
-        return switch (self) {
-            .UnterminatedStr => writer.write("close the opening quote"),
-            else => 0,
+    pub fn get_help(self: Self, writer: anytype) !void {
+        _ = try switch (self) {
+            .ImplicitCast => writer.write("unterminated string"),
+            else => {},
         };
     }
 };

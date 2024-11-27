@@ -9,6 +9,7 @@ const Parser = @import("frontend/parser.zig").Parser;
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const Vm = @import("runtime/vm.zig").Vm;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
@@ -31,6 +32,7 @@ pub const Pipeline = struct {
     pub const Config = struct {
         print_ast: bool,
         print_bytecode: bool,
+        static_analysis: bool,
     };
 
     pub fn init(allocator: Allocator, config: Config) Self {
@@ -54,6 +56,7 @@ pub const Pipeline = struct {
     pub fn reinit_frontend(self: *Self) void {
         self.lexer.reinit();
         self.parser.reinit();
+        self.analyzer.reinit();
     }
 
     /// Runs the pipeline
@@ -62,7 +65,7 @@ pub const Pipeline = struct {
         try self.lexer.lex(source);
 
         if (self.lexer.errs.items.len > 0) {
-            var reporter = GenReporter(LexerMsg).init(source, &[_][]u8{});
+            var reporter = GenReporter(LexerMsg).init(source);
             try reporter.report_all(filename, self.lexer.errs.items);
             return;
         }
@@ -72,7 +75,7 @@ pub const Pipeline = struct {
         try self.parser.parse(source, self.lexer.tokens.items);
 
         if (self.parser.errs.items.len > 0) {
-            var reporter = GenReporter(ParserMsg).init(source, self.parser.extra_infos.items);
+            var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, self.parser.errs.items);
             return;
         }
@@ -89,8 +92,23 @@ pub const Pipeline = struct {
         // Analyzer
         try self.analyzer.analyze(self.parser.stmts.items);
 
+        if (self.analyzer.errs.items.len > 0) {
+            var reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, self.analyzer.errs.items);
+
+            if (!self.config.static_analysis and self.analyzer.warns.items.len == 0) {
+                return;
+            }
+        }
+
+        if (self.config.static_analysis and self.analyzer.warns.items.len > 0) {
+            var reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, self.analyzer.warns.items);
+            return;
+        }
+
         // Compiler
-        var compiler = Compiler.init(self.allocator);
+        var compiler = Compiler.init(self.allocator, self.analyzer.analyzed_binops.items);
         defer compiler.deinit();
         try compiler.compile(self.parser.stmts.items);
 

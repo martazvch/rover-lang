@@ -16,3 +16,37 @@ expect:
 [Int literal 687945]
 
 ================
+
+// Float
+code:
+    1.5
+
+expect:
+[Float literal 1.5]
+
+================
+
+code:
+    7.
+
+expect:
+[Float literal 7]
+
+================
+
+code:
+    .85
+
+expect:
+[Float literal 0.85]
+
+================
+
+code:
+    0.33
+
+expect:
+[Float literal 0.33]
+
+================
+

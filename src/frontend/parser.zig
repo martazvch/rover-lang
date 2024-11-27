@@ -33,7 +33,6 @@ pub const Parser = struct {
     tokens: []const Token,
     token_id: usize,
     panic_mode: bool,
-    extra_infos: ArrayList([]const u8),
 
     const Self = @This();
     const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
@@ -52,7 +51,6 @@ pub const Parser = struct {
         self.errs = ArrayList(ParserReport).init(self.allocator);
         self.token_id = 0;
         self.panic_mode = false;
-        self.extra_infos = ArrayList([]const u8).init(self.allocator);
     }
 
     pub fn deinit(self: *Self) void {
@@ -63,7 +61,6 @@ pub const Parser = struct {
         self.panic_mode = false;
         self.stmts.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
-        self.extra_infos.clearRetainingCapacity();
         self.token_id = 0;
     }
 
@@ -71,7 +68,6 @@ pub const Parser = struct {
     pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
         self.source = source;
         self.tokens = tokens;
-        std.debug.print("tokens: {any}\n", .{tokens});
 
         self.skip_new_lines();
 
@@ -172,7 +168,7 @@ pub const Parser = struct {
 
         self.panic_mode = true;
 
-        const report = ParserReport.err(error_kind, token.loc.start, token.loc.end);
+        const report = ParserReport.err(error_kind, token.span);
         try self.errs.append(report);
     }
 
@@ -270,8 +266,8 @@ pub const Parser = struct {
             .op = op.kind,
             .rhs = try self.parse_prefix_expr(),
             .span = .{
-                .start = op.loc.start,
-                .end = self.current().loc.start,
+                .start = op.span.start,
+                .end = self.current().span.start,
             },
         } };
 
@@ -281,14 +277,14 @@ pub const Parser = struct {
     fn parse_primary_expr(self: *Self) Error!*Expr {
         return switch (self.prev().kind) {
             .LeftParen => self.grouping(),
+            .Float => self.float(),
             .Int => self.int(),
             else => |k| {
                 if (k == .Eof) {
                     try self.error_at_prev(.UnexpectedEof);
                 } else {
-                    const p = self.prev().loc;
-                    try self.error_at_prev(.ExpectExpr);
-                    try self.extra_infos.append(self.source[p.start..p.end]);
+                    const p = self.prev().span;
+                    try self.error_at_prev(.{ .ExpectExpr = .{ .found = self.source[p.start..p.end] } });
                 }
                 return error.err;
             },
@@ -302,8 +298,8 @@ pub const Parser = struct {
         expr.* = .{ .Grouping = .{
             .expr = try self.parse_precedence_expr(0),
             .span = .{
-                .start = opening.loc.start,
-                .end = self.current().loc.start,
+                .start = opening.span.start,
+                .end = self.current().span.start,
             },
         } };
 
@@ -311,17 +307,34 @@ pub const Parser = struct {
         return expr;
     }
 
+    fn float(self: *Self) Error!*Expr {
+        const previous = self.prev();
+        const lexeme = self.source[previous.span.start..previous.span.end];
+        const value = try std.fmt.parseFloat(f64, lexeme);
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .FloatLit = .{
+            .value = value,
+            .span = .{
+                .start = previous.span.start,
+                .end = previous.span.end,
+            },
+        } };
+
+        return expr;
+    }
+
     fn int(self: *Self) Error!*Expr {
         const previous = self.prev();
-        const lexeme = self.source[previous.loc.start..previous.loc.end];
+        const lexeme = self.source[previous.span.start..previous.span.end];
         const value = try std.fmt.parseInt(i64, lexeme, 10);
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .IntLit = .{
             .value = value,
             .span = .{
-                .start = previous.loc.start,
-                .end = previous.loc.end,
+                .start = previous.span.start,
+                .end = previous.span.end,
             },
         } };
 
@@ -331,6 +344,9 @@ pub const Parser = struct {
 
 // Tests
 test Parser {
-    const test_all = @import("test_parser.zig").test_all;
-    try test_all();
+    const GenericTester = @import("../tester.zig").GenericTester;
+    const run_test = @import("test_parser.zig").run_test;
+
+    const ParserTester = GenericTester("parser", run_test);
+    try ParserTester.test_all();
 }

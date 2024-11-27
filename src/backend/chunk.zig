@@ -4,33 +4,25 @@ const ArrayList = std.ArrayList;
 const Value = @import("../runtime/values.zig").Value;
 
 pub const OpCode = enum(u8) {
-    Add,
+    AddInt,
+    AddFloat,
+    CastToFloat,
+    CastToInt,
     Constant,
-    Divide,
+    DivideFloat,
+    DivideInt,
     False,
-    Multiply,
-    Negate,
+    MultiplyFloat,
+    MultiplyInt,
+    NegateFloat,
+    NegateInt,
     Not,
     Null,
     Print,
     Return,
-    Subtract,
+    SubtractFloat,
+    SubtractInt,
     True,
-};
-
-/// All lhs and rhs types in binop
-/// If *Other*, it means it calls the Add trait
-pub const BinOpType = enum {
-    IntInt,
-    IntFloat,
-    IntUint,
-    FloatInt,
-    UintInt,
-    UintFloat,
-    FloatUint,
-    FloatFloat,
-    UintUint,
-    Other,
 };
 
 pub const Chunk = struct {

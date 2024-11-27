@@ -2,7 +2,6 @@ const std = @import("std");
 const print = std.debug.print;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
-const BinOpType = @import("chunk.zig").BinOpType;
 
 pub const Disassembler = struct {
     chunk: *const Chunk,
@@ -25,7 +24,6 @@ pub const Disassembler = struct {
     }
 
     pub fn dis_instruction(self: *const Self, offset: usize) usize {
-        // print("{:0>4} ", .{offset});
         print("{:0>4} ", .{offset});
 
         // if (offset > 0 and self.chunk.lines.items[offset] == self.chunk.lines.items[offset - 1]) {
@@ -36,7 +34,8 @@ pub const Disassembler = struct {
 
         const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
         return switch (op) {
-            .Add => self.binop_instruction("OP_ADD", offset),
+            .AddFloat => simple_instruction("OP_ADD_FLOAT", offset),
+            .AddInt => simple_instruction("OP_ADD_INT", offset),
             // .Call => self.byte_instruction("OP_CALL", offset),
             // .CloseUpValue => simple_instruction("OP_CLOSE_UPVALUE", offset),
             // .Closure => {
@@ -63,10 +62,13 @@ pub const Disassembler = struct {
             //
             //     return local_offset;
             // },
+            .CastToFloat => simple_instruction("CAST_TO_FLOAT", offset),
+            .CastToInt => simple_instruction("CAST_TO_INT", offset),
             .Constant => self.constant_instruction("OP_CONSTANT", offset),
             // .CreateIter => simple_instruction("OP_CREATE_ITER", offset),
             // .DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL", offset),
-            .Divide => self.binop_instruction("OP_DIVIDE", offset),
+            .DivideFloat => simple_instruction("OP_DIVIDE_FLOAT", offset),
+            .DivideInt => simple_instruction("OP_DIVIDE_INT", offset),
             // .Equal => simple_instruction("OP_EQUAL", offset),
             .False => simple_instruction("OP_FALSE", offset),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
@@ -81,8 +83,10 @@ pub const Disassembler = struct {
             // .Less => simple_instruction("OP_LESS", offset),
             // .Loop => self.jump_instruction("OP_LOOP", -1, offset),
             // .Method => self.constant_instruction("OP_METHOD", offset),
-            .Multiply => self.binop_instruction("OP_MULTIPLY", offset),
-            .Negate => simple_instruction("OP_NEGATE", offset),
+            .MultiplyFloat => simple_instruction("OP_MULTIPLY_FLOAT", offset),
+            .MultiplyInt => simple_instruction("OP_MULTIPLY_INT", offset),
+            .NegateFloat => simple_instruction("OP_NEGATE_FLOAT", offset),
+            .NegateInt => simple_instruction("OP_NEGATE_INT", offset),
             .Not => simple_instruction("OP_NOT", offset),
             .Null => simple_instruction("OP_NULL", offset),
             // .Pop => simple_instruction("OP_POP", offset),
@@ -93,7 +97,8 @@ pub const Disassembler = struct {
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
             // .SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),
             // .Struct => self.constant_instruction("OP_STRUCT", offset),
-            .Subtract => self.binop_instruction("OP_SUBTRACT", offset),
+            .SubtractFloat => simple_instruction("OP_SUBTRACT_FLOAT", offset),
+            .SubtractInt => simple_instruction("OP_SUBTRACT_INT", offset),
             .True => simple_instruction("OP_TRUE", offset),
         };
     }
@@ -101,12 +106,6 @@ pub const Disassembler = struct {
     fn simple_instruction(name: []const u8, offset: usize) usize {
         print("{s:<16}\n", .{name});
         return offset + 1;
-    }
-
-    fn binop_instruction(self: *const Self, name: []const u8, offset: usize) usize {
-        const binop_type = self.chunk.code.items[offset + 1];
-        print("{s:<16} type: {s}\n", .{ name, @tagName(@as(BinOpType, @enumFromInt(binop_type))) });
-        return offset + 2;
     }
 
     fn constant_instruction(self: *const Self, name: []const u8, offset: usize) usize {

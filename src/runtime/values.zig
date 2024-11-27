@@ -1,6 +1,22 @@
 const std = @import("std");
 const print = std.debug.print;
 
+pub const Type = union(enum) {
+    Int,
+    Float,
+    Bool,
+
+    const Self = @This();
+
+    pub fn str(self: Self) []const u8 {
+        return switch (self) {
+            .Int => "int",
+            .Float => "float",
+            .Bool => "bool",
+        };
+    }
+};
+
 pub const Value = union(enum) {
     Bool: bool,
     Float: f64,
@@ -28,6 +44,11 @@ pub const Value = union(enum) {
 
     pub fn null_() Self {
         return .{ .Null = undefined };
+    }
+
+    // Safety garenteed by the analyzer
+    pub fn not(self: *Self) void {
+        self.Bool = !self.Bool;
     }
 
     pub fn log(self: *const Value) void {

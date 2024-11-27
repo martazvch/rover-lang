@@ -31,11 +31,18 @@ pub const VarDecl = struct {
 pub const Expr = union(enum) {
     BinOp: BinOp,
     // BoolLit: BoolLit,
-    // FloatLit: FloatLit,
+    FloatLit: FloatLit,
     Grouping: Grouping,
     IntLit: IntLit,
     // UintLit: UintLit,
     Unary: Unary,
+
+    pub fn span(self: *const Expr) Span {
+        return switch (self.*) {
+            .BinOp => |*e| .{ .start = e.lhs.span().start, .end = e.rhs.span().end },
+            inline else => |e| e.span,
+        };
+    }
 };
 
 pub const BinOp = struct {
@@ -46,7 +53,7 @@ pub const BinOp = struct {
 
 pub const BoolLit = struct {
     value: bool,
-    spa: Span,
+    span: Span,
 };
 
 pub const FloatLit = struct {

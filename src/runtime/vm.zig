@@ -41,6 +41,10 @@ const Stack = struct {
         // Pointer arithmetic
         return (self.top - 1 - distance)[0];
     }
+
+    fn peek_ref(self: *Self) *Value {
+        return &(self.top - 1)[0];
+    }
 };
 
 pub const Vm = struct {
@@ -111,75 +115,54 @@ pub const Vm = struct {
             const op: OpCode = @enumFromInt(instruction);
 
             switch (op) {
-                .Add => self.binop('+'),
+                .AddFloat => {
+                    const rhs = self.stack.pop().Float;
+                    self.stack.peek_ref().Float += rhs;
+                },
+                .AddInt => {
+                    const rhs = self.stack.pop().Int;
+                    self.stack.peek_ref().Int += rhs;
+                },
+                .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
+                .CastToInt => self.stack.push(Value.int(@intFromFloat(self.stack.pop().Float))),
                 .Constant => self.stack.push(self.read_constant()),
-                .Divide => self.binop('/'),
+                .DivideFloat => {
+                    const rhs = self.stack.pop().Float;
+                    self.stack.peek_ref().Float /= rhs;
+                },
+                .DivideInt => {
+                    const rhs = self.stack.pop().Int;
+                    const lhs = self.stack.pop().Int;
+                    self.stack.push(Value.int(@divTrunc(lhs, rhs)));
+                },
                 .False => self.stack.push(Value.bool_(false)),
-                .Multiply => self.binop('*'),
-                .Negate => self.stack.push(Value.int(-1 * self.stack.pop().Int)),
-                .Not => self.stack.push(Value.bool_(!self.stack.pop().Bool)),
+                .MultiplyFloat => {
+                    const rhs = self.stack.pop().Float;
+                    self.stack.peek_ref().Float *= rhs;
+                },
+                .MultiplyInt => {
+                    const rhs = self.stack.pop().Int;
+                    self.stack.peek_ref().Int *= rhs;
+                },
+                .NegateFloat => self.stack.peek_ref().Float *= -1,
+                .NegateInt => self.stack.peek_ref().Int *= -1,
+                .Not => self.stack.peek_ref().not(),
                 .Null => self.stack.push(Value.null_()),
                 .Print => unreachable,
                 .Return => {
                     self.stack.pop().log();
                     break;
                 },
-                .Subtract => self.binop('-'),
+                .SubtractFloat => {
+                    const rhs = self.stack.pop().Float;
+                    self.stack.peek_ref().Float -= rhs;
+                },
+                .SubtractInt => {
+                    const rhs = self.stack.pop().Int;
+                    self.stack.peek_ref().Int -= rhs;
+                },
                 .True => self.stack.push(Value.bool_(true)),
             }
         }
     }
-
-    fn binop(self: *Self, op: u8) void {
-        const rhs = self.stack.pop();
-        const lhs = self.stack.pop();
-        const binop_type = self.read_byte();
-
-        const res = switch (@as(BinOpType, @enumFromInt(binop_type))) {
-            .IntInt => Value.int(compute_binop(i64, lhs.Int, rhs.Int, op)),
-            .FloatFloat => Value.float(compute_binop(f64, lhs.Float, rhs.Float, op)),
-            .UintUint => Value.uint(compute_binop(u64, lhs.Uint, rhs.Uint, op)),
-            .IntFloat => blk: {
-                const cast: f64 = @floatFromInt(lhs.Int);
-                break :blk Value.float(compute_binop(f64, cast, rhs.Float, op));
-            },
-            .IntUint => blk: {
-                const cast: i64 = @intCast(rhs.Uint);
-                break :blk Value.int(compute_binop(i64, lhs.Int, cast, op));
-            },
-            .FloatInt => blk: {
-                const cast: f64 = @floatFromInt(rhs.Int);
-                break :blk Value.float(compute_binop(f64, lhs.Float, cast, op));
-            },
-            .UintInt => blk: {
-                const cast: i64 = @intCast(lhs.Uint);
-                break :blk Value.int(compute_binop(i64, cast, rhs.Int, op));
-            },
-            .UintFloat => blk: {
-                const cast: f64 = @floatFromInt(lhs.Uint);
-                break :blk Value.float(compute_binop(f64, cast, rhs.Float, op));
-            },
-            .FloatUint => blk: {
-                const cast: f64 = @floatFromInt(rhs.Int);
-                break :blk Value.float(compute_binop(f64, lhs.Float, cast, op));
-            },
-            .Other => @panic("not implemented yet"),
-        };
-
-        self.stack.push(res);
-    }
 };
-
-fn compute_binop(comptime T: type, v1: T, v2: T, op: u8) T {
-    return switch (op) {
-        '+' => v1 + v2,
-        '-' => v1 - v2,
-        '*' => v1 * v2,
-        '/' => switch (@typeInfo(T)) {
-            .int => @divTrunc(v1, v2),
-            .float => v1 / v2,
-            else => @compileError("unsupported type for division"),
-        },
-        else => unreachable,
-    };
-}

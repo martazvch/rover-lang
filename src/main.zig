@@ -16,6 +16,7 @@ pub fn main() !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
         \\-f, --file <FILE>      Path to the file to execute
+        \\-s, --static-analysis Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
     );
@@ -42,11 +43,12 @@ pub fn main() !void {
 
     const print_ast = if (res.args.@"print-ast" == 1) true else false;
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
+    const static_analysis = if (res.args.@"static-analysis" == 1) true else false;
 
     if (res.args.file) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analysis);
     } else {
-        try repl(allocator, print_ast, print_bytecode);
+        try repl(allocator, print_ast, print_bytecode, static_analysis);
     }
 }
 
@@ -55,6 +57,7 @@ fn run_file(
     filename: []const u8,
     print_ast: bool,
     print_bytecode: bool,
+    static_analysis: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -72,19 +75,32 @@ fn run_file(
     buf[size] = 0;
     const zt = buf[0.. :0];
 
-    var pipeline = Pipeline.init(allocator, .{ .print_ast = print_ast, .print_bytecode = print_bytecode });
+    var pipeline = Pipeline.init(allocator, .{
+        .print_ast = print_ast,
+        .print_bytecode = print_bytecode,
+        .static_analysis = static_analysis,
+    });
     defer pipeline.deinit();
     try pipeline.run(filename, zt);
 }
 
-fn repl(allocator: Allocator, print_ast: bool, print_bytecode: bool) !void {
+fn repl(
+    allocator: Allocator,
+    print_ast: bool,
+    print_bytecode: bool,
+    static_analysis: bool,
+) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
     var input = std.ArrayList(u8).init(allocator);
     defer input.deinit();
 
-    var pipeline = Pipeline.init(allocator, .{ .print_ast = print_ast, .print_bytecode = print_bytecode });
+    var pipeline = Pipeline.init(allocator, .{
+        .print_ast = print_ast,
+        .print_bytecode = print_bytecode,
+        .static_analysis = static_analysis,
+    });
     defer pipeline.deinit();
 
     _ = try stdout.write("\t\tRover language REPL\n");

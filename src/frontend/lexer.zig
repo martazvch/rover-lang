@@ -3,15 +3,11 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const GenReport = @import("../reporter.zig").GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
+const Span = @import("ast.zig").Span;
 
 pub const Token = struct {
     kind: Kind,
-    loc: Loc,
-
-    pub const Loc = struct {
-        start: usize,
-        end: usize,
-    };
+    span: Span,
 
     const keywords = std.StaticStringMap(Kind).initComptime(.{
         .{ "and", .And },
@@ -173,7 +169,7 @@ pub const Token = struct {
     }
 
     pub fn empty() Token {
-        return .{ .kind = .Null, .loc = Loc{ .start = 0, .end = 0 } };
+        return .{ .kind = .Null, .loc = .{ .start = 0, .end = 0 } };
     }
 };
 
@@ -240,15 +236,14 @@ pub const Lexer = struct {
     }
 
     fn error_at(self: *Self, kind: LexerMsg, token: *const Token) !void {
-        const report = LexerReport.err(kind, token.loc.start, token.loc.end);
+        const report = LexerReport.err(kind, token.span);
         try self.errs.append(report);
     }
 
     pub fn next(self: *Self) Token {
         var res = Token{
             .kind = undefined,
-
-            .loc = .{
+            .span = .{
                 .start = self.index,
                 .end = undefined,
             },
@@ -263,7 +258,7 @@ pub const Lexer = struct {
                     },
                     ' ', '\t', '\r' => {
                         self.index += 1;
-                        res.loc.start = self.index;
+                        res.span.start = self.index;
                         continue :state .Start;
                     },
                     '(' => {
@@ -316,6 +311,12 @@ pub const Lexer = struct {
                         res.kind = .String;
                         continue :state .String;
                     },
+                    '0' => {
+                        if (self.source[self.index + 1] == '.') {
+                            self.index += 1;
+                            continue :state .Float;
+                        } else continue :state .Invalid;
+                    },
                     '1'...'9' => {
                         res.kind = .Int;
                         self.index += 1;
@@ -325,7 +326,7 @@ pub const Lexer = struct {
                         if (self.index == self.source.len) {
                             return .{
                                 .kind = .Eof,
-                                .loc = .{ .start = self.index, .end = self.index },
+                                .span = .{ .start = self.index, .end = self.index },
                             };
                         } else continue :state .Invalid;
                     },
@@ -358,6 +359,7 @@ pub const Lexer = struct {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
+                    '0'...'9' => continue :state .Float,
                     '.' => continue :state .DotDot,
                     '*' => {
                         res.kind = .DotStar;
@@ -421,7 +423,7 @@ pub const Lexer = struct {
                 switch (self.source[self.index]) {
                     'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .Identifier,
                     else => {
-                        const ident = self.source[res.loc.start..self.index];
+                        const ident = self.source[res.span.start..self.index];
 
                         if (Token.get_keyword(ident)) |kw| {
                             res.kind = kw;
@@ -480,9 +482,9 @@ pub const Lexer = struct {
                             // For error reporting, one byte length
                             return .{
                                 .kind = .UnterminatedStr,
-                                .loc = .{
-                                    .start = res.loc.start,
-                                    .end = res.loc.start + 1,
+                                .span = .{
+                                    .start = res.span.start,
+                                    .end = res.span.start + 1,
                                 },
                             };
                         }
@@ -493,7 +495,7 @@ pub const Lexer = struct {
             },
         }
 
-        res.loc.end = self.index;
+        res.span.end = self.index;
         return res;
     }
 };
@@ -509,36 +511,37 @@ test "ident and strings" {
     try lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
-        .{ .kind = .Identifier, .loc = .{ .start = 0, .end = 3 } },
-        .{ .kind = .Identifier, .loc = .{ .start = 4, .end = 7 } },
-        .{ .kind = .Identifier, .loc = .{ .start = 8, .end = 16 } },
-        .{ .kind = .Identifier, .loc = .{ .start = 18, .end = 23 } },
+        .{ .kind = .Identifier, .span = .{ .start = 0, .end = 3 } },
+        .{ .kind = .Identifier, .span = .{ .start = 4, .end = 7 } },
+        .{ .kind = .Identifier, .span = .{ .start = 8, .end = 16 } },
+        .{ .kind = .Identifier, .span = .{ .start = 18, .end = 23 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i].kind);
-        try expect(tk.loc.start == res[i].loc.start);
-        try expect(tk.loc.end == res[i].loc.end);
+        try expect(tk.span.start == res[i].span.start);
+        try expect(tk.span.end == res[i].span.end);
     }
 }
 
 test "numbers" {
     var lexer = Lexer.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("123 45.6 7.");
+    try lexer.lex("123 45.6 7. .86");
 
-    const res = [3]Token{
-        .{ .kind = .Int, .loc = .{ .start = 0, .end = 3 } },
-        .{ .kind = .Float, .loc = .{ .start = 4, .end = 8 } },
-        .{ .kind = .Float, .loc = .{ .start = 9, .end = 11 } },
+    const res = [_]Token{
+        .{ .kind = .Int, .span = .{ .start = 0, .end = 3 } },
+        .{ .kind = .Float, .span = .{ .start = 4, .end = 8 } },
+        .{ .kind = .Float, .span = .{ .start = 9, .end = 11 } },
+        .{ .kind = .Float, .span = .{ .start = 12, .end = 15 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
         try expect(tk.kind == res[i].kind);
-        try expect(tk.loc.start == res[i].loc.start);
-        try expect(tk.loc.end == res[i].loc.end);
+        try expect(tk.span.start == res[i].span.start);
+        try expect(tk.span.end == res[i].span.end);
     }
 }
 
