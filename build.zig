@@ -1,21 +1,7 @@
 const std = @import("std");
 
-// pub const BuildOptions = struct {
-//     print_instr: bool = false,
-//     print_stack: bool = false,
-//     print_code: bool = false,
-//
-//     fn from_builder(b: *std.Build) BuildOptions {
-//         const print_instr = b.option(bool, "print_instr", "prints the current instruction") orelse false;
-//         const print_stack = b.option(bool, "print_stack", "prints the stack on each instruction") orelse false;
-//
-//         return .{ .print_instr = print_instr, .print_stack = print_stack };
-//     }
-// };
-
 pub fn build(b: *std.Build) void {
     const options = b.addOptions();
-    // const opts = BuildOptions.from_builder(b);
 
     const print_instr = b.option(bool, "print-instr", "prints the current instruction") orelse false;
     options.addOption(bool, "print_instr", print_instr);
@@ -66,18 +52,35 @@ pub fn build(b: *std.Build) void {
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&exe_check.step);
 
-    // Tests
-    const exe_tests = b.addTest(.{
+    // -------
+    //  Tests
+    // -------
+    // All unit tests within source code
+    const tests_exe = b.addTest(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    const run_exe_tests = b.addRunArtifact(exe_tests);
+    const run_exe_tests = b.addRunArtifact(tests_exe);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
-    //     // the `zig build --help` menu, providing a way for the user to request
-    //         // running the unit tests.
+    // the `zig build --help` menu, providing a way for the user to request
+    // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_tests.step);
+
+    // Vm tests use the compiled Vm to run, with a special main
+    // const runtime_tests_exe = b.addTest(.{
+    //     .root_source_file = b.path("tests/vm/runtime_tester.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    //
+    // const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
+    //
+    // test_step.dependOn(&run_runtime_tests_exe.step);
+
+    // Compiles the exe for the runtime tests
+    test_step.dependOn(b.getInstallStep());
 }

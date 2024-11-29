@@ -108,14 +108,16 @@ pub const Pipeline = struct {
         }
 
         // Compiler
-        var compiler = Compiler.init(self.allocator, self.analyzer.analyzed_binops.items);
+        var compiler = Compiler.init(self.allocator, self.analyzer.binop_infos.items);
         defer compiler.deinit();
         try compiler.compile(self.parser.stmts.items);
 
         // Disassembler
         if (self.config.print_bytecode) {
-            var dis = Disassembler.init(&compiler.chunk);
+            var dis = Disassembler.init(&compiler.chunk, self.allocator, false);
+            defer dis.deinit();
             try dis.dis_chunk("main");
+            std.debug.print("{s}", .{dis.disassembled.items});
         }
 
         // Vm

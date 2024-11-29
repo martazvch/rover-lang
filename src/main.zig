@@ -73,7 +73,7 @@ fn run_file(
 
     _ = try file.readAll(buf);
     buf[size] = 0;
-    const zt = buf[0.. :0];
+    const zt = buf[0..size :0];
 
     var pipeline = Pipeline.init(allocator, .{
         .print_ast = print_ast,
@@ -123,4 +123,7 @@ fn repl(
 test {
     _ = @import("frontend/lexer.zig");
     _ = @import("frontend/parser.zig");
+    _ = @import("frontend/analyzer.zig");
+    _ = @import("backend/compiler.zig");
+    _ = @import("runtime/vm.zig");
 }

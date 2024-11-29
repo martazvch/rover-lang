@@ -30,3 +30,12 @@ expect:
  
 ================
 
+code:
+not true
+
+expect:
+[Unary not]
+    [Bool literal true]
+ 
+================
+

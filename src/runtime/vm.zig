@@ -99,7 +99,7 @@ pub const Vm = struct {
                 var value = self.stack.values[0..].ptr;
                 while (value != self.stack.top) : (value += 1) {
                     print("[", .{});
-                    value[0].log();
+                    try value[0].log(self.stdout);
                     print("] ", .{});
                 }
                 print("\n", .{});
@@ -107,8 +107,10 @@ pub const Vm = struct {
 
             if (comptime config.print_instr) {
                 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
-                const dis = Disassembler.init(self.chunk);
-                _ = dis.dis_instruction(self.instruction_nb());
+                const dis = Disassembler.init(self.chunk, self.allocator, false);
+                defer dis.deinit();
+                print("{s}\n", .{dis.disassembled.items});
+                _ = try dis.dis_instruction(self.instruction_nb());
             }
 
             const instruction = self.read_byte();
@@ -124,8 +126,9 @@ pub const Vm = struct {
                     self.stack.peek_ref().Int += rhs;
                 },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
-                .CastToInt => self.stack.push(Value.int(@intFromFloat(self.stack.pop().Float))),
                 .Constant => self.stack.push(self.read_constant()),
+                .DifferentInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
+                .DifferentFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
                 .DivideFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref().Float /= rhs;
@@ -135,6 +138,16 @@ pub const Vm = struct {
                     const lhs = self.stack.pop().Int;
                     self.stack.push(Value.int(@divTrunc(lhs, rhs)));
                 },
+                .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
+                .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
+                .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
+                .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
+                .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
+                .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
+                .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
+                .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
+                .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
+                .LessEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
                 .False => self.stack.push(Value.bool_(false)),
                 .MultiplyFloat => {
                     const rhs = self.stack.pop().Float;
@@ -150,7 +163,7 @@ pub const Vm = struct {
                 .Null => self.stack.push(Value.null_()),
                 .Print => unreachable,
                 .Return => {
-                    self.stack.pop().log();
+                    try self.stack.pop().log(self.stdout);
                     break;
                 },
                 .SubtractFloat => {

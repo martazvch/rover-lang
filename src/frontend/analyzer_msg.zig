@@ -1,27 +1,61 @@
 pub const AnalyzerMsg = union(enum) {
-    InvalidMathBinop: struct { found: []const u8 },
+    FloatEqual,
+    FloatEqualCast,
+    InvalidArithmetic: struct { found: []const u8 },
+    InvalidComparison: struct { found1: []const u8, found2: []const u8 },
+    InvalidUnary: struct { found: []const u8 },
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
 
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         _ = try switch (self) {
-            .InvalidMathBinop => writer.write("invalid arithmetic operation"),
+            .FloatEqual => writer.write("floating-point values equality is unsafe"),
+            .FloatEqualCast => writer.write("unsafe floating-point values comparison"),
+            .InvalidArithmetic => writer.write("invalid arithmetic operation"),
+            .InvalidComparison => writer.write("invalid comparison"),
+            .InvalidUnary => writer.write("invalid unary operation"),
             .ImplicitCast => writer.write("implicit cast"),
         };
     }
 
     pub fn get_hint(self: Self, writer: anytype) !usize {
         return switch (self) {
-            .InvalidMathBinop => writer.write("expression is not a numeric type"),
+            .FloatEqual => writer.write("this expression is a float"),
+            .FloatEqualCast => writer.write("this expression is implicitly casted to a float"),
+            .InvalidArithmetic => writer.write("expression is not a numeric type"),
+            .InvalidComparison => writer.write("expressions have different types"),
+            .InvalidUnary => writer.write("expression is not a boolean type"),
             .ImplicitCast => writer.write("expressions have different types"),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
-            .InvalidMathBinop => |e| writer.print("expect a numeric type, found {s}", .{e.found}),
-            .ImplicitCast => |e| writer.print("explicitly cast {s} to {s}", .{ e.side, e.type_ }),
+            .FloatEqual => writer.print(
+                \\floating-point values are approximations to infinitly precise real numbers. 
+                \\ If you want to compare floats, you should compare against an Epsilon, like
+                \\ value < 1e-6  instead of  value == 0
+                \\ value - other < 1e-6  instead of  value < other
+            ,
+                .{},
+            ),
+            .FloatEqualCast => writer.print(
+                \\only values of same type can be compared so expression is implicitly casted to a float.
+                \\ This results in an unsafe floating-point comparison. To avoid this, explicitly
+                \\ cast the expression to 'float' and compare against an Epsilon (like 1e-5)
+            ,
+                .{},
+            ),
+            .InvalidArithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),
+            .InvalidComparison => |e| writer.print(
+                \\expressions must have the same type when compared, found
+                \\ '{s}' and '{s}'
+            ,
+                .{ e.found1, e.found2 },
+            ),
+            .InvalidUnary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
+            .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
         };
     }
 
@@ -37,8 +71,8 @@ pub const AnalyzerMsg = union(enum) {
         }
     };
 
-    pub fn invalid_math_binop(found: []const u8) Self {
-        return .{ .InvalidMathBinop = .{
+    pub fn invalid_arithmetic(found: []const u8) Self {
+        return .{ .InvalidArithmetic = .{
             .found = found,
         } };
     }
@@ -47,6 +81,13 @@ pub const AnalyzerMsg = union(enum) {
         return .{ .ImplicitCast = .{
             .side = side.str(),
             .type_ = type_,
+        } };
+    }
+
+    pub fn invalid_cmp(found1: []const u8, found2: []const u8) Self {
+        return .{ .InvalidComparison = .{
+            .found1 = found1,
+            .found2 = found2,
         } };
     }
 };

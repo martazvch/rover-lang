@@ -238,13 +238,14 @@ pub const Parser = struct {
                 .lhs = node,
                 .rhs = rhs,
                 .op = op,
+                .span = .{ .start = node.span().start, .end = rhs.span().end },
             } };
 
             node = expr;
 
             if (next_rule.assoc == .None) banned_prec = next_rule.prec;
 
-            self.skip_new_lines();
+            // self.skip_new_lines();
         }
 
         return node;
@@ -254,7 +255,7 @@ pub const Parser = struct {
     /// to form an expression
     fn parse_prefix_expr(self: *Self) Error!*Expr {
         const unary_expr = switch (self.prev().kind) {
-            .Minus => try self.allocator.create(Expr),
+            .Minus, .Not => try self.allocator.create(Expr),
             else => return self.parse_primary_expr(),
         };
 
@@ -276,9 +277,12 @@ pub const Parser = struct {
 
     fn parse_primary_expr(self: *Self) Error!*Expr {
         return switch (self.prev().kind) {
-            .LeftParen => self.grouping(),
+            .False => self.bool_(false),
             .Float => self.float(),
             .Int => self.int(),
+            .LeftParen => self.grouping(),
+            .Null => self.null_(),
+            .True => self.bool_(true),
             else => |k| {
                 if (k == .Eof) {
                     try self.error_at_prev(.UnexpectedEof);
@@ -307,17 +311,32 @@ pub const Parser = struct {
         return expr;
     }
 
+    fn bool_(self: *Self, value: bool) Error!*Expr {
+        const p = self.prev();
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .BoolLit = .{
+            .value = value,
+            .span = .{
+                .start = p.span.start,
+                .end = p.span.end,
+            },
+        } };
+
+        return expr;
+    }
+
     fn float(self: *Self) Error!*Expr {
-        const previous = self.prev();
-        const lexeme = self.source[previous.span.start..previous.span.end];
+        const p = self.prev();
+        const lexeme = self.source[p.span.start..p.span.end];
         const value = try std.fmt.parseFloat(f64, lexeme);
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .FloatLit = .{
             .value = value,
             .span = .{
-                .start = previous.span.start,
-                .end = previous.span.end,
+                .start = p.span.start,
+                .end = p.span.end,
             },
         } };
 
@@ -340,13 +359,27 @@ pub const Parser = struct {
 
         return expr;
     }
+
+    fn null_(self: *Self) Error!*Expr {
+        const p = self.prev();
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .NullLit = .{
+            .span = .{
+                .start = p.span.start,
+                .end = p.span.end,
+            },
+        } };
+
+        return expr;
+    }
 };
 
 // Tests
 test Parser {
     const GenericTester = @import("../tester.zig").GenericTester;
-    const run_test = @import("test_parser.zig").run_test;
+    const get_test_data = @import("test_parser.zig").get_test_data;
 
-    const ParserTester = GenericTester("parser", run_test);
-    try ParserTester.test_all();
+    const Tester = GenericTester("parser", ParserMsg, get_test_data);
+    try Tester.run();
 }

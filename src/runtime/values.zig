@@ -2,17 +2,19 @@ const std = @import("std");
 const print = std.debug.print;
 
 pub const Type = union(enum) {
-    Int,
-    Float,
     Bool,
+    Float,
+    Int,
+    Null,
 
     const Self = @This();
 
     pub fn str(self: Self) []const u8 {
         return switch (self) {
-            .Int => "int",
-            .Float => "float",
             .Bool => "bool",
+            .Float => "float",
+            .Int => "int",
+            .Null => "null",
         };
     }
 };
@@ -51,14 +53,14 @@ pub const Value = union(enum) {
         self.Bool = !self.Bool;
     }
 
-    pub fn log(self: *const Value) void {
-        switch (self.*) {
-            .Bool => |v| print("{}", .{v}),
-            .Float => |v| print("{d}", .{v}),
-            .Int => |v| print("{}", .{v}),
-            .Null => print("null", .{}),
-            .Uint => |v| print("{}", .{v}),
+    pub fn log(self: *const Value, writer: anytype) !void {
+        try switch (self.*) {
+            .Bool => |v| writer.print("{}", .{v}),
+            .Float => |v| writer.print("{d}", .{v}),
+            .Int => |v| writer.print("{}", .{v}),
+            .Null => writer.print("null", .{}),
+            .Uint => |v| writer.print("{}", .{v}),
             // .Obj => |v| v.log(),
-        }
+        };
     }
 };

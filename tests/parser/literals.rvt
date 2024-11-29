@@ -50,3 +50,30 @@ expect:
 
 ================
 
+// Bool
+
+code:
+true
+
+expect:
+[Bool literal true]
+
+================
+
+code:
+false
+
+expect:
+[Bool literal false]
+
+================
+
+// Null
+
+code:
+null
+
+expect:
+[Null literal]
+
+================

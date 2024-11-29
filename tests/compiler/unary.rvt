@@ -1,0 +1,67 @@
+// Tests literals
+
+code:
+-1
+
+expect:
+OP_CONSTANT index: 0 value: 1
+OP_NEGATE_INT
+OP_RETURN
+
+================
+
+code:
+----1
+
+expect:
+OP_CONSTANT index: 0 value: 1
+OP_NEGATE_INT
+OP_NEGATE_INT
+OP_NEGATE_INT
+OP_NEGATE_INT
+OP_RETURN
+
+================
+
+code:
+-65.82
+
+expect:
+OP_CONSTANT index: 0 value: 65.82
+OP_NEGATE_FLOAT
+OP_RETURN
+
+================
+
+code:
+not true
+
+expect:
+OP_TRUE
+OP_NOT
+OP_RETURN
+
+================
+
+code:
+not false
+
+expect:
+OP_FALSE
+OP_NOT
+OP_RETURN
+
+================
+
+code:
+not not not true
+
+expect:
+OP_TRUE
+OP_NOT
+OP_NOT
+OP_NOT
+OP_RETURN
+
+================
+

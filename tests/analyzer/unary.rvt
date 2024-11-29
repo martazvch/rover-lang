@@ -1,0 +1,14 @@
+// Tests unary
+
+code:
+-true
+-null
+not -8.2
+
+error:
+InvalidArithmetic, bool
+InvalidArithmetic, null
+InvalidUnary, float
+
+================
+

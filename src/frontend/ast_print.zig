@@ -50,9 +50,11 @@ pub const AstPrinter = struct {
     fn print_expr(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
             .BinOp => |*e| self.binop_expr(e),
+            .BoolLit => |*e| self.bool_expr(e),
             .Grouping => |*e| self.grouping_expr(e),
             .FloatLit => |*e| self.float_expr(e),
             .IntLit => |*e| self.int_expr(e),
+            .NullLit => self.null_expr(),
             .Unary => |*e| self.unary_expr(e),
         };
     }
@@ -79,6 +81,13 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
+    fn bool_expr(self: *Self, expr: *const Ast.BoolLit) Error!void {
+        try self.indent();
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Bool literal {}]\n", .{expr.value});
+        try self.tree.appendSlice(written);
+    }
+
     fn float_expr(self: *Self, expr: *const Ast.FloatLit) Error!void {
         try self.indent();
         var buf: [100]u8 = undefined;
@@ -91,6 +100,11 @@ pub const AstPrinter = struct {
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Int literal {}]\n", .{expr.value});
         try self.tree.appendSlice(written);
+    }
+
+    fn null_expr(self: *Self) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Null literal]\n");
     }
 
     fn unary_expr(self: *Self, expr: *const Ast.Unary) Error!void {

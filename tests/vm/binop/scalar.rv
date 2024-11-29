@@ -2,12 +2,6 @@
 
 // Ints
 
-code:
-print 1 + 1
-print 5 * (4 - 6 / 3)
+print 1 + 1            // expect: 2
+print 5 * (4 - 6 / 3)  // expect: 10
 
-expect:
-2
-10
-
-================

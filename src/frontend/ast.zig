@@ -1,5 +1,6 @@
 const std = @import("std");
 const Token = @import("lexer.zig").Token;
+const Type = @import("../runtime/values.zig").Type;
 
 pub const Span = struct {
     start: usize,
@@ -30,16 +31,16 @@ pub const VarDecl = struct {
 // Expressions
 pub const Expr = union(enum) {
     BinOp: BinOp,
-    // BoolLit: BoolLit,
+    BoolLit: BoolLit,
     FloatLit: FloatLit,
     Grouping: Grouping,
     IntLit: IntLit,
+    NullLit: NullLit,
     // UintLit: UintLit,
     Unary: Unary,
 
     pub fn span(self: *const Expr) Span {
         return switch (self.*) {
-            .BinOp => |*e| .{ .start = e.lhs.span().start, .end = e.rhs.span().end },
             inline else => |e| e.span,
         };
     }
@@ -49,6 +50,7 @@ pub const BinOp = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: Token.Kind,
+    span: Span,
 };
 
 pub const BoolLit = struct {
@@ -71,6 +73,10 @@ pub const IntLit = struct {
     span: Span,
 };
 
+pub const NullLit = struct {
+    span: Span,
+};
+
 pub const UintLit = struct {
     value: u64,
     span: Span,
@@ -79,5 +85,6 @@ pub const UintLit = struct {
 pub const Unary = struct {
     op: Token.Kind,
     rhs: *Expr,
+    type_: Type = .Null,
     span: Span,
 };

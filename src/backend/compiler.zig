@@ -10,24 +10,24 @@ const BinOpType = @import("chunk.zig").BinOpType;
 const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const AnalyzedBinop = @import("../frontend/analyzer.zig").Analyzer.AnalyzedBinOp;
+const BinopInfos = @import("../frontend/analyzer.zig").Analyzer.BinopInfos;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Compiler = struct {
     chunk: Chunk,
     errs: ArrayList(CompilerReport),
-    analyzed_binops: UnsafeIter(AnalyzedBinop),
+    binop_infos: UnsafeIter(BinopInfos),
 
     const Self = @This();
     const Error = Chunk.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(allocator: Allocator, binop_casts: []const AnalyzedBinop) Self {
+    pub fn init(allocator: Allocator, binop_infos: []const BinopInfos) Self {
         return .{
             .chunk = Chunk.init(allocator),
             .errs = ArrayList(CompilerReport).init(allocator),
-            .analyzed_binops = UnsafeIter(AnalyzedBinop).init(binop_casts),
+            .binop_infos = UnsafeIter(BinopInfos).init(binop_infos),
         };
     }
 
@@ -69,56 +69,43 @@ pub const Compiler = struct {
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
+            .BoolLit => |*e| self.bool_lit(e),
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
             .FloatLit => |*e| self.float_lit(e),
             .IntLit => |*e| self.int_lit(e),
+            .NullLit => self.null_lit(),
             .Unary => |*e| self.unary(e),
         };
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
-        if (expr.op == .Plus or expr.op == .Minus or expr.op == .Star or expr.op == .Slash) {
-            return self.arithmetic_binop(expr);
-        }
-
-        try self.expression(expr.lhs);
-        try self.expression(expr.rhs);
-
-        try switch (expr.op) {
-            else => unreachable,
-        };
-    }
-
-    fn arithmetic_binop(self: *Self, expr: *const Ast.BinOp) !void {
-        const analyzed = self.analyzed_binops.next();
+        const infos = self.binop_infos.next();
 
         try self.expression(expr.lhs);
 
-        if (analyzed.cast == .Lhs) {
-            switch (analyzed.type_) {
-                .Int => try self.chunk.write_op(.CastToInt),
-                .Float => try self.chunk.write_op(.CastToFloat),
-                else => unreachable,
-            }
+        if (infos.cast == .Lhs) {
+            try self.chunk.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
-        if (analyzed.cast == .Rhs) {
-            switch (analyzed.type_) {
-                .Int => try self.chunk.write_op(.CastToInt),
-                .Float => try self.chunk.write_op(.CastToFloat),
-                else => unreachable,
-            }
+        if (infos.cast == .Rhs) {
+            try self.chunk.write_op(.CastToFloat);
         }
 
-        try switch (analyzed.type_) {
+        try switch (infos.res_type) {
             .Int => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddInt),
                 .Minus => self.chunk.write_op(.SubtractInt),
                 .Star => self.chunk.write_op(.MultiplyInt),
                 .Slash => self.chunk.write_op(.DivideInt),
+                .EqualEqual => self.chunk.write_op(.EqualInt),
+                .BangEqual => self.chunk.write_op(.DifferentInt),
+                .Greater => self.chunk.write_op(.GreaterInt),
+                .GreaterEqual => self.chunk.write_op(.GreaterEqualInt),
+                .Less => self.chunk.write_op(.LessInt),
+                .LessEqual => self.chunk.write_op(.LessEqualInt),
                 else => unreachable,
             },
             .Float => switch (expr.op) {
@@ -126,6 +113,12 @@ pub const Compiler = struct {
                 .Minus => self.chunk.write_op(.SubtractFloat),
                 .Star => self.chunk.write_op(.MultiplyFloat),
                 .Slash => self.chunk.write_op(.DivideFloat),
+                .EqualEqual => self.chunk.write_op(.EqualFloat),
+                .BangEqual => self.chunk.write_op(.DifferentFloat),
+                .Greater => self.chunk.write_op(.GreaterFloat),
+                .GreaterEqual => self.chunk.write_op(.GreaterEqualFloat),
+                .Less => self.chunk.write_op(.LessFloat),
+                .LessEqual => self.chunk.write_op(.LessEqualFloat),
                 else => unreachable,
             },
             else => unreachable,
@@ -136,6 +129,11 @@ pub const Compiler = struct {
         try self.expression(expr.expr);
     }
 
+    fn bool_lit(self: *Self, expr: *const Ast.BoolLit) !void {
+        const op: OpCode = if (expr.value) .True else .False;
+        try self.chunk.write_op(op);
+    }
+
     fn float_lit(self: *Self, expr: *const Ast.FloatLit) !void {
         try self.emit_constant(Value.float(expr.value));
     }
@@ -144,13 +142,30 @@ pub const Compiler = struct {
         try self.emit_constant(Value.int(expr.value));
     }
 
+    fn null_lit(self: *Self) !void {
+        try self.chunk.write_op(.Null);
+    }
+
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
         try self.expression(expr.rhs);
 
-        try switch (expr.op) {
-            .Minus => self.chunk.write_op(.NegateInt),
-            .Not => self.chunk.write_op(.Not),
-            else => unreachable,
-        };
+        if (expr.op == .Minus) {
+            try switch (expr.type_) {
+                .Int => self.chunk.write_op(.NegateInt),
+                .Float => self.chunk.write_op(.NegateFloat),
+                else => unreachable,
+            };
+        } else {
+            try self.chunk.write_op(.Not);
+        }
     }
 };
+
+// Tests
+test Compiler {
+    const GenericTester = @import("../tester.zig").GenericTester;
+    const get_test_data = @import("test_compiler.zig").get_test_data;
+
+    const Tester = GenericTester("compiler", CompilerMsg, get_test_data);
+    try Tester.run();
+}
