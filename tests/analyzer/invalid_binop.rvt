@@ -5,10 +5,12 @@
 code:
 0.6 - true
 null * -5
+1 + "foo"
 
 error:
 InvalidArithmetic, bool
 InvalidArithmetic, null
+InvalidArithmetic, string
 
 ================
 
@@ -17,10 +19,12 @@ InvalidArithmetic, null
 code:
 5 < null
 false >= -67.8
+"foo" >= 65.2
 
 error:
 InvalidArithmetic, null
 InvalidArithmetic, bool
+InvalidArithmetic, string
 
 ================
 

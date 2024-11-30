@@ -1,29 +1,27 @@
 const std = @import("std");
 const Token = @import("lexer.zig").Token;
-const Type = @import("../runtime/values.zig").Type;
+const Type = @import("analyzer.zig").Type;
 
 pub const Span = struct {
     start: usize,
     end: usize,
 };
 
-pub const VarType = union(enum) {
-    Float: void,
-    Int: void,
-    Uint: void,
-    Bool: void,
-    Struct: Token,
-};
-
 pub const Stmt = union(enum) {
+    Print: Print,
     VarDecl: VarDecl,
     Expr: *Expr,
+};
+
+pub const Print = struct {
+    expr: *Expr,
+    span: Span,
 };
 
 pub const VarDecl = struct {
     name: []const u8,
     is_const: bool,
-    type_: ?VarType,
+    type_: ?Type,
     value: ?*Expr,
     span: Span,
 };
@@ -36,7 +34,7 @@ pub const Expr = union(enum) {
     Grouping: Grouping,
     IntLit: IntLit,
     NullLit: NullLit,
-    // UintLit: UintLit,
+    StringLit: StringLit,
     Unary: Unary,
 
     pub fn span(self: *const Expr) Span {
@@ -50,6 +48,7 @@ pub const BinOp = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: Token.Kind,
+    type_: Type = .Null,
     span: Span,
 };
 
@@ -77,8 +76,8 @@ pub const NullLit = struct {
     span: Span,
 };
 
-pub const UintLit = struct {
-    value: u64,
+pub const StringLit = struct {
+    value: []const u8,
     span: Span,
 };
 

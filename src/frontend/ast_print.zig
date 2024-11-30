@@ -32,19 +32,28 @@ pub const AstPrinter = struct {
         self.tree.deinit();
     }
 
+    pub fn display(self: *const Self) void {
+        print("{s}", .{self.tree.items});
+    }
+
     pub fn parse_ast(self: *Self, source: []const u8, nodes: []const Stmt) !void {
         self.source = source;
 
         for (nodes) |node| {
             try switch (node) {
-                .Expr => |e| self.print_expr(e),
+                .Print => |*n| self.print_stmt(n),
+                .Expr => |n| self.print_expr(n),
                 else => @panic("todo"),
             };
         }
     }
 
-    pub fn display(self: *const Self) void {
-        print("{s}", .{self.tree.items});
+    fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
+        try self.indent();
+        try self.tree.appendSlice("[Print]\n");
+        self.indent_level += 1;
+        try self.print_expr(stmt.expr);
+        self.indent_level -= 1;
     }
 
     fn print_expr(self: *Self, expr: *const Expr) Error!void {
@@ -55,6 +64,7 @@ pub const AstPrinter = struct {
             .FloatLit => |*e| self.float_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .NullLit => self.null_expr(),
+            .StringLit => |*e| self.string_expr(e),
             .Unary => |*e| self.unary_expr(e),
         };
     }
@@ -105,6 +115,13 @@ pub const AstPrinter = struct {
     fn null_expr(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Null literal]\n");
+    }
+
+    fn string_expr(self: *Self, expr: *const Ast.StringLit) Error!void {
+        try self.indent();
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[String literal {s}]\n", .{expr.value});
+        try self.tree.appendSlice(written);
     }
 
     fn unary_expr(self: *Self, expr: *const Ast.Unary) Error!void {

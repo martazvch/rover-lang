@@ -67,6 +67,7 @@ fn run_file(
     };
     defer file.close();
 
+    // The file has a new line inserted by default
     const size = try file.getEndPos();
     const buf = try allocator.alloc(u8, size + 1);
     defer allocator.free(buf);
@@ -114,6 +115,8 @@ fn repl(
 
         pipeline.reinit_frontend();
 
+        // For ease of use of the parser
+        try input.append('\n');
         try input.append(0);
         const zt = input.items[0 .. input.items.len - 1 :0];
         try pipeline.run("stdin", zt);
@@ -125,5 +128,6 @@ test {
     _ = @import("frontend/parser.zig");
     _ = @import("frontend/analyzer.zig");
     _ = @import("backend/compiler.zig");
+    _ = @import("runtime/table.zig");
     _ = @import("runtime/vm.zig");
 }

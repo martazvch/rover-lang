@@ -107,8 +107,15 @@ pub const Pipeline = struct {
             return;
         }
 
+        // We start the Vm for the allocator and string interning
+
+        // Vm
+        var vm = Vm.new(self.allocator);
+        try vm.init();
+        defer vm.deinit();
+
         // Compiler
-        var compiler = Compiler.init(self.allocator, self.analyzer.binop_infos.items);
+        var compiler = Compiler.init(&vm, self.analyzer.binop_casts.items);
         defer compiler.deinit();
         try compiler.compile(self.parser.stmts.items);
 
@@ -120,10 +127,7 @@ pub const Pipeline = struct {
             std.debug.print("{s}", .{dis.disassembled.items});
         }
 
-        // Vm
-        var vm = Vm.new(self.allocator, &compiler.chunk);
-        vm.init();
-        defer vm.deinit();
-        try vm.run();
+        // Vm run
+        try vm.run(&compiler.chunk);
     }
 };

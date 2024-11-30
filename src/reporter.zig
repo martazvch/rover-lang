@@ -339,7 +339,7 @@ pub fn GenReport(comptime T: type) type {
             return self.report.get_msg(writer);
         }
 
-        pub fn get_hint(self: *const Self, writer: anytype) !usize {
+        pub fn get_hint(self: *const Self, writer: anytype) !void {
             return self.report.get_hint(writer);
         }
 

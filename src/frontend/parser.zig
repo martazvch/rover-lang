@@ -139,7 +139,7 @@ pub const Parser = struct {
     /// Expecy a specific type, otherwise it's an error and we enter
     /// *panic* mode. Allow to pass a token to be marked as initial error
     /// (usefull for example when unclosed parenthesis, we give the first)
-    fn expect_or_err_at(
+    fn expect_or_err_at_tk(
         self: *Self,
         kind: Token.Kind,
         error_kind: ParserMsg,
@@ -148,6 +148,18 @@ pub const Parser = struct {
         if (self.match(kind)) return;
 
         try self.error_at(tk, error_kind);
+        return error.err;
+    }
+
+    fn expect_or_err_at_span(
+        self: *Self,
+        kind: Token.Kind,
+        error_kind: ParserMsg,
+        span: Span,
+    ) !void {
+        if (self.match(kind)) return;
+
+        try self.error_at_span(error_kind, span);
         return error.err;
     }
 
@@ -172,6 +184,15 @@ pub const Parser = struct {
         try self.errs.append(report);
     }
 
+    fn error_at_span(self: *Self, error_kind: ParserMsg, span: Span) !void {
+        if (self.panic_mode) return;
+
+        self.panic_mode = true;
+
+        const report = ParserReport.err(error_kind, span);
+        try self.errs.append(report);
+    }
+
     fn synchronize(self: *Self) void {
         self.panic_mode = false;
 
@@ -184,11 +205,36 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Self) !Stmt {
-        if (self.check(.Var)) {
+        if (self.match(.Var)) {
             unreachable;
+        } else {
+            return self.statement();
+        }
+    }
+
+    fn statement(self: *Self) !Stmt {
+        if (self.match(.Print)) {
+            return self.print_stmt();
         } else {
             return .{ .Expr = try self.parse_precedence_expr(0) };
         }
+    }
+
+    fn print_stmt(self: *Self) !Stmt {
+        var span: Span = .{ .start = self.prev().span.start, .end = 0 };
+        const expr = try self.parse_precedence_expr(0);
+        span.end = expr.span().end;
+
+        try self.expect_or_err_at_span(
+            .NewLine,
+            .ExpectNewLine,
+            .{ .start = span.end, .end = span.end },
+        );
+
+        return .{ .Print = .{
+            .expr = expr,
+            .span = span,
+        } };
     }
 
     const Assoc = enum { Left, None };
@@ -282,6 +328,7 @@ pub const Parser = struct {
             .Int => self.int(),
             .LeftParen => self.grouping(),
             .Null => self.null_(),
+            .String => self.string(),
             .True => self.bool_(true),
             else => |k| {
                 if (k == .Eof) {
@@ -307,7 +354,7 @@ pub const Parser = struct {
             },
         } };
 
-        try self.expect_or_err_at(.RightParen, .UnclosedParen, &opening);
+        try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, &opening);
         return expr;
     }
 
@@ -365,6 +412,21 @@ pub const Parser = struct {
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .NullLit = .{
+            .span = .{
+                .start = p.span.start,
+                .end = p.span.end,
+            },
+        } };
+
+        return expr;
+    }
+
+    fn string(self: *Self) Error!*Expr {
+        const p = self.prev();
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .StringLit = .{
+            .value = self.source[p.span.start + 1 .. p.span.end - 1],
             .span = .{
                 .start = p.span.start,
                 .end = p.span.end,

@@ -7,25 +7,41 @@ const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const GenReport = @import("../reporter.zig").GenReport;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const Type = @import("../runtime/values.zig").Type;
+
+pub const Type = union(enum) {
+    Bool,
+    Float,
+    Int,
+    Null,
+    Obj,
+    Str,
+
+    const Self = @This();
+
+    pub fn str(self: Self) []const u8 {
+        return switch (self) {
+            .Bool => "bool",
+            .Float => "float",
+            .Int => "int",
+            .Null => "null",
+            .Obj => "object",
+            .Str => "string",
+        };
+    }
+};
 
 pub const Analyzer = struct {
     types: StringHashMap(Type),
     errs: ArrayList(AnalyzerReport),
     warns: ArrayList(AnalyzerReport),
-    binop_infos: ArrayList(BinopInfos),
+    binop_casts: ArrayList(BinopCast),
 
     // We assume we only need to know the side because the cast will always
     // be from int to float
-    pub const BinopInfos = struct {
-        cast: Side = .None,
-        res_type: Type,
-
-        const Side = enum {
-            Lhs,
-            Rhs,
-            None,
-        };
+    pub const BinopCast = enum {
+        Lhs,
+        Rhs,
+        None,
     };
 
     const Self = @This();
@@ -38,7 +54,7 @@ pub const Analyzer = struct {
             .types = StringHashMap(Type).init(allocator),
             .errs = ArrayList(AnalyzerReport).init(allocator),
             .warns = ArrayList(AnalyzerReport).init(allocator),
-            .binop_infos = ArrayList(BinopInfos).init(allocator),
+            .binop_casts = ArrayList(BinopCast).init(allocator),
         };
     }
 
@@ -46,14 +62,14 @@ pub const Analyzer = struct {
         self.types.deinit();
         self.errs.deinit();
         self.warns.deinit();
-        self.binop_infos.deinit();
+        self.binop_casts.deinit();
     }
 
     pub fn reinit(self: *Self) void {
         self.types.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
         self.warns.clearRetainingCapacity();
-        self.binop_infos.clearRetainingCapacity();
+        self.binop_casts.clearRetainingCapacity();
     }
 
     fn is_numeric(t: Type) bool {
@@ -74,6 +90,7 @@ pub const Analyzer = struct {
 
     fn statement(self: *Self, stmt: *Stmt) !Type {
         return switch (stmt.*) {
+            .Print => .Null,
             .VarDecl => unreachable,
             .Expr => |e| self.expression(e),
         };
@@ -87,6 +104,7 @@ pub const Analyzer = struct {
             .FloatLit => .Float,
             .IntLit => .Int,
             .NullLit => .Null,
+            .StringLit => .Str,
             .Unary => |*e| self.unary(e),
         };
     }
@@ -95,8 +113,24 @@ pub const Analyzer = struct {
         const lhs = try self.expression(expr.lhs);
         const rhs = try self.expression(expr.rhs);
 
-        var res: Type = lhs;
-        var binop_infos: BinopInfos = .{ .res_type = lhs };
+        expr.type_ = lhs;
+        var cast: BinopCast = .None;
+        var res = lhs;
+
+        if (expr.op == .Plus and lhs == .Str and rhs == .Str) {
+            try self.binop_casts.append(cast);
+            return .Str;
+        } else if (expr.op == .Star) {
+            if ((lhs == .Str and rhs == .Int) or (lhs == .Int and rhs == .Str)) {
+                expr.type_ = .Str;
+
+                // For string concatenation, we use the cast information to tell
+                // on wich side is the integer (for the compiler)
+                cast = if (rhs == .Int) .Rhs else .Lhs;
+                try self.binop_casts.append(cast);
+                return .Str;
+            }
+        }
 
         switch (expr.op) {
             // Arithmetic binop
@@ -127,7 +161,7 @@ pub const Analyzer = struct {
                                     expr.rhs.span(),
                                 ));
 
-                                binop_infos.cast = .Rhs;
+                                cast = .Rhs;
                             },
                             else => unreachable,
                         }
@@ -140,9 +174,9 @@ pub const Analyzer = struct {
                                     expr.lhs.span(),
                                 ));
 
+                                cast = .Lhs;
                                 res = .Float;
-                                binop_infos.cast = .Lhs;
-                                binop_infos.res_type = .Float;
+                                expr.type_ = .Float;
                             },
                             .Int => {},
                             else => unreachable,
@@ -157,14 +191,16 @@ pub const Analyzer = struct {
                     // Check for implicit casts
                     if ((lhs == .Int and rhs == .Float) or (lhs == .Float and rhs == .Int)) {
                         if (lhs == .Int) {
-                            binop_infos.cast = .Lhs;
+                            cast = .Lhs;
 
                             try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.lhs.span()));
                         } else {
-                            binop_infos.cast = .Rhs;
+                            cast = .Rhs;
 
                             try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.rhs.span()));
                         }
+
+                        expr.type_ = .Float;
                     } else {
                         try self.errs.append(AnalyzerReport.err(
                             AnalyzerMsg.invalid_cmp(lhs.str(), rhs.str()),
@@ -205,7 +241,7 @@ pub const Analyzer = struct {
                         .Int => {
                             try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.rhs.span()));
 
-                            binop_infos.cast = .Rhs;
+                            cast = .Rhs;
                         },
                         else => unreachable,
                     },
@@ -213,8 +249,8 @@ pub const Analyzer = struct {
                         .Float => {
                             try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.lhs.span()));
 
-                            binop_infos.cast = .Lhs;
-                            binop_infos.res_type = .Float;
+                            cast = .Lhs;
+                            expr.type_ = .Float;
                         },
                         .Int => {},
                         else => unreachable,
@@ -230,7 +266,7 @@ pub const Analyzer = struct {
             else => unreachable,
         }
 
-        try self.binop_infos.append(binop_infos);
+        try self.binop_casts.append(cast);
         return res;
     }
 

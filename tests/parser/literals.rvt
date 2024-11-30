@@ -77,3 +77,13 @@ expect:
 [Null literal]
 
 ================
+
+// String
+
+code:
+  "no way"
+
+expect:
+[String literal no way]
+
+================

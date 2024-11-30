@@ -4,20 +4,20 @@ pub const CompilerMsg = union(enum) {
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
-        _ = try switch (self) {
-            .ImplicitCast => writer.write("implicit cast"),
+        try switch (self) {
+            .ImplicitCast => writer.print("implicit cast", .{}),
         };
     }
 
-    pub fn get_hint(self: Self, writer: anytype) !usize {
-        return switch (self) {
-            .ImplicitCast => writer.write("expressions have different types"),
+    pub fn get_hint(self: Self, writer: anytype) !void {
+        try switch (self) {
+            .ImplicitCast => writer.print("expressions have different types", .{}),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
-        _ = try switch (self) {
-            .ImplicitCast => writer.write("unterminated string"),
+        try switch (self) {
+            .ImplicitCast => writer.print("unterminated string", .{}),
             else => {},
         };
     }

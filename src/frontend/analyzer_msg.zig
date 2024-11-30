@@ -9,24 +9,24 @@ pub const AnalyzerMsg = union(enum) {
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
-        _ = try switch (self) {
-            .FloatEqual => writer.write("floating-point values equality is unsafe"),
-            .FloatEqualCast => writer.write("unsafe floating-point values comparison"),
-            .InvalidArithmetic => writer.write("invalid arithmetic operation"),
-            .InvalidComparison => writer.write("invalid comparison"),
-            .InvalidUnary => writer.write("invalid unary operation"),
-            .ImplicitCast => writer.write("implicit cast"),
+        try switch (self) {
+            .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
+            .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
+            .InvalidArithmetic => writer.print("invalid arithmetic operation", .{}),
+            .InvalidComparison => writer.print("invalid comparison", .{}),
+            .InvalidUnary => writer.print("invalid unary operation", .{}),
+            .ImplicitCast => writer.print("implicit cast", .{}),
         };
     }
 
-    pub fn get_hint(self: Self, writer: anytype) !usize {
-        return switch (self) {
-            .FloatEqual => writer.write("this expression is a float"),
-            .FloatEqualCast => writer.write("this expression is implicitly casted to a float"),
-            .InvalidArithmetic => writer.write("expression is not a numeric type"),
-            .InvalidComparison => writer.write("expressions have different types"),
-            .InvalidUnary => writer.write("expression is not a boolean type"),
-            .ImplicitCast => writer.write("expressions have different types"),
+    pub fn get_hint(self: Self, writer: anytype) !void {
+        try switch (self) {
+            .FloatEqual => writer.print("both sides are 'floats'", .{}),
+            .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
+            .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
+            .InvalidComparison => writer.print("expressions have different types", .{}),
+            .InvalidUnary => writer.print("expression is not a boolean type", .{}),
+            .ImplicitCast => writer.print("expressions have different types", .{}),
         };
     }
 
@@ -34,24 +34,22 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 
-                \\ If you want to compare floats, you should compare against an Epsilon, like
-                \\ value < 1e-6  instead of  value == 0
-                \\ value - other < 1e-6  instead of  value < other
+                \\   If you want to compare floats, you should compare against an Epsilon, like
+                \\   value < 1e-6  instead of  value == 0
+                \\   value - other < 1e-6  instead of  value < other
             ,
                 .{},
             ),
             .FloatEqualCast => writer.print(
                 \\only values of same type can be compared so expression is implicitly casted to a float.
-                \\ This results in an unsafe floating-point comparison. To avoid this, explicitly
-                \\ cast the expression to 'float' and compare against an Epsilon (like 1e-5)
+                \\   This results in an unsafe floating-point comparison. To avoid this, explicitly
+                \\   cast the expression to 'float' and compare against an Epsilon (like 1e-5)
             ,
                 .{},
             ),
             .InvalidArithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),
             .InvalidComparison => |e| writer.print(
-                \\expressions must have the same type when compared, found
-                \\ '{s}' and '{s}'
-            ,
+                "expressions must have the same type when compared, found '{s}' and '{s}'",
                 .{ e.found1, e.found2 },
             ),
             .InvalidUnary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),

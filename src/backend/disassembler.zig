@@ -58,7 +58,7 @@ pub const Disassembler = struct {
             //     print("{s:<16} index: {:<4}", .{ "OP_CLOSURE", constant });
             //
             //     const obj = self.chunk.constants.items[constant].as_obj().?;
-            //     obj.log();
+            //     obj.print(writer);
             //     print("\n", .{});
             //
             //     const obj_fn = obj.as(ObjFunction);
@@ -84,6 +84,7 @@ pub const Disassembler = struct {
             .DivideInt => self.simple_instruction("OP_DIVIDE_INT", offset, writer),
             .EqualInt => self.simple_instruction("OP_EQUAL_INT", offset, writer),
             .EqualFloat => self.simple_instruction("OP_EQUAL_FLOAT", offset, writer),
+            .EqualStr => self.simple_instruction("OP_EQUAL_STRING", offset, writer),
             .False => self.simple_instruction("OP_FALSE", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
             // .GetGlobal => self.constant_instruction("OP_GET_GLOBAL", offset),
@@ -117,6 +118,9 @@ pub const Disassembler = struct {
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
             // .SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),
             // .Struct => self.constant_instruction("OP_STRUCT", offset),
+            .StrCat => self.simple_instruction("OP_STRING_CONCAT", offset, writer),
+            .StrMulL => self.simple_instruction("OP_STRING_MUL_L", offset, writer),
+            .StrMulR => self.simple_instruction("OP_STRING_MUL_R", offset, writer),
             .SubtractFloat => self.simple_instruction("OP_SUBTRACT_FLOAT", offset, writer),
             .SubtractInt => self.simple_instruction("OP_SUBTRACT_INT", offset, writer),
             .True => self.simple_instruction("OP_TRUE", offset, writer),
@@ -148,7 +152,7 @@ pub const Disassembler = struct {
             try writer.print("{s:<24} index: {:<4} value: ", .{ name, constant });
         }
 
-        try value.log(writer);
+        try value.print(writer);
         try writer.print("\n", .{});
         return offset + 2;
     }
@@ -224,7 +228,7 @@ pub const Disassembler = struct {
         const arg_count = self.chunk.code.items[offset + 2];
 
         try writer.print("{s:<24} index: {}, value: ", .{ name, name_id });
-        try method_name.log(writer);
+        try method_name.print(writer);
         try writer.print(", {} args\n", .{arg_count});
 
         return offset - 3;

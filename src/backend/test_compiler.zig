@@ -7,6 +7,7 @@ const Analyzer = @import("../frontend/analyzer.zig").Analyzer;
 const Compiler = @import("compiler.zig").Compiler;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const Disassembler = @import("disassembler.zig").Disassembler;
+const Vm = @import("../runtime/vm.zig").Vm;
 const GenTestData = @import("../tester.zig").GenTestData;
 
 pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(CompilerMsg) {
@@ -23,7 +24,11 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(Co
     defer analyzer.deinit();
     try analyzer.analyze(parser.stmts.items);
 
-    var compiler = Compiler.init(allocator, analyzer.binop_infos.items);
+    var vm = Vm.new(allocator);
+    defer vm.deinit();
+    try vm.init();
+
+    var compiler = Compiler.init(&vm, analyzer.binop_casts.items);
     defer compiler.deinit();
     try compiler.compile(parser.stmts.items);
 

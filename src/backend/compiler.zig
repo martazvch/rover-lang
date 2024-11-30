@@ -4,30 +4,34 @@ const Allocator = std.mem.Allocator;
 const Ast = @import("../frontend/ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
+const Vm = @import("../runtime/vm.zig").Vm;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const BinOpType = @import("chunk.zig").BinOpType;
 const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const BinopInfos = @import("../frontend/analyzer.zig").Analyzer.BinopInfos;
+const BinopCast = @import("../frontend/analyzer.zig").Analyzer.BinopCast;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
+const ObjString = @import("../runtime/obj.zig").ObjString;
 
 pub const Compiler = struct {
+    vm: *Vm,
     chunk: Chunk,
     errs: ArrayList(CompilerReport),
-    binop_infos: UnsafeIter(BinopInfos),
+    binop_casts: UnsafeIter(BinopCast),
 
     const Self = @This();
     const Error = Chunk.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(allocator: Allocator, binop_infos: []const BinopInfos) Self {
+    pub fn init(vm: *Vm, binop_infos: []const BinopCast) Self {
         return .{
-            .chunk = Chunk.init(allocator),
-            .errs = ArrayList(CompilerReport).init(allocator),
-            .binop_infos = UnsafeIter(BinopInfos).init(binop_infos),
+            .vm = vm,
+            .chunk = Chunk.init(vm.allocator),
+            .errs = ArrayList(CompilerReport).init(vm.allocator),
+            .binop_casts = UnsafeIter(BinopCast).init(binop_infos),
         };
     }
 
@@ -59,12 +63,18 @@ pub const Compiler = struct {
     pub fn compile(self: *Self, stmts: []const Stmt) !void {
         for (stmts) |*stmt| {
             try switch (stmt.*) {
+                .Print => |*s| self.print_stmt(s),
                 .VarDecl => @panic("not implemented yet"),
                 .Expr => |expr| self.expression(expr),
             };
         }
 
         try self.chunk.write_op(.Return);
+    }
+
+    fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
+        try self.expression(stmt.expr);
+        try self.chunk.write_op(.Print);
     }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
@@ -75,26 +85,28 @@ pub const Compiler = struct {
             .FloatLit => |*e| self.float_lit(e),
             .IntLit => |*e| self.int_lit(e),
             .NullLit => self.null_lit(),
+            .StringLit => |*e| self.string_lit(e),
             .Unary => |*e| self.unary(e),
         };
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
-        const infos = self.binop_infos.next();
+        const cast = self.binop_casts.next();
 
         try self.expression(expr.lhs);
 
-        if (infos.cast == .Lhs) {
+        // For Str, the cast field is used in another way
+        if (cast == .Lhs and expr.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
-        if (infos.cast == .Rhs) {
+        if (cast == .Rhs and expr.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
-        try switch (infos.res_type) {
+        try switch (expr.type_) {
             .Int => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddInt),
                 .Minus => self.chunk.write_op(.SubtractInt),
@@ -121,7 +133,19 @@ pub const Compiler = struct {
                 .LessEqual => self.chunk.write_op(.LessEqualFloat),
                 else => unreachable,
             },
-            else => unreachable,
+            .Str => switch (expr.op) {
+                .EqualEqual => self.chunk.write_op(.EqualStr),
+                .Plus => self.chunk.write_op(.StrCat),
+                .Star => {
+                    // We use the cast info to determine where is the integer
+                    // for the multiplication
+                    const op: OpCode = if (cast == .Lhs) .StrMulL else .StrMulR;
+                    try self.chunk.write_op(op);
+                },
+                else => unreachable,
+            },
+            // If result is bool or none, there is nothing special to do
+            else => {},
         };
     }
 
@@ -144,6 +168,10 @@ pub const Compiler = struct {
 
     fn null_lit(self: *Self) !void {
         try self.chunk.write_op(.Null);
+    }
+
+    fn string_lit(self: *Self, expr: *const Ast.StringLit) !void {
+        try self.emit_constant(Value.obj((try ObjString.copy(self.vm, expr.value)).as_obj()));
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {

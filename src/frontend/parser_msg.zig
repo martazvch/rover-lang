@@ -1,6 +1,7 @@
 pub const ParserMsg = union(enum) {
     ChainingCmpOp,
     ExpectExpr: struct { found: []const u8 },
+    ExpectNewLine,
     UnclosedParen,
     UnexpectedEof,
 
@@ -8,33 +9,27 @@ pub const ParserMsg = union(enum) {
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         // Trick for handling both !usize and !void return type
-        _ = try switch (self) {
-            .ChainingCmpOp => writer.write("chaining comparison operators"),
-            .UnclosedParen => writer.write("unclosed parenthesis"),
-            .UnexpectedEof => writer.write("unexpected end of file"),
-            else => |other| blk: {
-                switch (other) {
-                    .ExpectExpr => |e| try writer.print("expected expression, found \"{s}\"", .{e.found}),
-                    else => unreachable,
-                }
-
-                break :blk 0;
-            },
+        try switch (self) {
+            .ChainingCmpOp => writer.print("chaining comparison operators", .{}),
+            .ExpectExpr => |e| try writer.print("expected expression, found \"{s}\"", .{e.found}),
+            .ExpectNewLine => writer.print("expect new line after statement", .{}),
+            .UnclosedParen => writer.print("unclosed parenthesis", .{}),
+            .UnexpectedEof => writer.print("unexpected end of file", .{}),
         };
     }
 
-    pub fn get_hint(self: Self, writer: anytype) !usize {
-        return switch (self) {
-            .ExpectExpr, .UnclosedParen, .UnexpectedEof => writer.write("here"),
-            .ChainingCmpOp => writer.write("this one is not allowed"),
+    pub fn get_hint(self: Self, writer: anytype) !void {
+        try switch (self) {
+            .ExpectExpr, .ExpectNewLine, .UnclosedParen, .UnexpectedEof => writer.print("here", .{}),
+            .ChainingCmpOp => writer.print("this one is not allowed", .{}),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
-        _ = try switch (self) {
-            .ChainingCmpOp => writer.write("split your comparison with 'and' and 'or' operators"),
-            .UnclosedParen => writer.write("close the opening parenthesis"),
-            else => 0,
+        try switch (self) {
+            .ChainingCmpOp => writer.print("split your comparison with 'and' and 'or' operators", .{}),
+            .UnclosedParen => writer.print("close the opening parenthesis", .{}),
+            else => {},
         };
     }
 };

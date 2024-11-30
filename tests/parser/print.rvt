@@ -1,0 +1,31 @@
+// Tests print statement
+
+code:
+print 1
+
+expect:
+[Print]
+    [Int literal 1]
+
+================
+
+code:
+print 65 / 4.
+
+expect:
+[Print]
+    [Binop /]
+        [Int literal 65]
+        [Float literal 4]
+
+================
+
+code:
+print false
+
+expect:
+[Print]
+    [Bool literal false]
+
+================
+

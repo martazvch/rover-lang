@@ -9,6 +9,9 @@ pub fn build(b: *std.Build) void {
     const print_stack = b.option(bool, "print-stack", "prints the stack on each instruction") orelse false;
     options.addOption(bool, "print_stack", print_stack);
 
+    const log_gc = b.option(bool, "log-gc", "logs each GC actions (alloc and free)") orelse false;
+    options.addOption(bool, "log_gc", log_gc);
+
     // const log_analyzer = b.option(bool, "log-analyzer", "prints the analyzer's logs") orelse false;
     // options.addOption(bool, "log_analyzer", log_analyzer);
 
@@ -63,6 +66,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_exe_tests = b.addRunArtifact(tests_exe);
+    tests_exe.root_module.addOptions("config", options);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
