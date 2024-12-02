@@ -1,0 +1,15 @@
+// Binary operations with scalar types
+
+// Ints
+
+print 1 + 1            // expect: 2
+print 5 * (4 - 6 / 3)  // expect: 10
+print -----7           // expect: -7
+
+print 1 + .4           // expect: 1.4
+print 6.6 / 3          // expect: 2.1999999999999997
+
+print 1.5 + 3./2       // expect: 3
+
+print "foo" + " bar"   // expect: "foo bar"
+print "foo " * 3       // expect: "foo foo foo "

@@ -1,49 +1,88 @@
 const std = @import("std");
+const testing = std.testing;
+const expect = testing.expect;
 const allocator = std.testing.allocator;
 
 pub fn main() !void {}
 
-test "poupi" {
+test "runtime" {
+    var cwd = std.fs.cwd();
+
     const path = try std.fs.path.join(allocator, &[_][]const u8{
         "tests", "vm",
     });
     defer allocator.free(path);
 
-    var base_dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
-    defer base_dir.close();
+    var test_dir = try cwd.openDir(path, .{ .iterate = true });
+    defer test_dir.close();
 
-    var base_walker = try base_dir.walk(allocator);
+    var base_walker = try test_dir.walk(allocator);
     defer base_walker.deinit();
 
-    while (try base_walker.next()) |*folder| {
-        if (std.mem.endsWith(u8, folder.path, ".rv")) {
+    while (try base_walker.next()) |*item| {
+        if (std.mem.endsWith(u8, item.path, ".rv")) {
             const path_to_exe = try std.fs.path.join(allocator, &[_][]const u8{
                 "zig-out", "bin", "rover-lang.exe",
             });
             defer allocator.free(path_to_exe);
 
-            const path_to_file = try std.fs.path.join(allocator, &[_][]const u8{
-                "tests", "vm", "binop", "scalar.rv",
+            const file_path = try std.fs.path.join(allocator, &[_][]const u8{
+                "tests", "vm", item.path,
             });
-            defer allocator.free(path_to_file);
-
-            var buf: [1024]u8 = undefined;
-            std.debug.print("CWD: {s}\n", .{try std.process.getCwd(&buf)});
+            defer allocator.free(file_path);
 
             const res = try std.process.Child.run(.{
                 .allocator = allocator,
-                .cwd_dir = base_dir,
+                .cwd_dir = cwd,
                 .argv = &[_][]const u8{
                     path_to_exe,
                     "-f",
-                    path_to_file,
+                    file_path,
                 },
             });
             defer allocator.free(res.stdout);
             defer allocator.free(res.stderr);
 
-            std.debug.print("STDOUT: {s}\n", .{res.stdout});
-            std.debug.print("STDERR: {s}\n", .{res.stderr});
+            // std.debug.print("STDOUT: {s}\n", .{res.stdout});
+
+            var got_expects = std.mem.splitScalar(u8, res.stdout, '\n');
+            var got_errors = std.mem.splitScalar(u8, res.stderr, '\n');
+            _ = &got_errors;
+
+            // Read file
+            const file = try test_dir.openFile(item.path, .{ .mode = .read_only });
+            defer file.close();
+
+            const size = try file.getEndPos();
+            const content = try allocator.alloc(u8, size);
+            defer allocator.free(content);
+
+            _ = try file.readAll(content);
+            var lines = std.mem.splitScalar(u8, content, '\n');
+
+            var expects = std.ArrayList(u8).init(allocator);
+            defer expects.deinit();
+
+            var i: usize = 0;
+
+            while (lines.next()) |line| : (i += 1) {
+                const trimmed = std.mem.trimRight(u8, line, "\r");
+
+                if (std.mem.containsAtLeast(u8, trimmed, 1, "expect:")) {
+                    var split = std.mem.splitSequence(u8, trimmed, "expect: ");
+                    _ = split.next();
+                    const exp = split.next().?;
+
+                    const got = got_expects.next().?;
+                    expect(std.mem.eql(u8, got, exp)) catch |e| {
+                        std.debug.print("Error in file: {s} line: {}\n", .{ item.path, i });
+                        std.debug.print("expect:\n{s}\n", .{exp});
+                        std.debug.print("got:\n{s}\n", .{got});
+                        std.debug.print("\nStderr: {s}\n", .{res.stderr});
+                        return e;
+                    };
+                }
+            }
         }
     }
 }

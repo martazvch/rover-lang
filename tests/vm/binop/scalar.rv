@@ -1,7 +1,0 @@
-// Binary operations with scalar types
-
-// Ints
-
-print 1 + 1            // expect: 2
-print 5 * (4 - 6 / 3)  // expect: 10
-

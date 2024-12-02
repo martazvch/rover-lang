@@ -169,14 +169,14 @@ pub const Vm = struct {
                 .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
-                .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
-                .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
-                .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
-                .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
-                .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
-                .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
-                .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
-                .LessEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
+                .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
+                .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
+                .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
+                .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
+                .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
+                .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
+                .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
+                .LessEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
                 .False => self.stack.push(Value.bool_(false)),
                 .MultiplyFloat => {
                     const rhs = self.stack.pop().Float;
@@ -190,7 +190,10 @@ pub const Vm = struct {
                 .NegateInt => self.stack.peek_ref(0).Int *= -1,
                 .Not => self.stack.peek_ref(0).not(),
                 .Null => self.stack.push(Value.null_()),
-                .Print => try self.stack.pop().print(self.stdout),
+                .Print => {
+                    try self.stack.pop().print(self.stdout);
+                    _ = try self.stdout.write("\n");
+                },
                 .Return => break,
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),

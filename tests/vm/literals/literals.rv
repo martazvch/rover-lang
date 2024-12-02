@@ -1,0 +1,10 @@
+// Literals
+
+print 1 // expect: 1
+print -8 // expect: -8
+print 2.5 // expect: 2.5
+print 2. // expect: 2
+print -.8 // expect: -0.8
+
+print "foo" // expect: "foo"
+print null // expect: null

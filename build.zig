@@ -75,15 +75,15 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_exe_tests.step);
 
     // Vm tests use the compiled Vm to run, with a special main
-    // const runtime_tests_exe = b.addTest(.{
-    //     .root_source_file = b.path("tests/vm/runtime_tester.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    //
-    // const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
-    //
-    // test_step.dependOn(&run_runtime_tests_exe.step);
+    const runtime_tests_exe = b.addTest(.{
+        .root_source_file = b.path("tests/vm/runtime_tester.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
+
+    test_step.dependOn(&run_runtime_tests_exe.step);
 
     // Compiles the exe for the runtime tests
     test_step.dependOn(b.getInstallStep());
