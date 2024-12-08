@@ -8,9 +8,9 @@ const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Span = Ast.Span;
 const AnalyzedAst = @import("analyzed_ast.zig");
+const AstExtra = AnalyzedAst.AstExtra;
 const GenReport = @import("../reporter.zig").GenReport;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Type = union(enum) {
     Bool,
@@ -46,46 +46,6 @@ pub const Type = union(enum) {
             .Null => "null",
             .Str => "string",
             .Struct => |t| t,
-        };
-    }
-};
-
-pub const AstExtra = struct {
-    binops: ArrayList(AnalyzedAst.BinOp),
-    unaries: ArrayList(AnalyzedAst.Unary),
-    variables: ArrayList(AnalyzedAst.Variable),
-
-    pub const Iter = struct {
-        binops: UnsafeIter(AnalyzedAst.BinOp),
-        unaries: UnsafeIter(AnalyzedAst.Unary),
-        variables: UnsafeIter(AnalyzedAst.Variable),
-    };
-
-    pub fn init(allocator: Allocator) AstExtra {
-        return .{
-            .binops = ArrayList(AnalyzedAst.BinOp).init(allocator),
-            .unaries = ArrayList(AnalyzedAst.Unary).init(allocator),
-            .variables = ArrayList(AnalyzedAst.Variable).init(allocator),
-        };
-    }
-
-    pub fn deinit(self: *AstExtra) void {
-        self.binops.deinit();
-        self.unaries.deinit();
-        self.variables.deinit();
-    }
-
-    pub fn reinit(self: *AstExtra) void {
-        self.binops.clearRetainingCapacity();
-        self.unaries.clearRetainingCapacity();
-        self.variables.clearRetainingCapacity();
-    }
-
-    pub fn as_iter(self: *AstExtra) Iter {
-        return .{
-            .binops = UnsafeIter(AnalyzedAst.BinOp).init(self.binops.items),
-            .unaries = UnsafeIter(AnalyzedAst.Unary).init(self.unaries.items),
-            .variables = UnsafeIter(AnalyzedAst.Variable).init(self.variables.items),
         };
     }
 };

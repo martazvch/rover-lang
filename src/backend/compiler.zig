@@ -12,14 +12,13 @@ const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const ObjString = @import("../runtime/obj.zig").ObjString;
-const AstExtraIter = @import("../frontend/analyzer.zig").AstExtra.Iter;
+const AstExtraIter = @import("../frontend/analyzed_ast.zig").AstExtra.Iter;
 
 pub const Compiler = struct {
     vm: *Vm,
     chunk: Chunk,
     errs: ArrayList(CompilerReport),
     ast_extras: AstExtraIter,
-    // ast_extras: AstExtra.Iter(AstExtra),
 
     const Self = @This();
     const Error = Chunk.Error;
