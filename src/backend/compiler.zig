@@ -11,27 +11,27 @@ const BinOpType = @import("chunk.zig").BinOpType;
 const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const BinopCast = @import("../frontend/analyzer.zig").Analyzer.BinopCast;
-const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 const ObjString = @import("../runtime/obj.zig").ObjString;
+const AstExtraIter = @import("../frontend/analyzer.zig").AstExtra.Iter;
 
 pub const Compiler = struct {
     vm: *Vm,
     chunk: Chunk,
     errs: ArrayList(CompilerReport),
-    binop_casts: UnsafeIter(BinopCast),
+    ast_extras: AstExtraIter,
+    // ast_extras: AstExtra.Iter(AstExtra),
 
     const Self = @This();
     const Error = Chunk.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(vm: *Vm, binop_infos: []const BinopCast) Self {
+    pub fn init(vm: *Vm, ast_extras: AstExtraIter) Self {
         return .{
             .vm = vm,
             .chunk = Chunk.init(vm.allocator),
             .errs = ArrayList(CompilerReport).init(vm.allocator),
-            .binop_casts = UnsafeIter(BinopCast).init(binop_infos),
+            .ast_extras = ast_extras,
         };
     }
 
@@ -64,7 +64,7 @@ pub const Compiler = struct {
         for (stmts) |*stmt| {
             try switch (stmt.*) {
                 .Print => |*s| self.print_stmt(s),
-                .VarDecl => @panic("not implemented yet"),
+                .VarDecl => |*s| self.var_declaration(s),
                 .Expr => |expr| self.expression(expr),
             };
         }
@@ -76,6 +76,23 @@ pub const Compiler = struct {
         try self.expression(stmt.expr);
         try self.chunk.write_op(.Print);
     }
+
+    fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
+        try self.emit_constant(Value.obj((try ObjString.copy(self.vm, stmt.name)).as_obj()));
+
+        if (stmt.value) |v| {
+            try self.expression(v);
+        } else try self.chunk.write_op(.Null);
+
+        // try self.chunk.write_op(.DefineGlobal);
+    }
+
+    /// Expressions followed by end of line (';' in other language)
+    /// We don't use the resulting value like just a function call
+    // fn expression_statement(self: *Self, expr: *const Expr) !void {
+    //     try self.expression(expr);
+    //     try self.chunk.write_op(.Pop);
+    // }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
@@ -91,22 +108,22 @@ pub const Compiler = struct {
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
-        const cast = self.binop_casts.next();
+        const binop_extra = self.ast_extras.binops.next();
 
         try self.expression(expr.lhs);
 
         // For Str, the cast field is used in another way
-        if (cast == .Lhs and expr.type_ != .Str) {
+        if (binop_extra.cast == .Lhs and binop_extra.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
-        if (cast == .Rhs and expr.type_ != .Str) {
+        if (binop_extra.cast == .Rhs and binop_extra.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
-        try switch (expr.type_) {
+        try switch (binop_extra.type_) {
             .Int => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddInt),
                 .Minus => self.chunk.write_op(.SubtractInt),
@@ -139,7 +156,7 @@ pub const Compiler = struct {
                 .Star => {
                     // We use the cast info to determine where is the integer
                     // for the multiplication
-                    const op: OpCode = if (cast == .Lhs) .StrMulL else .StrMulR;
+                    const op: OpCode = if (binop_extra.cast == .Lhs) .StrMulL else .StrMulR;
                     try self.chunk.write_op(op);
                 },
                 else => unreachable,
@@ -175,10 +192,11 @@ pub const Compiler = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
+        const unary_extra = self.ast_extras.unaries.next();
         try self.expression(expr.rhs);
 
         if (expr.op == .Minus) {
-            try switch (expr.type_) {
+            try switch (unary_extra.type_) {
                 .Int => self.chunk.write_op(.NegateInt),
                 .Float => self.chunk.write_op(.NegateFloat),
                 else => unreachable,

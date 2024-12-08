@@ -116,8 +116,8 @@ pub fn GenericTester(
 
             if (exp.len > 0) {
                 expect(eql(u8, test_data.expect, exp)) catch |e| {
-                    std.debug.print("expect:\n{s}\n", .{exp});
-                    std.debug.print("got:\n{s}\n", .{test_data.expect});
+                    print("expect:\n{s}\n", .{exp});
+                    print("got:\n{s}\n", .{test_data.expect});
                     return e;
                 };
             } else if (errors.len > 0) {
@@ -134,7 +134,7 @@ pub fn GenericTester(
                     const report = test_data.reports[i];
                     const got_name = @tagName(report);
                     expect(eql(u8, err_name, got_name)) catch |e| {
-                        print("expect error: {s}, got {s}\n", .{ err_name, got_name });
+                        print("assertion {}, expect error: {s}, got {s}\n", .{ i, err_name, got_name });
                         return e;
                     };
 
@@ -150,7 +150,7 @@ pub fn GenericTester(
 
                                 if (line.next()) |extra| {
                                     expect(eql(u8, std.mem.trimLeft(u8, extra, " "), subv)) catch |e| {
-                                        print("expect error extra arg: {s}, got {s}\n", .{ subv, extra });
+                                        print("assertion {}, expect error extra arg: {s}, got {s}\n", .{ i, subv, extra });
                                         return e;
                                     };
                                 } else {

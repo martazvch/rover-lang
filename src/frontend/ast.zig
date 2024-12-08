@@ -48,7 +48,6 @@ pub const BinOp = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: Token.Kind,
-    type_: Type = .Null,
     span: Span,
 };
 
@@ -84,6 +83,5 @@ pub const StringLit = struct {
 pub const Unary = struct {
     op: Token.Kind,
     rhs: *Expr,
-    type_: Type = .Null,
     span: Span,
 };

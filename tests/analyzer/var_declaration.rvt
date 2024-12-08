@@ -1,0 +1,16 @@
+// Tests variable declaration type
+
+code:
+var a: int = 7.5
+var b: float = "foo"
+var c: bool = 8
+var e: str = 2/4
+
+error:
+InvalidVarDeclType, int, float
+InvalidVarDeclType, float, string
+InvalidVarDeclType, bool, int
+InvalidVarDeclType, string, int
+
+================
+

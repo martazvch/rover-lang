@@ -29,6 +29,7 @@ pub const Token = struct {
         .{ "print", .Print },
         .{ "return", .Return },
         .{ "self", .Self },
+        .{ "str", .StrKw },
         .{ "struct", .Struct },
         .{ "true", .True },
         .{ "var", .Var },
@@ -86,6 +87,7 @@ pub const Token = struct {
         Self,
         Slash,
         Star,
+        StrKw,
         String,
         Struct,
         True,
@@ -102,7 +104,7 @@ pub const Token = struct {
                 .As => "as",
                 .Bang => "!",
                 .BangEqual => "!=",
-                .Bool => "boolean value",
+                .Bool => "bool",
                 .Colon => ":",
                 .Comma => ",",
                 .Dot => ".",
@@ -148,6 +150,7 @@ pub const Token = struct {
                 .Self => "self",
                 .Slash => "/",
                 .Star => "*",
+                .StrKw => "str",
                 .String => "string value",
                 .Struct => "struct",
                 .True => "true",
@@ -161,15 +164,11 @@ pub const Token = struct {
     };
 
     pub fn from_source(self: *const Token, source: []const u8) []const u8 {
-        return source[self.loc.start..self.loc.end];
+        return source[self.span.start..self.span.end];
     }
 
     pub fn get_keyword(ident: []const u8) ?Kind {
         return keywords.get(ident);
-    }
-
-    pub fn empty() Token {
-        return .{ .kind = .Null, .loc = .{ .start = 0, .end = 0 } };
     }
 };
 
@@ -565,11 +564,12 @@ test "tokens" {
 test "keywords" {
     var lexer = Lexer.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("and else false for fn if in null or print return self struct true var while not");
+    try lexer.lex("and else false for fn if in null or print return self struct true var while not int float str");
 
     const res = [_]Token.Kind{
-        .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null, .Or, .Print,
-        .Return, .Self, .Struct, .True, .Var, .While, .Not, .Eof,
+        .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null,  .Or,      .Print,
+        .Return, .Self, .Struct, .True, .Var, .While, .Not, .IntKw, .FloatKw, .StrKw,
+        .Eof,
     };
 
     for (0..res.len) |i| {

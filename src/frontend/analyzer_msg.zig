@@ -3,6 +3,7 @@ pub const AnalyzerMsg = union(enum) {
     FloatEqualCast,
     InvalidArithmetic: struct { found: []const u8 },
     InvalidComparison: struct { found1: []const u8, found2: []const u8 },
+    InvalidVarDeclType: struct { expect: []const u8, found: []const u8 },
     InvalidUnary: struct { found: []const u8 },
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
 
@@ -14,6 +15,7 @@ pub const AnalyzerMsg = union(enum) {
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
             .InvalidArithmetic => writer.print("invalid arithmetic operation", .{}),
             .InvalidComparison => writer.print("invalid comparison", .{}),
+            .InvalidVarDeclType => writer.print("variable delcaration type mismatch", .{}),
             .InvalidUnary => writer.print("invalid unary operation", .{}),
             .ImplicitCast => writer.print("implicit cast", .{}),
         };
@@ -26,6 +28,7 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
             .InvalidComparison => writer.print("expressions have different types", .{}),
             .InvalidUnary => writer.print("expression is not a boolean type", .{}),
+            .InvalidVarDeclType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
         };
     }
@@ -53,6 +56,10 @@ pub const AnalyzerMsg = union(enum) {
                 .{ e.found1, e.found2 },
             ),
             .InvalidUnary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
+            .InvalidVarDeclType => |e| writer.print(
+                "variable is declared of type '{s}' but expression is type '{s}'",
+                .{ e.expect, e.found },
+            ),
             .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
         };
     }

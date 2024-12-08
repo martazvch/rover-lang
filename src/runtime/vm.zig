@@ -190,6 +190,7 @@ pub const Vm = struct {
                 .NegateInt => self.stack.peek_ref(0).Int *= -1,
                 .Not => self.stack.peek_ref(0).not(),
                 .Null => self.stack.push(Value.null_()),
+                .Pop => _ = self.stack.pop(),
                 .Print => {
                     try self.stack.pop().print(self.stdout);
                     _ = try self.stdout.write("\n");

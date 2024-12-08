@@ -42,8 +42,8 @@ pub const AstPrinter = struct {
         for (nodes) |node| {
             try switch (node) {
                 .Print => |*n| self.print_stmt(n),
+                .VarDecl => |*n| self.var_decl(n),
                 .Expr => |n| self.print_expr(n),
-                else => @panic("todo"),
             };
         }
     }
@@ -54,6 +54,27 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
         try self.print_expr(stmt.expr);
         self.indent_level -= 1;
+    }
+
+    fn var_decl(self: *Self, stmt: *const Ast.VarDecl) !void {
+        try self.indent();
+        var buf: [100]u8 = undefined;
+
+        const type_name = if (stmt.type_) |t| t.str() else "none";
+        const written = try std.fmt.bufPrint(&buf, "[Var declaration {s}, type {s}, value\n", .{ stmt.name, type_name });
+        try self.tree.appendSlice(written);
+
+        self.indent_level += 1;
+
+        if (stmt.value) |v| {
+            try self.print_expr(v);
+        } else {
+            try self.tree.appendSlice("    none\n");
+        }
+
+        self.indent_level -= 1;
+
+        try self.tree.appendSlice("]\n");
     }
 
     fn print_expr(self: *Self, expr: *const Expr) Error!void {

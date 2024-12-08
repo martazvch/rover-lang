@@ -9,6 +9,7 @@ const Span = Ast.Span;
 const GenReport = @import("../reporter.zig").GenReport;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Token = @import("lexer.zig").Token;
+const Type = @import("analyzer.zig").Type;
 
 const Precedence = enum {
     None,
@@ -64,7 +65,7 @@ pub const Parser = struct {
         self.token_id = 0;
     }
 
-    /// Parses the while token stream
+    /// Parses the token stream
     pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
         self.source = source;
         self.tokens = tokens;
@@ -91,8 +92,8 @@ pub const Parser = struct {
         }
     }
 
-    fn current(self: *const Self) *const Token {
-        return &self.tokens[self.token_id];
+    fn current(self: *const Self) Token {
+        return self.tokens[self.token_id];
     }
 
     fn prev(self: *const Self) Token {
@@ -148,7 +149,6 @@ pub const Parser = struct {
         if (self.match(kind)) return;
 
         try self.error_at(tk, error_kind);
-        return error.err;
     }
 
     fn expect_or_err_at_span(
@@ -160,11 +160,10 @@ pub const Parser = struct {
         if (self.match(kind)) return;
 
         try self.error_at_span(error_kind, span);
-        return error.err;
     }
 
     fn error_at_current(self: *Self, error_kind: ParserMsg) Error!void {
-        try self.error_at(&self.prev(), error_kind);
+        try self.error_at(&self.current(), error_kind);
     }
 
     fn error_at_prev(self: *Self, error_kind: ParserMsg) !void {
@@ -182,6 +181,8 @@ pub const Parser = struct {
 
         const report = ParserReport.err(error_kind, token.span);
         try self.errs.append(report);
+
+        return error.err;
     }
 
     fn error_at_span(self: *Self, error_kind: ParserMsg, span: Span) !void {
@@ -191,6 +192,8 @@ pub const Parser = struct {
 
         const report = ParserReport.err(error_kind, span);
         try self.errs.append(report);
+
+        return error.err;
     }
 
     fn synchronize(self: *Self) void {
@@ -206,10 +209,51 @@ pub const Parser = struct {
 
     fn declaration(self: *Self) !Stmt {
         if (self.match(.Var)) {
-            unreachable;
+            return self.var_declaration(false);
         } else {
             return self.statement();
         }
+    }
+
+    fn var_declaration(self: *Self, is_const: bool) !Stmt {
+        try self.expect(.Identifier, .{ .ExpectVarName = .{ .keyword = "var" } });
+        const ident = self.prev();
+
+        var end = ident.span.end;
+
+        var type_: ?Type = null;
+
+        // Type
+        if (self.match(.Colon)) {
+            if (self.match(.FloatKw) or self.match(.IntKw) or self.match(.StrKw) or self.match(.Bool)) {
+                type_ = Type.get_type(self.prev().kind.symbol());
+            } else {
+                try self.expect(.Identifier, .ExpectTypeName);
+                type_ = Type.get_type(self.prev().from_source(self.source));
+            }
+
+            end = self.prev().span.end;
+        }
+
+        // If no ':' but we are at an identifier, maybe a typo
+        if (self.check(.Identifier)) {
+            try self.error_at_current(.ExpectColonBeforeType);
+        }
+
+        var value: ?*Expr = null;
+
+        if (self.match(.Equal)) {
+            value = try self.parse_precedence_expr(0);
+            end = value.?.span().end;
+        }
+
+        return .{ .VarDecl = .{
+            .name = ident.from_source(self.source),
+            .is_const = is_const,
+            .type_ = type_,
+            .value = value,
+            .span = .{ .start = ident.span.start, .end = end },
+        } };
     }
 
     fn statement(self: *Self) !Stmt {
@@ -271,7 +315,6 @@ pub const Parser = struct {
 
             if (next_rule.prec == banned_prec) {
                 try self.error_at_current(.ChainingCmpOp);
-                return error.err;
             }
 
             // Here, we can safely use it
@@ -290,8 +333,6 @@ pub const Parser = struct {
             node = expr;
 
             if (next_rule.assoc == .None) banned_prec = next_rule.prec;
-
-            // self.skip_new_lines();
         }
 
         return node;
@@ -334,10 +375,10 @@ pub const Parser = struct {
                 if (k == .Eof) {
                     try self.error_at_prev(.UnexpectedEof);
                 } else {
-                    const p = self.prev().span;
-                    try self.error_at_prev(.{ .ExpectExpr = .{ .found = self.source[p.start..p.end] } });
+                    const p = self.prev();
+                    try self.error_at_prev(.{ .ExpectExpr = .{ .found = p.from_source(self.source) } });
                 }
-                return error.err;
+                unreachable;
             },
         };
     }
@@ -375,7 +416,7 @@ pub const Parser = struct {
 
     fn float(self: *Self) Error!*Expr {
         const p = self.prev();
-        const lexeme = self.source[p.span.start..p.span.end];
+        const lexeme = p.from_source(self.source);
         const value = try std.fmt.parseFloat(f64, lexeme);
         const expr = try self.allocator.create(Expr);
 
@@ -391,16 +432,16 @@ pub const Parser = struct {
     }
 
     fn int(self: *Self) Error!*Expr {
-        const previous = self.prev();
-        const lexeme = self.source[previous.span.start..previous.span.end];
+        const p = self.prev();
+        const lexeme = p.from_source(self.source);
         const value = try std.fmt.parseInt(i64, lexeme, 10);
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .IntLit = .{
             .value = value,
             .span = .{
-                .start = previous.span.start,
-                .end = previous.span.end,
+                .start = p.span.start,
+                .end = p.span.end,
             },
         } };
 

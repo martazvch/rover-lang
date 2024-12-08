@@ -151,7 +151,7 @@ pub fn GenReporter(comptime Report: type) type {
             // Looking for current line where it occured and buffers the previous one
             // for context
             while (true) {
-                if (self.source[current] == 0) {
+                if (self.source[current] == '\n') {
                     if (current >= report.start) break;
 
                     const end = if (self.source[current - 1] == '\r') current - 1 else current;

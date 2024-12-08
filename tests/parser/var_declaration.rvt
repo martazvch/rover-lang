@@ -1,0 +1,86 @@
+// Tests variable declaration
+
+code:
+var home
+
+expect:
+[Var declaration home, type none, value
+    none
+]
+
+================
+
+code:
+var home: House
+
+expect:
+[Var declaration home, type House, value
+    none
+]
+
+================
+
+code:
+var home = 12 + 4.
+
+expect:
+[Var declaration home, type none, value
+    [Binop +]
+        [Int literal 12]
+        [Float literal 4]
+]
+ 
+================
+
+code:
+var home: House = 12 + 4.
+
+expect:
+[Var declaration home, type House, value
+    [Binop +]
+        [Int literal 12]
+        [Float literal 4]
+]
+ 
+================
+
+code:
+var 
+
+error:
+ExpectVarName, var
+ 
+================
+
+code:
+var : House
+
+error:
+ExpectVarName, var
+ 
+================
+
+code:
+var home House
+
+error:
+ExpectColonBeforeType
+ 
+================
+
+code:
+var home : 12+4
+
+error:
+ExpectTypeName
+ 
+================
+
+code:
+var home : House = var a
+
+error:
+ExpectExpr, var
+ 
+================
+

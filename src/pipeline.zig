@@ -90,6 +90,8 @@ pub const Pipeline = struct {
         }
 
         // Analyzer
+        // TODO: init analyzer extra info with exact number of element per array list
+        // for optimal memory allocation
         try self.analyzer.analyze(self.parser.stmts.items);
 
         if (self.analyzer.errs.items.len > 0) {
@@ -115,7 +117,7 @@ pub const Pipeline = struct {
         defer vm.deinit();
 
         // Compiler
-        var compiler = Compiler.init(&vm, self.analyzer.binop_casts.items);
+        var compiler = Compiler.init(&vm, self.analyzer.ast_extras.as_iter());
         defer compiler.deinit();
         try compiler.compile(self.parser.stmts.items);
 

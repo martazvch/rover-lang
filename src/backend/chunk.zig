@@ -30,6 +30,7 @@ pub const OpCode = enum(u8) {
     NegateInt,
     Not,
     Null,
+    Pop,
     Print,
     Return,
     StrCat,

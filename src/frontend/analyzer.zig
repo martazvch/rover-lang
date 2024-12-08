@@ -2,21 +2,41 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
+const activeTag = std.meta.activeTag;
 const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
+const Span = Ast.Span;
+const AnalyzedAst = @import("analyzed_ast.zig");
 const GenReport = @import("../reporter.zig").GenReport;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
+const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Type = union(enum) {
     Bool,
     Float,
     Int,
     Null,
-    Obj,
     Str,
+    Struct: []const u8,
 
     const Self = @This();
+
+    const types = std.StaticStringMap(Type).initComptime(.{
+        .{ "bool", .Bool },
+        .{ "float", .Float },
+        .{ "int", .Int },
+        .{ "null", .Null },
+        .{ "str", .Str },
+    });
+
+    pub fn get_type(name: []const u8) Type {
+        if (types.get(name)) |t| {
+            return t;
+        } else {
+            return .{ .Struct = name };
+        }
+    }
 
     pub fn str(self: Self) []const u8 {
         return switch (self) {
@@ -24,25 +44,57 @@ pub const Type = union(enum) {
             .Float => "float",
             .Int => "int",
             .Null => "null",
-            .Obj => "object",
             .Str => "string",
+            .Struct => |t| t,
+        };
+    }
+};
+
+pub const AstExtra = struct {
+    binops: ArrayList(AnalyzedAst.BinOp),
+    unaries: ArrayList(AnalyzedAst.Unary),
+    variables: ArrayList(AnalyzedAst.Variable),
+
+    pub const Iter = struct {
+        binops: UnsafeIter(AnalyzedAst.BinOp),
+        unaries: UnsafeIter(AnalyzedAst.Unary),
+        variables: UnsafeIter(AnalyzedAst.Variable),
+    };
+
+    pub fn init(allocator: Allocator) AstExtra {
+        return .{
+            .binops = ArrayList(AnalyzedAst.BinOp).init(allocator),
+            .unaries = ArrayList(AnalyzedAst.Unary).init(allocator),
+            .variables = ArrayList(AnalyzedAst.Variable).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *AstExtra) void {
+        self.binops.deinit();
+        self.unaries.deinit();
+        self.variables.deinit();
+    }
+
+    pub fn reinit(self: *AstExtra) void {
+        self.binops.clearRetainingCapacity();
+        self.unaries.clearRetainingCapacity();
+        self.variables.clearRetainingCapacity();
+    }
+
+    pub fn as_iter(self: *AstExtra) Iter {
+        return .{
+            .binops = UnsafeIter(AnalyzedAst.BinOp).init(self.binops.items),
+            .unaries = UnsafeIter(AnalyzedAst.Unary).init(self.unaries.items),
+            .variables = UnsafeIter(AnalyzedAst.Variable).init(self.variables.items),
         };
     }
 };
 
 pub const Analyzer = struct {
-    types: StringHashMap(Type),
     errs: ArrayList(AnalyzerReport),
     warns: ArrayList(AnalyzerReport),
-    binop_casts: ArrayList(BinopCast),
-
-    // We assume we only need to know the side because the cast will always
-    // be from int to float
-    pub const BinopCast = enum {
-        Lhs,
-        Rhs,
-        None,
-    };
+    var_types: StringHashMap(Type),
+    ast_extras: AstExtra,
 
     const Self = @This();
     const Error = error{Err} || Allocator.Error;
@@ -51,36 +103,47 @@ pub const Analyzer = struct {
 
     pub fn init(allocator: Allocator) Self {
         return .{
-            .types = StringHashMap(Type).init(allocator),
             .errs = ArrayList(AnalyzerReport).init(allocator),
             .warns = ArrayList(AnalyzerReport).init(allocator),
-            .binop_casts = ArrayList(BinopCast).init(allocator),
+            .var_types = StringHashMap(Type).init(allocator),
+            .ast_extras = AstExtra.init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.types.deinit();
         self.errs.deinit();
         self.warns.deinit();
-        self.binop_casts.deinit();
+        self.var_types.deinit();
+        self.ast_extras.deinit();
     }
 
     pub fn reinit(self: *Self) void {
-        self.types.clearRetainingCapacity();
         self.errs.clearRetainingCapacity();
         self.warns.clearRetainingCapacity();
-        self.binop_casts.clearRetainingCapacity();
+        self.var_types.clearRetainingCapacity();
+        self.ast_extras.reinit();
     }
 
     fn is_numeric(t: Type) bool {
         return (t == .Int or t == .Float);
     }
 
-    pub fn analyze(self: *Self, stmts: []Stmt) !void {
+    fn err(self: *Self, kind: AnalyzerMsg, span: Span) !void {
+        const report = AnalyzerReport.err(kind, span);
+        try self.errs.append(report);
+        return error.Err;
+    }
+
+    fn warn(self: *Self, kind: AnalyzerMsg, span: Span) !void {
+        const report = AnalyzerReport.warn(kind, span);
+        try self.warns.append(report);
+    }
+
+    pub fn analyze(self: *Self, stmts: []const Stmt) !void {
         for (stmts) |*stmt| {
             _ = self.statement(stmt) catch |e| {
                 switch (e) {
-                    // If it's our own errror, we continue
+                    // If it's our own error, we continue
                     error.Err => continue,
                     else => return e,
                 }
@@ -88,18 +151,50 @@ pub const Analyzer = struct {
         }
     }
 
-    fn statement(self: *Self, stmt: *Stmt) !Type {
+    fn statement(self: *Self, stmt: *const Stmt) !Type {
         return switch (stmt.*) {
-            .Print => |*e| {
-                _ = try self.expression(e.expr);
+            .Print => |*s| {
+                _ = try self.expression(s.expr);
                 return .Null;
             },
-            .VarDecl => unreachable,
+            .VarDecl => |*s| self.var_declaration(s),
             .Expr => |e| self.expression(e),
         };
     }
 
-    fn expression(self: *Self, expr: *Expr) !Type {
+    fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !Type {
+        var final_type: Type = .Null;
+
+        if (stmt.type_) |t| {
+            final_type = t;
+        }
+
+        if (stmt.value) |v| {
+            const value_type = try self.expression(v);
+
+            // If no type declared, we infer the value type
+            if (final_type == .Null) {
+                final_type = value_type;
+                // Else, we check for coherence
+            } else if (activeTag(final_type) != activeTag(value_type)) {
+                // One case in wich we can coerce; int -> float
+                if (final_type == .Float and value_type == .Int) {} else {
+                    try self.err(
+                        .{ .InvalidVarDeclType = .{
+                            .expect = final_type.str(),
+                            .found = value_type.str(),
+                        } },
+                        v.span(),
+                    );
+                }
+            }
+        }
+
+        try self.var_types.put(stmt.name, final_type);
+        return .Null;
+    }
+
+    fn expression(self: *Self, expr: *const Expr) !Type {
         return switch (expr.*) {
             .BoolLit => .Bool,
             .BinOp => |*e| self.binop(e),
@@ -112,27 +207,29 @@ pub const Analyzer = struct {
         };
     }
 
-    fn binop(self: *Self, expr: *Ast.BinOp) Error!Type {
+    fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
         // We reserve the slot because of recursion
-        const id = self.binop_casts.items.len;
-        try self.binop_casts.append(.None);
+        const id = self.ast_extras.binops.items.len;
+        try self.ast_extras.binops.append(.{});
+        var binop_extra = &self.ast_extras.binops.items[id];
 
         const lhs = try self.expression(expr.lhs);
         const rhs = try self.expression(expr.rhs);
 
-        expr.type_ = lhs;
+        binop_extra.type_ = lhs;
+
         var res = lhs;
 
+        // String operations
         if (expr.op == .Plus and lhs == .Str and rhs == .Str) {
             return .Str;
         } else if (expr.op == .Star) {
             if ((lhs == .Str and rhs == .Int) or (lhs == .Int and rhs == .Str)) {
-                expr.type_ = .Str;
+                binop_extra.type_ = .Str;
 
                 // For string concatenation, we use the cast information to tell
                 // on wich side is the integer (for the compiler)
-                const cast: BinopCast = if (rhs == .Int) .Rhs else .Lhs;
-                self.binop_casts.items[id] = cast;
+                binop_extra.cast = if (rhs == .Int) .Rhs else .Lhs;
                 return .Str;
             }
         }
@@ -141,19 +238,17 @@ pub const Analyzer = struct {
             // Arithmetic binop
             .Plus, .Minus, .Star, .Slash => {
                 if (!Analyzer.is_numeric(lhs)) {
-                    try self.errs.append(AnalyzerReport.err(
+                    try self.err(
                         AnalyzerMsg.invalid_arithmetic(lhs.str()),
                         expr.lhs.span(),
-                    ));
-                    return error.Err;
+                    );
                 }
 
                 if (!Analyzer.is_numeric(rhs)) {
-                    try self.errs.append(AnalyzerReport.err(
+                    try self.err(
                         AnalyzerMsg.invalid_arithmetic(rhs.str()),
                         expr.rhs.span(),
-                    ));
-                    return error.Err;
+                    );
                 }
 
                 switch (lhs) {
@@ -161,12 +256,12 @@ pub const Analyzer = struct {
                         switch (rhs) {
                             .Float => {},
                             .Int => {
-                                try self.warns.append(AnalyzerReport.warn(
+                                try self.warn(
                                     AnalyzerMsg.implicit_cast(.Rhs, lhs.str()),
                                     expr.rhs.span(),
-                                ));
+                                );
 
-                                self.binop_casts.items[id] = .Rhs;
+                                binop_extra.cast = .Rhs;
                             },
                             else => unreachable,
                         }
@@ -174,14 +269,14 @@ pub const Analyzer = struct {
                     .Int => {
                         switch (rhs) {
                             .Float => {
-                                try self.warns.append(AnalyzerReport.warn(
+                                try self.warn(
                                     AnalyzerMsg.implicit_cast(.Lhs, rhs.str()),
                                     expr.lhs.span(),
-                                ));
+                                );
 
-                                self.binop_casts.items[id] = .Lhs;
+                                binop_extra.type_ = .Float;
+                                binop_extra.cast = .Lhs;
                                 res = .Float;
-                                expr.type_ = .Float;
                             },
                             .Int => {},
                             else => unreachable,
@@ -196,27 +291,26 @@ pub const Analyzer = struct {
                     // Check for implicit casts
                     if ((lhs == .Int and rhs == .Float) or (lhs == .Float and rhs == .Int)) {
                         if (lhs == .Int) {
-                            self.binop_casts.items[id] = .Lhs;
+                            binop_extra.cast = .Lhs;
 
-                            try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.lhs.span()));
+                            try self.warn(.FloatEqualCast, expr.lhs.span());
                         } else {
-                            self.binop_casts.items[id] = .Rhs;
+                            binop_extra.cast = .Rhs;
 
-                            try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.rhs.span()));
+                            try self.warn(.FloatEqualCast, expr.rhs.span());
                         }
 
-                        expr.type_ = .Float;
+                        binop_extra.type_ = .Float;
                     } else {
-                        try self.errs.append(AnalyzerReport.err(
+                        try self.err(
                             AnalyzerMsg.invalid_cmp(lhs.str(), rhs.str()),
                             expr.span,
-                        ));
-                        return error.Err;
+                        );
                     }
                 } else {
                     // Check for unsafe float comparisons
                     if (lhs == .Float) {
-                        try self.warns.append(AnalyzerReport.warn(.FloatEqual, expr.span));
+                        try self.warn(.FloatEqual, expr.span);
                     }
                 }
 
@@ -225,37 +319,35 @@ pub const Analyzer = struct {
 
             .Greater, .GreaterEqual, .Less, .LessEqual => {
                 if (!Analyzer.is_numeric(lhs)) {
-                    try self.errs.append(AnalyzerReport.err(
+                    try self.err(
                         AnalyzerMsg.invalid_arithmetic(lhs.str()),
                         expr.lhs.span(),
-                    ));
-                    return error.Err;
+                    );
                 }
 
                 if (!Analyzer.is_numeric(rhs)) {
-                    try self.errs.append(AnalyzerReport.err(
+                    try self.err(
                         AnalyzerMsg.invalid_arithmetic(rhs.str()),
                         expr.rhs.span(),
-                    ));
-                    return error.Err;
+                    );
                 }
 
                 switch (lhs) {
                     .Float => switch (rhs) {
-                        .Float => try self.warns.append(AnalyzerReport.warn(.FloatEqual, expr.span)),
+                        .Float => try self.warn(.FloatEqual, expr.span),
                         .Int => {
-                            try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.rhs.span()));
+                            try self.warn(.FloatEqualCast, expr.rhs.span());
 
-                            self.binop_casts.items[id] = .Rhs;
+                            binop_extra.cast = .Rhs;
                         },
                         else => unreachable,
                     },
                     .Int => switch (rhs) {
                         .Float => {
-                            try self.warns.append(AnalyzerReport.warn(.FloatEqualCast, expr.lhs.span()));
+                            try self.warn(.FloatEqualCast, expr.lhs.span());
 
-                            self.binop_casts.items[id] = .Lhs;
-                            expr.type_ = .Float;
+                            binop_extra.cast = .Lhs;
+                            binop_extra.type_ = .Float;
                         },
                         .Int => {},
                         else => unreachable,
@@ -274,28 +366,30 @@ pub const Analyzer = struct {
         return res;
     }
 
-    fn grouping(self: *Self, expr: *Ast.Grouping) Error!Type {
+    fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
         return self.expression(expr.expr);
     }
 
-    fn unary(self: *Self, expr: *Ast.Unary) Error!Type {
+    fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
+        const id = self.ast_extras.unaries.items.len;
+        try self.ast_extras.unaries.append(undefined);
+        var unary_extra = &self.ast_extras.unaries.items[id];
+
         const rhs = try self.expression(expr.rhs);
 
         if (expr.op == .Not and rhs != .Bool) {
-            try self.errs.append(AnalyzerReport.err(
+            try self.err(
                 .{ .InvalidUnary = .{ .found = rhs.str() } },
                 expr.rhs.span(),
-            ));
+            );
         } else if (expr.op == .Minus and rhs != .Int and rhs != .Float) {
-            try self.errs.append(AnalyzerReport.err(
+            try self.err(
                 AnalyzerMsg.invalid_arithmetic(rhs.str()),
                 expr.rhs.span(),
-            ));
-
-            return error.Err;
+            );
         }
 
-        expr.type_ = rhs;
+        unary_extra.type_ = rhs;
 
         return rhs;
     }
