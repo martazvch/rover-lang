@@ -1,2 +1,4 @@
-print 1
-"eeee
+print -----7           // expect: -7
+print 1 + 1            // expect: 2
+print 5 * (4 - 6 / 3)  // expect: 10
+

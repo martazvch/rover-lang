@@ -28,7 +28,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(Co
     defer vm.deinit();
     try vm.init();
 
-    var compiler = Compiler.init(&vm, analyzer.ast_extras.as_iter());
+    var compiler = Compiler.init(&vm, analyzer.analyzed_stmts.items);
     defer compiler.deinit();
     try compiler.compile(parser.stmts.items);
 

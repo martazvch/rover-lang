@@ -5,6 +5,7 @@ pub const ParserMsg = union(enum) {
     ExpectNewLine,
     ExpectTypeName,
     ExpectVarName: struct { keyword: []const u8 },
+    // ExprAfterVarDecl,
     UnclosedParen,
     UnexpectedEof,
 
@@ -18,6 +19,7 @@ pub const ParserMsg = union(enum) {
             .ExpectNewLine => writer.print("expect new line after statement", .{}),
             .ExpectTypeName => writer.print("expect type name after ':'", .{}),
             .ExpectVarName => |e| writer.print("expect variable name after '{s}' keyword", .{e.keyword}),
+            // .ExprAfterVarDecl => writer.print("expect nothing after variable declaration", .{}),
             .UnclosedParen => writer.print("unclosed parenthesis", .{}),
             .UnexpectedEof => writer.print("unexpected end of file", .{}),
         };
@@ -28,6 +30,7 @@ pub const ParserMsg = union(enum) {
             .ExpectColonBeforeType => writer.print("before this identifier", .{}),
             .ExpectExpr, .ExpectNewLine, .UnclosedParen, .UnexpectedEof => writer.print("here", .{}),
             .ExpectTypeName, .ExpectVarName => writer.print("this is not an identifier", .{}),
+            // .ExprAfterVarDecl => writer.print("found this statement", .{}),
             .ChainingCmpOp => writer.print("this one is not allowed", .{}),
         };
     }
@@ -37,6 +40,7 @@ pub const ParserMsg = union(enum) {
             .ChainingCmpOp => writer.print("split your comparison with 'and' and 'or' operators", .{}),
             .ExpectColonBeforeType => writer.print("add ':' bofre type name", .{}),
             .ExpectTypeName, .ExpectVarName => writer.print("define an identifier", .{}),
+            // .ExprAfterVarDecl => writer.print("put the statement on a new line", .{}),
             .UnclosedParen => writer.print("close the opening parenthesis", .{}),
             else => {},
         };

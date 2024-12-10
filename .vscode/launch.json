@@ -1,0 +1,38 @@
+{
+    // Utilisez IntelliSense pour en savoir plus sur les attributs possibles.
+    // Pointez pour afficher la description des attributs existants.
+    // Pour plus d'informations, visitez : https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug",
+            "program": "${workspaceFolder}/zig-out/bin/rover-lang.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build",
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug playground",
+            "program": "${workspaceFolder}/zig-out/bin/rover-lang.exe",
+            "args": [
+                "-f",
+                "${workspaceFolder}/playground.rv",
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build",
+        },
+        {
+            "type": "cppvsdbg",
+            "request": "launch",
+            "name": "Debug test",
+            "program": "${workspaceFolder}/zig-out/bin/${fileBasenameNoExtension}-test",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "test"
+        }
+    ]
+}

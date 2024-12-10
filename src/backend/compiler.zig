@@ -7,30 +7,30 @@ const Expr = Ast.Expr;
 const Vm = @import("../runtime/vm.zig").Vm;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
-const BinOpType = @import("chunk.zig").BinOpType;
 const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const ObjString = @import("../runtime/obj.zig").ObjString;
-const AstExtraIter = @import("../frontend/analyzed_ast.zig").AstExtra.Iter;
+const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
+const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Compiler = struct {
     vm: *Vm,
     chunk: Chunk,
     errs: ArrayList(CompilerReport),
-    ast_extras: AstExtraIter,
+    analyzed_stmts: UnsafeIter(AnalyzedStmt),
 
     const Self = @This();
     const Error = Chunk.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(vm: *Vm, ast_extras: AstExtraIter) Self {
+    pub fn init(vm: *Vm, analyzed_stmts: []const AnalyzedStmt) Self {
         return .{
             .vm = vm,
             .chunk = Chunk.init(vm.allocator),
             .errs = ArrayList(CompilerReport).init(vm.allocator),
-            .ast_extras = ast_extras,
+            .analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts),
         };
     }
 
@@ -107,22 +107,22 @@ pub const Compiler = struct {
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
-        const binop_extra = self.ast_extras.binops.next();
+        const extra = self.analyzed_stmts.next().Binop;
 
         try self.expression(expr.lhs);
 
         // For Str, the cast field is used in another way
-        if (binop_extra.cast == .Lhs and binop_extra.type_ != .Str) {
+        if (extra.cast == .Lhs and extra.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
-        if (binop_extra.cast == .Rhs and binop_extra.type_ != .Str) {
+        if (extra.cast == .Rhs and extra.type_ != .Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
-        try switch (binop_extra.type_) {
+        try switch (extra.type_) {
             .Int => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddInt),
                 .Minus => self.chunk.write_op(.SubtractInt),
@@ -155,7 +155,7 @@ pub const Compiler = struct {
                 .Star => {
                     // We use the cast info to determine where is the integer
                     // for the multiplication
-                    const op: OpCode = if (binop_extra.cast == .Lhs) .StrMulL else .StrMulR;
+                    const op: OpCode = if (extra.cast == .Lhs) .StrMulL else .StrMulR;
                     try self.chunk.write_op(op);
                 },
                 else => unreachable,
@@ -191,11 +191,11 @@ pub const Compiler = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
-        const unary_extra = self.ast_extras.unaries.next();
+        const extra = self.analyzed_stmts.next().Unary;
         try self.expression(expr.rhs);
 
         if (expr.op == .Minus) {
-            try switch (unary_extra.type_) {
+            try switch (extra.type_) {
                 .Int => self.chunk.write_op(.NegateInt),
                 .Float => self.chunk.write_op(.NegateFloat),
                 else => unreachable,

@@ -247,6 +247,8 @@ pub const Parser = struct {
             end = value.?.span().end;
         }
 
+        try self.expect(.NewLine, .ExprAfterVarDecl);
+
         return .{ .VarDecl = .{
             .name = ident.from_source(self.source),
             .is_const = is_const,

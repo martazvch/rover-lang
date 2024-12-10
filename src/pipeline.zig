@@ -46,8 +46,8 @@ pub const Pipeline = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        defer self.lexer.deinit();
         self.parser.deinit();
+        self.lexer.deinit();
         self.analyzer.deinit();
     }
 
@@ -64,6 +64,10 @@ pub const Pipeline = struct {
         // Lexer
         try self.lexer.lex(source);
 
+        // In case we have an error, we initialize the parser because here it's still
+        // undefined and we are gonna call deinit on it
+        self.parser.init(self.allocator);
+
         if (self.lexer.errs.items.len > 0) {
             var reporter = GenReporter(LexerMsg).init(source);
             try reporter.report_all(filename, self.lexer.errs.items);
@@ -71,7 +75,6 @@ pub const Pipeline = struct {
         }
 
         // Parser
-        self.parser.init(self.allocator);
         try self.parser.parse(source, self.lexer.tokens.items);
 
         if (self.parser.errs.items.len > 0) {
@@ -117,7 +120,7 @@ pub const Pipeline = struct {
         defer vm.deinit();
 
         // Compiler
-        var compiler = Compiler.init(&vm, self.analyzer.ast_extras.as_iter());
+        var compiler = Compiler.init(&vm, self.analyzer.analyzed_stmts.items);
         defer compiler.deinit();
         try compiler.compile(self.parser.stmts.items);
 

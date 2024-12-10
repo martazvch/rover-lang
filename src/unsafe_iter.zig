@@ -11,9 +11,9 @@ pub fn UnsafeIter(comptime Item: type) type {
             return .{ .items = items, .index = 0 };
         }
 
-        pub fn next(self: *Self) Item {
+        pub fn next(self: *Self) *const Item {
             defer self.index += 1;
-            return self.items[self.index];
+            return &self.items[self.index];
         }
     };
 }
