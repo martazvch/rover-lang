@@ -35,13 +35,15 @@ pub const Pipeline = struct {
         static_analysis: bool,
     };
 
-    pub fn init(allocator: Allocator, config: Config) Self {
+    pub fn init(allocator: Allocator, config: Config) !Self {
+        var analyzer = Analyzer.init(allocator);
+        try analyzer.type_manager.init_builtins();
         return .{
             .allocator = allocator,
             .config = config,
             .lexer = Lexer.init(allocator),
             .parser = undefined,
-            .analyzer = Analyzer.init(allocator),
+            .analyzer = analyzer,
         };
     }
 
@@ -56,7 +58,7 @@ pub const Pipeline = struct {
     pub fn reinit_frontend(self: *Self) void {
         self.lexer.reinit();
         self.parser.reinit();
-        self.analyzer.reinit();
+        // self.analyzer.reinit();
     }
 
     /// Runs the pipeline

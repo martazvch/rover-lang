@@ -10,7 +10,7 @@ null * -5
 error:
 InvalidArithmetic, bool
 InvalidArithmetic, null
-InvalidArithmetic, string
+InvalidArithmetic, str
 
 ================
 
@@ -24,7 +24,7 @@ false >= -67.8
 error:
 InvalidArithmetic, null
 InvalidArithmetic, bool
-InvalidArithmetic, string
+InvalidArithmetic, str
 
 ================
 

@@ -9,7 +9,7 @@ const Span = Ast.Span;
 const GenReport = @import("../reporter.zig").GenReport;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Token = @import("lexer.zig").Token;
-const Type = @import("analyzer.zig").Type;
+const SourceSlice = Ast.SourceSlice;
 
 const Precedence = enum {
     None,
@@ -221,15 +221,16 @@ pub const Parser = struct {
 
         var end = ident.span.end;
 
-        var type_: ?Type = null;
+        var type_: ?SourceSlice = null;
 
         // Type
+        // NOTE: make builtin types basic identifier to treat the the same?
         if (self.match(.Colon)) {
             if (self.match(.FloatKw) or self.match(.IntKw) or self.match(.StrKw) or self.match(.Bool)) {
-                type_ = Type.get_type(self.prev().kind.symbol());
+                type_ = SourceSlice.from_token(self.prev(), self.source);
             } else {
                 try self.expect(.Identifier, .ExpectTypeName);
-                type_ = Type.get_type(self.prev().from_source(self.source));
+                type_ = SourceSlice.from_token(self.prev(), self.source);
             }
 
             end = self.prev().span.end;
@@ -247,10 +248,10 @@ pub const Parser = struct {
             end = value.?.span().end;
         }
 
-        try self.expect(.NewLine, .ExprAfterVarDecl);
+        // try self.expect(.NewLine, .ExprAfterVarDecl);
 
         return .{ .VarDecl = .{
-            .name = ident.from_source(self.source),
+            .name = SourceSlice.from_token(ident, self.source),
             .is_const = is_const,
             .type_ = type_,
             .value = value,
@@ -368,6 +369,7 @@ pub const Parser = struct {
         return switch (self.prev().kind) {
             .False => self.bool_(false),
             .Float => self.float(),
+            .Identifier => self.identifier(),
             .Int => self.int(),
             .LeftParen => self.grouping(),
             .Null => self.null_(),
@@ -428,6 +430,18 @@ pub const Parser = struct {
                 .start = p.span.start,
                 .end = p.span.end,
             },
+        } };
+
+        return expr;
+    }
+
+    fn identifier(self: *Self) Error!*Expr {
+        const p = self.prev();
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .Identifier = .{
+            .name = p.from_source(self.source),
+            .span = p.span,
         } };
 
         return expr;

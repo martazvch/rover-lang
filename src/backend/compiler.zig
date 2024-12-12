@@ -11,8 +11,15 @@ const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const ObjString = @import("../runtime/obj.zig").ObjString;
-const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
+const AnalyzedAst = @import("../frontend/analyzed_ast.zig");
+const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
+
+const Null = AnalyzedAst.Null;
+const Int = AnalyzedAst.Int;
+const Float = AnalyzedAst.Float;
+const Bool = AnalyzedAst.Bool;
+const Str = AnalyzedAst.Str;
 
 pub const Compiler = struct {
     vm: *Vm,
@@ -77,13 +84,19 @@ pub const Compiler = struct {
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
-        try self.emit_constant(Value.obj((try ObjString.copy(self.vm, stmt.name)).as_obj()));
+        const extra = self.analyzed_stmts.next().Variable;
+
+        try self.emit_constant(Value.obj(
+            (try ObjString.copy(self.vm, stmt.name.text)).as_obj(),
+        ));
 
         if (stmt.value) |v| {
             try self.expression(v);
         } else try self.chunk.write_op(.Null);
 
-        // try self.chunk.write_op(.DefineGlobal);
+        if (extra.scope == .Global) {
+            try self.write_op_and_byte(.DefineGlobal, @intCast(extra.index));
+        } else unreachable;
     }
 
     /// Expressions followed by end of line (';' in other language)
@@ -99,6 +112,7 @@ pub const Compiler = struct {
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
             .FloatLit => |*e| self.float_lit(e),
+            .Identifier => self.ident_expr(),
             .IntLit => |*e| self.int_lit(e),
             .NullLit => self.null_lit(),
             .StringLit => |*e| self.string_lit(e),
@@ -112,18 +126,18 @@ pub const Compiler = struct {
         try self.expression(expr.lhs);
 
         // For Str, the cast field is used in another way
-        if (extra.cast == .Lhs and extra.type_ != .Str) {
+        if (extra.cast == .Lhs and extra.type_ != Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
-        if (extra.cast == .Rhs and extra.type_ != .Str) {
+        if (extra.cast == .Rhs and extra.type_ != Str) {
             try self.chunk.write_op(.CastToFloat);
         }
 
         try switch (extra.type_) {
-            .Int => switch (expr.op) {
+            Int => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddInt),
                 .Minus => self.chunk.write_op(.SubtractInt),
                 .Star => self.chunk.write_op(.MultiplyInt),
@@ -136,7 +150,7 @@ pub const Compiler = struct {
                 .LessEqual => self.chunk.write_op(.LessEqualInt),
                 else => unreachable,
             },
-            .Float => switch (expr.op) {
+            Float => switch (expr.op) {
                 .Plus => self.chunk.write_op(.AddFloat),
                 .Minus => self.chunk.write_op(.SubtractFloat),
                 .Star => self.chunk.write_op(.MultiplyFloat),
@@ -149,7 +163,7 @@ pub const Compiler = struct {
                 .LessEqual => self.chunk.write_op(.LessEqualFloat),
                 else => unreachable,
             },
-            .Str => switch (expr.op) {
+            Str => switch (expr.op) {
                 .EqualEqual => self.chunk.write_op(.EqualStr),
                 .Plus => self.chunk.write_op(.StrCat),
                 .Star => {
@@ -178,6 +192,16 @@ pub const Compiler = struct {
         try self.emit_constant(Value.float(expr.value));
     }
 
+    fn ident_expr(self: *Self) !void {
+        const extra = self.analyzed_stmts.next().Variable;
+
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup
+        // for now
+        if (extra.scope == .Global) {
+            try self.write_op_and_byte(.GetGlobal, @intCast(extra.index));
+        } else unreachable;
+    }
+
     fn int_lit(self: *Self, expr: *const Ast.IntLit) !void {
         try self.emit_constant(Value.int(expr.value));
     }
@@ -196,8 +220,8 @@ pub const Compiler = struct {
 
         if (expr.op == .Minus) {
             try switch (extra.type_) {
-                .Int => self.chunk.write_op(.NegateInt),
-                .Float => self.chunk.write_op(.NegateFloat),
+                Int => self.chunk.write_op(.NegateInt),
+                Float => self.chunk.write_op(.NegateFloat),
                 else => unreachable,
             };
         } else {

@@ -8,9 +8,30 @@ var e: str = 2/4
 
 error:
 InvalidVarDeclType, int, float
-InvalidVarDeclType, float, string
+InvalidVarDeclType, float, str
 InvalidVarDeclType, bool, int
-InvalidVarDeclType, string, int
+InvalidVarDeclType, str, int
+
+================
+
+code:
+var a: floa = 7.5
+var b: Int = 4
+var c: House
+
+error:
+UndeclaredType, floa
+UndeclaredType, Int
+UndeclaredType, House
+
+================
+
+code:
+var a
+var a
+
+error:
+AlreadyDeclaredVar
 
 ================
 

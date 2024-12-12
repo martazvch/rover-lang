@@ -1,4 +1,5 @@
 pub const AnalyzerMsg = union(enum) {
+    AlreadyDeclaredVar,
     FloatEqual,
     FloatEqualCast,
     InvalidArithmetic: struct { found: []const u8 },
@@ -6,23 +7,29 @@ pub const AnalyzerMsg = union(enum) {
     InvalidVarDeclType: struct { expect: []const u8, found: []const u8 },
     InvalidUnary: struct { found: []const u8 },
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
+    UndeclaredType: struct { found: []const u8 },
+    UndeclaredVar: struct { name: []const u8 },
 
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         try switch (self) {
+            .AlreadyDeclaredVar => writer.print("variable name already declared in this scope", .{}),
             .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
             .InvalidArithmetic => writer.print("invalid arithmetic operation", .{}),
             .InvalidComparison => writer.print("invalid comparison", .{}),
-            .InvalidVarDeclType => writer.print("variable delcaration type mismatch", .{}),
+            .InvalidVarDeclType => writer.print("variable declaration type mismatch", .{}),
             .InvalidUnary => writer.print("invalid unary operation", .{}),
             .ImplicitCast => writer.print("implicit cast", .{}),
+            .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
+            .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
         };
     }
 
     pub fn get_hint(self: Self, writer: anytype) !void {
         try switch (self) {
+            .AlreadyDeclaredVar => writer.print("this name", .{}),
             .FloatEqual => writer.print("both sides are 'floats'", .{}),
             .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
             .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
@@ -30,11 +37,13 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidUnary => writer.print("expression is not a boolean type", .{}),
             .InvalidVarDeclType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
+            .UndeclaredType, .UndeclaredVar => writer.print("here", .{}),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
+            .AlreadyDeclaredVar => writer.print("use another name or e.g. numbers, underscore", .{}),
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like
@@ -61,6 +70,8 @@ pub const AnalyzerMsg = union(enum) {
                 .{ e.expect, e.found },
             ),
             .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
+            .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
+            .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
         };
     }
 

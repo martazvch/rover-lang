@@ -1,0 +1,10 @@
+// Identifier errors
+
+code:
+value = 1
+
+error:
+UndeclaredVar, value
+
+================
+

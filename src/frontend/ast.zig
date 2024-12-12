@@ -1,10 +1,32 @@
 const std = @import("std");
 const Token = @import("lexer.zig").Token;
-const Type = @import("analyzer.zig").Type;
 
 pub const Span = struct {
     start: usize,
     end: usize,
+
+    const Self = @This();
+
+    pub fn from_source_slice(source_slice: SourceSlice) Self {
+        return .{
+            .start = source_slice.start,
+            .end = source_slice.start + source_slice.text.len,
+        };
+    }
+};
+
+pub const SourceSlice = struct {
+    text: []const u8,
+    start: usize,
+
+    const Self = @This();
+
+    pub fn from_token(token: Token, source: []const u8) Self {
+        return .{
+            .text = token.from_source(source),
+            .start = token.span.start,
+        };
+    }
 };
 
 pub const Stmt = union(enum) {
@@ -19,9 +41,9 @@ pub const Print = struct {
 };
 
 pub const VarDecl = struct {
-    name: []const u8,
+    name: SourceSlice,
     is_const: bool,
-    type_: ?Type,
+    type_: ?SourceSlice,
     value: ?*Expr,
     span: Span,
 };
@@ -32,6 +54,7 @@ pub const Expr = union(enum) {
     BoolLit: BoolLit,
     FloatLit: FloatLit,
     Grouping: Grouping,
+    Identifier: Identifier,
     IntLit: IntLit,
     NullLit: NullLit,
     StringLit: StringLit,
@@ -63,6 +86,11 @@ pub const FloatLit = struct {
 
 pub const Grouping = struct {
     expr: *Expr,
+    span: Span,
+};
+
+pub const Identifier = struct {
+    name: []const u8,
     span: Span,
 };
 

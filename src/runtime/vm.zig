@@ -58,6 +58,7 @@ pub const Vm = struct {
     strings: Table,
     init_string: *ObjString,
     objects: ?*Obj,
+    globals: [256]Value, // TODO: ArrayList or constant, not hard written
 
     const Self = @This();
 
@@ -72,6 +73,7 @@ pub const Vm = struct {
             .strings = undefined,
             .init_string = undefined,
             .objects = null,
+            .globals = undefined,
         };
     }
 
@@ -157,6 +159,10 @@ pub const Vm = struct {
                 .Constant => self.stack.push(self.read_constant()),
                 .DifferentInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
                 .DifferentFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
+                .DefineGlobal => {
+                    const idx = self.read_byte();
+                    self.globals[idx] = self.stack.pop();
+                },
                 .DivideFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float /= rhs;
@@ -169,6 +175,7 @@ pub const Vm = struct {
                 .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
+                .GetGlobal => self.stack.push(self.globals[self.read_byte()]),
                 .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),

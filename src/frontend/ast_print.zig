@@ -60,8 +60,13 @@ pub const AstPrinter = struct {
         try self.indent();
         var buf: [100]u8 = undefined;
 
-        const type_name = if (stmt.type_) |t| t.str() else "none";
-        const written = try std.fmt.bufPrint(&buf, "[Var declaration {s}, type {s}, value\n", .{ stmt.name, type_name });
+        // const type_name = stmt.type_ orelse "none";
+        const type_name = if (stmt.type_) |t| t.text else "none";
+        const written = try std.fmt.bufPrint(
+            &buf,
+            "[Var declaration {s}, type {s}, value\n",
+            .{ stmt.name.text, type_name },
+        );
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
@@ -83,6 +88,7 @@ pub const AstPrinter = struct {
             .BoolLit => |*e| self.bool_expr(e),
             .Grouping => |*e| self.grouping_expr(e),
             .FloatLit => |*e| self.float_expr(e),
+            .Identifier => |*e| self.ident_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .NullLit => self.null_expr(),
             .StringLit => |*e| self.string_expr(e),
@@ -123,6 +129,13 @@ pub const AstPrinter = struct {
         try self.indent();
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Float literal {d}]\n", .{expr.value});
+        try self.tree.appendSlice(written);
+    }
+
+    fn ident_expr(self: *Self, expr: *const Ast.Identifier) Error!void {
+        try self.indent();
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(&buf, "[Identifier {s}]\n", .{expr.name});
         try self.tree.appendSlice(written);
     }
 

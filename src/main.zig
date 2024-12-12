@@ -76,7 +76,7 @@ fn run_file(
     buf[size] = 0;
     const zt = buf[0..size :0];
 
-    var pipeline = Pipeline.init(allocator, .{
+    var pipeline = try Pipeline.init(allocator, .{
         .print_ast = print_ast,
         .print_bytecode = print_bytecode,
         .static_analysis = static_analysis,
@@ -97,7 +97,7 @@ fn repl(
     var input = std.ArrayList(u8).init(allocator);
     defer input.deinit();
 
-    var pipeline = Pipeline.init(allocator, .{
+    var pipeline = try Pipeline.init(allocator, .{
         .print_ast = print_ast,
         .print_bytecode = print_bytecode,
         .static_analysis = static_analysis,

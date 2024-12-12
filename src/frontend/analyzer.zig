@@ -10,92 +10,27 @@ const Span = Ast.Span;
 const AnalyzedAst = @import("analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const GenReport = @import("../reporter.zig").GenReport;
+const Type = AnalyzedAst.Type;
 
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 
-// pub const Type = union(enum) {
-//     Bool,
-//     Float,
-//     Int,
-//     Null,
-//     Str,
-//     Struct: []const u8,
-//
-//     const Self = @This();
-//
-//     const types = std.StaticStringMap(Type).initComptime(.{
-//         .{ "bool", .Bool },
-//         .{ "float", .Float },
-//         .{ "int", .Int },
-//         .{ "null", .Null },
-//         .{ "str", .Str },
-//     });
-//
-//     pub fn get_type(name: []const u8) Type {
-//         if (types.get(name)) |t| {
-//             return t;
-//         } else {
-//             return .{ .Struct = name };
-//         }
-//     }
-//
-//     pub fn str(self: Self) []const u8 {
-//         return switch (self) {
-//             .Bool => "bool",
-//             .Float => "float",
-//             .Int => "int",
-//             .Null => "null",
-//             .Str => "string",
-//             .Struct => |t| t,
-//         };
-//     }
-// };
-
-// TODO: change to a struct containing an union. This manoeuvre makes
-// every element 8 bytes large Type = u32), as the union does. For
-// redability, better to do this:
-//
-// const Size = union(enum) {
-//     A,
-//     B,
-//     C,
-// };
-//
-// const Size2 = union(enum) {
-//     A, B,
-//     C: u32,
-// };
-//
-// pub fn main() !void {
-//     print("Size1: {}\n", .{@sizeOf(Size)});
-//     print("Size2: {}\n", .{@sizeOf(Size2)}); ==> 8
-// }
-
-const Type = u32;
-const Null: Type = 0;
-const Int: Type = 1;
-const Float: Type = 2;
-const Bool: Type = 3;
-const Str: Type = 4;
+const Null = AnalyzedAst.Null;
+const Int = AnalyzedAst.Int;
+const Float = AnalyzedAst.Float;
+const Bool = AnalyzedAst.Bool;
+const Str = AnalyzedAst.Str;
 
 pub const TypeManager = struct {
     declared: StringHashMap(Type),
 
     const Self = @This();
 
-    const builtins = std.StaticStringMap(Type).initComptime(.{
-        .{ "bool", Bool },
-        .{ "float", Float },
-        .{ "int", Int },
-        .{ "null", Null },
-        .{ "str", Str },
-    });
-
     pub fn init(allocator: Allocator) Self {
         return .{ .declared = StringHashMap(Type).init(allocator) };
     }
 
     pub fn init_builtins(self: *Self) !void {
+        try self.declared.put("null", Null);
         try self.declared.put("bool", Bool);
         try self.declared.put("float", Float);
         try self.declared.put("int", Int);
@@ -110,32 +45,56 @@ pub const TypeManager = struct {
         self.declared.clearRetainingCapacity();
     }
 
+    pub fn fetch_or_create(self: *Self, type_name: []const u8) !Type {
+        const entry = try self.declared.getOrPut(type_name);
+
+        if (entry.found_existing) {
+            return entry.value_ptr.*;
+        } else {
+            // Minus 1 because it just has been added
+            const value = self.declared.count() - 1;
+            entry.value_ptr.* = value;
+            return value;
+        }
+    }
+
+    // NOTE:
+    // Used only in error mode, no need for performance. If used in
+    // performance path, maybe use a ArrayHashMap to retreive with
+    // index (as type == index) but every thing else is slow?
     pub fn str(self: *const Self, type_: Type) []const u8 {
-        while (self.declared.iterator().next()) |entry| {
-            if (entry.value_ptr == type_) {
+        var iter = self.declared.iterator();
+        while (iter.next()) |entry| {
+            if (entry.value_ptr.* == type_) {
                 return entry.key_ptr.*;
             }
         }
+        unreachable;
     }
 };
 
 pub const Analyzer = struct {
     errs: ArrayList(AnalyzerReport),
     warns: ArrayList(AnalyzerReport),
-    globals: StringHashMap(Type),
+    globals: StringHashMap(Variable),
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
 
     const Self = @This();
     const Error = error{Err} || Allocator.Error;
 
+    // Representation of a variable. Index is the declaration order
+    const Variable = struct {
+        index: usize,
+        type_: Type,
+    };
     const AnalyzerReport = GenReport(AnalyzerMsg);
 
     pub fn init(allocator: Allocator) Self {
         return .{
             .errs = ArrayList(AnalyzerReport).init(allocator),
             .warns = ArrayList(AnalyzerReport).init(allocator),
-            .globals = StringHashMap(Type).init(allocator),
+            .globals = StringHashMap(Variable).init(allocator),
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
             .type_manager = TypeManager.init(allocator),
         };
@@ -154,14 +113,14 @@ pub const Analyzer = struct {
         self.warns.clearRetainingCapacity();
         self.globals.clearRetainingCapacity();
         self.analyzed_stmts.clearRetainingCapacity();
-        self.type_manager.clearRetainingCapacity();
+        self.type_manager.reinit();
     }
 
     fn is_numeric(t: Type) bool {
-        return (t == Int or t == Float);
+        return t == Int or t == Float;
     }
 
-    fn err(self: *Self, kind: AnalyzerMsg, span: Span) !void {
+    fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
         const report = AnalyzerReport.err(kind, span);
         try self.errs.append(report);
         return error.Err;
@@ -173,6 +132,8 @@ pub const Analyzer = struct {
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt) !void {
+        std.debug.print("Globals: {any}\n", .{self.globals});
+
         for (stmts) |*stmt| {
             _ = self.statement(stmt) catch |e| {
                 switch (e) {
@@ -196,16 +157,27 @@ pub const Analyzer = struct {
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !Type {
-        const id = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
-        var var_decl_extra: AnalyzedAst.Variable = .{};
+        // Name check
+        if (self.globals.get(stmt.name.text)) |_| {
+            return self.err(.AlreadyDeclaredVar, Span.from_source_slice(stmt.name));
+        }
 
+        // Type check
         var final_type = Null;
 
         // If a type was declared
         if (stmt.type_) |t| {
-            final_type = t;
+            final_type = self.type_manager.declared.get(t.text) orelse {
+                return self.err(
+                    .{ .UndeclaredType = .{ .found = t.text } },
+                    Span.from_source_slice(t),
+                );
+            };
         }
+
+        const id = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+        var var_decl_extra: AnalyzedAst.Variable = .{ .scope = .Global, .index = 0 };
 
         if (stmt.value) |v| {
             const value_type = try self.expression(v);
@@ -217,10 +189,10 @@ pub const Analyzer = struct {
             } else if (final_type != value_type) {
                 // One case in wich we can coerce; int -> float
                 if (final_type == Float and value_type == Int) {} else {
-                    try self.err(
+                    return self.err(
                         .{ .InvalidVarDeclType = .{
-                            .expect = final_type.str(),
-                            .found = value_type.str(),
+                            .expect = self.type_manager.str(final_type),
+                            .found = self.type_manager.str(value_type),
                         } },
                         v.span(),
                     );
@@ -228,22 +200,25 @@ pub const Analyzer = struct {
             }
         }
 
-        try self.globals.put(stmt.name, final_type);
-        var_decl_extra.index = self.globals.count();
-        self.analyzed_stmts.items[id] = var_decl_extra;
+        const idx = self.globals.count();
+        var_decl_extra.index = idx;
+        try self.globals.put(stmt.name.text, .{ .index = idx, .type_ = final_type });
 
-        return 0;
+        self.analyzed_stmts.items[id] = .{ .Variable = var_decl_extra };
+
+        return Null;
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
         return switch (expr.*) {
-            .BoolLit => .Bool,
+            .BoolLit => Bool,
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
-            .FloatLit => .Float,
-            .IntLit => .Int,
-            .NullLit => .Null,
-            .StringLit => .Str,
+            .FloatLit => Float,
+            .Identifier => |*e| self.identifier(e),
+            .IntLit => Int,
+            .NullLit => Null,
+            .StringLit => Str,
             .Unary => |*e| self.unary(e),
         };
     }
@@ -252,7 +227,7 @@ pub const Analyzer = struct {
         // We reserve the slot because of recursion
         const id = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
-        var binop_extra: AnalyzedAst.BinOp = .{};
+        var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
 
         const lhs = try self.expression(expr.lhs);
         const rhs = try self.expression(expr.rhs);
@@ -263,6 +238,7 @@ pub const Analyzer = struct {
 
         // String operations
         if (expr.op == .Plus and lhs == Str and rhs == Str) {
+            self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
             return Str;
         } else if (expr.op == .Star) {
             if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
@@ -271,6 +247,7 @@ pub const Analyzer = struct {
                 // For string concatenation, we use the cast information to tell
                 // on wich side is the integer (for the compiler)
                 binop_extra.cast = if (rhs == Int) .Rhs else .Lhs;
+                self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
                 return Str;
             }
         }
@@ -279,15 +256,15 @@ pub const Analyzer = struct {
             // Arithmetic binop
             .Plus, .Minus, .Star, .Slash => {
                 if (!Analyzer.is_numeric(lhs)) {
-                    try self.err(
-                        AnalyzerMsg.invalid_arithmetic(lhs.str()),
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
                         expr.lhs.span(),
                     );
                 }
 
                 if (!Analyzer.is_numeric(rhs)) {
-                    try self.err(
-                        AnalyzerMsg.invalid_arithmetic(rhs.str()),
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
                         expr.rhs.span(),
                     );
                 }
@@ -298,7 +275,7 @@ pub const Analyzer = struct {
                             Float => {},
                             Int => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast(.Rhs, lhs.str()),
+                                    AnalyzerMsg.implicit_cast(.Rhs, self.type_manager.str(lhs)),
                                     expr.rhs.span(),
                                 );
 
@@ -311,7 +288,7 @@ pub const Analyzer = struct {
                         switch (rhs) {
                             Float => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast(.Lhs, rhs.str()),
+                                    AnalyzerMsg.implicit_cast(.Lhs, self.type_manager.str(rhs)),
                                     expr.lhs.span(),
                                 );
 
@@ -343,8 +320,11 @@ pub const Analyzer = struct {
 
                         binop_extra.type_ = Float;
                     } else {
-                        try self.err(
-                            AnalyzerMsg.invalid_cmp(lhs.str(), rhs.str()),
+                        return self.err(
+                            AnalyzerMsg.invalid_cmp(
+                                self.type_manager.str(lhs),
+                                self.type_manager.str(rhs),
+                            ),
                             expr.span,
                         );
                     }
@@ -360,15 +340,15 @@ pub const Analyzer = struct {
 
             .Greater, .GreaterEqual, .Less, .LessEqual => {
                 if (!Analyzer.is_numeric(lhs)) {
-                    try self.err(
-                        AnalyzerMsg.invalid_arithmetic(lhs.str()),
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
                         expr.lhs.span(),
                     );
                 }
 
                 if (!Analyzer.is_numeric(rhs)) {
-                    try self.err(
-                        AnalyzerMsg.invalid_arithmetic(rhs.str()),
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
                         expr.rhs.span(),
                     );
                 }
@@ -412,21 +392,36 @@ pub const Analyzer = struct {
         return self.expression(expr.expr);
     }
 
+    fn identifier(self: *Self, expr: *const Ast.Identifier) Error!Type {
+        if (self.globals.get(expr.name)) |glob| {
+            try self.analyzed_stmts.append(.{
+                .Variable = .{ .scope = .Global, .index = glob.index },
+            });
+
+            return glob.type_;
+        } else {
+            return self.err(
+                .{ .UndeclaredVar = .{ .name = expr.name } },
+                expr.span,
+            );
+        }
+    }
+
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
         const id = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
-        var unary_extra: AnalyzedAst.Unary = .{};
+        var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
 
         const rhs = try self.expression(expr.rhs);
 
         if (expr.op == .Not and rhs != Bool) {
-            try self.err(
-                .{ .InvalidUnary = .{ .found = rhs.str() } },
+            return self.err(
+                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
                 expr.rhs.span(),
             );
         } else if (expr.op == .Minus and rhs != Int and rhs != Float) {
-            try self.err(
-                AnalyzerMsg.invalid_arithmetic(rhs.str()),
+            return self.err(
+                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
                 expr.rhs.span(),
             );
         }
