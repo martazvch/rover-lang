@@ -3,10 +3,16 @@
 code:
 1 + 2.
 5.6 + 4
+"steak" * 3
+5 * "house"
+"juicy " + "orange"
 
 expect:
 [Binop cast Lhs, type float]
 [Binop cast Rhs, type float]
+[Binop cast Rhs, type str]
+[Binop cast Lhs, type str]
+[Binop cast None, type str]
 
 ================
 
