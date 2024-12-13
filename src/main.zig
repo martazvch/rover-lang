@@ -94,8 +94,12 @@ fn repl(
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
 
+    // Keep all prompts because all of the pipeline uses []const u8 wich point
+    // to the user input
+    var prompts = std.ArrayList([]const u8).init(allocator);
+    defer prompts.deinit();
+
     var input = std.ArrayList(u8).init(allocator);
-    defer input.deinit();
 
     var pipeline = try Pipeline.init(allocator, .{
         .print_ast = print_ast,
@@ -113,12 +117,13 @@ fn repl(
         try stdin.streamUntilDelimiter(input.writer(), '\n', null);
         // const trimmed = std.mem.trimRight(u8, input.items, "\r");
 
-        pipeline.reinit_frontend();
-
         // For ease of use of the parser
         try input.append('\n');
         try input.append(0);
+
         const zt = input.items[0 .. input.items.len - 1 :0];
+        try prompts.append(try input.toOwnedSlice());
+
         try pipeline.run("stdin", zt);
     }
 }

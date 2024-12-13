@@ -26,6 +26,7 @@ pub const Pipeline = struct {
     lexer: Lexer,
     parser: Parser,
     analyzer: Analyzer,
+    vm: Vm,
 
     const Self = @This();
 
@@ -38,12 +39,18 @@ pub const Pipeline = struct {
     pub fn init(allocator: Allocator, config: Config) !Self {
         var analyzer = Analyzer.init(allocator);
         try analyzer.type_manager.init_builtins();
+
+        var vm = Vm.new(allocator);
+        try vm.init();
+
+        // Init of parser in two times, maybe fix later when RLS is fixed in the lang
         return .{
             .allocator = allocator,
             .config = config,
             .lexer = Lexer.init(allocator),
             .parser = undefined,
             .analyzer = analyzer,
+            .vm = vm,
         };
     }
 
@@ -51,24 +58,19 @@ pub const Pipeline = struct {
         self.parser.deinit();
         self.lexer.deinit();
         self.analyzer.deinit();
-    }
-
-    /// Reinitialize the frontend only: lexer and parser.
-    /// Meant to be used in the *REPL*
-    pub fn reinit_frontend(self: *Self) void {
-        self.lexer.reinit();
-        self.parser.reinit();
-        // self.analyzer.reinit();
+        self.vm.deinit();
     }
 
     /// Runs the pipeline
     pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
         // Lexer
         try self.lexer.lex(source);
+        defer self.lexer.reinit();
 
         // In case we have an error, we initialize the parser because here it's still
         // undefined and we are gonna call deinit on it
         self.parser.init(self.allocator);
+        defer self.parser.reinit();
 
         if (self.lexer.errs.items.len > 0) {
             var reporter = GenReporter(LexerMsg).init(source);
@@ -114,17 +116,10 @@ pub const Pipeline = struct {
             return;
         }
 
-        // We start the Vm for the allocator and string interning
-
-        // Vm
-        var vm = Vm.new(self.allocator);
-        try vm.init();
-        defer vm.deinit();
-
         // Compiler
-        var compiler = Compiler.init(&vm, self.analyzer.analyzed_stmts.items);
+        var compiler = Compiler.init(&self.vm);
+        try compiler.compile(self.parser.stmts.items, self.analyzer.analyzed_stmts.items);
         defer compiler.deinit();
-        try compiler.compile(self.parser.stmts.items);
 
         // Disassembler
         if (self.config.print_bytecode) {
@@ -135,6 +130,6 @@ pub const Pipeline = struct {
         }
 
         // Vm run
-        try vm.run(&compiler.chunk);
+        try self.vm.run(&compiler.chunk);
     }
 };

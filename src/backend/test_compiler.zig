@@ -21,6 +21,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(Co
     try parser.parse(source, lexer.tokens.items);
 
     var analyzer = Analyzer.init(allocator);
+    try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
     try analyzer.analyze(parser.stmts.items);
 
@@ -28,9 +29,9 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(Co
     defer vm.deinit();
     try vm.init();
 
-    var compiler = Compiler.init(&vm, analyzer.analyzed_stmts.items);
+    var compiler = Compiler.init(&vm);
     defer compiler.deinit();
-    try compiler.compile(parser.stmts.items);
+    try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
 
     var disassembler = Disassembler.init(&compiler.chunk, allocator, true);
     defer disassembler.deinit();

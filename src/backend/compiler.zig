@@ -32,12 +32,12 @@ pub const Compiler = struct {
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(vm: *Vm, analyzed_stmts: []const AnalyzedStmt) Self {
+    pub fn init(vm: *Vm) Self {
         return .{
             .vm = vm,
             .chunk = Chunk.init(vm.allocator),
             .errs = ArrayList(CompilerReport).init(vm.allocator),
-            .analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts),
+            .analyzed_stmts = undefined,
         };
     }
 
@@ -66,7 +66,9 @@ pub const Compiler = struct {
         };
     }
 
-    pub fn compile(self: *Self, stmts: []const Stmt) !void {
+    pub fn compile(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt) !void {
+        self.analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts);
+
         for (stmts) |*stmt| {
             try switch (stmt.*) {
                 .Print => |*s| self.print_stmt(s),

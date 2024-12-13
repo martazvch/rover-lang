@@ -132,8 +132,6 @@ pub const Analyzer = struct {
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt) !void {
-        std.debug.print("Globals: {any}\n", .{self.globals});
-
         for (stmts) |*stmt| {
             _ = self.statement(stmt) catch |e| {
                 switch (e) {
