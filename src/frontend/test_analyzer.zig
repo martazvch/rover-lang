@@ -6,6 +6,7 @@ const Parser = @import("parser.zig").Parser;
 const Analyzer = @import("analyzer.zig").Analyzer;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const GenTestData = @import("../tester.zig").GenTestData;
+const AnalyzedAstPrinter = @import("analyzed_ast_print.zig").AnalyzedAstPrinter;
 
 pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(AnalyzerMsg) {
     var lexer = Lexer.init(allocator);
@@ -33,5 +34,9 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(An
         try msgs.append(err.report);
     }
 
-    return .{ .expect = "", .reports = try msgs.toOwnedSlice() };
+    var printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);
+    defer printer.deinit();
+    try printer.parse(source, analyzer.analyzed_stmts.items);
+
+    return .{ .expect = try printer.tree.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
 }

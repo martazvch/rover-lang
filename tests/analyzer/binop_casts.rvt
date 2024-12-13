@@ -1,0 +1,12 @@
+// Tests invalid binop
+
+code:
+1 + 2.
+5.6 + 4
+
+expect:
+[Binop cast Lhs, type float]
+[Binop cast Rhs, type float]
+
+================
+

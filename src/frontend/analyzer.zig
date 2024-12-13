@@ -41,10 +41,6 @@ pub const TypeManager = struct {
         self.declared.deinit();
     }
 
-    pub fn reinit(self: *Self) void {
-        self.declared.clearRetainingCapacity();
-    }
-
     pub fn fetch_or_create(self: *Self, type_name: []const u8) !Type {
         const entry = try self.declared.getOrPut(type_name);
 
@@ -106,14 +102,6 @@ pub const Analyzer = struct {
         self.globals.deinit();
         self.analyzed_stmts.deinit();
         self.type_manager.deinit();
-    }
-
-    pub fn reinit(self: *Self) void {
-        self.errs.clearRetainingCapacity();
-        self.warns.clearRetainingCapacity();
-        self.globals.clearRetainingCapacity();
-        self.analyzed_stmts.clearRetainingCapacity();
-        self.type_manager.reinit();
     }
 
     fn is_numeric(t: Type) bool {

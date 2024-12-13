@@ -88,14 +88,18 @@ pub const Compiler = struct {
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
         const extra = self.analyzed_stmts.next().Variable;
 
-        try self.emit_constant(Value.obj(
-            (try ObjString.copy(self.vm, stmt.name.text)).as_obj(),
-        ));
+        // NOTE: do we have to do this in statically typed lang?
+
+        // try self.emit_constant(Value.obj(
+        //     (try ObjString.copy(self.vm, stmt.name.text)).as_obj(),
+        // ));
 
         if (stmt.value) |v| {
             try self.expression(v);
         } else try self.chunk.write_op(.Null);
 
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup
+        // for now
         if (extra.scope == .Global) {
             try self.write_op_and_byte(.DefineGlobal, @intCast(extra.index));
         } else unreachable;

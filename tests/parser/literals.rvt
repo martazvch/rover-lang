@@ -87,3 +87,16 @@ expect:
 [String literal no way]
 
 ================
+
+// Identifier
+
+code:
+bee_and_allies - tom2ndDragon
+
+expect:
+[Binop -]
+    [Identifier bee_and_allies]
+    [Identifier tom2ndDragon]
+
+================
+

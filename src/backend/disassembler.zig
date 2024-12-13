@@ -25,11 +25,15 @@ pub const Disassembler = struct {
     }
 
     pub fn dis_chunk(self: *Self, name: []const u8) !void {
+        try self.dis_slice(name, 0);
+    }
+
+    pub fn dis_slice(self: *Self, name: []const u8, start: usize) !void {
         var writer = self.disassembled.writer();
 
         if (!self.test_mode) try writer.print("== {s} ==\n", .{name});
 
-        var i: usize = 0;
+        var i: usize = start;
         while (i < self.chunk.code.items.len) {
             i = try self.dis_instruction(i, writer);
         }
@@ -77,7 +81,7 @@ pub const Disassembler = struct {
             .CastToFloat => self.simple_instruction("OP_CAST_TO_FLOAT", offset, writer),
             .Constant => self.constant_instruction("OP_CONSTANT", offset, writer),
             // .CreateIter => self.simple_instruction("OP_CREATE_ITER", offset, writer),
-            .DefineGlobal => self.constant_instruction("OP_DEFINE_GLOBAL", offset, writer),
+            .DefineGlobal => self.index_instruction("OP_DEFINE_GLOBAL", offset, writer),
             .DifferentInt => self.simple_instruction("OP_DIFFERENT_INT", offset, writer),
             .DifferentFloat => self.simple_instruction("OP_DIFFERENT_FLOAT", offset, writer),
             .DivideFloat => self.simple_instruction("OP_DIVIDE_FLOAT", offset, writer),
@@ -87,7 +91,7 @@ pub const Disassembler = struct {
             .EqualStr => self.simple_instruction("OP_EQUAL_STRING", offset, writer),
             .False => self.simple_instruction("OP_FALSE", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
-            .GetGlobal => self.constant_instruction("OP_GET_GLOBAL", offset, writer),
+            .GetGlobal => self.index_instruction("OP_GET_GLOBAL", offset, writer),
             // .GetLocal => self.byte_instruction("OP_GET_LOCAL", offset),
             // .GetProperty => self.constant_instruction("OP_GET_PROPERTY", offset),
             // .GetUpvalue => self.byte_instruction("OP_GET_UPVALUE", offset),
@@ -135,6 +139,18 @@ pub const Disassembler = struct {
         }
 
         return offset + 1;
+    }
+
+    fn index_instruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
+        const index = self.chunk.code.items[offset + 1];
+
+        if (self.test_mode) {
+            try writer.print("{s} index: {}\n", .{ name, index });
+        } else {
+            try writer.print("{s:<24} index: {:<4}\n", .{ name, index });
+        }
+
+        return offset + 2;
     }
 
     fn constant_instruction(

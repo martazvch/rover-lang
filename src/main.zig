@@ -3,7 +3,8 @@ const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
-const Pipeline = @import("pipeline.zig").Pipeline;
+const run = @import("pipeline.zig").run;
+const ReplPipeline = @import("pipeline.zig").ReplPipeline;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -19,6 +20,7 @@ pub fn main() !void {
         \\-s, --static-analysis Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
+        \\--print-analyzed-ast   Prints the extra infos on AST
     );
 
     const parsers = comptime .{
@@ -44,11 +46,12 @@ pub fn main() !void {
     const print_ast = if (res.args.@"print-ast" == 1) true else false;
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
     const static_analysis = if (res.args.@"static-analysis" == 1) true else false;
+    const print_analyzed_ast = if (res.args.@"print-analyzed-ast" == 1) true else false;
 
     if (res.args.file) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analysis);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analysis, print_analyzed_ast);
     } else {
-        try repl(allocator, print_ast, print_bytecode, static_analysis);
+        try repl(allocator, print_ast, print_bytecode, static_analysis, print_analyzed_ast);
     }
 }
 
@@ -58,6 +61,7 @@ fn run_file(
     print_ast: bool,
     print_bytecode: bool,
     static_analysis: bool,
+    print_analyzed_ast: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -76,13 +80,17 @@ fn run_file(
     buf[size] = 0;
     const zt = buf[0..size :0];
 
-    var pipeline = try Pipeline.init(allocator, .{
-        .print_ast = print_ast,
-        .print_bytecode = print_bytecode,
-        .static_analysis = static_analysis,
-    });
-    defer pipeline.deinit();
-    try pipeline.run(filename, zt);
+    try run(
+        allocator,
+        .{
+            .print_ast = print_ast,
+            .print_bytecode = print_bytecode,
+            .static_analysis = static_analysis,
+            .print_analyzed_ast = print_analyzed_ast,
+        },
+        filename,
+        zt,
+    );
 }
 
 fn repl(
@@ -90,6 +98,7 @@ fn repl(
     print_ast: bool,
     print_bytecode: bool,
     static_analysis: bool,
+    print_analyzed_ast: bool,
 ) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
@@ -101,11 +110,13 @@ fn repl(
 
     var input = std.ArrayList(u8).init(allocator);
 
-    var pipeline = try Pipeline.init(allocator, .{
+    var pipeline = try ReplPipeline.new(allocator, .{
         .print_ast = print_ast,
         .print_bytecode = print_bytecode,
         .static_analysis = static_analysis,
+        .print_analyzed_ast = print_analyzed_ast,
     });
+    pipeline.init();
     defer pipeline.deinit();
 
     _ = try stdout.write("\t\tRover language REPL\n");

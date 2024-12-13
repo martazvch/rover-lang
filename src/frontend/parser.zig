@@ -58,13 +58,6 @@ pub const Parser = struct {
         self.arena.deinit();
     }
 
-    pub fn reinit(self: *Self) void {
-        self.panic_mode = false;
-        self.stmts.clearRetainingCapacity();
-        self.errs.clearRetainingCapacity();
-        self.token_id = 0;
-    }
-
     /// Parses the token stream
     pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
         self.source = source;

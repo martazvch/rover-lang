@@ -212,12 +212,6 @@ pub const Lexer = struct {
         self.errs.deinit();
     }
 
-    pub fn reinit(self: *Self) void {
-        self.index = 0;
-        self.tokens.clearRetainingCapacity();
-        self.errs.clearRetainingCapacity();
-    }
-
     pub fn lex(self: *Self, source: [:0]const u8) !void {
         self.source = source;
 

@@ -121,7 +121,16 @@ pub const Vm = struct {
     pub fn run(self: *Self, chunk: *const Chunk) !void {
         self.chunk = chunk;
         self.ip = self.chunk.code.items.ptr;
+        try self.execute();
+    }
 
+    pub fn run_slice(self: *Self, chunk: *const Chunk, start: usize) !void {
+        self.chunk = chunk;
+        self.ip = self.chunk.code.items[start..].ptr;
+        try self.execute();
+    }
+
+    fn execute(self: *Self) !void {
         while (true) {
             if (comptime config.print_stack) {
                 print("          ", .{});

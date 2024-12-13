@@ -1,0 +1,12 @@
+// Tests literals
+
+code:
+var a = 15.6
+
+expect:
+OP_CONSTANT index: 0 value: 15.6
+OP_DEFINE_GLOBAL index: 0
+OP_RETURN
+
+================
+

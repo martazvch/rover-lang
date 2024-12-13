@@ -24,16 +24,12 @@ pub const AstPrinter = struct {
         };
     }
 
-    pub fn reinit(self: *Self) void {
-        self.tree.clearRetainingCapacity();
-    }
-
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
     }
 
     pub fn display(self: *const Self) void {
-        print("{s}", .{self.tree.items});
+        print("\n--- AST ---\n{s}", .{self.tree.items});
     }
 
     pub fn parse_ast(self: *Self, source: []const u8, nodes: []const Stmt) !void {
