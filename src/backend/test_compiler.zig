@@ -23,7 +23,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(Co
     var analyzer = Analyzer.init(allocator);
     try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
-    try analyzer.analyze(parser.stmts.items);
+    try analyzer.analyze(parser.stmts.items, source);
 
     var vm = Vm.new(allocator);
     defer vm.deinit();

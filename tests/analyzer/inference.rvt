@@ -1,0 +1,40 @@
+// Tests type inference
+
+code:
+var a = 7.5 // float
+var b: float = 1.2
+print a + b
+
+// There is no cast in the binop
+expect:
+[Variable scope Global, index 0]
+[Variable scope Global, index 1]
+[Binop cast None, type float]
+[Variable scope Global, index 0]
+[Variable scope Global, index 1]
+
+================
+
+code:
+var res = true // bool
+print not res
+
+// No errors
+expect:
+[Variable scope Global, index 0]
+[Unary type bool]
+[Variable scope Global, index 0]
+
+================
+
+// Uninit error
+
+code:
+var a
+print a + 1
+
+error:
+UseUninitVar, a
+
+================
+

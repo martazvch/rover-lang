@@ -1,5 +1,7 @@
 // Tests unary
 
+// Errors
+
 code:
 -true
 -null
@@ -9,6 +11,22 @@ error:
 InvalidArithmetic, bool
 InvalidArithmetic, null
 InvalidUnary, float
+
+================
+
+// Types
+
+code:
+-6.7
+not not true
+--5
+
+expect:
+[Unary type float]
+[Unary type bool]
+[Unary type bool]
+[Unary type int]
+[Unary type int]
 
 ================
 

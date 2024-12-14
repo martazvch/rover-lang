@@ -7,11 +7,12 @@ const Span = @import("ast.zig").Span;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Type = u32;
-pub const Null: Type = 0;
-pub const Int: Type = 1;
-pub const Float: Type = 2;
-pub const Bool: Type = 3;
-pub const Str: Type = 4;
+pub const Unknown: Type = 0;
+pub const Null: Type = 1;
+pub const Int: Type = 2;
+pub const Float: Type = 3;
+pub const Bool: Type = 4;
+pub const Str: Type = 5;
 
 pub const AnalyzedStmt = union(enum) {
     Binop: BinOp,

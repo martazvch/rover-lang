@@ -106,7 +106,7 @@ pub const ReplPipeline = struct {
         // Analyzer
         // TODO: init analyzer extra info with exact number of element per array list
         // for optimal memory allocation
-        try self.analyzer.analyze(parser.stmts.items);
+        try self.analyzer.analyze(parser.stmts.items, source);
         // We don't keep errosr/warnings from a prompt to another
         defer self.analyzer.errs.clearRetainingCapacity();
         defer self.analyzer.warns.clearRetainingCapacity();
@@ -201,7 +201,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
 
-    try analyzer.analyze(parser.stmts.items);
+    try analyzer.analyze(parser.stmts.items, source);
 
     if (analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);

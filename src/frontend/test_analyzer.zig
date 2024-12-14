@@ -22,7 +22,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(An
     try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
 
-    try analyzer.analyze(parser.stmts.items);
+    try analyzer.analyze(parser.stmts.items, source);
 
     var msgs = ArrayList(AnalyzerMsg).init(allocator);
 
