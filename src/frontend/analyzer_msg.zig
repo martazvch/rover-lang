@@ -1,5 +1,5 @@
 pub const AnalyzerMsg = union(enum) {
-    AlreadyDeclaredVar,
+    AlreadyDeclaredVar: struct { name: []const u8 },
     FloatEqual,
     FloatEqualCast,
     InvalidArithmetic: struct { found: []const u8 },
@@ -15,7 +15,7 @@ pub const AnalyzerMsg = union(enum) {
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclaredVar => writer.print("variable name already declared in this scope", .{}),
+            .AlreadyDeclaredVar => |e| writer.print("variable '{s}' already declared in this scope", .{e.name}),
             .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
             .InvalidArithmetic => writer.print("invalid arithmetic operation", .{}),
@@ -45,7 +45,7 @@ pub const AnalyzerMsg = union(enum) {
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclaredVar => writer.print("use another name or e.g. numbers, underscore", .{}),
+            .AlreadyDeclaredVar => writer.print("use another name or use numbers, underscore", .{}),
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like

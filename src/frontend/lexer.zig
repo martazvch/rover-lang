@@ -95,6 +95,7 @@ pub const Token = struct {
         Var,
         While,
 
+        LeadingZeros,
         UnterminatedStr,
         UnexpectedChar,
 
@@ -158,7 +159,7 @@ pub const Token = struct {
                 .Var => "var",
                 .While => "while",
 
-                .UnexpectedChar, .UnterminatedStr => unreachable,
+                .LeadingZeros, .UnexpectedChar, .UnterminatedStr => unreachable,
             };
         }
     };
@@ -218,7 +219,10 @@ pub const Lexer = struct {
         while (true) {
             const tk = self.next();
 
+            // TODO: redo this part. As we lex every thing at once, use arraylist for
+            // errors like parser, analyzer, ...? Or use compitme to associate both sides
             try switch (tk.kind) {
+                .LeadingZeros => self.error_at(.LeadingZeros, &tk),
                 .UnterminatedStr => self.error_at(.UnterminatedStr, &tk),
                 .UnexpectedChar => self.error_at(.UnexpectedChar, &tk),
                 else => self.tokens.append(tk),
@@ -308,7 +312,19 @@ pub const Lexer = struct {
                         if (self.source[self.index + 1] == '.') {
                             self.index += 1;
                             continue :state .Float;
-                        } else continue :state .Invalid;
+                        } else {
+                            self.index += 1;
+                            switch (self.source[self.index]) {
+                                '0'...'9' => return .{
+                                    .kind = .LeadingZeros,
+                                    .span = .{
+                                        .start = self.index - 1,
+                                        .end = self.index,
+                                    },
+                                },
+                                else => res.kind = .Int,
+                            }
+                        }
                     },
                     '1'...'9' => {
                         res.kind = .Int;
@@ -579,6 +595,15 @@ test "unterminated string" {
 
     const err = lexer.errs.items[0];
     try expect(err.report == .UnterminatedStr);
+}
+
+test "leading zeros" {
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("var e = 01\n var b = 00002");
+
+    try expect(lexer.errs.items[0].report == .LeadingZeros);
+    try expect(lexer.errs.items[1].report == .LeadingZeros);
 }
 
 test "dot" {

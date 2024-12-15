@@ -29,18 +29,18 @@ UndeclaredType, House
 ================
 
 code:
-var a
-var a
+var declared
+var declared
 
 error:
-AlreadyDeclaredVar
+AlreadyDeclaredVar, declared
 
 ================
 
 // Extra
 
 code:
-var a
+var a = 0
 var b = true
 var c = 56.7
 

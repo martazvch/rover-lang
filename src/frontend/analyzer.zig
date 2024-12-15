@@ -114,14 +114,12 @@ pub const Analyzer = struct {
     }
 
     fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
-        const report = AnalyzerReport.err(kind, span);
-        try self.errs.append(report);
+        try self.errs.append(AnalyzerReport.err(kind, span));
         return error.Err;
     }
 
     fn warn(self: *Self, kind: AnalyzerMsg, span: Span) !void {
-        const report = AnalyzerReport.warn(kind, span);
-        try self.warns.append(report);
+        try self.warns.append(AnalyzerReport.warn(kind, span));
     }
 
     fn span_to_source(self: *const Self, span: Span) []const u8 {
@@ -153,7 +151,10 @@ pub const Analyzer = struct {
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
         // Name check
         if (self.globals.get(stmt.name.text)) |_| {
-            return self.err(.AlreadyDeclaredVar, Span.from_source_slice(stmt.name));
+            return self.err(
+                .{ .AlreadyDeclaredVar = .{ .name = stmt.name.text } },
+                Span.from_source_slice(stmt.name),
+            );
         }
 
         // Type check
@@ -213,29 +214,11 @@ pub const Analyzer = struct {
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
             .FloatLit => Float,
-            .Identifier => |*e| {
-                const res = try self.identifier(e);
-                return res.type_;
-            },
+            .Identifier => |*e| self.identifier(e, true),
             .IntLit => Int,
             .NullLit => Null,
             .StringLit => Str,
             .Unary => |*e| self.unary(e),
-        };
-    }
-
-    fn get_type_if_init(self: *Self, expr: *const Ast.Expr) Error!Type {
-        return switch (expr.*) {
-            .Identifier => |*ident| blk: {
-                const res = try self.identifier(ident);
-
-                if (!res.init) {
-                    return self.err(.{ .UseUninitVar = .{ .name = ident.name } }, ident.span);
-                }
-
-                break :blk res.type_;
-            },
-            else => try self.expression(expr),
         };
     }
 
@@ -245,8 +228,8 @@ pub const Analyzer = struct {
         try self.analyzed_stmts.append(undefined);
         var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
 
-        const lhs = try self.get_type_if_init(expr.lhs);
-        const rhs = try self.get_type_if_init(expr.rhs);
+        const lhs = try self.expression(expr.lhs);
+        const rhs = try self.expression(expr.rhs);
 
         binop_extra.type_ = lhs;
         var res = lhs;
@@ -407,13 +390,18 @@ pub const Analyzer = struct {
         return self.expression(expr.expr);
     }
 
-    fn identifier(self: *Self, expr: *const Ast.Identifier) Error!struct { type_: Type, init: bool } {
+    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!Type {
         if (self.globals.get(expr.name)) |glob| {
+            // Checks the initialization if asked
+            if (initialized and !glob.initialized) {
+                return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+            }
+
             try self.analyzed_stmts.append(.{
                 .Variable = .{ .scope = .Global, .index = glob.index },
             });
 
-            return .{ .type_ = glob.type_, .init = glob.initialized };
+            return glob.type_;
         } else {
             return self.err(
                 .{ .UndeclaredVar = .{ .name = expr.name } },

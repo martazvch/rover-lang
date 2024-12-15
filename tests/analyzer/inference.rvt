@@ -33,8 +33,12 @@ code:
 var a
 print a + 1
 
+var _empty: str
+print _empty
+
 error:
 UseUninitVar, a
+UseUninitVar, _empty
 
 ================
 

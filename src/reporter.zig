@@ -264,6 +264,8 @@ pub fn GenReporter(comptime Report: type) type {
                 // try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
                 try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
             }
+
+            _ = try self.writer.write("\n");
         }
 
         // Limitation of Zig, can only use comptime known strings for formatting...
