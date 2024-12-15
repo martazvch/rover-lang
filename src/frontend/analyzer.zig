@@ -43,18 +43,18 @@ pub const TypeManager = struct {
         self.declared.deinit();
     }
 
-    pub fn fetch_or_create(self: *Self, type_name: []const u8) !Type {
-        const entry = try self.declared.getOrPut(type_name);
-
-        if (entry.found_existing) {
-            return entry.value_ptr.*;
-        } else {
-            // Minus 1 because it just has been added
-            const value = self.declared.count() - 1;
-            entry.value_ptr.* = value;
-            return value;
-        }
-    }
+    // pub fn fetch_or_create(self: *Self, type_name: []const u8) !Type {
+    //     const entry = try self.declared.getOrPut(type_name);
+    //
+    //     if (entry.found_existing) {
+    //         return entry.value_ptr.*;
+    //     } else {
+    //         // Minus 1 because it just has been added
+    //         const value = self.declared.count() - 1;
+    //         entry.value_ptr.* = value;
+    //         return value;
+    //     }
+    // }
 
     // NOTE:
     // Used only in error mode, no need for performance. If used in
@@ -142,14 +142,52 @@ pub const Analyzer = struct {
 
     fn statement(self: *Self, stmt: *const Stmt) !void {
         try switch (stmt.*) {
+            .Assignment => |*s| _ = try self.assignment(s),
             .Print => |*s| _ = try self.expression(s.expr),
             .VarDecl => |*s| self.var_declaration(s),
             .Expr => |e| _ = try self.expression(e),
         };
     }
 
+    fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
+        const value_type = try self.expression(stmt.value);
+
+        switch (stmt.assigne.*) {
+            .Identifier => |*ident| {
+                // Forward declaration to preserve order
+                const idx = self.analyzed_stmts.items.len;
+                try self.analyzed_stmts.append(.{ .Assignment = .{} });
+
+                const assigne = try self.identifier(ident, false);
+
+                // If type is unknown, we update it
+                if (assigne.type_ == Unknown) {
+                    assigne.type_ = value_type;
+                } else if (assigne.type_ != value_type) {
+                    // One case in wich we can coerce; int -> float
+                    if (assigne.type_ == Float and value_type == Int) {
+                        self.analyzed_stmts.items[idx].Assignment.cast = .Yes;
+                    } else {
+                        return self.err(
+                            .{ .InvalidAssignType = .{
+                                .expect = self.type_manager.str(assigne.type_),
+                                .found = self.type_manager.str(value_type),
+                            } },
+                            ident.span,
+                        );
+                    }
+                }
+
+                assigne.initialized = true;
+            },
+            // Later, manage member, pointer, ...
+            else => |*expr| return self.err(.InvalidAssignTarget, expr.span()),
+        }
+    }
+
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
         // Name check
+        // TODO: combine with identifier()
         if (self.globals.get(stmt.name.text)) |_| {
             return self.err(
                 .{ .AlreadyDeclaredVar = .{ .name = stmt.name.text } },
@@ -159,7 +197,7 @@ pub const Analyzer = struct {
 
         // Type check
         var final_type = Unknown;
-        var initialized = false;
+        var variable: Variable = .{ .index = 0, .type_ = Unknown };
 
         // If a type was declared
         if (stmt.type_) |t| {
@@ -171,12 +209,10 @@ pub const Analyzer = struct {
             };
         }
 
-        const id = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
-        var var_decl_extra: AnalyzedAst.Variable = .{ .scope = .Global, .index = 0 };
-
+        // Value type check
         if (stmt.value) |v| {
             const value_type = try self.expression(v);
+            var assign_extra: AnalyzedAst.Assignment = .{};
 
             // If no type declared, we infer the value type
             if (final_type == Unknown) {
@@ -184,9 +220,11 @@ pub const Analyzer = struct {
                 // Else, we check for coherence
             } else if (final_type != value_type) {
                 // One case in wich we can coerce; int -> float
-                if (final_type == Float and value_type == Int) {} else {
+                if (final_type == Float and value_type == Int) {
+                    assign_extra.cast = .Yes;
+                } else {
                     return self.err(
-                        .{ .InvalidVarDeclType = .{
+                        .{ .InvalidAssignType = .{
                             .expect = self.type_manager.str(final_type),
                             .found = self.type_manager.str(value_type),
                         } },
@@ -194,18 +232,23 @@ pub const Analyzer = struct {
                     );
                 }
             }
-            initialized = true;
+
+            variable.initialized = true;
+            try self.analyzed_stmts.append(.{ .Assignment = assign_extra });
         }
 
-        const idx = self.globals.count();
-        var_decl_extra.index = idx;
-        try self.globals.put(stmt.name.text, .{
-            .index = idx,
-            .type_ = final_type,
-            .initialized = initialized,
-        });
+        variable.type_ = final_type;
 
-        self.analyzed_stmts.items[id] = .{ .Variable = var_decl_extra };
+        const idx = self.globals.count();
+        variable.index = idx;
+
+        const var_decl_extra: AnalyzedAst.Variable = .{
+            .scope = .Global,
+            .index = idx,
+        };
+
+        try self.globals.put(stmt.name.text, variable);
+        try self.analyzed_stmts.append(.{ .Variable = var_decl_extra });
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
@@ -214,7 +257,10 @@ pub const Analyzer = struct {
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
             .FloatLit => Float,
-            .Identifier => |*e| self.identifier(e, true),
+            .Identifier => |*e| {
+                const res = try self.identifier(e, true);
+                return res.type_;
+            },
             .IntLit => Int,
             .NullLit => Null,
             .StringLit => Str,
@@ -390,8 +436,8 @@ pub const Analyzer = struct {
         return self.expression(expr.expr);
     }
 
-    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!Type {
-        if (self.globals.get(expr.name)) |glob| {
+    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
+        if (self.globals.getPtr(expr.name)) |glob| {
             // Checks the initialization if asked
             if (initialized and !glob.initialized) {
                 return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
@@ -401,7 +447,7 @@ pub const Analyzer = struct {
                 .Variable = .{ .scope = .Global, .index = glob.index },
             });
 
-            return glob.type_;
+            return glob;
         } else {
             return self.err(
                 .{ .UndeclaredVar = .{ .name = expr.name } },

@@ -15,9 +15,17 @@ pub const Bool: Type = 4;
 pub const Str: Type = 5;
 
 pub const AnalyzedStmt = union(enum) {
+    Assignment: Assignment,
     Binop: BinOp,
     Unary: Unary,
     Variable: Variable,
+};
+
+pub const Assignment = struct {
+    cast: Cast = .No,
+
+    // Cast assumes that it is a cast to float
+    const Cast = enum { Yes, No };
 };
 
 pub const BinOp = struct {

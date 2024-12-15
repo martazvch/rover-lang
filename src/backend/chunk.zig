@@ -35,6 +35,7 @@ pub const OpCode = enum(u8) {
     Pop,
     Print,
     Return,
+    SetGlobal,
     StrCat,
     StrMulL,
     StrMulR,

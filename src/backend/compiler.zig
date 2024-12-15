@@ -71,6 +71,7 @@ pub const Compiler = struct {
 
         for (stmts) |*stmt| {
             try switch (stmt.*) {
+                .Assignment => |*s| self.assignment(s),
                 .Print => |*s| self.print_stmt(s),
                 .VarDecl => |*s| self.var_declaration(s),
                 .Expr => |expr| self.expression(expr),
@@ -80,23 +81,35 @@ pub const Compiler = struct {
         try self.chunk.write_op(.Return);
     }
 
+    fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
+        try self.expression(stmt.value);
+
+        // We cast the value on top of stack if needed
+        const assign_extra = self.analyzed_stmts.next().Assignment;
+        if (assign_extra.cast == .Yes) try self.chunk.write_op(.CastToFloat);
+
+        // Scope and index resolution
+        const extra = self.analyzed_stmts.next().Variable;
+
+        if (extra.scope == .Global) {
+            try self.write_op_and_byte(.SetGlobal, @intCast(extra.index));
+        } else unreachable;
+    }
+
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
         try self.expression(stmt.expr);
         try self.chunk.write_op(.Print);
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
-        const extra = self.analyzed_stmts.next().Variable;
-
-        // NOTE: do we have to do this in statically typed lang?
-
-        // try self.emit_constant(Value.obj(
-        //     (try ObjString.copy(self.vm, stmt.name.text)).as_obj(),
-        // ));
-
         if (stmt.value) |v| {
             try self.expression(v);
+            const extra = self.analyzed_stmts.next().Assignment;
+
+            if (extra.cast == .Yes) try self.chunk.write_op(.CastToFloat);
         } else try self.chunk.write_op(.Null);
+
+        const extra = self.analyzed_stmts.next().Variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now

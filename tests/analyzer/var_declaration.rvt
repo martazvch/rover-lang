@@ -9,10 +9,10 @@ var c: bool = 8
 var e: str = 2/4
 
 error:
-InvalidVarDeclType, int, float
-InvalidVarDeclType, float, str
-InvalidVarDeclType, bool, int
-InvalidVarDeclType, str, int
+InvalidAssignType, int, float
+InvalidAssignType, float, str
+InvalidAssignType, bool, int
+InvalidAssignType, str, int
 
 ================
 
@@ -29,8 +29,8 @@ UndeclaredType, House
 ================
 
 code:
-var declared
-var declared
+var declared: int
+var declared: float
 
 error:
 AlreadyDeclaredVar, declared
@@ -44,16 +44,37 @@ var a = 0
 var b = true
 var c = 56.7
 
-print b
-print a
-
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
 [Variable scope Global, index 2]
 
-[Variable scope Global, index 1]
+================
+
+// Expression assignment
+
+code:
+var a = 12 / 34
+
+expect:
+[Binop cast None, type int]
 [Variable scope Global, index 0]
+
+================
+
+// Typed expression assignment
+
+code:
+var a: float = 12 / 34
+var b: float = 4. / 3
+
+expect:
+[Binop cast None, type int]
+[Assignment cast to float]
+[Variable scope Global, index 0]
+
+[Binop cast Rhs, type float]
+[Variable scope Global, index 1]
 
 ================
 

@@ -10,3 +10,15 @@ OP_RETURN
 
 ================
 
+code:
+var number = 15.6 + .6
+
+expect:
+OP_CONSTANT index: 0 value: 15.6
+OP_CONSTANT index: 1 value: 0.6
+OP_ADD_FLOAT
+OP_DEFINE_GLOBAL index: 0
+OP_RETURN
+
+================
+

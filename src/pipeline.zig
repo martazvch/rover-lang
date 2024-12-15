@@ -88,13 +88,14 @@ pub const ReplPipeline = struct {
         defer parser.deinit();
         try parser.parse(source, lexer.tokens.items);
 
+        // Parser errors
         if (parser.errs.items.len > 0) {
             var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, parser.errs.items);
             return;
         }
 
-        // Printer
+        // Ast printer
         if (self.config.print_ast) {
             var ast_printer = AstPrinter.init(self.allocator);
             defer ast_printer.deinit();
@@ -107,19 +108,25 @@ pub const ReplPipeline = struct {
         // TODO: init analyzer extra info with exact number of element per array list
         // for optimal memory allocation
         try self.analyzer.analyze(parser.stmts.items, source);
-        // We don't keep errosr/warnings from a prompt to another
+        // We don't keep errors/warnings from a prompt to another
         defer self.analyzer.errs.clearRetainingCapacity();
         defer self.analyzer.warns.clearRetainingCapacity();
 
+        // Analyzer errors
         if (self.analyzer.errs.items.len > 0) {
             var reporter = GenReporter(AnalyzerMsg).init(source);
             try reporter.report_all(filename, self.analyzer.errs.items);
 
-            if (!self.config.static_analysis and self.analyzer.warns.items.len == 0) {
-                return;
+            if (self.analyzer.warns.items.len > 0) {
+                reporter = GenReporter(AnalyzerMsg).init(source);
+                try reporter.report_all(filename, self.analyzer.warns.items);
             }
+
+            self.stmts_count = self.analyzer.analyzed_stmts.items.len;
+            return;
         }
 
+        // Analyzer warnings
         if (self.config.static_analysis and self.analyzer.warns.items.len > 0) {
             var reporter = GenReporter(AnalyzerMsg).init(source);
             try reporter.report_all(filename, self.analyzer.warns.items);

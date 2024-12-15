@@ -212,6 +212,7 @@ pub const Vm = struct {
                     _ = try self.stdout.write("\n");
                 },
                 .Return => break,
+                .SetGlobal => self.globals[self.read_byte()] = self.stack.pop(),
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),
                 .StrMulR => try self.str_mul(self.stack.peek_ref(1).Obj.as(ObjString), self.stack.peek_ref(0).Int),

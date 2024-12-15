@@ -37,11 +37,27 @@ pub const AstPrinter = struct {
 
         for (nodes) |node| {
             try switch (node) {
+                .Assignment => |*n| self.assignment(n),
                 .Print => |*n| self.print_stmt(n),
                 .VarDecl => |*n| self.var_decl(n),
                 .Expr => |n| self.print_expr(n),
             };
         }
+    }
+
+    fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
+        try self.indent();
+        try self.tree.appendSlice("[Assignment\n");
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("assigne:\n");
+        try self.print_expr(stmt.assigne);
+        try self.tree.appendSlice("\n");
+        try self.indent();
+        try self.tree.appendSlice("value:\n");
+        try self.print_expr(stmt.value);
+        try self.tree.appendSlice("]\n");
+        self.indent_level -= 1;
     }
 
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
@@ -73,9 +89,8 @@ pub const AstPrinter = struct {
             try self.tree.appendSlice("    none\n");
         }
 
-        self.indent_level -= 1;
-
         try self.tree.appendSlice("]\n");
+        self.indent_level -= 1;
     }
 
     fn print_expr(self: *Self, expr: *const Expr) Error!void {

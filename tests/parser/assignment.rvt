@@ -1,0 +1,16 @@
+// Assignment
+
+code:
+var a
+a = 1
+
+expect:
+[Assignment
+    assigne:
+    [Identifier a]
+
+    value:
+    [Int literal 1]
+]
+
+================

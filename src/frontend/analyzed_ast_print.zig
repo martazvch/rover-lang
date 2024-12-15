@@ -44,10 +44,18 @@ pub const AnalyzedAstPrinter = struct {
 
         for (stmts) |*stmt| {
             try switch (stmt.*) {
+                .Assignment => |*s| self.assign(s),
                 .Binop => |*s| self.binop(s),
                 .Unary => |*s| self.unary(s),
                 .Variable => |*s| self.variable(s),
             };
+        }
+    }
+
+    fn assign(self: *Self, stmt: *const AnalyzedAst.Assignment) !void {
+        if (stmt.cast == .Yes) {
+            try self.indent();
+            try self.tree.appendSlice("[Assignment cast to float]\n");
         }
     }
 

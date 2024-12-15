@@ -81,6 +81,14 @@ pub const Parser = struct {
             };
 
             try self.stmts.append(stmt);
+
+            // After each statements we expect a new line
+            try self.expect_or_err_at_tk(
+                .NewLine,
+                .ExpectNewLine,
+                &self.prev(),
+            );
+
             self.skip_new_lines();
         }
     }
@@ -212,8 +220,6 @@ pub const Parser = struct {
         try self.expect(.Identifier, .{ .ExpectVarName = .{ .keyword = "var" } });
         const ident = self.prev();
 
-        var end = ident.span.end;
-
         var type_: ?SourceSlice = null;
 
         // Type
@@ -225,8 +231,6 @@ pub const Parser = struct {
                 try self.expect(.Identifier, .ExpectTypeName);
                 type_ = SourceSlice.from_token(self.prev(), self.source);
             }
-
-            end = self.prev().span.end;
         }
 
         // If no ':' but we are at an identifier, maybe a typo
@@ -238,42 +242,38 @@ pub const Parser = struct {
 
         if (self.match(.Equal)) {
             value = try self.parse_precedence_expr(0);
-            end = value.?.span().end;
         }
 
-        // try self.expect(.NewLine, .ExprAfterVarDecl);
-
-        return .{ .VarDecl = .{
-            .name = SourceSlice.from_token(ident, self.source),
-            .is_const = is_const,
-            .type_ = type_,
-            .value = value,
-            .span = .{ .start = ident.span.start, .end = end },
-        } };
+        return .{
+            .VarDecl = .{
+                .name = SourceSlice.from_token(ident, self.source),
+                .is_const = is_const,
+                .type_ = type_,
+                .value = value,
+            },
+        };
     }
 
     fn statement(self: *Self) !Stmt {
         if (self.match(.Print)) {
             return self.print_stmt();
         } else {
-            return .{ .Expr = try self.parse_precedence_expr(0) };
+            const assigne = try self.parse_precedence_expr(0);
+
+            if (self.match(.Equal)) {
+                return self.assignment(assigne);
+            } else return .{ .Expr = assigne };
         }
     }
 
     fn print_stmt(self: *Self) !Stmt {
-        var span: Span = .{ .start = self.prev().span.start, .end = 0 };
-        const expr = try self.parse_precedence_expr(0);
-        span.end = expr.span().end;
+        return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
+    }
 
-        try self.expect_or_err_at_span(
-            .NewLine,
-            .ExpectNewLine,
-            .{ .start = span.end, .end = span.end },
-        );
-
-        return .{ .Print = .{
-            .expr = expr,
-            .span = span,
+    fn assignment(self: *Self, assigne: *const Expr) !Stmt {
+        return .{ .Assignment = .{
+            .assigne = assigne,
+            .value = try self.parse_precedence_expr(0),
         } };
     }
 

@@ -30,14 +30,19 @@ pub const SourceSlice = struct {
 };
 
 pub const Stmt = union(enum) {
+    Assignment: Assignment,
     Print: Print,
     VarDecl: VarDecl,
     Expr: *Expr,
 };
 
+pub const Assignment = struct {
+    assigne: *const Expr,
+    value: *const Expr,
+};
+
 pub const Print = struct {
     expr: *Expr,
-    span: Span,
 };
 
 pub const VarDecl = struct {
@@ -45,7 +50,6 @@ pub const VarDecl = struct {
     is_const: bool,
     type_: ?SourceSlice,
     value: ?*Expr,
-    span: Span,
 };
 
 // Expressions

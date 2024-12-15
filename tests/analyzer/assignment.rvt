@@ -1,0 +1,58 @@
+// Tests assignment
+
+code:
+var noval
+noval = 1
+
+var noval_type : float
+noval_type = .7
+
+var noval_binop
+noval_binop = 12/-.7
+
+var noval_binop_typed: float
+noval_binop_typed = 1/2
+
+expect:
+[Variable scope Global, index 0]
+[Variable scope Global, index 0]
+
+[Variable scope Global, index 1]
+[Variable scope Global, index 1]
+
+[Variable scope Global, index 2]
+[Binop cast Lhs, type float]
+[Unary type float]
+[Variable scope Global, index 2]
+
+[Variable scope Global, index 3]
+[Binop cast None, type int]
+[Assignment cast to float]
+[Variable scope Global, index 3]
+
+================
+
+// Type error
+
+code:
+var noval: int
+noval = 1.4
+
+errors:
+InvalidAssignType, int, float
+
+================
+
+// Implicit cast
+
+code:
+var noval: float
+noval = 1
+
+expect:
+[Variable scope Global, index 0]
+[Assignment cast to float]
+[Variable scope Global, index 0]
+
+================
+

@@ -1,0 +1,22 @@
+// Tests variable declaration type
+
+code:
+var a = 0
+var b = true
+var c = 56.7
+
+print b
+print c
+print a
+
+expect:
+[Variable scope Global, index 0]
+[Variable scope Global, index 1]
+[Variable scope Global, index 2]
+
+[Variable scope Global, index 1]
+[Variable scope Global, index 2]
+[Variable scope Global, index 0]
+
+================
+
