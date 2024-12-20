@@ -17,7 +17,7 @@ pub fn main() !void {
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
         \\-f, --file <FILE>      Path to the file to execute
-        \\-s, --static-analysis Statically checks the file without running it (shows warnings)
+        \\-s, --static-analyzis  Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
         \\--print-analyzed-ast   Prints the extra infos on AST
@@ -45,13 +45,13 @@ pub fn main() !void {
 
     const print_ast = if (res.args.@"print-ast" == 1) true else false;
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
-    const static_analysis = if (res.args.@"static-analysis" == 1) true else false;
+    const static_analyzis = if (res.args.@"static-analyzis" == 1) true else false;
     const print_analyzed_ast = if (res.args.@"print-analyzed-ast" == 1) true else false;
 
     if (res.args.file) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analysis, print_analyzed_ast);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
     } else {
-        try repl(allocator, print_ast, print_bytecode, static_analysis, print_analyzed_ast);
+        try repl(allocator, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
     }
 }
 
@@ -60,7 +60,7 @@ fn run_file(
     filename: []const u8,
     print_ast: bool,
     print_bytecode: bool,
-    static_analysis: bool,
+    static_analyzis: bool,
     print_analyzed_ast: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
@@ -85,7 +85,7 @@ fn run_file(
         .{
             .print_ast = print_ast,
             .print_bytecode = print_bytecode,
-            .static_analysis = static_analysis,
+            .static_analyzis = static_analyzis,
             .print_analyzed_ast = print_analyzed_ast,
         },
         filename,
@@ -97,7 +97,7 @@ fn repl(
     allocator: Allocator,
     print_ast: bool,
     print_bytecode: bool,
-    static_analysis: bool,
+    static_analyzis: bool,
     print_analyzed_ast: bool,
 ) !void {
     const stdin = std.io.getStdIn().reader();
@@ -113,7 +113,7 @@ fn repl(
     var pipeline = try ReplPipeline.new(allocator, .{
         .print_ast = print_ast,
         .print_bytecode = print_bytecode,
-        .static_analysis = static_analysis,
+        .static_analyzis = static_analyzis,
         .print_analyzed_ast = print_analyzed_ast,
     });
     pipeline.init();

@@ -14,7 +14,7 @@ const Type = AnalyzedAst.Type;
 
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 
-const Unknown = AnalyzedAst.Unknown;
+const Void = AnalyzedAst.Void;
 const Null = AnalyzedAst.Null;
 const Int = AnalyzedAst.Int;
 const Float = AnalyzedAst.Float;
@@ -31,7 +31,7 @@ pub const TypeManager = struct {
     }
 
     pub fn init_builtins(self: *Self) !void {
-        try self.declared.put("unknown", Unknown);
+        try self.declared.put("void", Void);
         try self.declared.put("null", Null);
         try self.declared.put("bool", Bool);
         try self.declared.put("float", Float);
@@ -76,6 +76,8 @@ pub const Analyzer = struct {
     errs: ArrayList(AnalyzerReport),
     warns: ArrayList(AnalyzerReport),
     globals: StringHashMap(Variable),
+    locals: ArrayList(Variable),
+    scope_depth: usize,
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
 
@@ -86,6 +88,8 @@ pub const Analyzer = struct {
     const Variable = struct {
         index: usize,
         type_: Type,
+        depth: usize,
+        name: []const u8,
         initialized: bool = false,
     };
     const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -96,6 +100,8 @@ pub const Analyzer = struct {
             .errs = ArrayList(AnalyzerReport).init(allocator),
             .warns = ArrayList(AnalyzerReport).init(allocator),
             .globals = StringHashMap(Variable).init(allocator),
+            .locals = ArrayList(Variable).init(allocator),
+            .scope_depth = 0,
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
             .type_manager = TypeManager.init(allocator),
         };
@@ -105,6 +111,7 @@ pub const Analyzer = struct {
         self.errs.deinit();
         self.warns.deinit();
         self.globals.deinit();
+        self.locals.deinit();
         self.analyzed_stmts.deinit();
         self.type_manager.deinit();
     }
@@ -126,27 +133,67 @@ pub const Analyzer = struct {
         return self.source[span.start..span.end];
     }
 
+    fn var_in_scope(self: *const Self, name: []const u8) bool {
+        if (self.scope_depth == 0) {
+            if (self.globals.get(name)) |_| {
+                return true;
+            }
+        } else {
+            if (self.locals.items.len == 0) return false;
+
+            var idx = self.locals.items.len;
+
+            while (idx > 0) : (idx -= 1) {
+                const local = self.locals.items[idx - 1];
+
+                if (local.depth < self.scope_depth) break;
+
+                // First condition might fail first avoiding string comparison
+                if (local.name.len == name.len and std.mem.eql(u8, local.name, name)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
         self.source = source;
 
         for (stmts) |*stmt| {
-            self.statement(stmt) catch |e| {
+            const stmt_type = self.statement(stmt) catch |e| {
                 switch (e) {
                     // If it's our own error, we continue
                     error.Err => continue,
                     else => return e,
                 }
             };
+
+            // If at this stage we have a type, it means that nobody
+            // consumed it. It might be a standalone expression like:
+            // 3+4
+            // TODO: tell the compiler to skip this statement and don't compile it
+            // (maybe a separate array with statement index?)
+            // Only expressions can lead to that
+            if (stmt_type != Void) {
+                try self.warn(.UnusedValue, stmt.Expr.span());
+            }
         }
     }
 
-    fn statement(self: *Self, stmt: *const Stmt) !void {
-        try switch (stmt.*) {
-            .Assignment => |*s| _ = try self.assignment(s),
+    fn statement(self: *Self, stmt: *const Stmt) !Type {
+        var final: Type = Void;
+
+        switch (stmt.*) {
+            .Assignment => |*s| try self.assignment(s),
+            .Discard => |*s| _ = try self.expression(s.expr),
             .Print => |*s| _ = try self.expression(s.expr),
-            .VarDecl => |*s| self.var_declaration(s),
-            .Expr => |e| _ = try self.expression(e),
-        };
+            .VarDecl => |*s| try self.var_declaration(s),
+            .Expr => |e| final = try self.expression(e),
+        }
+
+        return final;
     }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
@@ -161,7 +208,7 @@ pub const Analyzer = struct {
                 const assigne = try self.identifier(ident, false);
 
                 // If type is unknown, we update it
-                if (assigne.type_ == Unknown) {
+                if (assigne.type_ == Void) {
                     assigne.type_ = value_type;
                 } else if (assigne.type_ != value_type) {
                     // One case in wich we can coerce; int -> float
@@ -187,8 +234,7 @@ pub const Analyzer = struct {
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
         // Name check
-        // TODO: combine with identifier()
-        if (self.globals.get(stmt.name.text)) |_| {
+        if (self.var_in_scope(stmt.name.text)) {
             return self.err(
                 .{ .AlreadyDeclaredVar = .{ .name = stmt.name.text } },
                 Span.from_source_slice(stmt.name),
@@ -196,8 +242,13 @@ pub const Analyzer = struct {
         }
 
         // Type check
-        var final_type = Unknown;
-        var variable: Variable = .{ .index = 0, .type_ = Unknown };
+        var final_type = Void;
+        var variable: Variable = .{
+            .index = 0,
+            .type_ = Void,
+            .name = stmt.name.text,
+            .depth = self.scope_depth,
+        };
 
         // If a type was declared
         if (stmt.type_) |t| {
@@ -215,7 +266,7 @@ pub const Analyzer = struct {
             var assign_extra: AnalyzedAst.Assignment = .{};
 
             // If no type declared, we infer the value type
-            if (final_type == Unknown) {
+            if (final_type == Void) {
                 final_type = value_type;
                 // Else, we check for coherence
             } else if (final_type != value_type) {
@@ -239,20 +290,22 @@ pub const Analyzer = struct {
 
         variable.type_ = final_type;
 
-        const idx = self.globals.count();
-        variable.index = idx;
-
-        const var_decl_extra: AnalyzedAst.Variable = .{
+        const extra: AnalyzedAst.Variable = if (self.scope_depth == 0) .{
             .scope = .Global,
-            .index = idx,
+            .index = self.globals.count(),
+        } else .{
+            .scope = .Local,
+            .index = self.locals.items.len,
         };
 
+        variable.index = extra.index;
         try self.globals.put(stmt.name.text, variable);
-        try self.analyzed_stmts.append(.{ .Variable = var_decl_extra });
+        try self.analyzed_stmts.append(.{ .Variable = extra });
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
         return switch (expr.*) {
+            .Block => |*e| self.block(e),
             .BoolLit => Bool,
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
@@ -266,6 +319,99 @@ pub const Analyzer = struct {
             .StringLit => Str,
             .Unary => |*e| self.unary(e),
         };
+    }
+
+    fn block(self: *Self, expr: *const Ast.Block) Error!Type {
+        self.scope_depth += 1;
+
+        var final: Type = Void;
+
+        for (expr.stmts, 0..) |*s, i| {
+            final = try self.statement(s);
+
+            // Same as main function, if the type is not void and it
+            // wasn't the last expression of block (for implicit return),
+            // unsued value
+            if (final != Void and i < expr.stmts.len - 1) {
+                try self.warn(.UnusedValue, s.Expr.span());
+            }
+        }
+
+        self.scope_depth -= 1;
+
+        return final;
+    }
+
+    fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
+        return self.expression(expr.expr);
+    }
+
+    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
+        // We first check in locals
+        if (self.locals.items.len > 0) {
+            var idx = self.locals.items.len;
+
+            while (idx > 0) : (idx -= 1) {
+                const local = &self.locals.items[idx - 1];
+
+                if (std.mem.eql(u8, local.name, expr.name)) {
+                    // Checks the initialization if asked
+                    if (initialized and !local.initialized) {
+                        return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+                    }
+
+                    try self.analyzed_stmts.append(.{
+                        .Variable = .{ .scope = .Local, .index = local.index },
+                    });
+
+                    return local;
+                }
+            }
+        }
+
+        // We then check for global
+        if (self.globals.getPtr(expr.name)) |glob| {
+            if (initialized and !glob.initialized) {
+                return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+            }
+
+            try self.analyzed_stmts.append(.{
+                .Variable = .{ .scope = .Global, .index = glob.index },
+            });
+
+            return glob;
+        }
+
+        // Else, it's undeclared
+        return self.err(
+            .{ .UndeclaredVar = .{ .name = expr.name } },
+            expr.span,
+        );
+    }
+
+    fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
+        const id = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+        var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
+
+        const rhs = try self.expression(expr.rhs);
+
+        if (expr.op == .Not and rhs != Bool) {
+            return self.err(
+                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
+                expr.rhs.span(),
+            );
+        } else if (expr.op == .Minus and rhs != Int and rhs != Float) {
+            return self.err(
+                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+                expr.rhs.span(),
+            );
+        }
+
+        unary_extra.type_ = rhs;
+
+        self.analyzed_stmts.items[id] = .{ .Unary = unary_extra };
+        return rhs;
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
@@ -430,55 +576,6 @@ pub const Analyzer = struct {
 
         self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
         return res;
-    }
-
-    fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
-        return self.expression(expr.expr);
-    }
-
-    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
-        if (self.globals.getPtr(expr.name)) |glob| {
-            // Checks the initialization if asked
-            if (initialized and !glob.initialized) {
-                return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
-            }
-
-            try self.analyzed_stmts.append(.{
-                .Variable = .{ .scope = .Global, .index = glob.index },
-            });
-
-            return glob;
-        } else {
-            return self.err(
-                .{ .UndeclaredVar = .{ .name = expr.name } },
-                expr.span,
-            );
-        }
-    }
-
-    fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
-        const id = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
-        var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
-
-        const rhs = try self.expression(expr.rhs);
-
-        if (expr.op == .Not and rhs != Bool) {
-            return self.err(
-                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
-                expr.rhs.span(),
-            );
-        } else if (expr.op == .Minus and rhs != Int and rhs != Float) {
-            return self.err(
-                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
-                expr.rhs.span(),
-            );
-        }
-
-        unary_extra.type_ = rhs;
-
-        self.analyzed_stmts.items[id] = .{ .Unary = unary_extra };
-        return rhs;
     }
 };
 

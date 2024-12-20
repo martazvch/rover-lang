@@ -91,7 +91,7 @@ pub const Token = struct {
         String,
         Struct,
         True,
-        UintKw,
+        Underscore,
         Var,
         While,
 
@@ -155,7 +155,7 @@ pub const Token = struct {
                 .String => "string value",
                 .Struct => "struct",
                 .True => "true",
-                .UintKw => "uint",
+                .Underscore => "_",
                 .Var => "var",
                 .While => "while",
 
@@ -249,7 +249,7 @@ pub const Lexer = struct {
         state: switch (State.Start) {
             .Start => {
                 switch (self.source[self.index]) {
-                    'a'...'z', 'A'...'Z', '_' => {
+                    'a'...'z', 'A'...'Z' => {
                         res.kind = .Identifier;
                         continue :state .Identifier;
                     },
@@ -330,6 +330,16 @@ pub const Lexer = struct {
                         res.kind = .Int;
                         self.index += 1;
                         continue :state .Int;
+                    },
+                    '_' => {
+                        self.index += 1;
+                        switch (self.source[self.index]) {
+                            'a'...'z', 'A'...'Z', '0'...'9', '_' => {
+                                res.kind = .Identifier;
+                                continue :state .Identifier;
+                            },
+                            else => res.kind = .Underscore,
+                        }
                     },
                     0 => {
                         if (self.index == self.source.len) {
@@ -604,6 +614,22 @@ test "leading zeros" {
 
     try expect(lexer.errs.items[0].report == .LeadingZeros);
     try expect(lexer.errs.items[1].report == .LeadingZeros);
+}
+
+test "underscore" {
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("var _under   _=1   var _1art   var ___yo");
+
+    const res = [_]Token.Kind{
+        .Var, .Identifier, .Underscore, .Equal,      .Int,
+        .Var, .Identifier, .Var,        .Identifier, .Eof,
+    };
+
+    for (0..res.len) |i| {
+        const tk = lexer.tokens.items[i];
+        try expect(tk.kind == res[i]);
+    }
 }
 
 test "dot" {

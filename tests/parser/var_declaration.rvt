@@ -4,7 +4,7 @@ code:
 var home
 
 expect:
-[Var declaration home, type none, value
+[Var declaration home, type void, value
     none
 ]
 
@@ -24,7 +24,7 @@ code:
 var home = 12 + 4.
 
 expect:
-[Var declaration home, type none, value
+[Var declaration home, type void, value
     [Binop +]
         [Int literal 12]
         [Float literal 4]

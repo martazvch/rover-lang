@@ -100,3 +100,16 @@ expect:
 
 ================
 
+// Underscore
+
+code:
+_ = 1 + 3
+
+expect:
+[Discard]
+    [Binop +]
+        [Int literal 1]
+        [Int literal 3]
+
+================
+

@@ -4,8 +4,8 @@ code:
 1+ -2
 
 expect:
-OP_CONSTANT index: 0 value: 1
-OP_CONSTANT index: 1 value: 2
+OP_CONSTANT index: 0, value: 1
+OP_CONSTANT index: 1, value: 2
 OP_NEGATE_INT
 OP_ADD_INT
 OP_RETURN
@@ -16,8 +16,8 @@ code:
 1. + -2.
 
 expect:
-OP_CONSTANT index: 0 value: 1
-OP_CONSTANT index: 1 value: 2
+OP_CONSTANT index: 0, value: 1
+OP_CONSTANT index: 1, value: 2
 OP_NEGATE_FLOAT
 OP_ADD_FLOAT
 OP_RETURN
@@ -28,8 +28,8 @@ code:
 "foo" + " bar"
 
 expect:
-OP_CONSTANT index: 0 value: "foo"
-OP_CONSTANT index: 1 value: " bar"
+OP_CONSTANT index: 0, value: "foo"
+OP_CONSTANT index: 1, value: " bar"
 OP_STRING_CONCAT
 OP_RETURN
 
@@ -39,8 +39,8 @@ code:
 12.5 - -78.2
 
 expect:
-OP_CONSTANT index: 0 value: 12.5
-OP_CONSTANT index: 1 value: 78.2
+OP_CONSTANT index: 0, value: 12.5
+OP_CONSTANT index: 1, value: 78.2
 OP_NEGATE_FLOAT
 OP_SUBTRACT_FLOAT
 OP_RETURN
@@ -51,8 +51,8 @@ code:
 12 - -78
 
 expect:
-OP_CONSTANT index: 0 value: 12
-OP_CONSTANT index: 1 value: 78
+OP_CONSTANT index: 0, value: 12
+OP_CONSTANT index: 1, value: 78
 OP_NEGATE_INT
 OP_SUBTRACT_INT
 OP_RETURN
@@ -63,9 +63,9 @@ code:
 12 * -56.
 
 expect:
-OP_CONSTANT index: 0 value: 12
+OP_CONSTANT index: 0, value: 12
 OP_CAST_TO_FLOAT
-OP_CONSTANT index: 1 value: 56
+OP_CONSTANT index: 1, value: 56
 OP_NEGATE_FLOAT
 OP_MULTIPLY_FLOAT
 OP_RETURN
@@ -76,8 +76,8 @@ code:
 12 * -56
 
 expect:
-OP_CONSTANT index: 0 value: 12
-OP_CONSTANT index: 1 value: 56
+OP_CONSTANT index: 0, value: 12
+OP_CONSTANT index: 1, value: 56
 OP_NEGATE_INT
 OP_MULTIPLY_INT
 OP_RETURN
@@ -88,8 +88,8 @@ code:
 2 * "foo"
 
 expect:
-OP_CONSTANT index: 0 value: 2
-OP_CONSTANT index: 1 value: "foo"
+OP_CONSTANT index: 0, value: 2
+OP_CONSTANT index: 1, value: "foo"
 OP_STRING_MUL_L
 OP_RETURN
 
@@ -99,8 +99,8 @@ code:
 "foo" * 4
 
 expect:
-OP_CONSTANT index: 0 value: "foo"
-OP_CONSTANT index: 1 value: 4
+OP_CONSTANT index: 0, value: "foo"
+OP_CONSTANT index: 1, value: 4
 OP_STRING_MUL_R
 OP_RETURN
 
@@ -110,8 +110,8 @@ code:
 6.789 / -1
 
 expect:
-OP_CONSTANT index: 0 value: 6.789
-OP_CONSTANT index: 1 value: 1
+OP_CONSTANT index: 0, value: 6.789
+OP_CONSTANT index: 1, value: 1
 OP_NEGATE_INT
 OP_CAST_TO_FLOAT
 OP_DIVIDE_FLOAT
@@ -123,8 +123,8 @@ code:
 6 / -1
 
 expect:
-OP_CONSTANT index: 0 value: 6
-OP_CONSTANT index: 1 value: 1
+OP_CONSTANT index: 0, value: 6
+OP_CONSTANT index: 1, value: 1
 OP_NEGATE_INT
 OP_DIVIDE_INT
 OP_RETURN
@@ -137,8 +137,8 @@ code:
 5 > 3
 
 expect:
-OP_CONSTANT index: 0 value: 5
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index: 1, value: 3
 OP_GREATER_INT
 OP_RETURN
 
@@ -148,8 +148,8 @@ code:
 23. > 32.
 
 expect:
-OP_CONSTANT index: 0 value: 23
-OP_CONSTANT index: 1 value: 32
+OP_CONSTANT index: 0, value: 23
+OP_CONSTANT index: 1, value: 32
 OP_GREATER_FLOAT
 OP_RETURN
 
@@ -159,9 +159,9 @@ code:
 5 >= 3.
 
 expect:
-OP_CONSTANT index: 0 value: 5
+OP_CONSTANT index: 0, value: 5
 OP_CAST_TO_FLOAT
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 1, value: 3
 OP_GREATER_EQUAL_FLOAT
 OP_RETURN
 
@@ -171,8 +171,8 @@ code:
 8 >= 9
 
 expect:
-OP_CONSTANT index: 0 value: 8
-OP_CONSTANT index: 1 value: 9
+OP_CONSTANT index: 0, value: 8
+OP_CONSTANT index: 1, value: 9
 OP_GREATER_EQUAL_INT
 OP_RETURN
 
@@ -182,8 +182,8 @@ code:
 12. < -56.
 
 expect:
-OP_CONSTANT index: 0 value: 12
-OP_CONSTANT index: 1 value: 56
+OP_CONSTANT index: 0, value: 12
+OP_CONSTANT index: 1, value: 56
 OP_NEGATE_FLOAT
 OP_LESS_FLOAT
 OP_RETURN
@@ -194,8 +194,8 @@ code:
 12 < -56
 
 expect:
-OP_CONSTANT index: 0 value: 12
-OP_CONSTANT index: 1 value: 56
+OP_CONSTANT index: 0, value: 12
+OP_CONSTANT index: 1, value: 56
 OP_NEGATE_INT
 OP_LESS_INT
 OP_RETURN
@@ -206,8 +206,8 @@ code:
 34 <= 5
 
 expect:
-OP_CONSTANT index: 0 value: 34
-OP_CONSTANT index: 1 value: 5
+OP_CONSTANT index: 0, value: 34
+OP_CONSTANT index: 1, value: 5
 OP_LESS_EQUAL_INT
 OP_RETURN
 
@@ -217,8 +217,8 @@ code:
 34. <= 5.
 
 expect:
-OP_CONSTANT index: 0 value: 34
-OP_CONSTANT index: 1 value: 5
+OP_CONSTANT index: 0, value: 34
+OP_CONSTANT index: 1, value: 5
 OP_LESS_EQUAL_FLOAT
 OP_RETURN
 
@@ -228,8 +228,8 @@ code:
 5 == 3
 
 expect:
-OP_CONSTANT index: 0 value: 5
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index: 1, value: 3
 OP_EQUAL_INT
 OP_RETURN
 
@@ -239,8 +239,8 @@ code:
 5. == 3.
 
 expect:
-OP_CONSTANT index: 0 value: 5
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index: 1, value: 3
 OP_EQUAL_FLOAT
 OP_RETURN
 
@@ -250,8 +250,8 @@ code:
 5 != 3
 
 expect:
-OP_CONSTANT index: 0 value: 5
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index: 1, value: 3
 OP_DIFFERENT_INT
 OP_RETURN
 
@@ -261,8 +261,8 @@ code:
 5. != 3
 
 expect:
-OP_CONSTANT index: 0 value: 5
-OP_CONSTANT index: 1 value: 3
+OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index: 1, value: 3
 OP_CAST_TO_FLOAT
 OP_DIFFERENT_FLOAT
 OP_RETURN

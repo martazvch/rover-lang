@@ -5,9 +5,15 @@ const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const AstPrinter = @import("ast_print.zig").AstPrinter;
-const GenTestData = @import("../tester.zig").GenTestData;
+const Tester = @import("../tester.zig");
+const GenTestData = Tester.GenTestData;
+const Config = Tester.Config;
 
-pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(ParserMsg) {
+pub fn get_test_data(
+    source: [:0]const u8,
+    allocator: Allocator,
+    _: ?Config,
+) !GenTestData(ParserMsg) {
     var lexer = Lexer.init(allocator);
     defer lexer.deinit();
     try lexer.lex(source);

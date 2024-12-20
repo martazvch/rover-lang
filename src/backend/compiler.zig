@@ -72,6 +72,7 @@ pub const Compiler = struct {
         for (stmts) |*stmt| {
             try switch (stmt.*) {
                 .Assignment => |*s| self.assignment(s),
+                .Discard => |*s| self.discard(s),
                 .Print => |*s| self.print_stmt(s),
                 .VarDecl => |*s| self.var_declaration(s),
                 .Expr => |expr| self.expression(expr),
@@ -79,6 +80,11 @@ pub const Compiler = struct {
         }
 
         try self.chunk.write_op(.Return);
+    }
+
+    fn discard(self: *Self, stmt: *const Ast.Discard) !void {
+        try self.expression(stmt.expr);
+        try self.chunk.write_op(.Pop);
     }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
@@ -127,6 +133,7 @@ pub const Compiler = struct {
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
+            .Block => return,
             .BoolLit => |*e| self.bool_lit(e),
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),

@@ -8,9 +8,11 @@ const Compiler = @import("compiler.zig").Compiler;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const Disassembler = @import("disassembler.zig").Disassembler;
 const Vm = @import("../runtime/vm.zig").Vm;
-const GenTestData = @import("../tester.zig").GenTestData;
+const Tester = @import("../tester.zig");
+const GenTestData = Tester.GenTestData;
+const Config = Tester.Config;
 
-pub fn get_test_data(source: [:0]const u8, allocator: Allocator) !GenTestData(CompilerMsg) {
+pub fn get_test_data(source: [:0]const u8, allocator: Allocator, _: ?Config) !GenTestData(CompilerMsg) {
     var lexer = Lexer.init(allocator);
     defer lexer.deinit();
     try lexer.lex(source);

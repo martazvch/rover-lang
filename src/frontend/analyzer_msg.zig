@@ -10,6 +10,7 @@ pub const AnalyzerMsg = union(enum) {
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
     UndeclaredType: struct { found: []const u8 },
     UndeclaredVar: struct { name: []const u8 },
+    UnusedValue,
     UseUninitVar: struct { name: []const u8 },
 
     const Self = @This();
@@ -27,6 +28,7 @@ pub const AnalyzerMsg = union(enum) {
             .ImplicitCast => writer.print("implicit cast", .{}),
             .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
+            .UnusedValue => writer.print("unused value", .{}),
             .UseUninitVar => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
         };
     }
@@ -43,6 +45,7 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
+            .UnusedValue => writer.print("this expression produces a value", .{}),
         };
     }
 
@@ -79,6 +82,7 @@ pub const AnalyzerMsg = union(enum) {
             .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
             .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
+            .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
         };
     }
 

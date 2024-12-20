@@ -5,10 +5,12 @@ var a
 a = 1
 
 expect:
+[Var declaration a, type void, value
+    none
+]
 [Assignment
     assigne:
     [Identifier a]
-
     value:
     [Int literal 1]
 ]

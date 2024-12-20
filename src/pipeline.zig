@@ -19,7 +19,7 @@ const AnalyzedAstPrinter = @import("frontend/analyzed_ast_print.zig").AnalyzedAs
 pub const Config = struct {
     print_ast: bool,
     print_bytecode: bool,
-    static_analysis: bool,
+    static_analyzis: bool,
     print_analyzed_ast: bool,
 };
 
@@ -127,7 +127,7 @@ pub const ReplPipeline = struct {
         }
 
         // Analyzer warnings
-        if (self.config.static_analysis and self.analyzer.warns.items.len > 0) {
+        if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
             var reporter = GenReporter(AnalyzerMsg).init(source);
             try reporter.report_all(filename, self.analyzer.warns.items);
             return;
@@ -214,12 +214,12 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.errs.items);
 
-        if (!config.static_analysis and analyzer.warns.items.len == 0) {
+        if (!config.static_analyzis and analyzer.warns.items.len == 0) {
             return;
         }
     }
 
-    if (config.static_analysis and analyzer.warns.items.len > 0) {
+    if (config.static_analyzis and analyzer.warns.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.warns.items);
         return;

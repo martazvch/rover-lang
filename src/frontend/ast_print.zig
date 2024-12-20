@@ -32,17 +32,22 @@ pub const AstPrinter = struct {
         print("\n--- AST ---\n{s}", .{self.tree.items});
     }
 
-    pub fn parse_ast(self: *Self, source: []const u8, nodes: []const Stmt) !void {
+    pub fn parse_ast(self: *Self, source: []const u8, stmts: []const Stmt) !void {
         self.source = source;
 
-        for (nodes) |node| {
-            try switch (node) {
-                .Assignment => |*n| self.assignment(n),
-                .Print => |*n| self.print_stmt(n),
-                .VarDecl => |*n| self.var_decl(n),
-                .Expr => |n| self.print_expr(n),
-            };
+        for (stmts) |stmt| {
+            try self.statement(stmt);
         }
+    }
+
+    fn statement(self: *Self, stmt: Ast.Stmt) !void {
+        try switch (stmt) {
+            .Assignment => |*s| self.assignment(s),
+            .Discard => |*s| self.discard(s),
+            .Print => |*s| self.print_stmt(s),
+            .VarDecl => |*s| self.var_decl(s),
+            .Expr => |s| self.print_expr(s),
+        };
     }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
@@ -52,11 +57,20 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("assigne:\n");
         try self.print_expr(stmt.assigne);
-        try self.tree.appendSlice("\n");
         try self.indent();
         try self.tree.appendSlice("value:\n");
         try self.print_expr(stmt.value);
+
+        self.indent_level -= 1;
+        try self.indent();
         try self.tree.appendSlice("]\n");
+    }
+
+    fn discard(self: *Self, stmt: *const Ast.Discard) !void {
+        try self.indent();
+        try self.tree.appendSlice("[Discard]\n");
+        self.indent_level += 1;
+        try self.print_expr(stmt.expr);
         self.indent_level -= 1;
     }
 
@@ -73,7 +87,7 @@ pub const AstPrinter = struct {
         var buf: [100]u8 = undefined;
 
         // const type_name = stmt.type_ orelse "none";
-        const type_name = if (stmt.type_) |t| t.text else "none";
+        const type_name = if (stmt.type_) |t| t.text else "void";
         const written = try std.fmt.bufPrint(
             &buf,
             "[Var declaration {s}, type {s}, value\n",
@@ -86,15 +100,18 @@ pub const AstPrinter = struct {
         if (stmt.value) |v| {
             try self.print_expr(v);
         } else {
-            try self.tree.appendSlice("    none\n");
+            try self.indent();
+            try self.tree.appendSlice("none\n");
         }
 
-        try self.tree.appendSlice("]\n");
         self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
     }
 
     fn print_expr(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
+            .Block => |*e| self.block_expr(e),
             .BinOp => |*e| self.binop_expr(e),
             .BoolLit => |*e| self.bool_expr(e),
             .Grouping => |*e| self.grouping_expr(e),
@@ -105,6 +122,17 @@ pub const AstPrinter = struct {
             .StringLit => |*e| self.string_expr(e),
             .Unary => |*e| self.unary_expr(e),
         };
+    }
+
+    fn block_expr(self: *Self, expr: *const Ast.Block) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Block]\n");
+
+        self.indent_level += 1;
+
+        for (expr.stmts) |s| try self.statement(s);
+
+        self.indent_level -= 1;
     }
 
     fn binop_expr(self: *Self, expr: *const Ast.BinOp) Error!void {

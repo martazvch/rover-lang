@@ -1,7 +1,3 @@
-var a = 0
-var b = true
-var c = 56.7
-
-print b
-print a
-
+{
+    5 + { 4
+}

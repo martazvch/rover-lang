@@ -4,7 +4,7 @@ code:
 -1
 
 expect:
-OP_CONSTANT index: 0 value: 1
+OP_CONSTANT index: 0, value: 1
 OP_NEGATE_INT
 OP_RETURN
 
@@ -14,7 +14,7 @@ code:
 ----1
 
 expect:
-OP_CONSTANT index: 0 value: 1
+OP_CONSTANT index: 0, value: 1
 OP_NEGATE_INT
 OP_NEGATE_INT
 OP_NEGATE_INT
@@ -27,7 +27,7 @@ code:
 -65.82
 
 expect:
-OP_CONSTANT index: 0 value: 65.82
+OP_CONSTANT index: 0, value: 65.82
 OP_NEGATE_FLOAT
 OP_RETURN
 

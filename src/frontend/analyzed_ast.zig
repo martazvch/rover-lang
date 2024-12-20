@@ -7,7 +7,7 @@ const Span = @import("ast.zig").Span;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 
 pub const Type = u32;
-pub const Unknown: Type = 0;
+pub const Void: Type = 0;
 pub const Null: Type = 1;
 pub const Int: Type = 2;
 pub const Float: Type = 3;

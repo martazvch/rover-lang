@@ -1,5 +1,8 @@
 // Tests invalid binop
 
+config:
+ignore UnusedValue
+
 // Math binop
 
 code:

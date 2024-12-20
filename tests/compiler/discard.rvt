@@ -1,0 +1,14 @@
+// Discard
+
+code:
+_ = 3 + 4
+
+expect:
+OP_CONSTANT index: 0, value: 3
+OP_CONSTANT index: 1, value: 4
+OP_ADD_INT
+OP_POP
+OP_RETURN
+
+================
+

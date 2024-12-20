@@ -163,9 +163,9 @@ pub const Disassembler = struct {
         const value = self.chunk.constants[constant];
 
         if (self.test_mode) {
-            try writer.print("{s} index: {} value: ", .{ name, constant });
+            try writer.print("{s} index: {}, value: ", .{ name, constant });
         } else {
-            try writer.print("{s:<24} index: {:<4} value: ", .{ name, constant });
+            try writer.print("{s:<24} index: {:<4}, value: ", .{ name, constant });
         }
 
         try value.print(writer);

@@ -31,6 +31,7 @@ pub const SourceSlice = struct {
 
 pub const Stmt = union(enum) {
     Assignment: Assignment,
+    Discard: Discard,
     Print: Print,
     VarDecl: VarDecl,
     Expr: *Expr,
@@ -39,6 +40,10 @@ pub const Stmt = union(enum) {
 pub const Assignment = struct {
     assigne: *const Expr,
     value: *const Expr,
+};
+
+pub const Discard = struct {
+    expr: *const Expr,
 };
 
 pub const Print = struct {
@@ -54,6 +59,7 @@ pub const VarDecl = struct {
 
 // Expressions
 pub const Expr = union(enum) {
+    Block: Block,
     BinOp: BinOp,
     BoolLit: BoolLit,
     FloatLit: FloatLit,
@@ -69,6 +75,11 @@ pub const Expr = union(enum) {
             inline else => |e| e.span,
         };
     }
+};
+
+pub const Block = struct {
+    stmts: []Stmt,
+    span: Span,
 };
 
 pub const BinOp = struct {

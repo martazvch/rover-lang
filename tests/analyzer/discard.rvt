@@ -1,0 +1,15 @@
+// Tests discard
+
+// Only two warnings here
+
+code:
+3+4
+"ok"
+_ = 3+4
+
+error:
+UnusedValue
+UnusedValue
+
+================
+

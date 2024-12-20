@@ -6,6 +6,7 @@ const eql = std.mem.eql;
 const fields = std.meta.fields;
 const testing = std.testing;
 const allocator = testing.allocator;
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
 pub fn GenTestData(comptime Report: type) type {
@@ -17,13 +18,25 @@ pub fn GenTestData(comptime Report: type) type {
     };
 }
 
+pub const Config = struct {
+    ignores: ArrayList([]const u8),
+
+    pub fn init() Config {
+        return .{ .ignores = ArrayList([]const u8).init(allocator) };
+    }
+
+    pub fn deinit(self: *Config) void {
+        self.ignores.deinit();
+    }
+};
+
 pub fn GenericTester(
     foldername: []const u8,
     comptime Report: type,
-    comptime get_test_data: fn ([:0]const u8, Allocator) anyerror!GenTestData(Report),
+    comptime get_test_data: fn ([:0]const u8, Allocator, ?Config) anyerror!GenTestData(Report),
 ) type {
     return struct {
-        const Section = enum { Code, Expect, Err, None };
+        const Section = enum { Code, Config, Expect, Err, None };
 
         pub fn run() !void {
             const path = try std.fs.path.join(allocator, &[_][]const u8{
@@ -57,12 +70,16 @@ pub fn GenericTester(
 
             var lines = std.mem.splitScalar(u8, content, '\n');
 
+            var config_text = std.ArrayList(u8).init(allocator);
+            defer config_text.deinit();
             var code = std.ArrayList(u8).init(allocator);
             defer code.deinit();
             var expects = std.ArrayList(u8).init(allocator);
             defer expects.deinit();
             var errors = std.ArrayList(u8).init(allocator);
             defer errors.deinit();
+
+            var config: ?Config = null;
 
             var section: Section = .None;
             var test_count: usize = 0;
@@ -72,7 +89,15 @@ pub fn GenericTester(
                 // If after removing the \r there is only spaces, we skip it
                 if (std.mem.trimRight(u8, std.mem.trimRight(u8, line, "\r"), " ").len == 0) continue;
 
-                if (std.mem.startsWith(u8, line, "code")) {
+                if (std.mem.startsWith(u8, line, "config")) {
+                    section = .Config;
+                    continue;
+                } else if (std.mem.startsWith(u8, line, "code")) {
+                    // First code block, we build the config
+                    if (section == .Config) {
+                        config = try build_config(config_text.items);
+                    }
+
                     section = .Code;
                     continue;
                 } else if (std.mem.startsWith(u8, line, "expect")) {
@@ -84,8 +109,13 @@ pub fn GenericTester(
                 } else if (std.mem.startsWith(u8, line, "==")) {
                     try code.append(0);
 
-                    run_test(code.items[0 .. code.items.len - 1 :0], expects.items, errors.items) catch |e| {
-                        print("Error in test {} in file {s}\n\n", .{ test_count, file_path });
+                    run_test(
+                        code.items[0 .. code.items.len - 1 :0],
+                        expects.items,
+                        errors.items,
+                        config,
+                    ) catch |e| {
+                        print("Error in test {} in file {s}\n\n", .{ test_count + 1, file_path });
                         return e;
                     };
 
@@ -99,6 +129,7 @@ pub fn GenericTester(
 
                 var writer = switch (section) {
                     .Code => code.writer(),
+                    .Config => config_text.writer(),
                     .Expect => expects.writer(),
                     .Err => errors.writer(),
                     .None => continue,
@@ -107,10 +138,28 @@ pub fn GenericTester(
                 _ = try writer.write(std.mem.trimRight(u8, line, "\r"));
                 _ = try writer.write("\n");
             }
+
+            if (config) |*conf| conf.deinit();
         }
 
-        pub fn run_test(source: [:0]const u8, exp: []const u8, errors: []const u8) !void {
-            const test_data = try get_test_data(source, allocator);
+        fn build_config(config_text: []const u8) !Config {
+            var config = Config.init();
+
+            var split_conf = std.mem.splitScalar(u8, config_text, '\n');
+
+            while (split_conf.next()) |conf| {
+                var split = std.mem.splitScalar(u8, conf, ' ');
+
+                if (std.mem.eql(u8, split.next().?, "ignore")) {
+                    try config.ignores.append(split.next().?);
+                }
+            }
+
+            return config;
+        }
+
+        pub fn run_test(source: [:0]const u8, exp: []const u8, errors: []const u8, config: ?Config) !void {
+            const test_data = try get_test_data(source, allocator, config);
             defer allocator.free(test_data.expect);
             defer allocator.free(test_data.reports);
 
@@ -163,6 +212,7 @@ pub fn GenericTester(
                 }
             } else {
                 print("Error, no expect and no erros in test\n", .{});
+                return error.TestUnexpectedResult;
             }
         }
     };

@@ -211,6 +211,8 @@ pub const Parser = struct {
     fn declaration(self: *Self) !Stmt {
         if (self.match(.Var)) {
             return self.var_declaration(false);
+        } else if (self.match(.Underscore)) {
+            return self.discard();
         } else {
             return self.statement();
         }
@@ -250,6 +252,16 @@ pub const Parser = struct {
                 .is_const = is_const,
                 .type_ = type_,
                 .value = value,
+            },
+        };
+    }
+
+    fn discard(self: *Self) !Stmt {
+        try self.expect(.Equal, .InvalidDiscard);
+
+        return .{
+            .Discard = .{
+                .expr = try self.parse_precedence_expr(0),
             },
         };
     }
@@ -338,6 +350,7 @@ pub const Parser = struct {
     /// to form an expression
     fn parse_prefix_expr(self: *Self) Error!*Expr {
         const unary_expr = switch (self.prev().kind) {
+            .LeftBrace => return self.block_expr(),
             .Minus, .Not => try self.allocator.create(Expr),
             else => return self.parse_primary_expr(),
         };
@@ -356,6 +369,32 @@ pub const Parser = struct {
         } };
 
         return unary_expr;
+    }
+
+    fn block_expr(self: *Self) Error!*Expr {
+        const openning_brace = self.prev();
+
+        self.skip_new_lines();
+        var span: Span = .{ .start = openning_brace.span.start, .end = 0 };
+        const expr = try self.allocator.create(Expr);
+
+        var stmts = ArrayList(Stmt).init(self.allocator);
+
+        while (!self.check(.RightBrace) and !self.check(.Eof)) {
+            try stmts.append(try self.declaration());
+            self.skip_new_lines();
+        }
+
+        try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, &openning_brace);
+
+        span.end = self.prev().span.end;
+
+        expr.* = .{ .Block = .{
+            .stmts = try stmts.toOwnedSlice(),
+            .span = span,
+        } };
+
+        return expr;
     }
 
     fn parse_primary_expr(self: *Self) Error!*Expr {

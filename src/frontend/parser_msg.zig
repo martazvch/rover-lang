@@ -5,6 +5,8 @@ pub const ParserMsg = union(enum) {
     ExpectNewLine,
     ExpectTypeName,
     ExpectVarName: struct { keyword: []const u8 },
+    InvalidDiscard,
+    UnclosedBrace,
     UnclosedParen,
     UnexpectedEof,
 
@@ -18,6 +20,8 @@ pub const ParserMsg = union(enum) {
             .ExpectNewLine => writer.print("expect new line after statement", .{}),
             .ExpectTypeName => writer.print("expect type name after ':'", .{}),
             .ExpectVarName => |e| writer.print("expect variable name after '{s}' keyword", .{e.keyword}),
+            .InvalidDiscard => writer.print("invalid discard expression", .{}),
+            .UnclosedBrace => writer.print("unclosed brace", .{}),
             .UnclosedParen => writer.print("unclosed parenthesis", .{}),
             .UnexpectedEof => writer.print("unexpected end of file", .{}),
         };
@@ -25,10 +29,13 @@ pub const ParserMsg = union(enum) {
 
     pub fn get_hint(self: Self, writer: anytype) !void {
         try switch (self) {
-            .ExpectColonBeforeType => writer.print("before this identifier", .{}),
-            .ExpectExpr, .ExpectNewLine, .UnclosedParen, .UnexpectedEof => writer.print("here", .{}),
-            .ExpectTypeName, .ExpectVarName => writer.print("this is not an identifier", .{}),
             .ChainingCmpOp => writer.print("this one is not allowed", .{}),
+            .ExpectColonBeforeType => writer.print("before this identifier", .{}),
+            .ExpectExpr, .ExpectNewLine, .UnexpectedEof => writer.print("here", .{}),
+            .ExpectTypeName, .ExpectVarName => writer.print("this is not an identifier", .{}),
+            .InvalidDiscard => writer.print("expect an assignment to '_'", .{}),
+            .UnclosedBrace => writer.print("this opening brace", .{}),
+            .UnclosedParen => writer.print("this opening parenthesis", .{}),
         };
     }
 
@@ -37,6 +44,8 @@ pub const ParserMsg = union(enum) {
             .ChainingCmpOp => writer.print("split your comparison with 'and' and 'or' operators", .{}),
             .ExpectColonBeforeType => writer.print("add ':' bofre type name", .{}),
             .ExpectTypeName, .ExpectVarName => writer.print("define an identifier", .{}),
+            .InvalidDiscard => writer.print("add '=' token: _ = call()", .{}),
+            .UnclosedBrace => writer.print("close the opening brace", .{}),
             .UnclosedParen => writer.print("close the opening parenthesis", .{}),
             else => {},
         };
