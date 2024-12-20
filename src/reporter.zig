@@ -256,10 +256,9 @@ pub fn GenReporter(comptime Report: type) type {
             _ = try self.writer.write(left_padding);
             try self.writer.print("{s}\n", .{corner_to_end});
 
-            var fba = try std.BoundedArray(u8, 10000).init(0);
-            // const help_bytes = try report.get_help(fba.writer());
+            var fba = try std.BoundedArray(u8, 1000).init(0);
             try report.get_help(fba.writer());
-            // if (help_bytes > 0) {
+
             if (fba.slice().len > 0) {
                 // try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
                 try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
