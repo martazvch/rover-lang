@@ -12,6 +12,7 @@ pub const AnalyzerMsg = union(enum) {
     UndeclaredVar: struct { name: []const u8 },
     UnusedValue,
     UseUninitVar: struct { name: []const u8 },
+    VoidAssignment,
 
     const Self = @This();
 
@@ -30,6 +31,7 @@ pub const AnalyzerMsg = union(enum) {
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
             .UnusedValue => writer.print("unused value", .{}),
             .UseUninitVar => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
+            .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
         };
     }
 
@@ -46,6 +48,7 @@ pub const AnalyzerMsg = union(enum) {
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
             .UnusedValue => writer.print("this expression produces a value", .{}),
+            .VoidAssignment => writer.print("this expression procuses no value", .{}),
         };
     }
 
@@ -83,6 +86,7 @@ pub const AnalyzerMsg = union(enum) {
             .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
             .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
+            .VoidAssignment => writer.print("consider returning a value from expression or remove assignment", .{}),
         };
     }
 

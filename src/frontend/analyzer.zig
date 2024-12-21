@@ -190,6 +190,10 @@ pub const Analyzer = struct {
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
         const value_type = try self.expression(stmt.value);
 
+        if (value_type == Void) {
+            return self.err(.VoidAssignment, stmt.value.span());
+        }
+
         switch (stmt.assigne.*) {
             .Identifier => |*ident| {
                 // Forward declaration to preserve order
@@ -254,6 +258,12 @@ pub const Analyzer = struct {
         // Value type check
         if (stmt.value) |v| {
             const value_type = try self.expression(v);
+
+            // Void assignment check
+            if (value_type == Void) {
+                return self.err(.VoidAssignment, v.span());
+            }
+
             var assign_extra: AnalyzedAst.Assignment = .{};
 
             // If no type declared, we infer the value type
@@ -314,6 +324,7 @@ pub const Analyzer = struct {
                 const res = try self.identifier(e, true);
                 return res.type_;
             },
+            .If => unreachable,
             .IntLit => Int,
             .NullLit => Null,
             .StringLit => Str,
@@ -322,6 +333,9 @@ pub const Analyzer = struct {
     }
 
     fn block(self: *Self, expr: *const Ast.Block) Error!Type {
+        const idx = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+
         self.scope_depth += 1;
 
         var final: Type = Void;
@@ -352,7 +366,11 @@ pub const Analyzer = struct {
             try self.locals.resize(i);
         }
 
-        try self.analyzed_stmts.append(.{ .Block = .{ .pop_count = pop_count } });
+        self.analyzed_stmts.items[idx] = .{ .Block = .{
+            .pop_count = pop_count,
+            .returns_value = if (final == Void) false else true,
+        } };
+
         return final;
     }
 
@@ -404,7 +422,7 @@ pub const Analyzer = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
-        const id = self.analyzed_stmts.items.len;
+        const idx = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
         var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
 
@@ -424,13 +442,13 @@ pub const Analyzer = struct {
 
         unary_extra.type_ = rhs;
 
-        self.analyzed_stmts.items[id] = .{ .Unary = unary_extra };
+        self.analyzed_stmts.items[idx] = .{ .Unary = unary_extra };
         return rhs;
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
         // We reserve the slot because of recursion
-        const id = self.analyzed_stmts.items.len;
+        const idx = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
         var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
 
@@ -442,7 +460,7 @@ pub const Analyzer = struct {
 
         // String operations
         if (expr.op == .Plus and lhs == Str and rhs == Str) {
-            self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
+            self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
             return Str;
         } else if (expr.op == .Star) {
             if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
@@ -451,7 +469,7 @@ pub const Analyzer = struct {
                 // For string concatenation, we use the cast information to tell
                 // on wich side is the integer (for the compiler)
                 binop_extra.cast = if (rhs == Int) .Rhs else .Lhs;
-                self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
+                self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
                 return Str;
             }
         }
@@ -588,7 +606,7 @@ pub const Analyzer = struct {
             else => unreachable,
         }
 
-        self.analyzed_stmts.items[id] = .{ .Binop = binop_extra };
+        self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
         return res;
     }
 };

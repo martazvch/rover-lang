@@ -210,15 +210,20 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
 
     try analyzer.analyze(parser.stmts.items, source);
 
+    // Analyzer errors
     if (analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.errs.items);
 
-        if (!config.static_analyzis and analyzer.warns.items.len == 0) {
-            return;
+        if (analyzer.warns.items.len > 0) {
+            reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, analyzer.warns.items);
         }
+
+        return;
     }
 
+    // Analyzer warnings
     if (config.static_analyzis and analyzer.warns.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.warns.items);

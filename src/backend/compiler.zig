@@ -79,16 +79,11 @@ pub const Compiler = struct {
     fn statement(self: *Self, stmt: *const Stmt) !void {
         try switch (stmt.*) {
             .Assignment => |*s| self.assignment(s),
-            .Discard => |*s| self.discard(s),
+            .Discard => |*s| self.expression_statement(s.expr),
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
-            .Expr => |expr| self.expression(expr),
+            .Expr => |expr| self.expression_statement(expr),
         };
-    }
-
-    fn discard(self: *Self, stmt: *const Ast.Discard) !void {
-        try self.expression(stmt.expr);
-        try self.chunk.write_op(.Pop);
     }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
@@ -132,12 +127,15 @@ pub const Compiler = struct {
         // No else, if local variable value sits on top of stack
     }
 
-    /// Expressions followed by end of line (';' in other language)
-    /// We don't use the resulting value like just a function call
-    // fn expression_statement(self: *Self, expr: *const Expr) !void {
-    //     try self.expression(expr);
-    //     try self.chunk.write_op(.Pop);
-    // }
+    /// Expressions used as statements, e.g.:
+    ///  3 + 4
+    /// without any assignment. To avoid having the value sitting on top
+    /// of the stack, we discard it in cases where the expression is in
+    /// stabdalone like the example
+    fn expression_statement(self: *Self, expr: *const Expr) !void {
+        try self.expression(expr);
+        try self.chunk.write_op(.Pop);
+    }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
@@ -147,6 +145,7 @@ pub const Compiler = struct {
             .Grouping => |*e| self.grouping(e),
             .FloatLit => |*e| self.float_lit(e),
             .Identifier => self.ident_expr(),
+            .If => unreachable,
             .IntLit => |*e| self.int_lit(e),
             .NullLit => self.null_lit(),
             .StringLit => |*e| self.string_lit(e),
@@ -155,14 +154,34 @@ pub const Compiler = struct {
     }
 
     fn block(self: *Self, expr: *const Ast.Block) Error!void {
-        for (expr.stmts) |*stmt| {
-            try self.statement(stmt);
+        const extra = self.analyzed_stmts.next().Block;
+
+        for (expr.stmts, 0..) |*stmt, i| {
+            // If this is the last stmt and the block returns a value
+            // we compile with "expression" to avoid compiling a POP
+            // with expression_statement
+            if (i == expr.stmts.len - 1 and extra.returns_value) {
+                try self.expression(stmt.Expr);
+            } else try self.statement(stmt);
         }
 
-        const extra = self.analyzed_stmts.next().Block;
-        for (0..extra.pop_count) |_| {
-            try self.chunk.write_op(.Pop);
-        }
+        // If we don't return any value, then we brain the POP from
+        // expression_statement
+        // The only case in which we don't return a value and the
+        // analyzer is ok with that is in cases where blocks are
+        // written outside expressions, so always called with
+        // expression statement
+        // TODO: protect the @intCast
+        if (!extra.returns_value) {
+            // try self.chunk.write_op(.Null);
+
+            // -1 because we know here we are called by expression_statement
+            // which is gonna emit a POP
+            for (0..extra.pop_count - 1) |_| {
+                // for (0..extra.pop_count) |_| {
+                try self.chunk.write_op(.Pop);
+            }
+        } else try self.write_op_and_byte(.ScopeReturn, @intCast(extra.pop_count));
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {

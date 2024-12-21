@@ -5,6 +5,7 @@ code:
 
 expect:
 OP_CONSTANT index: 0, value: 1
+OP_POP
 OP_RETURN
 
 ================
@@ -14,6 +15,7 @@ code:
 
 expect:
 OP_CONSTANT index: 0, value: 65.82
+OP_POP
 OP_RETURN
 
 ================
@@ -23,6 +25,7 @@ true
 
 expect:
 OP_TRUE
+OP_POP
 OP_RETURN
 
 ================
@@ -32,6 +35,7 @@ false
 
 expect:
 OP_FALSE
+OP_POP
 OP_RETURN
 
 ================
@@ -41,6 +45,7 @@ null
 
 expect:
 OP_NULL
+OP_POP
 OP_RETURN
 
 ================
@@ -50,6 +55,7 @@ code:
 
 expect:
 OP_CONSTANT index: 0, value: "foo"
+OP_POP
 OP_RETURN
 
 ================

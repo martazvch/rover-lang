@@ -117,6 +117,7 @@ pub const Disassembler = struct {
             .Pop => self.simple_instruction("OP_POP", offset, writer),
             .Print => self.simple_instruction("OP_PRINT", offset, writer),
             .Return => self.simple_instruction("OP_RETURN", offset, writer),
+            .ScopeReturn => self.index_instruction("OP_SCOPE_RETURN", offset, writer),
             .SetGlobal => self.index_instruction("OP_SET_GLOBAL", offset, writer),
             .SetLocal => self.index_instruction("OP_SET_LOCAL", offset, writer),
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),

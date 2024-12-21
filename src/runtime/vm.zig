@@ -213,6 +213,13 @@ pub const Vm = struct {
                     _ = try self.stdout.write("\n");
                 },
                 .Return => break,
+                .ScopeReturn => {
+                    const locals_count = self.read_byte();
+                    const res = self.stack.pop();
+
+                    for (0..locals_count) |_| _ = self.stack.pop();
+                    self.stack.push(res);
+                },
                 .SetGlobal => self.globals[self.read_byte()] = self.stack.pop(),
                 .SetLocal => self.stack.values[self.read_byte()] = self.stack.pop(),
                 .StrCat => try self.str_concat(),

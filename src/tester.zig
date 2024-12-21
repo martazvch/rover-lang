@@ -210,6 +210,16 @@ pub fn GenericTester(
                         }
                     }
                 }
+
+                // i - 1 because end of while loop executed the continuation expression
+                if (i - 1 != test_data.reports.len) {
+                    print(
+                        "Error: incoherent number of errors/warnings, execution had {} and test file had {}\n",
+                        .{ test_data.reports.len, i - 1 },
+                    );
+                    print("Execution:\n{any}\nTest file:\n{s}\n", .{ test_data.reports, errors });
+                    return error.TestUnexpectedResult;
+                }
             } else {
                 print("Error, no expect and no erros in test\n", .{});
                 return error.TestUnexpectedResult;

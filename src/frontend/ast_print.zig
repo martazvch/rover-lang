@@ -117,6 +117,7 @@ pub const AstPrinter = struct {
             .Grouping => |*e| self.grouping_expr(e),
             .FloatLit => |*e| self.float_expr(e),
             .Identifier => |*e| self.ident_expr(e),
+            .If => unreachable,
             .IntLit => |*e| self.int_expr(e),
             .NullLit => self.null_expr(),
             .StringLit => |*e| self.string_expr(e),

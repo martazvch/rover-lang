@@ -52,7 +52,7 @@ pub const ParserMsg = union(enum) {
             .InvalidDiscard => writer.print("add '=' token: _ = call()", .{}),
             .ExpectBraceAfterElse,
             .ExpectBraceAfterIf,
-            => writer.print("add an opening brace '{' before expression", .{}),
+            => writer.print("add an opening brace '{{' before expression", .{}),
             .UnclosedBrace => writer.print("close the opening brace", .{}),
             .UnclosedParen => writer.print("close the opening parenthesis", .{}),
             else => {},

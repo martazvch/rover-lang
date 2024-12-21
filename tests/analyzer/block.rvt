@@ -1,0 +1,40 @@
+// Test blocks
+
+// Void assignment
+
+code:
+var noval = {
+    var integer = 1
+}
+
+var void_post_assign
+void_post_assign = {
+    3 + 4
+    var empty
+}
+
+error:
+VoidAssignment
+VoidAssignment
+UnusedValue
+
+================
+
+code:
+{5}
+
+error:
+UnusedValue
+
+================
+
+code:
+var a: int = {
+    var nb = 7.5
+    nb
+}
+
+error:
+InvalidAssignType, int, float
+
+================
