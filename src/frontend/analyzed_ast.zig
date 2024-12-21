@@ -16,9 +16,15 @@ pub const Str: Type = 5;
 
 pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
+    Block: Block,
     Binop: BinOp,
     Unary: Unary,
     Variable: Variable,
+};
+
+pub const Block = struct {
+    // Number of locals to pop at the end of scope
+    pop_count: usize,
 };
 
 pub const Assignment = struct {

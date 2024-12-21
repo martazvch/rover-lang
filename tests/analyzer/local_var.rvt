@@ -1,0 +1,143 @@
+// Tests variable declaration type
+
+code:
+{
+    var loc1 = 1.5
+    var loc2 = 5
+    var _loc3 = -.5
+
+    print _loc3 + loc1
+}
+
+expect:
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Unary type float]
+[Variable scope Local, index 2]
+
+[Binop cast None, type float]
+[Variable scope Local, index 2]
+[Variable scope Local, index 0]
+
+[Block pop count 3]
+
+================
+
+code:
+{
+    var loc1 = 1.5
+    var loc2 = 5
+    var _loc3 = -.5
+
+    print _loc3 + loc1
+
+    {
+        var loc1 = 6.
+        var loc2 = 1.5
+
+        print loc2 + loc1
+        print loc1 + _loc3
+    }
+
+    print loc2
+}
+
+expect:
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Unary type float]
+[Variable scope Local, index 2]
+
+[Binop cast None, type float]
+[Variable scope Local, index 2]
+[Variable scope Local, index 0]
+
+[Variable scope Local, index 3]
+[Variable scope Local, index 4]
+
+[Binop cast None, type float]
+[Variable scope Local, index 4]
+[Variable scope Local, index 3]
+
+[Binop cast None, type float]
+[Variable scope Local, index 3]
+[Variable scope Local, index 2]
+
+[Block pop count 2]
+[Variable scope Local, index 1]
+[Block pop count 3]
+
+================
+
+code:
+var glob = 1
+var period = "."
+var loc2 = "sneaky"
+{
+    var loc1 = "local"
+    var loc2 = " var"
+
+    print loc1 + loc2 + period
+}
+
+expect:
+[Variable scope Global, index 0]
+[Variable scope Global, index 1]
+[Variable scope Global, index 2]
+
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+
+[Binop cast None, type str]
+[Binop cast None, type str]
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Variable scope Global, index 1]
+
+[Block pop count 2]
+
+================
+
+code:
+var loc2 = "sneaky"
+{
+    var loc1 = "local"
+    var loc2 = " var"
+
+    loc2 = "assign local"
+    {
+        var loc2 = "sublocal"
+        loc2 = "assign sub"
+    }
+    loc2 = loc1
+}
+loc2 = "still glob"
+
+expect:
+[Variable scope Global, index 0]
+
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Variable scope Local, index 1]
+
+[Variable scope Local, index 2]
+[Variable scope Local, index 2]
+[Block pop count 1]
+
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Block pop count 2]
+
+[Variable scope Global, index 0]
+
+================
+
+code:
+var loc2 = "sneaky"
+{
+    var loc1 = "local"
+    var loc1 = " var"
+}
+
+error:
+AlreadyDeclaredVar, loc1

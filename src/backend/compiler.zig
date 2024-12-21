@@ -70,16 +70,20 @@ pub const Compiler = struct {
         self.analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts);
 
         for (stmts) |*stmt| {
-            try switch (stmt.*) {
-                .Assignment => |*s| self.assignment(s),
-                .Discard => |*s| self.discard(s),
-                .Print => |*s| self.print_stmt(s),
-                .VarDecl => |*s| self.var_declaration(s),
-                .Expr => |expr| self.expression(expr),
-            };
+            try self.statement(stmt);
         }
 
         try self.chunk.write_op(.Return);
+    }
+
+    fn statement(self: *Self, stmt: *const Stmt) !void {
+        try switch (stmt.*) {
+            .Assignment => |*s| self.assignment(s),
+            .Discard => |*s| self.discard(s),
+            .Print => |*s| self.print_stmt(s),
+            .VarDecl => |*s| self.var_declaration(s),
+            .Expr => |expr| self.expression(expr),
+        };
     }
 
     fn discard(self: *Self, stmt: *const Ast.Discard) !void {
@@ -97,9 +101,12 @@ pub const Compiler = struct {
         // Scope and index resolution
         const extra = self.analyzed_stmts.next().Variable;
 
-        if (extra.scope == .Global) {
-            try self.write_op_and_byte(.SetGlobal, @intCast(extra.index));
-        } else unreachable;
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup
+        // for now
+        try self.write_op_and_byte(
+            if (extra.scope == .Global) .SetGlobal else .SetLocal,
+            @intCast(extra.index),
+        );
     }
 
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
@@ -121,7 +128,8 @@ pub const Compiler = struct {
         // for now
         if (extra.scope == .Global) {
             try self.write_op_and_byte(.DefineGlobal, @intCast(extra.index));
-        } else unreachable;
+        }
+        // No else, if local variable value sits on top of stack
     }
 
     /// Expressions followed by end of line (';' in other language)
@@ -133,7 +141,7 @@ pub const Compiler = struct {
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
-            .Block => return,
+            .Block => |*e| self.block(e),
             .BoolLit => |*e| self.bool_lit(e),
             .BinOp => |*e| self.binop(e),
             .Grouping => |*e| self.grouping(e),
@@ -144,6 +152,17 @@ pub const Compiler = struct {
             .StringLit => |*e| self.string_lit(e),
             .Unary => |*e| self.unary(e),
         };
+    }
+
+    fn block(self: *Self, expr: *const Ast.Block) Error!void {
+        for (expr.stmts) |*stmt| {
+            try self.statement(stmt);
+        }
+
+        const extra = self.analyzed_stmts.next().Block;
+        for (0..extra.pop_count) |_| {
+            try self.chunk.write_op(.Pop);
+        }
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
@@ -223,9 +242,10 @@ pub const Compiler = struct {
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
-        if (extra.scope == .Global) {
-            try self.write_op_and_byte(.GetGlobal, @intCast(extra.index));
-        } else unreachable;
+        try self.write_op_and_byte(
+            if (extra.scope == .Global) .GetGlobal else .GetLocal,
+            @intCast(extra.index),
+        );
     }
 
     fn int_lit(self: *Self, expr: *const Ast.IntLit) !void {

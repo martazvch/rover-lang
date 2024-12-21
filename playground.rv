@@ -1,3 +1,5 @@
+var a = 1
 {
-    5 + { 4
+    var a = a + 5
+    print a
 }

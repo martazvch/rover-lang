@@ -43,19 +43,6 @@ pub const TypeManager = struct {
         self.declared.deinit();
     }
 
-    // pub fn fetch_or_create(self: *Self, type_name: []const u8) !Type {
-    //     const entry = try self.declared.getOrPut(type_name);
-    //
-    //     if (entry.found_existing) {
-    //         return entry.value_ptr.*;
-    //     } else {
-    //         // Minus 1 because it just has been added
-    //         const value = self.declared.count() - 1;
-    //         entry.value_ptr.* = value;
-    //         return value;
-    //     }
-    // }
-
     // NOTE:
     // Used only in error mode, no need for performance. If used in
     // performance path, maybe use a ArrayHashMap to retreive with
@@ -85,6 +72,9 @@ pub const Analyzer = struct {
     const Error = error{Err} || Allocator.Error;
 
     // Representation of a variable. Index is the declaration order
+    // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
+    // de 48 à 40 bits
+    // Voir si possible de faire autrement que de stocker le nom des vars
     const Variable = struct {
         index: usize,
         type_: Type,
@@ -176,6 +166,7 @@ pub const Analyzer = struct {
             // TODO: tell the compiler to skip this statement and don't compile it
             // (maybe a separate array with statement index?)
             // Only expressions can lead to that
+            // -> Pas skip parce que side effect du stmt mais emit POP?
             if (stmt_type != Void) {
                 try self.warn(.UnusedValue, stmt.Expr.span());
             }
@@ -290,6 +281,7 @@ pub const Analyzer = struct {
 
         variable.type_ = final_type;
 
+        // Build the extra infos
         const extra: AnalyzedAst.Variable = if (self.scope_depth == 0) .{
             .scope = .Global,
             .index = self.globals.count(),
@@ -298,8 +290,16 @@ pub const Analyzer = struct {
             .index = self.locals.items.len,
         };
 
+        // Get the index
         variable.index = extra.index;
-        try self.globals.put(stmt.name.text, variable);
+
+        // Add the variable to the correct data structure
+        if (extra.scope == .Global) {
+            try self.globals.put(stmt.name.text, variable);
+        } else {
+            try self.locals.append(variable);
+        }
+
         try self.analyzed_stmts.append(.{ .Variable = extra });
     }
 
@@ -339,6 +339,20 @@ pub const Analyzer = struct {
 
         self.scope_depth -= 1;
 
+        var pop_count: usize = 0;
+        // Discards all the local variables
+        if (self.locals.items.len > 0) {
+            var i: usize = self.locals.items.len;
+
+            while (i > 0 and self.locals.items[i - 1].depth > self.scope_depth) {
+                i -= 1;
+            }
+
+            pop_count = self.locals.items.len - i;
+            try self.locals.resize(i);
+        }
+
+        try self.analyzed_stmts.append(.{ .Block = .{ .pop_count = pop_count } });
         return final;
     }
 

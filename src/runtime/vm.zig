@@ -133,6 +133,7 @@ pub const Vm = struct {
     fn execute(self: *Self) !void {
         while (true) {
             if (comptime config.print_stack) {
+                print("\n", .{});
                 print("          ", .{});
 
                 var value = self.stack.values[0..].ptr;
@@ -141,7 +142,6 @@ pub const Vm = struct {
                     try value[0].print(self.stdout);
                     print("] ", .{});
                 }
-                print("\n", .{});
             }
 
             if (comptime config.print_instr) {
@@ -185,6 +185,7 @@ pub const Vm = struct {
                 .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
                 .GetGlobal => self.stack.push(self.globals[self.read_byte()]),
+                .GetLocal => self.stack.push(self.stack.values[self.read_byte()]),
                 .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
@@ -213,6 +214,7 @@ pub const Vm = struct {
                 },
                 .Return => break,
                 .SetGlobal => self.globals[self.read_byte()] = self.stack.pop(),
+                .SetLocal => self.stack.values[self.read_byte()] = self.stack.pop(),
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),
                 .StrMulR => try self.str_mul(self.stack.peek_ref(1).Obj.as(ObjString), self.stack.peek_ref(0).Int),

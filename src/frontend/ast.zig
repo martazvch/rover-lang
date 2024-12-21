@@ -65,6 +65,7 @@ pub const Expr = union(enum) {
     FloatLit: FloatLit,
     Grouping: Grouping,
     Identifier: Identifier,
+    If: If,
     IntLit: IntLit,
     NullLit: NullLit,
     StringLit: StringLit,
@@ -106,6 +107,13 @@ pub const Grouping = struct {
 
 pub const Identifier = struct {
     name: []const u8,
+    span: Span,
+};
+
+pub const If = struct {
+    condition: *const Expr,
+    if_body: *const Expr,
+    else_body: ?*const Expr,
     span: Span,
 };
 

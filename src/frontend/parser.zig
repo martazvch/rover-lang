@@ -83,11 +83,15 @@ pub const Parser = struct {
             try self.stmts.append(stmt);
 
             // After each statements we expect a new line
-            try self.expect_or_err_at_tk(
+            self.expect_or_err_at_tk(
                 .NewLine,
                 .ExpectNewLine,
                 &self.prev(),
-            );
+            ) catch |e| switch (e) {
+                // If it's our own error, we just synchronize before resuming
+                error.err => self.synchronize(),
+                else => return e,
+            };
 
             self.skip_new_lines();
         }
@@ -202,7 +206,7 @@ pub const Parser = struct {
 
         while (!self.check(.Eof)) {
             switch (self.current().kind) {
-                .Fn, .For, .If, .Print, .Return, .Struct, .Var, .While => return,
+                .Fn, .For, .If, .LeftBrace, .Print, .Return, .Struct, .Var, .While => return,
                 else => self.advance(),
             }
         }
@@ -351,6 +355,7 @@ pub const Parser = struct {
     fn parse_prefix_expr(self: *Self) Error!*Expr {
         const unary_expr = switch (self.prev().kind) {
             .LeftBrace => return self.block_expr(),
+            .If => return self.if_expr(),
             .Minus, .Not => try self.allocator.create(Expr),
             else => return self.parse_primary_expr(),
         };
@@ -391,6 +396,32 @@ pub const Parser = struct {
 
         expr.* = .{ .Block = .{
             .stmts = try stmts.toOwnedSlice(),
+            .span = span,
+        } };
+
+        return expr;
+    }
+
+    fn if_expr(self: *Self) !*Expr {
+        var span = self.prev().span;
+        const condition = try self.parse_precedence_expr(0);
+
+        try self.expect(.RightBrace, .ExpectBraceAfterIf);
+        const if_body = try self.block_expr();
+
+        var else_body: ?*const Expr = null;
+        if (self.match(.Else)) {
+            try self.expect(.RightBrace, .ExpectBraceAfterElse);
+            else_body = try self.block_expr();
+        }
+
+        const expr = try self.allocator.create(Expr);
+        span.end = expr.span().end;
+
+        expr.* = .{ .If = .{
+            .condition = condition,
+            .if_body = if_body,
+            .else_body = else_body,
             .span = span,
         } };
 

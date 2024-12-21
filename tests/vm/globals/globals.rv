@@ -8,3 +8,8 @@ var lhs = 34
 var rhs = -.5
 
 print rhs * lhs // expect: -17
+
+age = "27"
+name = "Martin"
+
+print name + " is " + age // expect: "Martin is 27"

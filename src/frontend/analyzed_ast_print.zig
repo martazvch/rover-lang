@@ -43,13 +43,18 @@ pub const AnalyzedAstPrinter = struct {
         self.source = source;
 
         for (stmts) |*stmt| {
-            try switch (stmt.*) {
-                .Assignment => |*s| self.assign(s),
-                .Binop => |*s| self.binop(s),
-                .Unary => |*s| self.unary(s),
-                .Variable => |*s| self.variable(s),
-            };
+            try self.statement(stmt);
         }
+    }
+
+    fn statement(self: *Self, stmt: *const AnalyzedStmt) !void {
+        try switch (stmt.*) {
+            .Assignment => |*s| self.assign(s),
+            .Block => |*s| self.block(s),
+            .Binop => |*s| self.binop(s),
+            .Unary => |*s| self.unary(s),
+            .Variable => |*s| self.variable(s),
+        };
     }
 
     fn assign(self: *Self, stmt: *const AnalyzedAst.Assignment) !void {
@@ -57,6 +62,18 @@ pub const AnalyzedAstPrinter = struct {
             try self.indent();
             try self.tree.appendSlice("[Assignment cast to float]\n");
         }
+    }
+
+    fn block(self: *Self, stmt: *const AnalyzedAst.Block) !void {
+        try self.indent();
+
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(
+            &buf,
+            "[Block pop count {}]\n",
+            .{stmt.pop_count},
+        );
+        try self.tree.appendSlice(written);
     }
 
     fn binop(self: *Self, stmt: *const AnalyzedAst.BinOp) !void {

@@ -92,7 +92,7 @@ pub const Disassembler = struct {
             .False => self.simple_instruction("OP_FALSE", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
             .GetGlobal => self.index_instruction("OP_GET_GLOBAL", offset, writer),
-            // .GetLocal => self.byte_instruction("OP_GET_LOCAL", offset),
+            .GetLocal => self.index_instruction("OP_GET_LOCAL", offset, writer),
             // .GetProperty => self.constant_instruction("OP_GET_PROPERTY", offset),
             // .GetUpvalue => self.byte_instruction("OP_GET_UPVALUE", offset),
             .GreaterInt => self.simple_instruction("OP_GREATER_INT", offset, writer),
@@ -118,7 +118,7 @@ pub const Disassembler = struct {
             .Print => self.simple_instruction("OP_PRINT", offset, writer),
             .Return => self.simple_instruction("OP_RETURN", offset, writer),
             .SetGlobal => self.index_instruction("OP_SET_GLOBAL", offset, writer),
-            // .SetLocal => self.byte_instruction("OP_SET_LOCAL", offset),
+            .SetLocal => self.index_instruction("OP_SET_LOCAL", offset, writer),
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
             // .SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),
             // .Struct => self.constant_instruction("OP_STRUCT", offset),
@@ -147,7 +147,7 @@ pub const Disassembler = struct {
         if (self.test_mode) {
             try writer.print("{s} index: {}\n", .{ name, index });
         } else {
-            try writer.print("{s:<24} index: {:<4}\n", .{ name, index });
+            try writer.print("{s:<24} index: {:>4}\n", .{ name, index });
         }
 
         return offset + 2;
@@ -165,30 +165,11 @@ pub const Disassembler = struct {
         if (self.test_mode) {
             try writer.print("{s} index: {}, value: ", .{ name, constant });
         } else {
-            try writer.print("{s:<24} index: {:<4}, value: ", .{ name, constant });
+            try writer.print("{s:<24} index: {:>4}, value: ", .{ name, constant });
         }
 
         try value.print(writer);
         try writer.print("\n", .{});
-        return offset + 2;
-    }
-
-    // NOTE: for locals, we don't store their name into the chunk (great for performance
-    // bit bad for introspection). Maybe get a compile time way to do so?
-    fn byte_instruction(
-        self: *const Self,
-        name: []const u8,
-        offset: usize,
-        writer: anytype,
-    ) !usize {
-        const index = self.chunk.code.items[offset + 1];
-
-        if (self.test_mode) {
-            try writer.print("{s} {}\n", .{ name, index });
-        } else {
-            try writer.print("{s:<24} {:<4}\n", .{ name, index });
-        }
-
         return offset + 2;
     }
 
@@ -206,7 +187,7 @@ pub const Disassembler = struct {
         if (self.test_mode) {
             try writer.print("{s} {} -> {}\n", .{ name, offset, target });
         } else {
-            try writer.print("{s:<24} {:<4} -> {}\n", .{ name, offset, target });
+            try writer.print("{s:<24} {:>4} -> {}\n", .{ name, offset, target });
         }
 
         return offset + 3;
