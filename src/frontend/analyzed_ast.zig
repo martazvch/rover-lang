@@ -18,6 +18,7 @@ pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
     Block: Block,
     Binop: BinOp,
+    If: If,
     Unary: Unary,
     Variable: Variable,
 };
@@ -43,6 +44,14 @@ pub const BinOp = struct {
     // We assume we only need to know the side because the cast will always
     // be from int to float
     const Cast = enum { Lhs, Rhs, None };
+};
+
+pub const If = struct {
+    cast: Cast = .None,
+
+    // We assume we only need to know the branch because the cast will always
+    // be from int to float
+    const Cast = enum { Then, Else, None };
 };
 
 pub const Unary = struct {

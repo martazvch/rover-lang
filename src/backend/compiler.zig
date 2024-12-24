@@ -28,7 +28,7 @@ pub const Compiler = struct {
     analyzed_stmts: UnsafeIter(AnalyzedStmt),
 
     const Self = @This();
-    const Error = Chunk.Error;
+    const Error = error{err} || Chunk.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
 
@@ -64,6 +64,28 @@ pub const Compiler = struct {
             std.debug.print("Too many constants in chunk\n", .{});
             return err;
         };
+    }
+
+    fn emit_jump(self: *Self, kind: OpCode) !usize {
+        try self.chunk.write_op(kind);
+        try self.chunk.write_byte(0xff);
+        try self.chunk.write_byte(0xff);
+
+        return self.chunk.code.items.len - 2;
+    }
+
+    fn patch_jump(self: *Self, offset: usize) !void {
+        // -2 for the two 8bits jump value (cf emit jump)
+        const jump = self.chunk.code.items.len - offset - 2;
+
+        // TODO: proper error handling
+        if (jump > std.math.maxInt(u16)) {
+            std.debug.print("Too much code to jump over", .{});
+            return Error.err;
+        }
+
+        self.chunk.code.items[offset] = @as(u8, @intCast(jump >> 8)) & 0xff;
+        self.chunk.code.items[offset + 1] = @intCast(jump & 0xff);
     }
 
     pub fn compile(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt) !void {
@@ -145,7 +167,7 @@ pub const Compiler = struct {
             .Grouping => |*e| self.grouping(e),
             .FloatLit => |*e| self.float_lit(e),
             .Identifier => self.ident_expr(),
-            .If => unreachable,
+            .If => |*e| self.if_expr(e),
             .IntLit => |*e| self.int_lit(e),
             .NullLit => self.null_lit(),
             .StringLit => |*e| self.string_lit(e),
@@ -265,6 +287,28 @@ pub const Compiler = struct {
             if (extra.scope == .Global) .GetGlobal else .GetLocal,
             @intCast(extra.index),
         );
+    }
+
+    fn if_expr(self: *Self, expr: *const Ast.If) !void {
+        const extra = self.analyzed_stmts.next().If;
+
+        try self.expression(expr.condition);
+        const then_jump = try self.emit_jump(.JumpIfFalse);
+        try self.statement(&expr.then_body);
+
+        if (extra.cast == .Then) try self.chunk.write_op(.CastToFloat);
+
+        // We insert a jump in the then body to be able to jump over the else branch
+        // Otherwise, we just patch the then_jump
+        if (expr.else_body) |*body| {
+            const else_jump = try self.emit_jump(.Jump);
+            try self.patch_jump(then_jump);
+            try self.statement(body);
+
+            if (extra.cast == .Else) try self.chunk.write_op(.CastToFloat);
+
+            try self.patch_jump(else_jump);
+        } else try self.patch_jump(then_jump);
     }
 
     fn int_lit(self: *Self, expr: *const Ast.IntLit) !void {

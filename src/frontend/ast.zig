@@ -35,6 +35,23 @@ pub const Stmt = union(enum) {
     Print: Print,
     VarDecl: VarDecl,
     Expr: *Expr,
+
+    pub fn span(self: *const Stmt) Span {
+        return switch (self.*) {
+            .Assignment => |s| .{
+                .start = s.assigne.span().start,
+                .end = s.value.span().end,
+            },
+            .Discard => |s| s.expr.span(),
+            .Print => |s| s.expr.span(),
+            // NOTE: wrong, but sufficient
+            .VarDecl => |s| .{
+                .start = s.name.start,
+                .end = s.name.start + s.name.text.len,
+            },
+            .Expr => |e| e.span(),
+        };
+    }
 };
 
 pub const Assignment = struct {
@@ -110,10 +127,11 @@ pub const Identifier = struct {
     span: Span,
 };
 
+/// Bodies can be either blocks or single do statement
 pub const If = struct {
-    condition: *const Expr,
-    if_body: *const Expr,
-    else_body: ?*const Expr,
+    condition: *Expr,
+    then_body: Stmt,
+    else_body: ?Stmt,
     span: Span,
 };
 

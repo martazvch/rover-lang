@@ -2,12 +2,15 @@ pub const AnalyzerMsg = union(enum) {
     AlreadyDeclaredVar: struct { name: []const u8 },
     FloatEqual,
     FloatEqualCast,
+    IncompatibleIfType: struct { found1: []const u8, found2: []const u8 },
     InvalidArithmetic: struct { found: []const u8 },
     InvalidAssignTarget,
     InvalidComparison: struct { found1: []const u8, found2: []const u8 },
     InvalidAssignType: struct { expect: []const u8, found: []const u8 },
     InvalidUnary: struct { found: []const u8 },
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
+    MissingElseClause: struct { if_type: []const u8 },
+    NonBoolIfCond: struct { found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
     UndeclaredVar: struct { name: []const u8 },
     UnusedValue,
@@ -21,12 +24,18 @@ pub const AnalyzerMsg = union(enum) {
             .AlreadyDeclaredVar => |e| writer.print("variable '{s}' already declared in this scope", .{e.name}),
             .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
+            .IncompatibleIfType => |e| writer.print(
+                "'if' and 'else' have incompatible types, found '{s}'  and '{s}'",
+                .{ e.found1, e.found2 },
+            ),
             .InvalidArithmetic => writer.print("invalid arithmetic operation", .{}),
             .InvalidAssignTarget => writer.print("invalid assignment target", .{}),
             .InvalidComparison => writer.print("invalid comparison", .{}),
             .InvalidAssignType => writer.print("variable declaration type mismatch", .{}),
             .InvalidUnary => writer.print("invalid unary operation", .{}),
             .ImplicitCast => writer.print("implicit cast", .{}),
+            .NonBoolIfCond => |e| writer.print("non boolean condition, found type '{s}'", .{e.found}),
+            .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
             .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
             .UnusedValue => writer.print("unused value", .{}),
@@ -40,10 +49,14 @@ pub const AnalyzerMsg = union(enum) {
             .AlreadyDeclaredVar => writer.print("this name", .{}),
             .FloatEqual => writer.print("both sides are 'floats'", .{}),
             .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
+            .IncompatibleIfType => writer.print("this expression", .{}),
             .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
             .InvalidAssignTarget => writer.print("cannot assign to this expression", .{}),
             .InvalidComparison => writer.print("expressions have different types", .{}),
-            .InvalidUnary => writer.print("expression is not a boolean type", .{}),
+            .InvalidUnary,
+            .NonBoolIfCond,
+            => writer.print("expression is not a boolean type", .{}),
+            .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
@@ -70,6 +83,7 @@ pub const AnalyzerMsg = union(enum) {
             ,
                 .{},
             ),
+            .IncompatibleIfType => writer.print("make both paths return the same type", .{}),
             .InvalidArithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),
             .InvalidAssignTarget => writer.print("can only assign to variables", .{}),
             .InvalidComparison => |e| writer.print(
@@ -82,6 +96,8 @@ pub const AnalyzerMsg = union(enum) {
                 .{ e.expect, e.found },
             ),
             .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
+            .MissingElseClause => writer.print("add an 'else' block that evaluate to the expected type", .{}),
+            .NonBoolIfCond => writer.print("'if' conditions can only be boolean type", .{}),
             .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
             .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
@@ -90,27 +106,15 @@ pub const AnalyzerMsg = union(enum) {
         };
     }
 
-    const Side = enum {
-        Lhs,
-        Rhs,
-
-        fn str(self: Side) []const u8 {
-            return switch (self) {
-                .Lhs => "left hand side",
-                .Rhs => "right hand side",
-            };
-        }
-    };
-
     pub fn invalid_arithmetic(found: []const u8) Self {
         return .{ .InvalidArithmetic = .{
             .found = found,
         } };
     }
 
-    pub fn implicit_cast(side: Side, type_: []const u8) Self {
+    pub fn implicit_cast(side: []const u8, type_: []const u8) Self {
         return .{ .ImplicitCast = .{
-            .side = side.str(),
+            .side = side,
             .type_ = type_,
         } };
     }

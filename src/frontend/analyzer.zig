@@ -324,7 +324,7 @@ pub const Analyzer = struct {
                 const res = try self.identifier(e, true);
                 return res.type_;
             },
-            .If => unreachable,
+            .If => |*e| self.if_expr(e),
             .IntLit => Int,
             .NullLit => Null,
             .StringLit => Str,
@@ -421,6 +421,71 @@ pub const Analyzer = struct {
         );
     }
 
+    // For nullable, use bitmasking!
+    // like: first 5 digit for type id (should be enough) and the 6th one
+    // is 1 for nullable and 0 for non-nullable for example
+    // The 7th digit could tell if we exit scope. For example if the
+    // else branch isn't the same type but is an explicit return, we
+    // dont check if type match, we exit scope anyway
+    fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
+        // We reserve the slot because of recursion
+        const idx = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+        var extra: AnalyzedAst.If = .{};
+
+        const cond_type = try self.expression(expr.condition);
+        if (cond_type != Bool) return self.err(
+            .{ .NonBoolIfCond = .{ .found = self.type_manager.str(cond_type) } },
+            expr.condition.span(),
+        );
+
+        const then_type = try self.statement(&expr.then_body);
+
+        var else_type: Type = Void;
+        if (expr.else_body) |*body| {
+            else_type = try self.statement(body);
+        } else if (then_type != Void) {
+            // If there is no else body but the then returns a value
+            // it's an error because not all paths return a value
+            return self.err(
+                .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
+                expr.span,
+            );
+        }
+
+        if (then_type != else_type) {
+            if (then_type == Int and else_type == Float) {
+                extra.cast = .Then;
+
+                try self.warn(
+                    AnalyzerMsg.implicit_cast("then branch", "float"),
+                    expr.then_body.span(),
+                );
+            } else if (then_type == Float and else_type == Int) {
+                extra.cast = .Else;
+
+                // Safe unsafe access, if there is a non void type
+                // there is an else body
+                try self.warn(
+                    AnalyzerMsg.implicit_cast("else branch", "float"),
+                    expr.else_body.?.span(),
+                );
+            } else {
+                return self.err(
+                    .{ .IncompatibleIfType = .{
+                        .found1 = self.type_manager.str(then_type),
+                        .found2 = self.type_manager.str(else_type),
+                    } },
+                    expr.span,
+                );
+            }
+        }
+
+        self.analyzed_stmts.items[idx] = .{ .If = extra };
+
+        return then_type;
+    }
+
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
         const idx = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
@@ -497,7 +562,7 @@ pub const Analyzer = struct {
                             Float => {},
                             Int => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast(.Rhs, self.type_manager.str(lhs)),
+                                    AnalyzerMsg.implicit_cast("right hand side", self.type_manager.str(lhs)),
                                     expr.rhs.span(),
                                 );
 
@@ -510,7 +575,7 @@ pub const Analyzer = struct {
                         switch (rhs) {
                             Float => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast(.Lhs, self.type_manager.str(rhs)),
+                                    AnalyzerMsg.implicit_cast("left hand side", self.type_manager.str(rhs)),
                                     expr.lhs.span(),
                                 );
 

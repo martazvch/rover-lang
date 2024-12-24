@@ -1,0 +1,174 @@
+// Tests if expr
+
+code:
+if true 
+if true {} else = // '=' to avoid having a \n
+if true do print "ok" }
+errors:
+ExpectBraceOrDoAfterIf
+ExpectExpr, =
+ExpectNewLine
+
+================
+
+code:
+if true { print "ok" }
+if true {
+    print "ok"
+}
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    none
+]
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    none
+]
+
+================
+
+code:
+if {
+    print "in cond"
+    false
+}{
+    print "ok"
+}
+
+expect:
+[If
+    condition:
+    [Block]
+        [Print]
+            [String literal in cond]
+        [Bool literal false]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    none
+]
+
+================
+
+
+code:
+if true
+{
+    print "ok"
+}
+else print "ko"
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    [Print]
+        [String literal ko]
+]
+
+================
+
+code:
+if true {
+    print "ok" } else {
+    print "ko" }
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    [Block]
+        [Print]
+            [String literal ko]
+]
+
+================
+
+code:
+if true do print "ok"
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Print]
+        [String literal ok]
+    else body:
+    none
+]
+
+================
+
+code:
+if true do print "ok"
+else print "ko"
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Print]
+        [String literal ok]
+    else body:
+    [Print]
+        [String literal ko]
+]
+
+================
+
+// Else if
+
+code:
+if true do print "ok"
+else if true do print "elseif"
+else print "ko"
+
+expect:
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Print]
+        [String literal ok]
+    else body:
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [Print]
+            [String literal elseif]
+        else body:
+        [Print]
+            [String literal ko]
+    ]
+]
+
+================

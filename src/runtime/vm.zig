@@ -112,6 +112,12 @@ pub const Vm = struct {
         return self.chunk.constants[self.read_byte()];
     }
 
+    pub fn read_short(self: *Self) u16 {
+        const short = @as(u16, self.ip[0]) << 8 | self.ip[1];
+        self.ip += 2;
+        return short;
+    }
+
     fn instruction_nb(self: *const Self) usize {
         const addr1 = @intFromPtr(self.ip);
         const addr2 = @intFromPtr(self.chunk.code.items.ptr);
@@ -190,6 +196,10 @@ pub const Vm = struct {
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
                 .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
+                .Jump => self.ip += self.read_short(),
+                .JumpIfFalse => {
+                    if (!self.stack.peek(0).Bool) self.ip += self.read_short();
+                },
                 .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
                 .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
                 .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),

@@ -32,6 +32,10 @@ pub const AstPrinter = struct {
         print("\n--- AST ---\n{s}", .{self.tree.items});
     }
 
+    fn indent(self: *Self) !void {
+        try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
+    }
+
     pub fn parse_ast(self: *Self, source: []const u8, stmts: []const Stmt) !void {
         self.source = source;
 
@@ -46,7 +50,7 @@ pub const AstPrinter = struct {
             .Discard => |*s| self.discard(s),
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_decl(s),
-            .Expr => |s| self.print_expr(s),
+            .Expr => |s| self.expression(s),
         };
     }
 
@@ -56,10 +60,10 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
         try self.indent();
         try self.tree.appendSlice("assigne:\n");
-        try self.print_expr(stmt.assigne);
+        try self.expression(stmt.assigne);
         try self.indent();
         try self.tree.appendSlice("value:\n");
-        try self.print_expr(stmt.value);
+        try self.expression(stmt.value);
 
         self.indent_level -= 1;
         try self.indent();
@@ -70,7 +74,7 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("[Discard]\n");
         self.indent_level += 1;
-        try self.print_expr(stmt.expr);
+        try self.expression(stmt.expr);
         self.indent_level -= 1;
     }
 
@@ -78,7 +82,7 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("[Print]\n");
         self.indent_level += 1;
-        try self.print_expr(stmt.expr);
+        try self.expression(stmt.expr);
         self.indent_level -= 1;
     }
 
@@ -98,7 +102,7 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
 
         if (stmt.value) |v| {
-            try self.print_expr(v);
+            try self.expression(v);
         } else {
             try self.indent();
             try self.tree.appendSlice("none\n");
@@ -109,7 +113,7 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
-    fn print_expr(self: *Self, expr: *const Expr) Error!void {
+    fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
             .Block => |*e| self.block_expr(e),
             .BinOp => |*e| self.binop_expr(e),
@@ -117,7 +121,7 @@ pub const AstPrinter = struct {
             .Grouping => |*e| self.grouping_expr(e),
             .FloatLit => |*e| self.float_expr(e),
             .Identifier => |*e| self.ident_expr(e),
-            .If => unreachable,
+            .If => |*e| self.if_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .NullLit => self.null_expr(),
             .StringLit => |*e| self.string_expr(e),
@@ -144,8 +148,8 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
-        try self.print_expr(expr.lhs);
-        try self.print_expr(expr.rhs);
+        try self.expression(expr.lhs);
+        try self.expression(expr.rhs);
         self.indent_level -= 1;
     }
 
@@ -154,7 +158,7 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("[Grouping]\n");
 
         self.indent_level += 1;
-        try self.print_expr(expr.expr);
+        try self.expression(expr.expr);
         self.indent_level -= 1;
     }
 
@@ -177,6 +181,31 @@ pub const AstPrinter = struct {
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Identifier {s}]\n", .{expr.name});
         try self.tree.appendSlice(written);
+    }
+
+    fn if_expr(self: *Self, expr: *const Ast.If) Error!void {
+        try self.indent();
+
+        try self.tree.appendSlice("[If\n");
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("condition:\n");
+        try self.expression(expr.condition);
+        try self.indent();
+        try self.tree.appendSlice("then body:\n");
+        try self.statement(expr.then_body);
+        try self.indent();
+        try self.tree.appendSlice("else body:\n");
+        if (expr.else_body) |body| {
+            try self.statement(body);
+        } else {
+            try self.indent();
+            try self.tree.appendSlice("none\n");
+        }
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
     }
 
     fn int_expr(self: *Self, expr: *const Ast.IntLit) Error!void {
@@ -206,11 +235,7 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice(written);
 
         self.indent_level += 1;
-        try self.print_expr(expr.rhs);
+        try self.expression(expr.rhs);
         self.indent_level -= 1;
-    }
-
-    fn indent(self: *Self) !void {
-        try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
     }
 };

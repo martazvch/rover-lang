@@ -82,6 +82,9 @@ pub const Parser = struct {
 
             try self.stmts.append(stmt);
 
+            // If EOF, continue to end
+            if (self.check(.Eof)) continue;
+
             // After each statements we expect a new line
             self.expect_or_err_at_tk(
                 .NewLine,
@@ -120,6 +123,12 @@ pub const Parser = struct {
         return true;
     }
 
+    fn match_and_skip(self: *Self, kind: Token.Kind) bool {
+        const res = self.match(kind);
+        self.skip_new_lines();
+        return res;
+    }
+
     /// Checks if we currently are at a token
     fn check(self: *const Self, kind: Token.Kind) bool {
         return self.current().kind == kind;
@@ -138,8 +147,7 @@ pub const Parser = struct {
             return;
         }
 
-        try self.error_at_current(error_kind);
-        return Error.err;
+        return self.error_at_current(error_kind);
     }
 
     /// Expecy a specific type, otherwise it's an error and we enter
@@ -153,7 +161,7 @@ pub const Parser = struct {
     ) !void {
         if (self.match(kind)) return;
 
-        try self.error_at(tk, error_kind);
+        return self.error_at(tk, error_kind);
     }
 
     fn expect_or_err_at_span(
@@ -164,23 +172,23 @@ pub const Parser = struct {
     ) !void {
         if (self.match(kind)) return;
 
-        try self.error_at_span(error_kind, span);
+        return self.error_at_span(error_kind, span);
     }
 
-    fn error_at_current(self: *Self, error_kind: ParserMsg) Error!void {
-        try self.error_at(&self.current(), error_kind);
+    fn error_at_current(self: *Self, error_kind: ParserMsg) Error {
+        return self.error_at(&self.current(), error_kind);
     }
 
-    fn error_at_prev(self: *Self, error_kind: ParserMsg) !void {
-        try self.error_at(&self.prev(), error_kind);
+    fn error_at_prev(self: *Self, error_kind: ParserMsg) Error {
+        return self.error_at(&self.prev(), error_kind);
     }
 
     /// If error already encountered and in the same statement parsing,
     /// we exit, let synchronize and resume. It is likely that if we
     /// are already in panic mode, the following errors are just
     /// consequencies of actual bad statement
-    fn error_at(self: *Self, token: *const Token, error_kind: ParserMsg) !void {
-        if (self.panic_mode) return;
+    fn error_at(self: *Self, token: *const Token, error_kind: ParserMsg) Error {
+        if (self.panic_mode) return error.err;
 
         self.panic_mode = true;
 
@@ -241,7 +249,7 @@ pub const Parser = struct {
 
         // If no ':' but we are at an identifier, maybe a typo
         if (self.check(.Identifier)) {
-            try self.error_at_current(.ExpectColonBeforeType);
+            return self.error_at_current(.ExpectColonBeforeType);
         }
 
         var value: ?*Expr = null;
@@ -326,7 +334,7 @@ pub const Parser = struct {
             if (next_rule.prec < prec_min) break;
 
             if (next_rule.prec == banned_prec) {
-                try self.error_at_current(.ChainingCmpOp);
+                return self.error_at_current(.ChainingCmpOp);
             }
 
             // Here, we can safely use it
@@ -406,21 +414,28 @@ pub const Parser = struct {
         var span = self.prev().span;
         const condition = try self.parse_precedence_expr(0);
 
-        try self.expect(.RightBrace, .ExpectBraceAfterIf);
-        const if_body = try self.block_expr();
+        self.skip_new_lines();
 
-        var else_body: ?*const Expr = null;
-        if (self.match(.Else)) {
-            try self.expect(.RightBrace, .ExpectBraceAfterElse);
-            else_body = try self.block_expr();
+        // TODO: Warning for unnecessary 'do' if there is a block after
+        const then_body: Ast.Stmt = if (self.match_and_skip(.LeftBrace))
+            .{ .Expr = try self.block_expr() }
+        else if (self.match_and_skip(.Do))
+            try self.statement()
+        else
+            return self.error_at_current(.ExpectBraceOrDoAfterIf);
+
+        self.skip_new_lines();
+        var else_body: ?Stmt = null;
+        if (self.match_and_skip(.Else)) {
+            else_body = try self.statement();
         }
 
+        span.end = self.prev().span.end;
         const expr = try self.allocator.create(Expr);
-        span.end = expr.span().end;
 
         expr.* = .{ .If = .{
             .condition = condition,
-            .if_body = if_body,
+            .then_body = then_body,
             .else_body = else_body,
             .span = span,
         } };
@@ -440,10 +455,10 @@ pub const Parser = struct {
             .True => self.bool_(true),
             else => |k| {
                 if (k == .Eof) {
-                    try self.error_at_prev(.UnexpectedEof);
+                    return self.error_at_prev(.UnexpectedEof);
                 } else {
                     const p = self.prev();
-                    try self.error_at_prev(.{ .ExpectExpr = .{ .found = p.from_source(self.source) } });
+                    return self.error_at_prev(.{ .ExpectExpr = .{ .found = p.from_source(self.source) } });
                 }
                 unreachable;
             },

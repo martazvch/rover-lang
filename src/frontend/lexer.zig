@@ -13,6 +13,7 @@ pub const Token = struct {
         .{ "and", .And },
         .{ "as", .As },
         .{ "bool", .Bool },
+        .{ "do", .Do },
         .{ "else", .Else },
         .{ "error", .Error },
         .{ "false", .False },
@@ -44,6 +45,7 @@ pub const Token = struct {
         Bool,
         Colon,
         Comma,
+        Do,
         Dot,
         DotBang,
         DotDot,
@@ -108,6 +110,7 @@ pub const Token = struct {
                 .Bool => "bool",
                 .Colon => ":",
                 .Comma => ",",
+                .Do => "do",
                 .Dot => ".",
                 .DotBang => ".!",
                 .DotDot => "..",
@@ -584,12 +587,15 @@ test "tokens" {
 test "keywords" {
     var lexer = Lexer.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("and else false for fn if in null or print return self struct true var while not int float str");
+    try lexer.lex(
+        \\\and else false for fn if in null or print return 
+        \\\self struct true var while not int float str do
+    );
 
     const res = [_]Token.Kind{
-        .And,    .Else, .False,  .For,  .Fn,  .If,    .In,  .Null,  .Or,      .Print,
-        .Return, .Self, .Struct, .True, .Var, .While, .Not, .IntKw, .FloatKw, .StrKw,
-        .Eof,
+        .And,    .Else,    .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
+        .Return, .NewLine, .Self,  .Struct, .True, .Var, .While, .Not,  .IntKw, .FloatKw,
+        .StrKw,  .Do,      .Eof,
     };
 
     for (0..res.len) |i| {
