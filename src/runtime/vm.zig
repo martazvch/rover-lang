@@ -198,7 +198,8 @@ pub const Vm = struct {
                 .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
                 .Jump => self.ip += self.read_short(),
                 .JumpIfFalse => {
-                    if (!self.stack.peek(0).Bool) self.ip += self.read_short();
+                    const jump = self.read_short();
+                    if (!self.stack.peek(0).Bool) self.ip += jump;
                 },
                 .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
                 .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
