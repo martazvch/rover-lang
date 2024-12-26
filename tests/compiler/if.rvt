@@ -1,0 +1,88 @@
+// Tests if
+
+// Note:
+//  - each jump count as 3 OP (the jump + 2x8bits jump value)
+//  - OP count begins at 0
+//  - we jump just after the other JUMP (on the POP) to exit the then branch
+
+code:
+var a = if true {1} else {2}
+
+expect:
+OP_TRUE
+OP_JUMP_IF_FALSE 1 -> 12
+OP_POP
+OP_CONSTANT index 0, value 1
+OP_SCOPE_RETURN index 0
+OP_JUMP 9 -> 17
+OP_POP
+OP_CONSTANT index 1, value 2
+OP_SCOPE_RETURN index 0
+OP_DEFINE_GLOBAL index 0
+OP_RETURN
+
+================
+
+code:
+var b = if { true } do 5 + 6 else {
+    1
+}
+
+expect:
+OP_TRUE
+OP_SCOPE_RETURN index 0
+OP_JUMP_IF_FALSE 3 -> 15
+OP_POP
+OP_CONSTANT index 0, value 5
+OP_CONSTANT index 1, value 6
+OP_ADD_INT
+OP_JUMP 12 -> 20
+OP_POP
+OP_CONSTANT index 2, value 1
+OP_SCOPE_RETURN index 0
+OP_DEFINE_GLOBAL index 0
+OP_RETURN
+
+================
+
+code:
+var a = 1
+var b = 2
+var c = if { not true } { 5 + 6 } else {
+    var tmp = 1
+    print tmp
+    tmp = 5
+    a + b + tmp
+}
+
+expect:
+OP_CONSTANT index 0, value 1
+OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value 2
+OP_DEFINE_GLOBAL index 1
+OP_TRUE
+OP_NOT
+OP_SCOPE_RETURN index 0
+OP_JUMP_IF_FALSE 12 -> 26
+OP_POP
+OP_CONSTANT index 2, value 5
+OP_CONSTANT index 3, value 6
+OP_ADD_INT
+OP_SCOPE_RETURN index 0
+OP_JUMP 23 -> 46
+OP_POP
+OP_CONSTANT index 4, value 1
+OP_GET_LOCAL index 0
+OP_PRINT
+OP_CONSTANT index 5, value 5
+OP_SET_LOCAL index 0
+OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 1
+OP_ADD_INT
+OP_GET_LOCAL index 0
+OP_ADD_INT
+OP_SCOPE_RETURN index 1
+OP_DEFINE_GLOBAL index 2
+OP_RETURN
+
+================

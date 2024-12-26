@@ -7,8 +7,8 @@ code:
 {5}
 
 expect:
-OP_CONSTANT index: 0, value: 5
-OP_SCOPE_RETURN index: 0
+OP_CONSTANT index 0, value 5
+OP_SCOPE_RETURN index 0
 OP_POP
 OP_RETURN
 
@@ -18,7 +18,7 @@ code:
 { var a = 5 }
 
 expect:
-OP_CONSTANT index: 0, value: 5
+OP_CONSTANT index 0, value 5
 OP_POP
 OP_RETURN
 
@@ -46,13 +46,13 @@ code:
 }
 
 expect:
-OP_CONSTANT index: 0, value: 1
-OP_CONSTANT index: 1, value: 3
-OP_CONSTANT index: 2, value: 4
+OP_CONSTANT index 0, value 1
+OP_CONSTANT index 1, value 3
+OP_CONSTANT index 2, value 4
 OP_ADD_INT
 OP_POP
-OP_CONSTANT index: 3, value: 5
-OP_GET_LOCAL index: 1
+OP_CONSTANT index 3, value 5
+OP_GET_LOCAL index 1
 OP_PRINT
 OP_POP
 OP_POP
@@ -67,10 +67,10 @@ var a: int = {
 }
 
 expect:
-OP_CONSTANT index: 0, value: 7
-OP_GET_LOCAL index: 0
-OP_SCOPE_RETURN index: 1
-OP_DEFINE_GLOBAL index: 0
+OP_CONSTANT index 0, value 7
+OP_GET_LOCAL index 0
+OP_SCOPE_RETURN index 1
+OP_DEFINE_GLOBAL index 0
 OP_RETURN
 
 ================
@@ -86,13 +86,13 @@ var a: int = {
 }
 
 expect:
-OP_CONSTANT index: 0, value: 67
-OP_CONSTANT index: 1, value: "just chillin"
-OP_CONSTANT index: 2, value: 7
-OP_CONSTANT index: 3, value: 90
-OP_GET_LOCAL index: 2
-OP_SCOPE_RETURN index: 4
-OP_DEFINE_GLOBAL index: 0
+OP_CONSTANT index 0, value 67
+OP_CONSTANT index 1, value "just chillin"
+OP_CONSTANT index 2, value 7
+OP_CONSTANT index 3, value 90
+OP_GET_LOCAL index 2
+OP_SCOPE_RETURN index 4
+OP_DEFINE_GLOBAL index 0
 OP_RETURN
 
 ================

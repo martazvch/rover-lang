@@ -146,9 +146,9 @@ pub const Disassembler = struct {
         const index = self.chunk.code.items[offset + 1];
 
         if (self.test_mode) {
-            try writer.print("{s} index: {}\n", .{ name, index });
+            try writer.print("{s} index {}\n", .{ name, index });
         } else {
-            try writer.print("{s:<24} index: {:>4}\n", .{ name, index });
+            try writer.print("{s:<24} index {:>4}\n", .{ name, index });
         }
 
         return offset + 2;
@@ -164,9 +164,9 @@ pub const Disassembler = struct {
         const value = self.chunk.constants[constant];
 
         if (self.test_mode) {
-            try writer.print("{s} index: {}, value: ", .{ name, constant });
+            try writer.print("{s} index {}, value ", .{ name, constant });
         } else {
-            try writer.print("{s:<24} index: {:>4}, value: ", .{ name, constant });
+            try writer.print("{s:<24} index {:>4}, value ", .{ name, constant });
         }
 
         try value.print(writer);
@@ -207,9 +207,9 @@ pub const Disassembler = struct {
         const iter_index = self.chunk.code.items[offset + 3];
 
         if (self.test_mode) {
-            try writer.print("{s} iter index: {}, {} -> {}\n", .{ name, iter_index, offset, target });
+            try writer.print("{s} iter index {}, {} -> {}\n", .{ name, iter_index, offset, target });
         } else {
-            try writer.print("{s:<24} iter index: {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });
+            try writer.print("{s:<24} iter index {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });
         }
 
         return offset + 4;
@@ -225,7 +225,7 @@ pub const Disassembler = struct {
         const method_name = self.chunk.constants.items[name_id];
         const arg_count = self.chunk.code.items[offset + 2];
 
-        try writer.print("{s:<24} index: {}, value: ", .{ name, name_id });
+        try writer.print("{s:<24} index {}, value ", .{ name, name_id });
         try method_name.print(writer);
         try writer.print(", {} args\n", .{arg_count});
 

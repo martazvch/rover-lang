@@ -139,7 +139,6 @@ pub const Vm = struct {
     fn execute(self: *Self) !void {
         while (true) {
             if (comptime config.print_stack) {
-                print("\n", .{});
                 print("          ", .{});
 
                 var value = self.stack.values[0..].ptr;
@@ -148,13 +147,13 @@ pub const Vm = struct {
                     try value[0].print(self.stdout);
                     print("] ", .{});
                 }
+                print("\n", .{});
             }
 
             if (comptime config.print_instr) {
                 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
                 var dis = Disassembler.init(self.chunk, self.allocator, false);
                 defer dis.deinit();
-                print("{s}\n", .{dis.disassembled.items});
                 _ = try dis.dis_instruction(self.instruction_nb(), self.stdout);
             }
 
@@ -196,7 +195,10 @@ pub const Vm = struct {
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
                 .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
-                .Jump => self.ip += self.read_short(),
+                .Jump => {
+                    const jump = self.read_short();
+                    self.ip += jump;
+                },
                 .JumpIfFalse => {
                     const jump = self.read_short();
                     if (!self.stack.peek(0).Bool) self.ip += jump;

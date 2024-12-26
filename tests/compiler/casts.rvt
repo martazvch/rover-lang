@@ -6,10 +6,10 @@ noval = 1
 
 expect:
 OP_NULL
-OP_DEFINE_GLOBAL index: 0
-OP_CONSTANT index: 0, value: 1
+OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 0, value 1
 OP_CAST_TO_FLOAT
-OP_SET_GLOBAL index: 0
+OP_SET_GLOBAL index 0
 OP_RETURN
 
 ================
@@ -18,11 +18,11 @@ code:
 var noval: float = 1 + 6
 
 expect:
-OP_CONSTANT index: 0, value: 1
-OP_CONSTANT index: 1, value: 6
+OP_CONSTANT index 0, value 1
+OP_CONSTANT index 1, value 6
 OP_ADD_INT
 OP_CAST_TO_FLOAT
-OP_DEFINE_GLOBAL index: 0
+OP_DEFINE_GLOBAL index 0
 OP_RETURN
 
 ================

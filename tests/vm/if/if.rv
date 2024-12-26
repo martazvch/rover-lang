@@ -8,12 +8,13 @@ print b // expect: 11
 
 var c = if { not true } { 5 + 6 } else {
     var tmp = 1
-    print tmp
+    print tmp // expect: 1
     tmp = 5
+    print tmp // expect: 5
     a + b + tmp
 }
 
-print c
+print c // expect: 17
 
 var d = if {
     var tmp = "garbage"
@@ -25,3 +26,13 @@ var d = if {
 } else -10
 
 print d // expect: -5
+
+var e = if not not true do 6/2 else 0
+print e // expect: 3
+
+var f = if if true do true else false {
+    var tmp = 3
+    tmp + e
+} else -8
+
+print f // expect: 6
