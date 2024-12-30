@@ -22,3 +22,17 @@ print -8 >= -9.1 // expect: true
 
 print "foo " == "foo " // expect: true
 print "f o o" == "f oo" // expect: false
+
+// And & Or
+print true and true // expect: true
+print true and false // expect: false
+print false and true // expect: false
+print false and false // expect: false
+
+print true or true // expect: true
+print true or false // expect: true
+print false or true // expect: true
+print false or false // expect: false
+
+// Right associative
+print true and false or true // expect: true

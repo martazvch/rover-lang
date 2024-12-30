@@ -6,6 +6,60 @@
 //  - we jump just after the other JUMP (on the POP) to exit the then branch
 
 code:
+if true do print "yes"
+
+expect:
+OP_TRUE
+OP_JUMP_IF_FALSE 1 -> 8
+OP_POP
+OP_CONSTANT index 0, value "yes"
+OP_PRINT
+OP_POP
+OP_RETURN
+
+================
+
+code:
+if true and false { print "yes" }
+
+expect:
+OP_TRUE
+OP_JUMP_IF_FALSE 1 -> 6
+OP_POP
+OP_FALSE
+OP_JUMP_IF_FALSE 6 -> 13
+OP_POP
+OP_CONSTANT index 0, value "yes"
+OP_PRINT
+OP_POP
+OP_RETURN
+
+================
+
+code:
+if true and false { print "yes" } else { print "no" }
+
+expect:
+OP_TRUE
+OP_JUMP_IF_FALSE 1 -> 6
+OP_POP
+OP_FALSE
+OP_JUMP_IF_FALSE 6 -> 16
+OP_POP
+OP_CONSTANT index 0, value "yes"
+OP_PRINT
+OP_JUMP 13 -> 20
+OP_POP
+OP_CONSTANT index 1, value "no"
+OP_PRINT
+OP_RETURN
+
+================
+
+
+// If as expr
+
+code:
 var a = if true {1} else {2}
 
 expect:

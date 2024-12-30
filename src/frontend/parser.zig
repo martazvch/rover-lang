@@ -306,6 +306,9 @@ pub const Parser = struct {
     const Rule = struct { prec: i8, assoc: Assoc = .Left };
 
     const rules = std.enums.directEnumArrayDefault(Token.Kind, Rule, .{ .prec = -1 }, 0, .{
+        .And = .{ .prec = 20 },
+        .Or = .{ .prec = 20 },
+
         .EqualEqual = .{ .prec = 30, .assoc = .None },
         .BangEqual = .{ .prec = 30, .assoc = .None },
 

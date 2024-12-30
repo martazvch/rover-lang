@@ -25,6 +25,7 @@ pub const OpCode = enum(u8) {
     GreaterEqualFloat,
     Jump,
     JumpIfFalse,
+    JumpIfTrue,
     LessInt,
     LessFloat,
     LessEqualInt,

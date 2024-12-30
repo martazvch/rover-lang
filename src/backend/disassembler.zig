@@ -102,6 +102,7 @@ pub const Disassembler = struct {
             // .Invoke => self.invoke_instruction("OP_INVOKE", offset),
             .Jump => self.jump_instruction("OP_JUMP", 1, offset, writer),
             .JumpIfFalse => self.jump_instruction("OP_JUMP_IF_FALSE", 1, offset, writer),
+            .JumpIfTrue => self.jump_instruction("OP_JUMP_IF_TRUE", 1, offset, writer),
             .LessInt => self.simple_instruction("OP_LESS_INT", offset, writer),
             .LessFloat => self.simple_instruction("OP_LESS_FLOAT", offset, writer),
             .LessEqualInt => self.simple_instruction("OP_LESS_EQUAL_INT", offset, writer),

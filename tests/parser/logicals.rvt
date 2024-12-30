@@ -1,0 +1,26 @@
+// Tests logicals
+
+// Int
+code:
+true and false
+
+expect:
+[Binop and]
+    [Bool literal true]
+    [Bool literal false]
+
+================
+
+code:
+true and true or false and true
+
+expect:
+[Binop and]
+    [Binop or]
+        [Binop and]
+            [Bool literal true]
+            [Bool literal true]
+        [Bool literal false]
+    [Bool literal true]
+
+================

@@ -189,6 +189,9 @@ pub const Compiler = struct {
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
         const extra = self.analyzed_stmts.next().Binop;
 
+        // Special handle for logicals
+        if (extra.type_ == Bool) return self.logical_binop(expr);
+
         try self.expression(expr.lhs);
 
         // For Str, the cast field is used in another way
@@ -245,6 +248,27 @@ pub const Compiler = struct {
         };
     }
 
+    fn logical_binop(self: *Self, expr: *const Ast.BinOp) !void {
+        switch (expr.op) {
+            .And => {
+                try self.expression(expr.lhs);
+                const end_jump = try self.emit_jump(.JumpIfFalse);
+                // If true, pop the value, else the 'false' remains on top of stack
+                try self.chunk.write_op(.Pop);
+                try self.expression(expr.rhs);
+                try self.patch_jump(end_jump);
+            },
+            .Or => {
+                try self.expression(expr.lhs);
+                const else_jump = try self.emit_jump(.JumpIfTrue);
+                try self.chunk.write_op(.Pop);
+                try self.expression(expr.rhs);
+                try self.patch_jump(else_jump);
+            },
+            else => unreachable,
+        }
+    }
+
     fn grouping(self: *Self, expr: *const Ast.Grouping) !void {
         try self.expression(expr.expr);
     }
@@ -285,7 +309,7 @@ pub const Compiler = struct {
         // Otherwise, we just patch the then_jump
         if (expr.else_body) |*body| {
             const else_jump = try self.emit_jump(.Jump);
-            // We patch here so we arrive on the Jump that skips the whole else branch
+            // We patch here so we arrive on the POP
             try self.patch_jump(then_jump);
 
             // If we didn't go into the then branch, we pop the condition here
@@ -296,7 +320,11 @@ pub const Compiler = struct {
             if (extra.cast == .Else) try self.chunk.write_op(.CastToFloat);
 
             try self.patch_jump(else_jump);
-        } else try self.patch_jump(then_jump);
+        } else {
+            try self.patch_jump(then_jump);
+            // We pop the condition used to go through then branch
+            try self.chunk.write_op(.Pop);
+        }
     }
 
     fn int_lit(self: *Self, expr: *const Ast.IntLit) !void {

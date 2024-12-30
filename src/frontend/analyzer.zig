@@ -666,7 +666,15 @@ pub const Analyzer = struct {
             },
 
             // Logical binop
-            .And, .Or => unreachable,
+            .And, .Or => {
+                if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
+                    .found = self.type_manager.str(lhs),
+                } }, expr.lhs.span());
+
+                if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
+                    .found = self.type_manager.str(rhs),
+                } }, expr.rhs.span());
+            },
             else => unreachable,
         }
 

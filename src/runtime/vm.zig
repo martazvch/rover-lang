@@ -202,6 +202,10 @@ pub const Vm = struct {
                     const jump = self.read_short();
                     if (!self.stack.peek(0).Bool) self.ip += jump;
                 },
+                .JumpIfTrue => {
+                    const jump = self.read_short();
+                    if (self.stack.peek(0).Bool) self.ip += jump;
+                },
                 .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
                 .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
                 .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
