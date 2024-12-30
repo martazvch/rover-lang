@@ -34,6 +34,7 @@ pub const Stmt = union(enum) {
     Discard: Discard,
     Print: Print,
     VarDecl: VarDecl,
+    While: While,
     Expr: *Expr,
 
     pub fn span(self: *const Stmt) Span {
@@ -48,6 +49,10 @@ pub const Stmt = union(enum) {
             .VarDecl => |s| .{
                 .start = s.name.start,
                 .end = s.name.start + s.name.text.len,
+            },
+            .While => |s| .{
+                .start = s.condition.span().start,
+                .end = s.body.span().end,
             },
             .Expr => |e| e.span(),
         };
@@ -72,6 +77,11 @@ pub const VarDecl = struct {
     is_const: bool,
     type_: ?SourceSlice,
     value: ?*Expr,
+};
+
+pub const While = struct {
+    condition: *const Expr,
+    body: *const Stmt,
 };
 
 // Expressions

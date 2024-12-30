@@ -108,6 +108,7 @@ pub const Compiler = struct {
             },
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
+            .While => |*s| self.while_stmt(s),
             .Expr => |expr| self.expression(expr),
         };
     }
@@ -151,6 +152,11 @@ pub const Compiler = struct {
             try self.write_op_and_byte(.DefineGlobal, @intCast(extra.index));
         }
         // No else, if local variable value sits on top of stack
+    }
+
+    fn while_stmt(self: *Self, stmt: *const Ast.While) !void {
+        _ = self;
+        _ = stmt;
     }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {

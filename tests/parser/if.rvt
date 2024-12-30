@@ -6,7 +6,7 @@ if true {} else = // '=' to avoid having a \n
 if true do print "ok" }
 
 errors:
-ExpectBraceOrDoAfterIf
+ExpectBraceOrDo, if
 ExpectExpr, =
 ExpectNewLine
 

@@ -220,7 +220,7 @@ pub const Parser = struct {
         }
     }
 
-    fn declaration(self: *Self) !Stmt {
+    fn declaration(self: *Self) Error!Stmt {
         if (self.match(.Var)) {
             return self.var_declaration(false);
         } else if (self.match(.Underscore)) {
@@ -281,6 +281,8 @@ pub const Parser = struct {
     fn statement(self: *Self) !Stmt {
         if (self.match(.Print)) {
             return self.print_stmt();
+        } else if (self.match(.While)) {
+            return self.while_stmt();
         } else {
             const assigne = try self.parse_precedence_expr(0);
 
@@ -290,8 +292,25 @@ pub const Parser = struct {
         }
     }
 
-    fn print_stmt(self: *Self) !Stmt {
+    fn print_stmt(self: *Self) Error!Stmt {
         return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
+    }
+
+    fn while_stmt(self: *Self) !Stmt {
+        const condition = try self.parse_precedence_expr(0);
+
+        const body = try self.allocator.create(Ast.Stmt);
+        body.* = if (self.match_and_skip(.LeftBrace))
+            .{ .Expr = try self.block_expr() }
+        else if (self.match_and_skip(.Do))
+            try self.declaration()
+        else
+            return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
+
+        return .{ .While = .{
+            .condition = condition,
+            .body = body,
+        } };
     }
 
     fn assignment(self: *Self, assigne: *const Expr) !Stmt {
@@ -425,7 +444,7 @@ pub const Parser = struct {
         else if (self.match_and_skip(.Do))
             try self.declaration()
         else
-            return self.error_at_current(.ExpectBraceOrDoAfterIf);
+            return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "if" } });
 
         span.end = self.prev().span.end;
         self.skip_new_lines();

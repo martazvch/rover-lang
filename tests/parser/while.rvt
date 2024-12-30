@@ -1,0 +1,58 @@
+// Tests variable declaration
+
+code:
+while true {}
+while true do {}
+while true and false do var a = 1
+while {true} {
+    var tmp = 1+5
+}
+
+expect:
+[While
+    condition:
+    [Bool literal true]
+    body:
+    [Block]
+]
+[While
+    condition:
+    [Bool literal true]
+    body:
+    [Block]
+]
+[While
+    condition:
+    [Binop and]
+        [Bool literal true]
+        [Bool literal false]
+    body:
+    [Var declaration a, type void, value
+        [Int literal 1]
+    ]
+]
+[While
+    condition:
+    [Block]
+        [Bool literal true]
+    body:
+    [Block]
+        [Var declaration tmp, type void, value
+            [Binop +]
+                [Int literal 1]
+                [Int literal 5]
+        ]
+]
+
+================
+
+code:
+while true 1+1
+while {true} var a
+
+error:
+ExpectBraceOrDo, while
+ExpectBraceOrDo, while
+
+================
+

@@ -39,17 +39,18 @@ pub const AstPrinter = struct {
     pub fn parse_ast(self: *Self, source: []const u8, stmts: []const Stmt) !void {
         self.source = source;
 
-        for (stmts) |stmt| {
+        for (stmts) |*stmt| {
             try self.statement(stmt);
         }
     }
 
-    fn statement(self: *Self, stmt: Ast.Stmt) !void {
-        try switch (stmt) {
+    fn statement(self: *Self, stmt: *const Ast.Stmt) !void {
+        try switch (stmt.*) {
             .Assignment => |*s| self.assignment(s),
             .Discard => |*s| self.discard(s),
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_decl(s),
+            .While => |*s| self.while_stmt(s),
             .Expr => |s| self.expression(s),
         };
     }
@@ -115,6 +116,22 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
+    fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[While\n");
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("condition:\n");
+        try self.expression(stmt.condition);
+        try self.indent();
+        try self.tree.appendSlice("body:\n");
+        try self.statement(stmt.body);
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
             .Block => |*e| self.block_expr(e),
@@ -137,7 +154,7 @@ pub const AstPrinter = struct {
 
         self.indent_level += 1;
 
-        for (expr.stmts) |s| try self.statement(s);
+        for (expr.stmts) |*s| try self.statement(s);
 
         self.indent_level -= 1;
     }
@@ -195,10 +212,10 @@ pub const AstPrinter = struct {
         try self.expression(expr.condition);
         try self.indent();
         try self.tree.appendSlice("then body:\n");
-        try self.statement(expr.then_body);
+        try self.statement(&expr.then_body);
         try self.indent();
         try self.tree.appendSlice("else body:\n");
-        if (expr.else_body) |body| {
+        if (expr.else_body) |*body| {
             try self.statement(body);
         } else {
             try self.indent();

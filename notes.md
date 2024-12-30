@@ -10,7 +10,6 @@
 at the end of a scope being the returned value
 - Each control flow is an expression, all branches must return the same value:
    - If
-   - While
    - Loop
    - Switch
 - Regarding returned value:
@@ -23,6 +22,7 @@ at the end of a scope being the returned value
         - Same as while
     - Switch:
         - Each branch must return the same type
+- While can't be an expression because of the fact that you may never enter the loop
 
 ### Variables
 

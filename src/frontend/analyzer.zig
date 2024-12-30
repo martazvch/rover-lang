@@ -177,6 +177,7 @@ pub const Analyzer = struct {
             .Discard => |*s| try self.discard(s),
             .Print => |*s| _ = try self.expression(s.expr),
             .VarDecl => |*s| try self.var_declaration(s),
+            .While => |*s| try self.while_stmt(s),
             .Expr => |e| final = try self.expression(e),
         }
 
@@ -313,6 +314,11 @@ pub const Analyzer = struct {
         }
 
         try self.analyzed_stmts.append(.{ .Variable = extra });
+    }
+
+    fn while_stmt(self: *Self, stmt: *const Ast.While) !void {
+        _ = self;
+        _ = stmt;
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
