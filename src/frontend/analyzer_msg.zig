@@ -11,12 +11,12 @@ pub const AnalyzerMsg = union(enum) {
     ImplicitCast: struct { side: []const u8, type_: []const u8 },
     MissingElseClause: struct { if_type: []const u8 },
     NonBoolIfCond: struct { found: []const u8 },
-    // NonExprAsExpr: struct { what: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
     UndeclaredVar: struct { name: []const u8 },
     UnusedValue,
     UseUninitVar: struct { name: []const u8 },
     VoidAssignment,
+    VoidDiscard,
 
     const Self = @This();
 
@@ -36,13 +36,13 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidUnary => writer.print("invalid unary operation", .{}),
             .ImplicitCast => writer.print("implicit cast", .{}),
             .NonBoolIfCond => |e| writer.print("non boolean condition, found type '{s}'", .{e.found}),
-            // .NonExprAsExpr => |e| writer.print("'{s}' produced a value outside an assignment", .{e.what}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
             .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
             .UnusedValue => writer.print("unused value", .{}),
             .UseUninitVar => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
+            .VoidDiscard => writer.print("trying to discard a non value", .{}),
         };
     }
 
@@ -58,19 +58,20 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidUnary,
             .NonBoolIfCond,
             => writer.print("expression is not a boolean type", .{}),
-            // .NonExprAsExpr => |e| writer.print("branches resolve to a '{s}' type", .{e.found}),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
             .UnusedValue => writer.print("this expression produces a value", .{}),
             .VoidAssignment => writer.print("this expression procuses no value", .{}),
+            .VoidDiscard => writer.print("this expression produces no value", .{}),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
             .AlreadyDeclaredVar => writer.print("use another name or use numbers, underscore", .{}),
+            .VoidDiscard => writer.print("remove the discard", .{}),
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like

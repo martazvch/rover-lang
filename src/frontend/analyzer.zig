@@ -174,7 +174,7 @@ pub const Analyzer = struct {
 
         switch (stmt.*) {
             .Assignment => |*s| try self.assignment(s),
-            .Discard => |*s| _ = try self.expression(s.expr),
+            .Discard => |*s| try self.discard(s),
             .Print => |*s| _ = try self.expression(s.expr),
             .VarDecl => |*s| try self.var_declaration(s),
             .Expr => |e| final = try self.expression(e),
@@ -221,6 +221,12 @@ pub const Analyzer = struct {
             // Later, manage member, pointer, ...
             else => |*expr| return self.err(.InvalidAssignTarget, expr.span()),
         }
+    }
+
+    fn discard(self: *Self, stmt: *const Ast.Discard) !void {
+        const discarded = try self.expression(stmt.expr);
+
+        if (discarded == Void) return self.err(.VoidDiscard, stmt.expr.span());
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
