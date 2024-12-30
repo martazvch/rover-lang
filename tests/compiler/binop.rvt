@@ -1,7 +1,7 @@
 // Tests binop
 
 code:
-1+ -2
+_ = 1+ -2
 
 expect:
 OP_CONSTANT index 0, value 1
@@ -14,7 +14,7 @@ OP_RETURN
 ================
 
 code:
-1. + -2.
+_ = 1. + -2.
 
 expect:
 OP_CONSTANT index 0, value 1
@@ -27,7 +27,7 @@ OP_RETURN
 ================
 
 code:
-"foo" + " bar"
+_ = "foo" + " bar"
 
 expect:
 OP_CONSTANT index 0, value "foo"
@@ -39,7 +39,7 @@ OP_RETURN
 ================
 
 code:
-12.5 - -78.2
+_ = 12.5 - -78.2
 
 expect:
 OP_CONSTANT index 0, value 12.5
@@ -52,7 +52,7 @@ OP_RETURN
 ================
 
 code:
-12 - -78
+_ = 12 - -78
 
 expect:
 OP_CONSTANT index 0, value 12
@@ -65,7 +65,7 @@ OP_RETURN
 ================
 
 code:
-12 * -56.
+_ = 12 * -56.
 
 expect:
 OP_CONSTANT index 0, value 12
@@ -79,7 +79,7 @@ OP_RETURN
 ================
 
 code:
-12 * -56
+_ = 12 * -56
 
 expect:
 OP_CONSTANT index 0, value 12
@@ -92,7 +92,7 @@ OP_RETURN
 ================
 
 code:
-2 * "foo"
+_ = 2 * "foo"
 
 expect:
 OP_CONSTANT index 0, value 2
@@ -104,7 +104,7 @@ OP_RETURN
 ================
 
 code:
-"foo" * 4
+_ = "foo" * 4
 
 expect:
 OP_CONSTANT index 0, value "foo"
@@ -116,7 +116,7 @@ OP_RETURN
 ================
 
 code:
-6.789 / -1
+_ = 6.789 / -1
 
 expect:
 OP_CONSTANT index 0, value 6.789
@@ -130,7 +130,7 @@ OP_RETURN
 ================
 
 code:
-6 / -1
+_ = 6 / -1
 
 expect:
 OP_CONSTANT index 0, value 6
@@ -145,7 +145,7 @@ OP_RETURN
 // Logical
 
 code:
-5 > 3
+_ = 5 > 3
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -157,7 +157,7 @@ OP_RETURN
 ================
 
 code:
-23. > 32.
+_ = 23. > 32.
 
 expect:
 OP_CONSTANT index 0, value 23
@@ -169,7 +169,7 @@ OP_RETURN
 ================
 
 code:
-5 >= 3.
+_ = 5 >= 3.
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -182,7 +182,7 @@ OP_RETURN
 ================
 
 code:
-8 >= 9
+_ = 8 >= 9
 
 expect:
 OP_CONSTANT index 0, value 8
@@ -194,7 +194,7 @@ OP_RETURN
 ================
 
 code:
-12. < -56.
+_ = 12. < -56.
 
 expect:
 OP_CONSTANT index 0, value 12
@@ -207,7 +207,7 @@ OP_RETURN
 ================
 
 code:
-12 < -56
+_ = 12 < -56
 
 expect:
 OP_CONSTANT index 0, value 12
@@ -220,7 +220,7 @@ OP_RETURN
 ================
 
 code:
-34 <= 5
+_ = 34 <= 5
 
 expect:
 OP_CONSTANT index 0, value 34
@@ -232,7 +232,7 @@ OP_RETURN
 ================
 
 code:
-34. <= 5.
+_ = 34. <= 5.
 
 expect:
 OP_CONSTANT index 0, value 34
@@ -244,7 +244,7 @@ OP_RETURN
 ================
 
 code:
-5 == 3
+_ = 5 == 3
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -256,7 +256,7 @@ OP_RETURN
 ================
 
 code:
-5. == 3.
+_ = 5. == 3.
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -268,7 +268,7 @@ OP_RETURN
 ================
 
 code:
-5 != 3
+_ = 5 != 3
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -280,7 +280,7 @@ OP_RETURN
 ================
 
 code:
-5. != 3
+_ = 5. != 3
 
 expect:
 OP_CONSTANT index 0, value 5

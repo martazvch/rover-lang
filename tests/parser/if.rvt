@@ -4,6 +4,7 @@ code:
 if true 
 if true {} else = // '=' to avoid having a \n
 if true do print "ok" }
+
 errors:
 ExpectBraceOrDoAfterIf
 ExpectExpr, =
@@ -16,6 +17,16 @@ if true { print "ok" }
 if true {
     print "ok"
 }
+
+if true
+{
+    print "ok"
+}
+else print "ko"
+
+if true {
+    print "ok" } else {
+    print "ko" }
 
 expect:
 [If
@@ -39,7 +50,34 @@ expect:
     none
 ]
 
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    [Print]
+        [String literal ko]
+]
+
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Block]
+        [Print]
+            [String literal ok]
+    else body:
+    [Block]
+        [Print]
+            [String literal ko]
+]
+
 ================
+
+// Condition as block
 
 code:
 if {
@@ -66,52 +104,16 @@ expect:
 
 ================
 
-
-code:
-if true
-{
-    print "ok"
-}
-else print "ko"
-
-expect:
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal ok]
-    else body:
-    [Print]
-        [String literal ko]
-]
-
-================
-
-code:
-if true {
-    print "ok" } else {
-    print "ko" }
-
-expect:
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal ok]
-    else body:
-    [Block]
-        [Print]
-            [String literal ko]
-]
-
-================
+// Do syntaxe
 
 code:
 if true do print "ok"
+
+if true do print "ok"
+else print "ko"
+
+if true do print "ok"
+else { print "ko" }
 
 expect:
 [If
@@ -124,13 +126,6 @@ expect:
     none
 ]
 
-================
-
-code:
-if true do print "ok"
-else print "ko"
-
-expect:
 [If
     condition:
     [Bool literal true]
@@ -140,6 +135,18 @@ expect:
     else body:
     [Print]
         [String literal ko]
+]
+
+[If
+    condition:
+    [Bool literal true]
+    then body:
+    [Print]
+        [String literal ok]
+    else body:
+    [Block]
+        [Print]
+            [String literal ko]
 ]
 
 ================
@@ -169,6 +176,66 @@ expect:
         [Print]
             [String literal ko]
     ]
+]
+
+================
+
+// If as expression
+
+code:
+var _res = if true do 5 else 10
+
+expect:
+[Var declaration _res, type void, value
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [Int literal 5]
+        else body:
+        [Int literal 10]
+    ]
+]
+
+================
+
+code:
+_ = if true do 5 else 10
+
+expect:
+[Discard
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [Int literal 5]
+        else body:
+        [Int literal 10]
+    ]
+]
+
+================
+
+// Here, the if dosen't know it's an expression
+code:
+if { if true do true else false } do 5 else 10
+
+expect:
+[If
+    condition:
+    [Block]
+        [If
+            condition:
+            [Bool literal true]
+            then body:
+            [Bool literal true]
+            else body:
+            [Bool literal false]
+        ]
+    then body:
+    [Int literal 5]
+    else body:
+    [Int literal 10]
 ]
 
 ================

@@ -93,19 +93,22 @@ pub const Compiler = struct {
 
         for (stmts) |*stmt| {
             // From here, we always want to pop results from expressions
-            try self.statement(stmt, true);
+            try self.statement(stmt);
         }
 
         try self.chunk.write_op(.Return);
     }
 
-    fn statement(self: *Self, stmt: *const Stmt, pop_expr: bool) !void {
+    fn statement(self: *Self, stmt: *const Stmt) !void {
         try switch (stmt.*) {
             .Assignment => |*s| self.assignment(s),
-            .Discard => |*s| self.expression_statement(s.expr, pop_expr),
+            .Discard => |*s| {
+                try self.expression(s.expr);
+                try self.chunk.write_op(.Pop);
+            },
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
-            .Expr => |expr| self.expression_statement(expr, pop_expr),
+            .Expr => |expr| self.expression(expr),
         };
     }
 
@@ -150,19 +153,6 @@ pub const Compiler = struct {
         // No else, if local variable value sits on top of stack
     }
 
-    /// Expressions used as statements, e.g.:
-    ///  3 + 4
-    /// without any assignment. To avoid having the value sitting on top
-    /// of the stack, we discard it in cases where the expression is in
-    /// stabdalone like the example if asked
-    /// It can be asked to not pop it, like when we parse then/else bodies
-    /// than are statements, if it's a block, we don't want to pop the value out
-    fn expression_statement(self: *Self, expr: *const Expr, pop: bool) !void {
-        try self.expression(expr);
-
-        if (pop) try self.chunk.write_op(.Pop);
-    }
-
     fn expression(self: *Self, expr: *const Expr) Error!void {
         try switch (expr.*) {
             .Block => |*e| self.block(e),
@@ -181,31 +171,19 @@ pub const Compiler = struct {
 
     fn block(self: *Self, expr: *const Ast.Block) Error!void {
         const extra = self.analyzed_stmts.next().Block;
-        const pop_last = !extra.returns_value;
 
-        for (expr.stmts, 0..) |*stmt, i| {
-            // If this is the last stmt and the block returns a value
-            // we compile with "expression" to avoid compiling a POP
-            // with expression_statement
-            if (i == expr.stmts.len - 1) {
-                try self.statement(stmt, pop_last);
-            } else try self.statement(stmt, true);
+        for (expr.stmts) |*stmt| {
+            try self.statement(stmt);
         }
 
-        // If we don't return any value, then we brain the POP from
-        // expression_statement
-        // The only case in which we don't return a value and the
-        // analyzer is ok with that is in cases where blocks are
-        // written outside expressions, so always called with
-        // expression statement
         // TODO: protect the @intCast
-        if (!extra.returns_value) {
-            // -1 because we know here we are called by expression_statement
-            // which is gonna emit a POP
-            for (0..extra.pop_count - 1) |_| {
+        if (extra.is_expr) {
+            try self.write_op_and_byte(.ScopeReturn, @intCast(extra.pop_count));
+        } else {
+            for (0..extra.pop_count) |_| {
                 try self.chunk.write_op(.Pop);
             }
-        } else try self.write_op_and_byte(.ScopeReturn, @intCast(extra.pop_count));
+        }
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
@@ -298,7 +276,8 @@ pub const Compiler = struct {
         const then_jump = try self.emit_jump(.JumpIfFalse);
         // Pops the condition, no longer needed
         try self.chunk.write_op(.Pop);
-        try self.statement(&expr.then_body, false);
+
+        try self.statement(&expr.then_body);
 
         if (extra.cast == .Then) try self.chunk.write_op(.CastToFloat);
 
@@ -312,7 +291,7 @@ pub const Compiler = struct {
             // If we didn't go into the then branch, we pop the condition here
             try self.chunk.write_op(.Pop);
 
-            try self.statement(body, false);
+            try self.statement(body);
 
             if (extra.cast == .Else) try self.chunk.write_op(.CastToFloat);
 

@@ -1,0 +1,22 @@
+// Discard expression
+
+code:
+_ = if true do 5 else 10
+_ = 56
+
+expect:
+[Discard
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [Int literal 5]
+        else body:
+        [Int literal 10]
+    ]
+]
+[Discard
+    [Int literal 56]
+]
+
+================

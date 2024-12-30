@@ -1,27 +1,7 @@
-var a = if true {1} else {2}
-print a // expect: 1
-
-var b = if { true } do 5 + 6 else {
-    1
-}
-print b // expect: 11
-
-var c = if { not true } { 5 + 6 } else {
-    var tmp = 1
-    print tmp
-    tmp = 5
-    a + b + tmp
+{
+    var a = 1
+    _ = 3+4
+    var b = 5
+    print b
 }
 
-print c
-
-var d = if {
-    var tmp = "garbage"
-    5 == 5
-} {
-    var tmp = "other trash"
-    _ = tmp == "trash"
-    -5
-} else -10
-
-print d // expect: -5

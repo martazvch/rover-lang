@@ -64,7 +64,7 @@ pub const Discard = struct {
 };
 
 pub const Print = struct {
-    expr: *Expr,
+    expr: *const Expr,
 };
 
 pub const VarDecl = struct {

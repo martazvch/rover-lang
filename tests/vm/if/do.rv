@@ -1,0 +1,4 @@
+var cond = true
+var res = 180
+
+if cond do print res // expect: 180

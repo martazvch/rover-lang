@@ -80,9 +80,7 @@ pub const Vm = struct {
     pub fn init(self: *Self) !void {
         self.gc.link(self);
         self.allocator = self.gc.allocator();
-
         self.stack.init();
-
         self.strings = Table.init(self.allocator);
         self.init_string = try ObjString.copy(self, "init");
     }
@@ -142,6 +140,7 @@ pub const Vm = struct {
                 print("          ", .{});
 
                 var value = self.stack.values[0..].ptr;
+
                 while (value != self.stack.top) : (value += 1) {
                     print("[", .{});
                     try value[0].print(self.stdout);

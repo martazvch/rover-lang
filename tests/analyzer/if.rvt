@@ -94,6 +94,8 @@ expect:
 
 ================
 
+// Non bool condition
+
 code:
 _ = if {
     var tmp = 62
@@ -155,6 +157,18 @@ IncompatibleIfType, int, str
 IncompatibleIfType, void, float
 IncompatibleIfType, float, str
 IncompatibleIfType, int, str
+
+================
+
+// Non expression if return a value
+
+code:
+if true do 1 else 2
+if false {5.1} else 4.2
+
+error:
+UnusedValue
+UnusedValue
 
 ================
 

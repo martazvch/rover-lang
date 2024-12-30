@@ -72,10 +72,12 @@ pub const AstPrinter = struct {
 
     fn discard(self: *Self, stmt: *const Ast.Discard) !void {
         try self.indent();
-        try self.tree.appendSlice("[Discard]\n");
+        try self.tree.appendSlice("[Discard\n");
         self.indent_level += 1;
         try self.expression(stmt.expr);
         self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
     }
 
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {

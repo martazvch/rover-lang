@@ -163,12 +163,8 @@ pub const Analyzer = struct {
             // If at this stage we have a type, it means that nobody
             // consumed it. It might be a standalone expression like:
             // 3+4
-            // TODO: tell the compiler to skip this statement and don't compile it
-            // (maybe a separate array with statement index?)
-            // Only expressions can lead to that
-            // -> Pas skip parce que side effect du stmt mais emit POP?
             if (stmt_type != Void) {
-                try self.warn(.UnusedValue, stmt.Expr.span());
+                self.err(.UnusedValue, stmt.Expr.span()) catch {};
             }
         }
     }
@@ -343,11 +339,8 @@ pub const Analyzer = struct {
         for (expr.stmts, 0..) |*s, i| {
             final = try self.statement(s);
 
-            // Same as main function, if the type is not void and it
-            // wasn't the last expression of block (for implicit return),
-            // unsued value
-            if (final != Void and i < expr.stmts.len - 1) {
-                try self.warn(.UnusedValue, s.Expr.span());
+            if (final != Void and i != expr.stmts.len - 1) {
+                return self.err(.UnusedValue, s.span());
             }
         }
 
@@ -368,7 +361,7 @@ pub const Analyzer = struct {
 
         self.analyzed_stmts.items[idx] = .{ .Block = .{
             .pop_count = pop_count,
-            .returns_value = if (final == Void) false else true,
+            .is_expr = if (final != Void) true else false,
         } };
 
         return final;

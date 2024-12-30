@@ -82,8 +82,8 @@ pub const Parser = struct {
 
             try self.stmts.append(stmt);
 
-            // If EOF, continue to end
-            if (self.check(.Eof)) continue;
+            // If EOF, exit
+            if (self.match(.Eof)) break;
 
             // After each statements we expect a new line
             self.expect_or_err_at_tk(
@@ -410,7 +410,7 @@ pub const Parser = struct {
         return expr;
     }
 
-    fn if_expr(self: *Self) !*Expr {
+    fn if_expr(self: *Self) Error!*Expr {
         var span = self.prev().span;
         const condition = try self.parse_precedence_expr(0);
 
@@ -420,17 +420,25 @@ pub const Parser = struct {
         const then_body: Ast.Stmt = if (self.match_and_skip(.LeftBrace))
             .{ .Expr = try self.block_expr() }
         else if (self.match_and_skip(.Do))
-            try self.statement()
+            try self.declaration()
         else
             return self.error_at_current(.ExpectBraceOrDoAfterIf);
 
+        span.end = self.prev().span.end;
         self.skip_new_lines();
         var else_body: ?Stmt = null;
-        if (self.match_and_skip(.Else)) {
-            else_body = try self.statement();
-        }
 
-        span.end = self.prev().span.end;
+        // If we dosen't match an else, we go back one token to be able
+        // to match the rule "after each statement there is a new line"
+        // tested in the main caller
+        if (self.match_and_skip(.Else)) {
+            if (self.match_and_skip(.LeftBrace)) {
+                else_body = .{ .Expr = try self.block_expr() };
+            } else else_body = try self.declaration();
+
+            span.end = self.prev().span.end;
+        } else self.token_id -= 1;
+
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .If = .{

@@ -10,6 +10,17 @@ expect:
 ================
 
 code:
+_ = { 5 }
+
+expect:
+[Discard
+    [Block]
+        [Int literal 5]
+]
+
+================
+
+code:
 {
     var a }
 

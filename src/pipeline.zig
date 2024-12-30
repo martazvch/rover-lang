@@ -44,22 +44,20 @@ pub const ReplPipeline = struct {
         var analyzer = Analyzer.init(allocator);
         try analyzer.type_manager.init_builtins();
 
-        var vm = Vm.new(allocator);
-        try vm.init();
-
         // Init of parser in two times, maybe fix later when RLS is fixed in the lang
         return .{
             .allocator = allocator,
             .config = config,
             .analyzer = analyzer,
             .compiler = undefined,
-            .vm = vm,
+            .vm = Vm.new(allocator),
             .stmts_count = 0,
             .code_count = 0,
         };
     }
 
-    pub fn init(self: *Self) void {
+    pub fn init(self: *Self) !void {
+        try self.vm.init();
         self.compiler = Compiler.init(&self.vm);
     }
 

@@ -106,10 +106,11 @@ code:
 _ = 1 + 3
 
 expect:
-[Discard]
+[Discard
     [Binop +]
         [Int literal 1]
         [Int literal 3]
+]
 
 ================
 

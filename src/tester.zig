@@ -180,7 +180,12 @@ pub fn GenericTester(
                     // There is at least one element, the error name
                     const err_name = line.next().?;
 
+                    expect(i < test_data.reports.len) catch |e| {
+                        print("assertion {}, expect to find a {}th report but only {} were generated", .{ i, i + 1, test_data.reports.len });
+                        return e;
+                    };
                     const report = test_data.reports[i];
+
                     const got_name = @tagName(report);
                     expect(eql(u8, err_name, got_name)) catch |e| {
                         print("assertion {}, expect error: {s}, got {s}\n", .{ i, err_name, got_name });

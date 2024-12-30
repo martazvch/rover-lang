@@ -26,8 +26,8 @@ pub const AnalyzedStmt = union(enum) {
 pub const Block = struct {
     // Number of locals to pop at the end of scope
     pop_count: usize,
-    // Flag for implicit return
-    returns_value: bool,
+    // Tells if the block returns a value or not
+    is_expr: bool,
 };
 
 pub const Assignment = struct {

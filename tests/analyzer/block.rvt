@@ -9,14 +9,13 @@ var noval = {
 
 var void_post_assign
 void_post_assign = {
-    3 + 4
+    _ = 3 + 4
     var empty
 }
 
 error:
 VoidAssignment
 VoidAssignment
-UnusedValue
 
 ================
 
@@ -36,5 +35,27 @@ var a: int = {
 
 error:
 InvalidAssignType, int, float
+
+================
+
+code:
+// Declare local 0, declare local 1, use local 0 in binop
+// assign to local 1, returns local 0, defines global 0
+var a: int = {
+    var nb = 7
+    var c = 56
+    c = nb - 5
+    nb
+}
+
+expect:
+[Block pop count 2]
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Binop cast None, type int]
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Variable scope Local, index 0]
+[Variable scope Global, index 0]
 
 ================

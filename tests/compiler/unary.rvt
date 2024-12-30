@@ -1,7 +1,7 @@
 // Tests literals
 
 code:
--1
+_ = -1
 
 expect:
 OP_CONSTANT index 0, value 1
@@ -12,7 +12,7 @@ OP_RETURN
 ================
 
 code:
-----1
+_ = ----1
 
 expect:
 OP_CONSTANT index 0, value 1
@@ -26,7 +26,7 @@ OP_RETURN
 ================
 
 code:
--65.82
+_ = -65.82
 
 expect:
 OP_CONSTANT index 0, value 65.82
@@ -37,7 +37,7 @@ OP_RETURN
 ================
 
 code:
-not true
+_ = not true
 
 expect:
 OP_TRUE
@@ -48,7 +48,7 @@ OP_RETURN
 ================
 
 code:
-not false
+_ = not false
 
 expect:
 OP_FALSE
@@ -59,7 +59,7 @@ OP_RETURN
 ================
 
 code:
-not not not true
+_ = not not not true
 
 expect:
 OP_TRUE

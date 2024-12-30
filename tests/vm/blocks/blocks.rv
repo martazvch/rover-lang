@@ -18,7 +18,7 @@ var c: int = {
     var other = "just chillin"
     var nb = 7
     var sneaky = 90
-    nb
+    _ = nb
     b
 }
 

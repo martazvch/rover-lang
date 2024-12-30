@@ -116,7 +116,7 @@ fn repl(
         .static_analyzis = static_analyzis,
         .print_analyzed_ast = print_analyzed_ast,
     });
-    pipeline.init();
+    try pipeline.init();
     defer pipeline.deinit();
 
     _ = try stdout.write("\t\tRover language REPL\n");

@@ -4,7 +4,7 @@
 // but the scope is invoked without assigning the value
 // A OP_POP will be triggered as an expression statement
 code:
-{5}
+_ = {5}
 
 expect:
 OP_CONSTANT index 0, value 5
@@ -40,7 +40,7 @@ OP_RETURN
 code:
 {
     var a = 1
-    3+4
+    _ = 3+4
     var b = 5
     print b
 }
