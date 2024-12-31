@@ -34,16 +34,14 @@ test "runtime" {
             });
             defer allocator.free(file_path);
 
-            const tmp = &[_][]const u8{
-                path_to_exe,
-                "-f",
-                file_path,
-            };
-
             const res = try std.process.Child.run(.{
                 .allocator = allocator,
                 .cwd_dir = cwd,
-                .argv = tmp,
+                .argv = &[_][]const u8{
+                    path_to_exe,
+                    "-f",
+                    file_path,
+                },
             });
             defer allocator.free(res.stdout);
             defer allocator.free(res.stderr);
