@@ -1,5 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
+const builtin = @import("builtin");
 const expect = testing.expect;
 const allocator = std.testing.allocator;
 
@@ -21,8 +22,10 @@ test "runtime" {
 
     while (try base_walker.next()) |*item| {
         if (std.mem.endsWith(u8, item.path, ".rv")) {
+            const exe_name = if (builtin.os.tag == .windows) "rover-lang.exe" else "rover-lang";
+
             const path_to_exe = try std.fs.path.join(allocator, &[_][]const u8{
-                "zig-out", "bin", "rover-lang.exe",
+                "zig-out", "bin", exe_name,
             });
             defer allocator.free(path_to_exe);
 
@@ -31,19 +34,19 @@ test "runtime" {
             });
             defer allocator.free(file_path);
 
+            const tmp = &[_][]const u8{
+                path_to_exe,
+                "-f",
+                file_path,
+            };
+
             const res = try std.process.Child.run(.{
                 .allocator = allocator,
                 .cwd_dir = cwd,
-                .argv = &[_][]const u8{
-                    path_to_exe,
-                    "-f",
-                    file_path,
-                },
+                .argv = tmp,
             });
             defer allocator.free(res.stdout);
             defer allocator.free(res.stderr);
-
-            // std.debug.print("STDOUT: {s}\n", .{res.stdout});
 
             var got_expects = std.mem.splitScalar(u8, res.stdout, '\n');
             var got_errors = std.mem.splitScalar(u8, res.stderr, '\n');

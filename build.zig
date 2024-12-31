@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
     const exe_check = b.addExecutable(.{
         .name = "foo",
         .root_source_file = b.path("src/main.zig"),
-        .target = b.graph.host,
+        .target = target,
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
     exe_check.root_module.addOptions("config", options);

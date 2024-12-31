@@ -70,7 +70,6 @@ pub fn GenReporter(comptime Report: type) type {
     return struct {
         source: [:0]const u8,
         writer: WriterType,
-        // extra: UnsafeIterStr,
 
         const Self = @This();
 
@@ -104,30 +103,23 @@ pub fn GenReporter(comptime Report: type) type {
             Custom: WindowsReporter,
 
             pub fn write(self: *const WriterType, bytes: []const u8) !usize {
-                return switch (self.*) {
-                    inline else => |writer| writer.write(bytes),
-                };
+                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
+                return writer.write(bytes);
             }
 
             pub fn print(self: *const WriterType, comptime format: []const u8, args: anytype) !void {
-                return switch (self.*) {
-                    inline else => |writer| writer.print(format, args),
-                };
+                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
+                return writer.print(format, args);
             }
         };
 
-        // pub fn init(source: [:0]const u8, extra: []const []const u8) Self {
         pub fn init(source: [:0]const u8) Self {
-            var writer: WriterType = undefined;
             const stdout = std.io.getStdOut().writer();
+            const writer: WriterType = if (builtin.os.tag == .windows)
+                .{ .Custom = WindowsReporter.init(stdout) }
+            else
+                .{ .StdOut = stdout };
 
-            if (builtin.os.tag == .windows) {
-                writer = .{ .Custom = WindowsReporter.init(stdout) };
-            } else {
-                writer = .{ .StdOut = stdout };
-            }
-
-            // return .{ .writer = writer, .source = source, .extra = UnsafeIterStr.init(extra) };
             return .{ .writer = writer, .source = source };
         }
 
