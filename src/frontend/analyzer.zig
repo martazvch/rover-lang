@@ -316,9 +316,25 @@ pub const Analyzer = struct {
         try self.analyzed_stmts.append(.{ .Variable = extra });
     }
 
-    fn while_stmt(self: *Self, stmt: *const Ast.While) !void {
-        _ = self;
-        _ = stmt;
+    fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
+        const cond_type = try self.expression(stmt.condition);
+
+        if (cond_type != Bool) return self.err(
+            .{ .NonBoolCond = .{
+                .what = "while",
+                .found = self.type_manager.str(cond_type),
+            } },
+            stmt.condition.span(),
+        );
+
+        const body_type = try self.statement(stmt.body);
+
+        if (body_type != Void) return self.err(
+            .{ .NonVoidWhile = .{
+                .found = self.type_manager.str(body_type),
+            } },
+            stmt.body.span(),
+        );
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
@@ -440,7 +456,10 @@ pub const Analyzer = struct {
 
         const cond_type = try self.expression(expr.condition);
         if (cond_type != Bool) return self.err(
-            .{ .NonBoolIfCond = .{ .found = self.type_manager.str(cond_type) } },
+            .{ .NonBoolCond = .{
+                .what = "if",
+                .found = self.type_manager.str(cond_type),
+            } },
             expr.condition.span(),
         );
 

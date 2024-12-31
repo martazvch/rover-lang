@@ -154,9 +154,20 @@ pub const Compiler = struct {
         // No else, if local variable value sits on top of stack
     }
 
-    fn while_stmt(self: *Self, stmt: *const Ast.While) !void {
-        _ = self;
-        _ = stmt;
+    fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
+        const loop_start = self.chunk.code.items.len;
+
+        try self.expression(stmt.condition);
+        const exit_jump = try self.emit_jump(.JumpIfFalse);
+
+        // If true
+        try self.chunk.write_op(.Pop);
+        try self.statement(stmt.body);
+        try self.emit_loop(loop_start);
+
+        try self.patch_jump(exit_jump);
+        // If false
+        try self.chunk.write_op(.Pop);
     }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {

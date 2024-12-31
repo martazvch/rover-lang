@@ -104,7 +104,7 @@ _ = if {
 
 
 error:
-NonBoolIfCond, int
+NonBoolCond, if, int
 
 ================
 

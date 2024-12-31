@@ -1,0 +1,30 @@
+// Tests while
+
+// Errors
+
+code:
+while 1 {}
+while "true" {}
+while true do "value"
+while true or false {
+    var a = 56
+    a
+}
+
+// No error
+while true or false do var a = 1
+while {
+    var tmp = 45
+    if tmp == 45 do true else false
+} {
+    var tmp = 32
+    print tmp + 5
+}
+
+error:
+NonBoolCond, while, int
+NonBoolCond, while, str
+NonVoidWhile, str
+NonVoidWhile, int
+
+================
