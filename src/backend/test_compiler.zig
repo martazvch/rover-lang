@@ -31,11 +31,11 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, _: ?Config) !Ge
     defer vm.deinit();
     try vm.init();
 
-    var compiler = Compiler.init(&vm);
+    var compiler = Compiler.init(&vm, .Global);
     defer compiler.deinit();
-    try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
+    const function = try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
 
-    var disassembler = Disassembler.init(&compiler.chunk, allocator, true);
+    var disassembler = Disassembler.init(&function.chunk, allocator, true);
     defer disassembler.deinit();
     try disassembler.dis_chunk("main");
 

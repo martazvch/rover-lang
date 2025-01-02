@@ -11,6 +11,7 @@ const GenReport = @import("../reporter.zig").GenReport;
 const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const ObjString = @import("../runtime/obj.zig").ObjString;
+const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
 const AnalyzedAst = @import("../frontend/analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
@@ -23,7 +24,8 @@ const Str = AnalyzedAst.Str;
 
 pub const Compiler = struct {
     vm: *Vm,
-    chunk: Chunk,
+    function: *ObjFunction,
+    fn_kind: FnKind,
     errs: ArrayList(CompilerReport),
     analyzed_stmts: UnsafeIter(AnalyzedStmt),
 
@@ -32,27 +34,39 @@ pub const Compiler = struct {
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    pub fn init(vm: *Vm) Self {
+    const FnKind = enum {
+        Global,
+        Fn,
+        Method,
+    };
+
+    pub fn init(vm: *Vm, fn_kind: FnKind) Self {
+        // TODO: clean this up
         return .{
             .vm = vm,
-            .chunk = Chunk.init(vm.allocator),
+            .function = ObjFunction.create(vm, ObjString.copy(vm, "Global") catch unreachable) catch unreachable,
+            .fn_kind = fn_kind,
             .errs = ArrayList(CompilerReport).init(vm.allocator),
             .analyzed_stmts = undefined,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.chunk.deinit();
         self.errs.deinit();
     }
 
+    inline fn get_chunk(self: *Self) *Chunk {
+        return &self.function.chunk;
+    }
+
     fn write_op_and_byte(self: *Self, op: OpCode, byte: u8) !void {
-        try self.chunk.write_op(op);
-        try self.chunk.write_byte(byte);
+        const c = self.get_chunk();
+        try c.write_op(op);
+        try c.write_byte(byte);
     }
 
     fn emit_constant(self: *Self, value: Value) !void {
-        self.write_op_and_byte(.Constant, try self.chunk.write_constant(value)) catch |err| {
+        self.write_op_and_byte(.Constant, try self.get_chunk().write_constant(value)) catch |err| {
             // The idea is to collect errors as TreeSpan index. It means the parser is
             // going to have to generate an array list of spans and we have to keep track
             // of which we are at current to let reporter take the index to have span
@@ -67,16 +81,18 @@ pub const Compiler = struct {
     }
 
     fn emit_jump(self: *Self, kind: OpCode) !usize {
-        try self.chunk.write_op(kind);
-        try self.chunk.write_byte(0xff);
-        try self.chunk.write_byte(0xff);
+        const c = self.get_chunk();
+        try c.write_op(kind);
+        try c.write_byte(0xff);
+        try c.write_byte(0xff);
 
-        return self.chunk.code.items.len - 2;
+        return c.code.items.len - 2;
     }
 
     fn patch_jump(self: *Self, offset: usize) !void {
+        const c = self.get_chunk();
         // -2 for the two 8bits jump value (cf emit jump)
-        const jump = self.chunk.code.items.len - offset - 2;
+        const jump = c.code.items.len - offset - 2;
 
         // TODO: proper error handling
         if (jump > std.math.maxInt(u16)) {
@@ -84,11 +100,26 @@ pub const Compiler = struct {
             return Error.err;
         }
 
-        self.chunk.code.items[offset] = @as(u8, @intCast(jump >> 8)) & 0xff;
-        self.chunk.code.items[offset + 1] = @intCast(jump & 0xff);
+        c.code.items[offset] = @as(u8, @intCast(jump >> 8)) & 0xff;
+        c.code.items[offset + 1] = @intCast(jump & 0xff);
     }
 
-    pub fn compile(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt) !void {
+    fn emit_loop(self: *Self, loop_start: usize) !void {
+        const c = self.get_chunk();
+        try c.write_op(.Loop);
+        // +2 for loop own operands (jump offset on 16bits)
+        const offset = c.code.items.len - loop_start + 2;
+
+        if (offset > std.math.maxInt(u16)) {
+            std.debug.print("Loop body too large\n", .{});
+            return Error.err;
+        }
+
+        try c.write_byte(@as(u8, @intCast(offset >> 8)) & 0xff);
+        try c.write_byte(@intCast(offset & 0xff));
+    }
+
+    pub fn compile(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt) !*ObjFunction {
         self.analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts);
 
         for (stmts) |*stmt| {
@@ -96,7 +127,8 @@ pub const Compiler = struct {
             try self.statement(stmt);
         }
 
-        try self.chunk.write_op(.Return);
+        try self.get_chunk().write_op(.Return);
+        return self.function;
     }
 
     fn statement(self: *Self, stmt: *const Stmt) !void {
@@ -104,7 +136,7 @@ pub const Compiler = struct {
             .Assignment => |*s| self.assignment(s),
             .Discard => |*s| {
                 try self.expression(s.expr);
-                try self.chunk.write_op(.Pop);
+                try self.get_chunk().write_op(.Pop);
             },
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
@@ -118,7 +150,7 @@ pub const Compiler = struct {
 
         // We cast the value on top of stack if needed
         const assign_extra = self.analyzed_stmts.next().Assignment;
-        if (assign_extra.cast == .Yes) try self.chunk.write_op(.CastToFloat);
+        if (assign_extra.cast == .Yes) try self.get_chunk().write_op(.CastToFloat);
 
         // Scope and index resolution
         const extra = self.analyzed_stmts.next().Variable;
@@ -133,16 +165,18 @@ pub const Compiler = struct {
 
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
         try self.expression(stmt.expr);
-        try self.chunk.write_op(.Print);
+        try self.get_chunk().write_op(.Print);
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
+        const c = self.get_chunk();
+
         if (stmt.value) |v| {
             try self.expression(v);
             const extra = self.analyzed_stmts.next().Assignment;
 
-            if (extra.cast == .Yes) try self.chunk.write_op(.CastToFloat);
-        } else try self.chunk.write_op(.Null);
+            if (extra.cast == .Yes) try c.write_op(.CastToFloat);
+        } else try c.write_op(.Null);
 
         const extra = self.analyzed_stmts.next().Variable;
 
@@ -155,19 +189,21 @@ pub const Compiler = struct {
     }
 
     fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
-        const loop_start = self.chunk.code.items.len;
+        const c = self.get_chunk();
+
+        const loop_start = c.code.items.len;
 
         try self.expression(stmt.condition);
         const exit_jump = try self.emit_jump(.JumpIfFalse);
 
         // If true
-        try self.chunk.write_op(.Pop);
+        try c.write_op(.Pop);
         try self.statement(stmt.body);
         try self.emit_loop(loop_start);
 
         try self.patch_jump(exit_jump);
         // If false
-        try self.chunk.write_op(.Pop);
+        try c.write_op(.Pop);
     }
 
     fn expression(self: *Self, expr: *const Expr) Error!void {
@@ -198,12 +234,14 @@ pub const Compiler = struct {
             try self.write_op_and_byte(.ScopeReturn, @intCast(extra.pop_count));
         } else {
             for (0..extra.pop_count) |_| {
-                try self.chunk.write_op(.Pop);
+                try self.get_chunk().write_op(.Pop);
             }
         }
     }
 
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
+        const c = self.get_chunk();
+
         const extra = self.analyzed_stmts.next().Binop;
 
         // Special handle for logicals
@@ -213,50 +251,50 @@ pub const Compiler = struct {
 
         // For Str, the cast field is used in another way
         if (extra.cast == .Lhs and extra.type_ != Str) {
-            try self.chunk.write_op(.CastToFloat);
+            try c.write_op(.CastToFloat);
         }
 
         try self.expression(expr.rhs);
 
         if (extra.cast == .Rhs and extra.type_ != Str) {
-            try self.chunk.write_op(.CastToFloat);
+            try c.write_op(.CastToFloat);
         }
 
         try switch (extra.type_) {
             Int => switch (expr.op) {
-                .Plus => self.chunk.write_op(.AddInt),
-                .Minus => self.chunk.write_op(.SubtractInt),
-                .Star => self.chunk.write_op(.MultiplyInt),
-                .Slash => self.chunk.write_op(.DivideInt),
-                .EqualEqual => self.chunk.write_op(.EqualInt),
-                .BangEqual => self.chunk.write_op(.DifferentInt),
-                .Greater => self.chunk.write_op(.GreaterInt),
-                .GreaterEqual => self.chunk.write_op(.GreaterEqualInt),
-                .Less => self.chunk.write_op(.LessInt),
-                .LessEqual => self.chunk.write_op(.LessEqualInt),
+                .Plus => c.write_op(.AddInt),
+                .Minus => c.write_op(.SubtractInt),
+                .Star => c.write_op(.MultiplyInt),
+                .Slash => c.write_op(.DivideInt),
+                .EqualEqual => c.write_op(.EqualInt),
+                .BangEqual => c.write_op(.DifferentInt),
+                .Greater => c.write_op(.GreaterInt),
+                .GreaterEqual => c.write_op(.GreaterEqualInt),
+                .Less => c.write_op(.LessInt),
+                .LessEqual => c.write_op(.LessEqualInt),
                 else => unreachable,
             },
             Float => switch (expr.op) {
-                .Plus => self.chunk.write_op(.AddFloat),
-                .Minus => self.chunk.write_op(.SubtractFloat),
-                .Star => self.chunk.write_op(.MultiplyFloat),
-                .Slash => self.chunk.write_op(.DivideFloat),
-                .EqualEqual => self.chunk.write_op(.EqualFloat),
-                .BangEqual => self.chunk.write_op(.DifferentFloat),
-                .Greater => self.chunk.write_op(.GreaterFloat),
-                .GreaterEqual => self.chunk.write_op(.GreaterEqualFloat),
-                .Less => self.chunk.write_op(.LessFloat),
-                .LessEqual => self.chunk.write_op(.LessEqualFloat),
+                .Plus => c.write_op(.AddFloat),
+                .Minus => c.write_op(.SubtractFloat),
+                .Star => c.write_op(.MultiplyFloat),
+                .Slash => c.write_op(.DivideFloat),
+                .EqualEqual => c.write_op(.EqualFloat),
+                .BangEqual => c.write_op(.DifferentFloat),
+                .Greater => c.write_op(.GreaterFloat),
+                .GreaterEqual => c.write_op(.GreaterEqualFloat),
+                .Less => c.write_op(.LessFloat),
+                .LessEqual => c.write_op(.LessEqualFloat),
                 else => unreachable,
             },
             Str => switch (expr.op) {
-                .EqualEqual => self.chunk.write_op(.EqualStr),
-                .Plus => self.chunk.write_op(.StrCat),
+                .EqualEqual => c.write_op(.EqualStr),
+                .Plus => c.write_op(.StrCat),
                 .Star => {
                     // We use the cast info to determine where is the integer
                     // for the multiplication
                     const op: OpCode = if (extra.cast == .Lhs) .StrMulL else .StrMulR;
-                    try self.chunk.write_op(op);
+                    try c.write_op(op);
                 },
                 else => unreachable,
             },
@@ -266,19 +304,21 @@ pub const Compiler = struct {
     }
 
     fn logical_binop(self: *Self, expr: *const Ast.BinOp) !void {
+        const c = self.get_chunk();
+
         switch (expr.op) {
             .And => {
                 try self.expression(expr.lhs);
                 const end_jump = try self.emit_jump(.JumpIfFalse);
                 // If true, pop the value, else the 'false' remains on top of stack
-                try self.chunk.write_op(.Pop);
+                try c.write_op(.Pop);
                 try self.expression(expr.rhs);
                 try self.patch_jump(end_jump);
             },
             .Or => {
                 try self.expression(expr.lhs);
                 const else_jump = try self.emit_jump(.JumpIfTrue);
-                try self.chunk.write_op(.Pop);
+                try c.write_op(.Pop);
                 try self.expression(expr.rhs);
                 try self.patch_jump(else_jump);
             },
@@ -292,7 +332,7 @@ pub const Compiler = struct {
 
     fn bool_lit(self: *Self, expr: *const Ast.BoolLit) !void {
         const op: OpCode = if (expr.value) .True else .False;
-        try self.chunk.write_op(op);
+        try self.get_chunk().write_op(op);
     }
 
     fn float_lit(self: *Self, expr: *const Ast.FloatLit) !void {
@@ -311,37 +351,33 @@ pub const Compiler = struct {
     }
 
     fn if_expr(self: *Self, expr: *const Ast.If) !void {
+        const c = self.get_chunk();
+
         const extra = self.analyzed_stmts.next().If;
 
         try self.expression(expr.condition);
         const then_jump = try self.emit_jump(.JumpIfFalse);
         // Pops the condition, no longer needed
-        try self.chunk.write_op(.Pop);
+        try c.write_op(.Pop);
 
         try self.statement(&expr.then_body);
+        if (extra.cast == .Then) try c.write_op(.CastToFloat);
 
-        if (extra.cast == .Then) try self.chunk.write_op(.CastToFloat);
+        // Exits the if expression
+        const else_jump = try self.emit_jump(.Jump);
+        try self.patch_jump(then_jump);
+
+        // If we go in the else branch, we pop the condition too
+        try c.write_op(.Pop);
 
         // We insert a jump in the then body to be able to jump over the else branch
         // Otherwise, we just patch the then_jump
         if (expr.else_body) |*body| {
-            const else_jump = try self.emit_jump(.Jump);
-            // We patch here so we arrive on the POP
-            try self.patch_jump(then_jump);
-
-            // If we didn't go into the then branch, we pop the condition here
-            try self.chunk.write_op(.Pop);
-
             try self.statement(body);
-
-            if (extra.cast == .Else) try self.chunk.write_op(.CastToFloat);
-
-            try self.patch_jump(else_jump);
-        } else {
-            try self.patch_jump(then_jump);
-            // We pop the condition used to go through then branch
-            try self.chunk.write_op(.Pop);
+            if (extra.cast == .Else) try c.write_op(.CastToFloat);
         }
+
+        try self.patch_jump(else_jump);
     }
 
     fn int_lit(self: *Self, expr: *const Ast.IntLit) !void {
@@ -349,7 +385,7 @@ pub const Compiler = struct {
     }
 
     fn null_lit(self: *Self) !void {
-        try self.chunk.write_op(.Null);
+        try self.get_chunk().write_op(.Null);
     }
 
     fn string_lit(self: *Self, expr: *const Ast.StringLit) !void {
@@ -357,17 +393,19 @@ pub const Compiler = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
+        const c = self.get_chunk();
+
         const extra = self.analyzed_stmts.next().Unary;
         try self.expression(expr.rhs);
 
         if (expr.op == .Minus) {
             try switch (extra.type_) {
-                Int => self.chunk.write_op(.NegateInt),
-                Float => self.chunk.write_op(.NegateFloat),
+                Int => c.write_op(.NegateInt),
+                Float => c.write_op(.NegateFloat),
                 else => unreachable,
             };
         } else {
-            try self.chunk.write_op(.Not);
+            try c.write_op(.Not);
         }
     }
 };

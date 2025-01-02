@@ -1,0 +1,55 @@
+// Tests while statements
+
+code:
+var i = 0
+while i<4 {
+    print i
+    i = i + 1
+}
+
+expect:
+OP_CONSTANT index 0, value 0
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CONSTANT index 1, value 4
+OP_LESS_INT
+OP_JUMP_IF_FALSE 9 -> 26
+OP_POP
+OP_GET_GLOBAL index 0
+OP_PRINT
+OP_GET_GLOBAL index 0
+OP_CONSTANT index 2, value 1
+OP_ADD_INT
+OP_SET_GLOBAL index 0
+OP_LOOP 23 -> 4
+OP_POP
+OP_RETURN
+
+================
+
+code:
+{
+    var i = 0
+    while i<4 {
+        print i
+        i = i + 1
+    }
+}
+
+expect:
+OP_CONSTANT index 0, value 0
+OP_DEFINE_LOCAL index 0
+OP_GET_LOCAL index 0
+OP_CONSTANT index 1, value 4
+OP_LESS_INT
+OP_JUMP_IF_FALSE 9 -> 26
+OP_POP
+OP_GET_LOCAL index 0
+OP_PRINT
+OP_GET_LOCAL index 0
+OP_CONSTANT index 2, value 1
+OP_ADD_INT
+OP_SET_GLOBAL index 0
+OP_LOOP 23 -> 4
+OP_POP
+OP_RETURN

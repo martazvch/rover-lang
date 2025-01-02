@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const config = @import("config");
 const Vm = @import("vm.zig").Vm;
 const Value = @import("values.zig").Value;
+const Chunk = @import("../backend/chunk.zig").Chunk;
 
 pub const Obj = struct {
     kind: ObjKind,
@@ -14,7 +15,7 @@ pub const Obj = struct {
     const ObjKind = enum {
         // BoundMethod,
         // Closure,
-        // Fn,
+        Fn,
         // Instance,
         // Iter,
         // NativeFn,
@@ -48,10 +49,10 @@ pub const Obj = struct {
         switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
             // .Closure => self.as(ObjClosure).deinit(vm.allocator),
-            // .Fn => {
-            //     const function = self.as(ObjFunction);
-            //     function.deinit(vm.allocator);
-            // },
+            .Fn => {
+                const function = self.as(ObjFunction);
+                function.deinit(vm.allocator);
+            },
             // .Instance => {
             //     const instance = self.as(ObjInstance);
             //     instance.deinit(vm.allocator);
@@ -86,7 +87,7 @@ pub const Obj = struct {
         try switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
             // .Closure => self.as(ObjClosure).function.print(writer),
-            // .Fn => self.as(ObjFunction).print(writer),
+            .Fn => self.as(ObjFunction).print(writer),
             // .Instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
             // .Iter => {
             //     const iter = self.as(ObjIter);
@@ -169,6 +170,55 @@ pub const ObjString = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.free(self.chars);
+        allocator.destroy(self);
+    }
+};
+
+pub const ObjFunction = struct {
+    obj: Obj,
+    arity: u8,
+    chunk: Chunk,
+    name: ?*ObjString,
+    // upvalue_count: u8,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, name: ?*ObjString) Allocator.Error!*Self {
+        const obj = try Obj.allocate(vm, Self, .Fn);
+
+        obj.arity = 0;
+        obj.chunk = Chunk.init(vm.allocator);
+        obj.name = name;
+        // obj.upvalue_count = 0;
+
+        // if (config.LOG_GC) {
+        //     const display_name = if (name) |n| n.chars else "";
+        //     std.debug.print("{s}\n", .{display_name});
+        // }
+
+        return obj;
+    }
+
+    pub fn as_obj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn print(self: *const Self, writer: anytype) (std.fs.File.WriteError || Allocator.Error)!void {
+        if (self.name) |n| {
+            try writer.print("<fn {s}>", .{n.chars});
+        } else {
+            try writer.print("<fn script>", .{});
+        }
+    }
+
+    pub fn log(self: *const Self) void {
+        std.debug.print("<fn {s}>", .{self.name orelse "script"});
+    }
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        self.chunk.deinit();
+
+        // Name already in the linked list, don't free manually
         allocator.destroy(self);
     }
 };

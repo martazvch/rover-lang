@@ -30,6 +30,7 @@ pub const OpCode = enum(u8) {
     LessFloat,
     LessEqualInt,
     LessEqualFloat,
+    Loop,
     MultiplyFloat,
     MultiplyInt,
     NegateFloat,

@@ -2,20 +2,25 @@ const std = @import("std");
 const print = std.debug.print;
 const config = @import("config");
 const Allocator = std.mem.Allocator;
+const Stmt = @import("../frontend/ast.zig").Stmt;
+const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
 const Gc = @import("gc.zig").Gc;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;
+const Compiler = @import("../backend/compiler.zig").Compiler;
 const OpCode = @import("../backend/chunk.zig").OpCode;
 const Table = @import("table.zig").Table;
 const Obj = @import("obj.zig").Obj;
 const ObjString = @import("obj.zig").ObjString;
+const ObjFunction = @import("obj.zig").ObjFunction;
+const Disassembler = @import("../backend/disassembler.zig").Disassembler;
 
 // PERF: bench avec BoundedArray
 const Stack = struct {
     values: [STACK_SIZE]Value,
     top: [*]Value,
 
-    const STACK_SIZE = std.math.maxInt(u8) + 1;
+    const STACK_SIZE: u16 = @as(u16, FrameStack.FRAMES_MAX) * @as(u16, std.math.maxInt(u8));
     const Self = @This();
 
     pub fn new() Self {
@@ -48,10 +53,56 @@ const Stack = struct {
     }
 };
 
+const CallFrame = struct {
+    // closure: *ObjClosure,
+    function: *ObjFunction,
+    ip: [*]u8,
+    slots: [*]Value,
+
+    const Self = @This();
+
+    pub fn read_byte(self: *Self) u8 {
+        const byte = self.ip[0];
+        self.ip += 1;
+        return byte;
+    }
+
+    pub fn read_constant(self: *Self) Value {
+        // return self.closure.function.chunk.constants.items[self.read_byte()];
+        return self.function.chunk.constants[self.read_byte()];
+    }
+
+    pub fn read_string(self: *Self) *ObjString {
+        return self.read_constant().as_obj().?.as(ObjString);
+    }
+
+    pub fn read_short(self: *Self) u16 {
+        const part1 = self.read_byte();
+        const part2 = self.read_byte();
+
+        return (@as(u16, part1) << 8) | part2;
+    }
+};
+
+const FrameStack = struct {
+    frames: [FRAMES_MAX]CallFrame,
+    count: usize,
+
+    const Self = @This();
+    const FRAMES_MAX: u8 = 64;
+
+    pub fn new() Self {
+        return .{
+            .frames = undefined,
+            .count = 0,
+        };
+    }
+};
+
 pub const Vm = struct {
     gc: Gc,
     stack: Stack,
-    chunk: *const Chunk,
+    frame_stack: FrameStack,
     ip: [*]u8,
     allocator: Allocator,
     stdout: std.fs.File.Writer,
@@ -66,7 +117,7 @@ pub const Vm = struct {
         return .{
             .gc = Gc.init(allocator),
             .stack = Stack.new(),
-            .chunk = undefined,
+            .frame_stack = FrameStack.new(),
             .ip = undefined,
             .allocator = undefined,
             .stdout = std.io.getStdOut().writer(),
@@ -100,41 +151,69 @@ pub const Vm = struct {
         }
     }
 
-    pub fn read_byte(self: *Self) u8 {
-        const byte = self.ip[0];
-        self.ip += 1;
-        return byte;
-    }
-
-    pub fn read_constant(self: *Self) Value {
-        return self.chunk.constants[self.read_byte()];
-    }
-
-    pub fn read_short(self: *Self) u16 {
-        const short = @as(u16, self.ip[0]) << 8 | self.ip[1];
-        self.ip += 2;
-        return short;
-    }
-
+    // pub fn read_byte(self: *Self) u8 {
+    //     const byte = self.ip[0];
+    //     self.ip += 1;
+    //     return byte;
+    // }
+    //
+    // pub fn read_constant(self: *Self) Value {
+    //     return self.chunk.constants[self.read_byte()];
+    // }
+    //
+    // pub fn read_short(self: *Self) u16 {
+    //     const short = @as(u16, self.ip[0]) << 8 | self.ip[1];
+    //     self.ip += 2;
+    //     return short;
+    // }
+    //
     fn instruction_nb(self: *const Self) usize {
-        const addr1 = @intFromPtr(self.ip);
-        const addr2 = @intFromPtr(self.chunk.code.items.ptr);
+        const frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+        const addr1 = @intFromPtr(frame.ip);
+        const addr2 = @intFromPtr(frame.function.chunk.code.items.ptr);
+        // const addr2 = @intFromPtr(frame.closure.function.chunk.code.items.ptr);
         return addr1 - addr2;
     }
 
-    pub fn run(self: *Self, chunk: *const Chunk) !void {
-        self.chunk = chunk;
-        self.ip = self.chunk.code.items.ptr;
+    pub fn run(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
+        // Compiler
+        var compiler = Compiler.init(self, .Global);
+        defer compiler.deinit();
+        const function = try compiler.compile(stmts, analyzed_stmts);
+
+        // Disassembler
+        if (print_bytecode) {
+            var dis = Disassembler.init(&function.chunk, self.allocator, false);
+            defer dis.deinit();
+            try dis.dis_chunk("main");
+            std.debug.print("\n{s}", .{dis.disassembled.items});
+        }
+
+        // Reinit stack here (usefull for repl mode)
+        self.stack.init();
+
+        // Initialization of stack and frame
+        self.stack.push(Value.obj(function.as_obj()));
+
+        const frame = &self.frame_stack.frames[self.frame_stack.count];
+        frame.function = function;
+        frame.ip = function.chunk.code.items.ptr;
+        frame.slots = self.stack.top;
+        self.frame_stack.count += 1;
+
         try self.execute();
     }
 
-    pub fn run_slice(self: *Self, chunk: *const Chunk, start: usize) !void {
-        self.chunk = chunk;
-        self.ip = self.chunk.code.items[start..].ptr;
-        try self.execute();
-    }
+    // pub fn run_slice(self: *Self, chunk: *const Chunk, start: usize) !void {
+    // pub fn run_slice(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
+    //     self.chunk = chunk;
+    //     self.ip = self.chunk.code.items[start..].ptr;
+    //     try self.execute();
+    // }
 
     fn execute(self: *Self) !void {
+        const frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+
         while (true) {
             if (comptime config.print_stack) {
                 print("          ", .{});
@@ -150,13 +229,12 @@ pub const Vm = struct {
             }
 
             if (comptime config.print_instr) {
-                const Disassembler = @import("../backend/disassembler.zig").Disassembler;
-                var dis = Disassembler.init(self.chunk, self.allocator, false);
+                var dis = Disassembler.init(&frame.function.chunk, self.allocator, false);
                 defer dis.deinit();
                 _ = try dis.dis_instruction(self.instruction_nb(), self.stdout);
             }
 
-            const instruction = self.read_byte();
+            const instruction = frame.read_byte();
             const op: OpCode = @enumFromInt(instruction);
 
             switch (op) {
@@ -169,11 +247,11 @@ pub const Vm = struct {
                     self.stack.peek_ref(0).Int += rhs;
                 },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
-                .Constant => self.stack.push(self.read_constant()),
+                .Constant => self.stack.push(frame.read_constant()),
                 .DifferentInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
                 .DifferentFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
                 .DefineGlobal => {
-                    const idx = self.read_byte();
+                    const idx = frame.read_byte();
                     self.globals[idx] = self.stack.pop();
                 },
                 .DivideFloat => {
@@ -188,28 +266,32 @@ pub const Vm = struct {
                 .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
-                .GetGlobal => self.stack.push(self.globals[self.read_byte()]),
-                .GetLocal => self.stack.push(self.stack.values[self.read_byte()]),
+                .GetGlobal => self.stack.push(self.globals[frame.read_byte()]),
+                .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
                 .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
                 .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
                 .Jump => {
-                    const jump = self.read_short();
-                    self.ip += jump;
+                    const jump = frame.read_short();
+                    frame.ip += jump;
                 },
                 .JumpIfFalse => {
-                    const jump = self.read_short();
-                    if (!self.stack.peek(0).Bool) self.ip += jump;
+                    const jump = frame.read_short();
+                    if (!self.stack.peek(0).Bool) frame.ip += jump;
                 },
                 .JumpIfTrue => {
-                    const jump = self.read_short();
-                    if (self.stack.peek(0).Bool) self.ip += jump;
+                    const jump = frame.read_short();
+                    if (self.stack.peek(0).Bool) frame.ip += jump;
                 },
                 .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
                 .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
                 .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
                 .LessEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
+                .Loop => {
+                    const jump = frame.read_short();
+                    frame.ip -= jump;
+                },
                 .False => self.stack.push(Value.bool_(false)),
                 .MultiplyFloat => {
                     const rhs = self.stack.pop().Float;
@@ -230,14 +312,14 @@ pub const Vm = struct {
                 },
                 .Return => break,
                 .ScopeReturn => {
-                    const locals_count = self.read_byte();
+                    const locals_count = frame.read_byte();
                     const res = self.stack.pop();
 
                     for (0..locals_count) |_| _ = self.stack.pop();
                     self.stack.push(res);
                 },
-                .SetGlobal => self.globals[self.read_byte()] = self.stack.pop(),
-                .SetLocal => self.stack.values[self.read_byte()] = self.stack.pop(),
+                .SetGlobal => self.globals[frame.read_byte()] = self.stack.pop(),
+                .SetLocal => frame.slots[frame.read_byte()] = self.stack.pop(),
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),
                 .StrMulR => try self.str_mul(self.stack.peek_ref(1).Obj.as(ObjString), self.stack.peek_ref(0).Int),

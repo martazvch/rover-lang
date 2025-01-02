@@ -33,7 +33,6 @@ pub const ReplPipeline = struct {
     allocator: Allocator,
     config: Config,
     analyzer: Analyzer,
-    compiler: Compiler,
     vm: Vm,
     stmts_count: usize,
     code_count: usize,
@@ -49,7 +48,6 @@ pub const ReplPipeline = struct {
             .allocator = allocator,
             .config = config,
             .analyzer = analyzer,
-            .compiler = undefined,
             .vm = Vm.new(allocator),
             .stmts_count = 0,
             .code_count = 0,
@@ -58,12 +56,10 @@ pub const ReplPipeline = struct {
 
     pub fn init(self: *Self) !void {
         try self.vm.init();
-        self.compiler = Compiler.init(&self.vm);
     }
 
     pub fn deinit(self: *Self) void {
         self.analyzer.deinit();
-        self.compiler.deinit();
         self.vm.deinit();
     }
 
@@ -141,22 +137,22 @@ pub const ReplPipeline = struct {
         }
 
         // Compiler
-        try self.compiler.compile(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
-        // We isolate only new compiled code
-        const code_len = self.compiler.chunk.code.items.len;
-
-        // Disassembler
-        if (self.config.print_bytecode) {
-            var dis = Disassembler.init(&self.compiler.chunk, self.allocator, false);
-            defer dis.deinit();
-            try dis.dis_slice("main", self.code_count);
-            std.debug.print("\n{s}", .{dis.disassembled.items});
-        }
+        // try self.compiler.compile(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
+        // // We isolate only new compiled code
+        // const code_len = self.compiler.chunk.code.items.len;
+        //
+        // // Disassembler
+        // if (self.config.print_bytecode) {
+        //     var dis = Disassembler.init(&self.compiler.chunk, self.allocator, false);
+        //     defer dis.deinit();
+        //     try dis.dis_slice("main", self.code_count);
+        //     std.debug.print("\n{s}", .{dis.disassembled.items});
+        // }
 
         // Vm run
-        try self.vm.run_slice(&self.compiler.chunk, self.code_count);
+        try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
 
-        self.code_count = code_len;
+        // self.code_count = self.vm.;
         self.stmts_count = self.analyzer.analyzed_stmts.items.len;
     }
 };
@@ -242,19 +238,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try vm.init();
     defer vm.deinit();
 
-    // Compiler
-    var compiler = Compiler.init(&vm);
-    try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
-    defer compiler.deinit();
-
-    // Disassembler
-    if (config.print_bytecode) {
-        var dis = Disassembler.init(&compiler.chunk, allocator, false);
-        defer dis.deinit();
-        try dis.dis_chunk("main");
-        std.debug.print("\n{s}", .{dis.disassembled.items});
-    }
-
     // Vm run
-    try vm.run(&compiler.chunk);
+    try vm.run(parser.stmts.items, analyzer.analyzed_stmts.items, config.print_bytecode);
 }
