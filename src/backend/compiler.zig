@@ -138,6 +138,7 @@ pub const Compiler = struct {
                 try self.expression(s.expr);
                 try self.get_chunk().write_op(.Pop);
             },
+            .FnDecl => {},
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
             .While => |*s| self.while_stmt(s),

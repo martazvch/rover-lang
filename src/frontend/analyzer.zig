@@ -175,6 +175,7 @@ pub const Analyzer = struct {
         switch (stmt.*) {
             .Assignment => |*s| try self.assignment(s),
             .Discard => |*s| try self.discard(s),
+            .FnDecl => {},
             .Print => |*s| _ = try self.expression(s.expr),
             .VarDecl => |*s| try self.var_declaration(s),
             .While => |*s| try self.while_stmt(s),

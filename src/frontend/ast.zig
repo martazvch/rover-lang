@@ -32,6 +32,7 @@ pub const SourceSlice = struct {
 pub const Stmt = union(enum) {
     Assignment: Assignment,
     Discard: Discard,
+    FnDecl: FnDecl,
     Print: Print,
     VarDecl: VarDecl,
     While: While,
@@ -44,6 +45,10 @@ pub const Stmt = union(enum) {
                 .end = s.value.span().end,
             },
             .Discard => |s| s.expr.span(),
+            .FnDecl => |s| .{
+                .start = s.name.start,
+                .end = s.name.start + s.name.text.len,
+            },
             .Print => |s| s.expr.span(),
             // NOTE: wrong, but sufficient
             .VarDecl => |s| .{
@@ -66,6 +71,19 @@ pub const Assignment = struct {
 
 pub const Discard = struct {
     expr: *const Expr,
+};
+
+pub const FnDecl = struct {
+    name: SourceSlice,
+    params: [256]Parameter,
+    arity: u16,
+    body: *const Expr,
+    return_type: ?SourceSlice,
+};
+
+pub const Parameter = struct {
+    name: SourceSlice,
+    type_: SourceSlice,
 };
 
 pub const Print = struct {

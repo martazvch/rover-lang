@@ -88,6 +88,7 @@ pub const Token = struct {
         RightParen,
         Self,
         Slash,
+        SmallArrow,
         Star,
         StrKw,
         String,
@@ -153,6 +154,7 @@ pub const Token = struct {
                 .RightParen => ")",
                 .Self => "self",
                 .Slash => "/",
+                .SmallArrow => "->",
                 .Star => "*",
                 .StrKw => "str",
                 .String => "string value",
@@ -290,8 +292,12 @@ pub const Lexer = struct {
                         self.index += 1;
                     },
                     '-' => {
-                        res.kind = .Minus;
                         self.index += 1;
+
+                        if (self.source[self.index] == '>') {
+                            self.index += 1;
+                            res.kind = .SmallArrow;
+                        } else res.kind = .Minus;
                     },
                     '*' => {
                         res.kind = .Star;
@@ -630,6 +636,22 @@ test "underscore" {
     const res = [_]Token.Kind{
         .Var, .Identifier, .Underscore, .Equal,      .Int,
         .Var, .Identifier, .Var,        .Identifier, .Eof,
+    };
+
+    for (0..res.len) |i| {
+        const tk = lexer.tokens.items[i];
+        try expect(tk.kind == res[i]);
+    }
+}
+
+test "arrow" {
+    var lexer = Lexer.init(std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.lex("- > -5> >- -< ->");
+
+    const res = [_]Token.Kind{
+        .Minus, .Greater, .Minus,      .Int, .Greater, .Greater, .Minus,
+        .Minus, .Less,    .SmallArrow,
     };
 
     for (0..res.len) |i| {

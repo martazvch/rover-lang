@@ -221,7 +221,9 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Self) Error!Stmt {
-        if (self.match(.Var)) {
+        if (self.match(.Fn)) {
+            return self.fn_declaration();
+        } else if (self.match(.Var)) {
             return self.var_declaration(false);
         } else if (self.match(.Underscore)) {
             return self.discard();
@@ -230,27 +232,50 @@ pub const Parser = struct {
         }
     }
 
-    fn var_declaration(self: *Self, is_const: bool) !Stmt {
-        try self.expect(.Identifier, .{ .ExpectVarName = .{ .keyword = "var" } });
+    fn fn_declaration(self: *Self) Error!Stmt {
+        try self.expect(.Identifier, .ExpectFnName);
         const ident = self.prev();
 
-        var type_: ?SourceSlice = null;
+        try self.expect(.LeftParen, .ExpectParenAfterFnName);
 
-        // Type
-        // NOTE: make builtin types basic identifier to treat the the same?
-        if (self.match(.Colon)) {
-            if (self.match(.FloatKw) or self.match(.IntKw) or self.match(.StrKw) or self.match(.Bool)) {
-                type_ = SourceSlice.from_token(self.prev(), self.source);
-            } else {
-                try self.expect(.Identifier, .ExpectTypeName);
-                type_ = SourceSlice.from_token(self.prev(), self.source);
-            }
+        var arity: usize = 0;
+        var params: [256]Ast.Parameter = undefined;
+
+        while (!self.check(.RightParen) and !self.check(.Eof)) {
+            if (arity > 255) return self.error_at_current(.TooMuchFnParam);
+
+            const var_infos = try self.var_name_and_type();
+            const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
+
+            params[arity] = .{ .name = var_infos.name, .type_ = type_ };
+            arity += 1;
+
+            if (!self.match(.Comma)) break;
         }
 
-        // If no ':' but we are at an identifier, maybe a typo
-        if (self.check(.Identifier)) {
-            return self.error_at_current(.ExpectColonBeforeType);
+        try self.expect(.RightParen, .ExpectParenAfterFnParams);
+
+        var return_type: ?SourceSlice = null;
+        if (self.match(.SmallArrow)) {
+            return_type = try self.parse_type();
+        } else if (self.check(.Identifier)) {
+            return self.error_at_current(.ExpectArrowBeforeFnType);
         }
+
+        try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
+        const body = try self.block_expr();
+
+        return .{ .FnDecl = .{
+            .name = SourceSlice.from_token(ident, self.source),
+            .params = params,
+            .arity = @intCast(arity),
+            .body = body,
+            .return_type = return_type,
+        } };
+    }
+
+    fn var_declaration(self: *Self, is_const: bool) !Stmt {
+        const var_infos = try self.var_name_and_type();
 
         var value: ?*Expr = null;
 
@@ -260,12 +285,37 @@ pub const Parser = struct {
 
         return .{
             .VarDecl = .{
-                .name = SourceSlice.from_token(ident, self.source),
+                .name = var_infos.name,
                 .is_const = is_const,
-                .type_ = type_,
+                .type_ = var_infos.type_,
                 .value = value,
             },
         };
+    }
+
+    fn var_name_and_type(self: *Self) !struct { name: SourceSlice, type_: ?SourceSlice } {
+        try self.expect(.Identifier, .{ .ExpectVarName = .{ .keyword = "var" } });
+        const ident = self.prev();
+
+        var type_: ?SourceSlice = null;
+
+        if (self.match(.Colon)) {
+            type_ = try self.parse_type();
+        } else if (self.check(.Identifier)) {
+            return self.error_at_current(.ExpectColonBeforeType);
+        }
+
+        return .{ .name = SourceSlice.from_token(ident, self.source), .type_ = type_ };
+    }
+
+    fn parse_type(self: *Self) !SourceSlice {
+        // NOTE: make builtin types basic identifier to treat the the same?
+        if (self.match(.FloatKw) or self.match(.IntKw) or self.match(.StrKw) or self.match(.Bool)) {
+            return SourceSlice.from_token(self.prev(), self.source);
+        } else {
+            try self.expect(.Identifier, .ExpectTypeName);
+            return SourceSlice.from_token(self.prev(), self.source);
+        }
     }
 
     fn discard(self: *Self) !Stmt {

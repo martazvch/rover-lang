@@ -48,6 +48,7 @@ pub const AstPrinter = struct {
         try switch (stmt.*) {
             .Assignment => |*s| self.assignment(s),
             .Discard => |*s| self.discard(s),
+            .FnDecl => |*s| self.fn_decl(s),
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_decl(s),
             .While => |*s| self.while_stmt(s),
@@ -76,6 +77,35 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("[Discard\n");
         self.indent_level += 1;
         try self.expression(stmt.expr);
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
+    fn fn_decl(self: *Self, stmt: *const Ast.FnDecl) !void {
+        try self.indent();
+
+        const return_type = if (stmt.return_type) |rt| rt.text else "void";
+
+        var buf: [100]u8 = undefined;
+        var written = try std.fmt.bufPrint(
+            &buf,
+            "[Fn declaration {s}, type {s}, arity {}, params\n",
+            .{ stmt.name.text, return_type, stmt.arity },
+        );
+        try self.tree.appendSlice(written);
+        self.indent_level += 1;
+
+        for (0..stmt.arity) |i| {
+            try self.indent();
+            written = try std.fmt.bufPrint(
+                &buf,
+                "[param {s}, type {s}]\n",
+                .{ stmt.params[i].name.text, stmt.params[i].type_.text },
+            );
+            try self.tree.appendSlice(written);
+        }
+
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
