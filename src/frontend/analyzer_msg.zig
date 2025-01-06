@@ -1,8 +1,10 @@
 pub const AnalyzerMsg = union(enum) {
-    AlreadyDeclaredVar: struct { name: []const u8 },
+    AlreadyDeclared: struct { name: []const u8 },
+    DuplicateParam: struct { name: []const u8 },
     FloatEqual,
     FloatEqualCast,
     IncompatibleIfType: struct { found1: []const u8, found2: []const u8 },
+    IncompatibleFnType: struct { found: []const u8, expect: []const u8 },
     InvalidArithmetic: struct { found: []const u8 },
     InvalidAssignTarget,
     InvalidAssignType: struct { expect: []const u8, found: []const u8 },
@@ -19,14 +21,20 @@ pub const AnalyzerMsg = union(enum) {
     UseUninitVar: struct { name: []const u8 },
     VoidAssignment,
     VoidDiscard,
+    VoidParam,
 
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclaredVar => |e| writer.print("variable '{s}' already declared in this scope", .{e.name}),
+            .AlreadyDeclared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
+            .DuplicateParam => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
+            .IncompatibleFnType => |e| writer.print(
+                "function declared as returning '{s}' type but found '{s}'",
+                .{ e.found, e.expect },
+            ),
             .IncompatibleIfType => |e| writer.print(
                 "'if' and 'else' have incompatible types, found '{s}'  and '{s}'",
                 .{ e.found1, e.found2 },
@@ -47,14 +55,16 @@ pub const AnalyzerMsg = union(enum) {
             .UseUninitVar => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
             .VoidDiscard => writer.print("trying to discard a non value", .{}),
+            .VoidParam => writer.print("function parameters can't be of 'void' type", .{}),
         };
     }
 
     pub fn get_hint(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclaredVar => writer.print("this name", .{}),
+            .AlreadyDeclared, .DuplicateParam => writer.print("this name", .{}),
             .FloatEqual => writer.print("both sides are 'floats'", .{}),
             .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
+            .IncompatibleFnType => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .IncompatibleIfType => writer.print("this expression", .{}),
             .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
             .InvalidAssignTarget => writer.print("cannot assign to this expression", .{}),
@@ -71,12 +81,15 @@ pub const AnalyzerMsg = union(enum) {
             .UnusedValue => writer.print("this expression produces a value", .{}),
             .VoidAssignment => writer.print("this expression procuses no value", .{}),
             .VoidDiscard => writer.print("this expression produces no value", .{}),
+            .VoidParam => writer.print("this parameter", .{}),
         };
     }
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclaredVar => writer.print("use another name or use numbers, underscore", .{}),
+            .AlreadyDeclared,
+            .DuplicateParam,
+            => writer.print("use another name or introduce numbers, underscore, ...", .{}),
             .VoidDiscard => writer.print("remove the discard", .{}),
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 
@@ -92,6 +105,10 @@ pub const AnalyzerMsg = union(enum) {
                 \\   cast the expression to 'float' and compare against an Epsilon (like 1e-5)
             ,
                 .{},
+            ),
+            .IncompatibleFnType => |e| writer.print(
+                "modify function's body to match '{s}' type or change function's definition",
+                .{e.expect},
             ),
             .IncompatibleIfType => writer.print("make both paths return the same type", .{}),
             .InvalidArithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),
@@ -115,6 +132,7 @@ pub const AnalyzerMsg = union(enum) {
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
             .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
             .VoidAssignment => writer.print("consider returning a value from expression or remove assignment", .{}),
+            .VoidParam => writer.print("use a any other type than 'void' or remove parameter", .{}),
         };
     }
 

@@ -90,21 +90,31 @@ pub const AstPrinter = struct {
         var buf: [100]u8 = undefined;
         var written = try std.fmt.bufPrint(
             &buf,
-            "[Fn declaration {s}, type {s}, arity {}, params\n",
+            "[Fn declaration {s}, type {s}, arity {}\n",
             .{ stmt.name.text, return_type, stmt.arity },
         );
         try self.tree.appendSlice(written);
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("params:\n");
         self.indent_level += 1;
 
         for (0..stmt.arity) |i| {
             try self.indent();
             written = try std.fmt.bufPrint(
                 &buf,
-                "[param {s}, type {s}]\n",
+                "{s}, type {s}\n",
                 .{ stmt.params[i].name.text, stmt.params[i].type_.text },
             );
             try self.tree.appendSlice(written);
         }
+        self.indent_level -= 1;
+
+        try self.indent();
+        try self.tree.appendSlice("body:\n");
+        self.indent_level += 1;
+        try self.expression(stmt.body);
+        self.indent_level -= 1;
 
         self.indent_level -= 1;
         try self.indent();

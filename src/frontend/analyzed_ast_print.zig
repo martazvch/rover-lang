@@ -52,6 +52,7 @@ pub const AnalyzedAstPrinter = struct {
             .Assignment => |*s| self.assign(s),
             .Block => |*s| self.block(s),
             .Binop => |*s| self.binop(s),
+            .FnDecl => |*s| self.fn_declaration(s),
             .If => |*s| self.if_expr(s),
             .Unary => |*s| self.unary(s),
             .Variable => |*s| self.variable(s),
@@ -85,6 +86,18 @@ pub const AnalyzedAstPrinter = struct {
             &buf,
             "[Binop cast {s}, type {s}]\n",
             .{ @tagName(stmt.cast), self.type_manager.str(stmt.type_) },
+        );
+        try self.tree.appendSlice(written);
+    }
+
+    fn fn_declaration(self: *Self, stmt: *const AnalyzedAst.FnDecl) !void {
+        try self.indent();
+
+        var buf: [100]u8 = undefined;
+        const written = try std.fmt.bufPrint(
+            &buf,
+            "[Fn declaration arity {}]\n",
+            .{stmt.arity},
         );
         try self.tree.appendSlice(written);
     }

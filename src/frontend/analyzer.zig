@@ -11,7 +11,7 @@ const AnalyzedAst = @import("analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const GenReport = @import("../reporter.zig").GenReport;
 const Type = AnalyzedAst.Type;
-
+const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 
 const Void = AnalyzedAst.Void;
@@ -123,7 +123,29 @@ pub const Analyzer = struct {
         return self.source[span.start..span.end];
     }
 
-    fn var_in_scope(self: *const Self, name: []const u8) bool {
+    /// Unincrement scope depth, discards all locals and return the number
+    /// of discarded locals
+    fn end_scope(self: *Self) !usize {
+        self.scope_depth -= 1;
+
+        var pop_count: usize = 0;
+        // Discards all the local variables
+        if (self.locals.items.len > 0) {
+            var i: usize = self.locals.items.len;
+
+            while (i > 0 and self.locals.items[i - 1].depth > self.scope_depth) {
+                i -= 1;
+            }
+
+            pop_count = self.locals.items.len - i;
+            try self.locals.resize(i);
+        }
+
+        return pop_count;
+    }
+
+    /// Checks if the variable name is in local or global scope
+    fn ident_in_scope(self: *const Self, name: []const u8) bool {
         if (self.scope_depth == 0) {
             if (self.globals.get(name)) |_| {
                 return true;
@@ -146,6 +168,56 @@ pub const Analyzer = struct {
         }
 
         return false;
+    }
+
+    /// Checks if an identifier already exists in current scope and if it's type exists
+    /// Returns the type of the variable
+    fn check_ident_and_type(self: *Self, ident: SourceSlice, type_: ?SourceSlice) !Type {
+        // Name check
+        if (self.ident_in_scope(ident.text)) {
+            return self.err(
+                .{ .AlreadyDeclared = .{ .name = ident.text } },
+                Span.from_source_slice(ident),
+            );
+        }
+
+        // If a type was declared
+        return if (type_) |t| self.type_manager.declared.get(t.text) orelse {
+            return self.err(
+                .{ .UndeclaredType = .{ .found = t.text } },
+                Span.from_source_slice(t),
+            );
+        } else Void;
+    }
+
+    fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
+        var extra: AnalyzedAst.Variable = undefined;
+        var variable: Variable = .{
+            .index = 0,
+            .name = name,
+            .type_ = type_,
+            .depth = self.scope_depth,
+            .initialized = initialized,
+        };
+
+        // Add the variable to the correct data structure
+        if (self.scope_depth == 0) {
+            const index = self.globals.count();
+            extra.index = index;
+            extra.scope = .Global;
+            variable.index = index;
+
+            try self.globals.put(name, variable);
+        } else {
+            const index = self.locals.items.len;
+            extra.index = index;
+            extra.scope = .Local;
+            variable.index = index;
+
+            try self.locals.append(variable);
+        }
+
+        return extra;
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
@@ -175,7 +247,7 @@ pub const Analyzer = struct {
         switch (stmt.*) {
             .Assignment => |*s| try self.assignment(s),
             .Discard => |*s| try self.discard(s),
-            .FnDecl => {},
+            .FnDecl => |*s| try self.fn_declaration(s),
             .Print => |*s| _ = try self.expression(s.expr),
             .VarDecl => |*s| try self.var_declaration(s),
             .While => |*s| try self.while_stmt(s),
@@ -231,35 +303,70 @@ pub const Analyzer = struct {
         if (discarded == Void) return self.err(.VoidDiscard, stmt.expr.span());
     }
 
-    fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
-        // Name check
-        if (self.var_in_scope(stmt.name.text)) {
+    fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
+        const idx = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+
+        // Check in current scope
+        const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
+
+        // We mark it initialized so that it can be called in its body
+        const fn_extra = try self.declare_variable(stmt.name.text, return_type, true);
+        try self.analyzed_stmts.append(.{ .Variable = fn_extra });
+
+        self.scope_depth += 1;
+
+        for (0..stmt.arity) |i| {
+            // Check on parameter
+            const param_type = self.check_ident_and_type(
+                stmt.params[i].name,
+                stmt.params[i].type_,
+            ) catch |e| switch (e) {
+                error.Err => {
+                    // We replace the error with a more explicit one for parameters
+                    if (self.errs.items[self.errs.items.len - 1].report == .AlreadyDeclared) {
+                        const name = stmt.params[i].name;
+
+                        self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
+                            .{ .DuplicateParam = .{ .name = name.text } },
+                            Span.from_source_slice(name),
+                        );
+                    }
+
+                    return e;
+                },
+                else => return e,
+            };
+
+            if (param_type == Void) {
+                return self.err(.VoidParam, Span.from_source_slice(stmt.params[i].name));
+            }
+
+            const param_extra = try self.declare_variable(stmt.params[i].name.text, param_type, true);
+            try self.analyzed_stmts.append(.{ .Variable = param_extra });
+        }
+
+        const result_type = try self.expression(stmt.body);
+
+        if (result_type != return_type) {
             return self.err(
-                .{ .AlreadyDeclaredVar = .{ .name = stmt.name.text } },
-                Span.from_source_slice(stmt.name),
+                .{ .IncompatibleFnType = .{
+                    .found = self.type_manager.str(result_type),
+                    .expect = self.type_manager.str(return_type),
+                } },
+                stmt.body.span(),
             );
         }
 
-        // Type check
-        var final_type = Void;
-        var variable: Variable = .{
-            .index = 0,
-            .type_ = Void,
-            .name = stmt.name.text,
-            .depth = self.scope_depth,
-        };
+        _ = try self.end_scope();
+        self.analyzed_stmts.items[idx] = .{ .FnDecl = .{ .arity = stmt.arity } };
+    }
 
-        // If a type was declared
-        if (stmt.type_) |t| {
-            final_type = self.type_manager.declared.get(t.text) orelse {
-                return self.err(
-                    .{ .UndeclaredType = .{ .found = t.text } },
-                    Span.from_source_slice(t),
-                );
-            };
-        }
+    fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
+        var checked_type = try self.check_ident_and_type(stmt.name, stmt.type_);
 
-        // Value type check
+        var initialized = false;
+
         if (stmt.value) |v| {
             const value_type = try self.expression(v);
 
@@ -271,17 +378,17 @@ pub const Analyzer = struct {
             var assign_extra: AnalyzedAst.Assignment = .{};
 
             // If no type declared, we infer the value type
-            if (final_type == Void) {
-                final_type = value_type;
+            if (checked_type == Void) {
+                checked_type = value_type;
                 // Else, we check for coherence
-            } else if (final_type != value_type) {
+            } else if (checked_type != value_type) {
                 // One case in wich we can coerce; int -> float
-                if (final_type == Float and value_type == Int) {
+                if (checked_type == Float and value_type == Int) {
                     assign_extra.cast = .Yes;
                 } else {
                     return self.err(
                         .{ .InvalidAssignType = .{
-                            .expect = self.type_manager.str(final_type),
+                            .expect = self.type_manager.str(checked_type),
                             .found = self.type_manager.str(value_type),
                         } },
                         v.span(),
@@ -289,31 +396,11 @@ pub const Analyzer = struct {
                 }
             }
 
-            variable.initialized = true;
+            initialized = true;
             try self.analyzed_stmts.append(.{ .Assignment = assign_extra });
         }
 
-        variable.type_ = final_type;
-
-        // Build the extra infos
-        const extra: AnalyzedAst.Variable = if (self.scope_depth == 0) .{
-            .scope = .Global,
-            .index = self.globals.count(),
-        } else .{
-            .scope = .Local,
-            .index = self.locals.items.len,
-        };
-
-        // Get the index
-        variable.index = extra.index;
-
-        // Add the variable to the correct data structure
-        if (extra.scope == .Global) {
-            try self.globals.put(stmt.name.text, variable);
-        } else {
-            try self.locals.append(variable);
-        }
-
+        const extra = try self.declare_variable(stmt.name.text, checked_type, initialized);
         try self.analyzed_stmts.append(.{ .Variable = extra });
     }
 
@@ -373,23 +460,8 @@ pub const Analyzer = struct {
             }
         }
 
-        self.scope_depth -= 1;
-
-        var pop_count: usize = 0;
-        // Discards all the local variables
-        if (self.locals.items.len > 0) {
-            var i: usize = self.locals.items.len;
-
-            while (i > 0 and self.locals.items[i - 1].depth > self.scope_depth) {
-                i -= 1;
-            }
-
-            pop_count = self.locals.items.len - i;
-            try self.locals.resize(i);
-        }
-
         self.analyzed_stmts.items[idx] = .{ .Block = .{
-            .pop_count = pop_count,
+            .pop_count = try self.end_scope(),
             .is_expr = if (final != Void) true else false,
         } };
 

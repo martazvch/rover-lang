@@ -18,15 +18,16 @@ pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
     Block: Block,
     Binop: BinOp,
+    FnDecl: FnDecl,
     If: If,
     Unary: Unary,
     Variable: Variable,
 };
 
 pub const Block = struct {
-    // Number of locals to pop at the end of scope
+    /// Number of locals to pop at the end of scope
     pop_count: usize,
-    // Tells if the block returns a value or not
+    /// Tells if the block returns a value or not
     is_expr: bool,
 };
 
@@ -44,6 +45,11 @@ pub const BinOp = struct {
     // We assume we only need to know the side because the cast will always
     // be from int to float
     const Cast = enum { Lhs, Rhs, None };
+};
+
+pub const FnDecl = struct {
+    /// Used to pop them after declaration
+    arity: usize,
 };
 
 pub const If = struct {

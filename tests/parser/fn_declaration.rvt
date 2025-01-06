@@ -1,0 +1,65 @@
+// Function declaration
+
+code:
+// Trailing comma
+fn add(param1: int, param2: Person,) {}
+
+// Multiline body + no args
+fn _ad() -> int {
+    var tmp = 5
+}
+
+// Multiline parameters + body on new line
+fn foo(
+    p1: int,
+    p2: Creation,
+) -> Promise
+{}
+
+expect:
+[Fn declaration add, type void, arity 2
+    params:
+        param1, type int
+        param2, type Person
+    body:
+        [Block]
+]
+
+[Fn declaration _ad, type int, arity 0
+    params:
+    body:
+        [Block]
+            [Var declaration tmp, type void, value
+                [Int literal 5]
+            ]
+]
+
+[Fn declaration foo, type Promise, arity 2
+    params:
+        p1, type int
+        p2, type Creation
+    body:
+        [Block]
+]
+
+================
+
+// Errors
+
+code:
+fn
+fn add
+fn add(1)
+fn add(a)
+fn add(a: int -> bool
+fn add() bool
+fn add() -> bool 1 + 1
+
+error:
+ExpectFnName
+ExpectParenAfterFnName
+ExpectName, parameter
+MissingFnParamType
+ExpectParenAfterFnParams
+ExpectArrowBeforeFnType
+ExpectBraceBeforeFnBody

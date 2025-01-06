@@ -241,16 +241,18 @@ pub const Parser = struct {
         var arity: usize = 0;
         var params: [256]Ast.Parameter = undefined;
 
+        self.skip_new_lines();
         while (!self.check(.RightParen) and !self.check(.Eof)) {
-            if (arity > 255) return self.error_at_current(.TooMuchFnParam);
+            if (arity == 255) return self.error_at_current(.TooMuchFnParam);
 
-            const var_infos = try self.var_name_and_type();
+            const var_infos = try self.var_name_and_type("parameter");
             const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
 
             params[arity] = .{ .name = var_infos.name, .type_ = type_ };
             arity += 1;
 
             if (!self.match(.Comma)) break;
+            self.skip_new_lines();
         }
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
@@ -262,6 +264,7 @@ pub const Parser = struct {
             return self.error_at_current(.ExpectArrowBeforeFnType);
         }
 
+        self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
         const body = try self.block_expr();
 
@@ -275,7 +278,7 @@ pub const Parser = struct {
     }
 
     fn var_declaration(self: *Self, is_const: bool) !Stmt {
-        const var_infos = try self.var_name_and_type();
+        const var_infos = try self.var_name_and_type("variable");
 
         var value: ?*Expr = null;
 
@@ -293,8 +296,8 @@ pub const Parser = struct {
         };
     }
 
-    fn var_name_and_type(self: *Self) !struct { name: SourceSlice, type_: ?SourceSlice } {
-        try self.expect(.Identifier, .{ .ExpectVarName = .{ .keyword = "var" } });
+    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: SourceSlice, type_: ?SourceSlice } {
+        try self.expect(.Identifier, .{ .ExpectName = .{ .kind = var_kind } });
         const ident = self.prev();
 
         var type_: ?SourceSlice = null;

@@ -33,7 +33,7 @@ var declared: int
 var declared: float
 
 error:
-AlreadyDeclaredVar, declared
+AlreadyDeclared, declared
 
 ================
 

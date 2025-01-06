@@ -138,4 +138,4 @@ var loc2 = "sneaky"
 }
 
 error:
-AlreadyDeclaredVar, loc1
+AlreadyDeclared, loc1

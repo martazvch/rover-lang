@@ -1,0 +1,69 @@
+// Tests function declaration
+
+code:
+fn add(a: int) {}
+
+expect:
+[Fn declaration arity 1]
+[Variable scope Global, index 0]
+[Variable scope Local, index 0]
+[Block pop count 0]
+
+================
+
+// Locals
+
+code:
+fn get_bool() -> bool {
+    true
+}
+
+{
+    fn another_bool(a: int, b: str) -> bool {
+        var tmp = 5
+        true or false
+    }
+}
+
+expect:
+[Fn declaration arity 0]
+[Variable scope Global, index 0]
+[Block pop count 0]
+
+[Block pop count 1]
+[Fn declaration arity 2]
+[Variable scope Local, index 0]
+[Variable scope Local, index 1]
+[Variable scope Local, index 2]
+[Block pop count 1]
+[Variable scope Local, index 3]
+[Binop cast None, type bool]
+
+================
+
+// Errors
+
+code:
+fn add(arg1: void) {}
+fn add(arg1: int, arg1: float) {}
+
+fn add() -> int {
+    true
+}
+
+fn add() {
+    1+1
+}
+
+fn bis() {}
+fn bis() {}
+
+error:
+VoidParam
+DuplicateParam, arg1
+IncompatibleFnType, bool, int
+IncompatibleFnType, int, void
+AlreadyDeclared, bis
+
+================
+
