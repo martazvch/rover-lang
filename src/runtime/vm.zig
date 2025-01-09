@@ -177,7 +177,7 @@ pub const Vm = struct {
 
     pub fn run(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
         // Compiler
-        var compiler = Compiler.init(self, .Global);
+        var compiler = Compiler.init(self, null, .Global, "Script");
         defer compiler.deinit();
         const function = try compiler.compile(stmts, analyzed_stmts);
 

@@ -4,8 +4,7 @@ code:
 fn add(a: int) {}
 
 expect:
-[Fn declaration arity 1]
-[Variable scope Global, index 0]
+[Fn declaration arity 1, scope Global, index 0]
 [Variable scope Local, index 0]
 [Block pop count 0]
 
@@ -26,13 +25,11 @@ fn get_bool() -> bool {
 }
 
 expect:
-[Fn declaration arity 0]
-[Variable scope Global, index 0]
+[Fn declaration arity 0, scope Global, index 0]
 [Block pop count 0]
 
 [Block pop count 1]
-[Fn declaration arity 2]
-[Variable scope Local, index 0]
+[Fn declaration arity 2, scope Local, index 0]
 [Variable scope Local, index 1]
 [Variable scope Local, index 2]
 [Block pop count 1]

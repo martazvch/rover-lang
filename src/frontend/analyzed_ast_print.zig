@@ -96,8 +96,8 @@ pub const AnalyzedAstPrinter = struct {
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(
             &buf,
-            "[Fn declaration arity {}]\n",
-            .{stmt.arity},
+            "[Fn declaration arity {}, scope {s}, index {}]\n",
+            .{ stmt.arity, @tagName(stmt.variable.scope), stmt.variable.index },
         );
         try self.tree.appendSlice(written);
     }

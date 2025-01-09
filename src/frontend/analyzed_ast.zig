@@ -50,6 +50,8 @@ pub const BinOp = struct {
 pub const FnDecl = struct {
     /// Used to pop them after declaration
     arity: usize,
+    /// The variable holding the function
+    variable: Variable,
 };
 
 pub const If = struct {

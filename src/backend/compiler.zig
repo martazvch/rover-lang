@@ -24,6 +24,7 @@ const Str = AnalyzedAst.Str;
 
 pub const Compiler = struct {
     vm: *Vm,
+    enclosing: ?*Compiler,
     function: *ObjFunction,
     fn_kind: FnKind,
     errs: ArrayList(CompilerReport),
@@ -40,11 +41,12 @@ pub const Compiler = struct {
         Method,
     };
 
-    pub fn init(vm: *Vm, fn_kind: FnKind) Self {
-        // TODO: clean this up
+    // TODO: error handling?
+    pub fn init(vm: *Vm, enclosing: ?*Compiler, fn_kind: FnKind, name: []const u8) Self {
         return .{
             .vm = vm,
-            .function = ObjFunction.create(vm, ObjString.copy(vm, "Global") catch unreachable) catch unreachable,
+            .enclosing = enclosing,
+            .function = ObjFunction.create(vm, ObjString.copy(vm, name) catch unreachable) catch unreachable,
             .fn_kind = fn_kind,
             .errs = ArrayList(CompilerReport).init(vm.allocator),
             .analyzed_stmts = undefined,
@@ -78,6 +80,17 @@ pub const Compiler = struct {
             std.debug.print("Too many constants in chunk\n", .{});
             return err;
         };
+    }
+
+    /// Declare the variable based on informations coming from Analyzer. Declares
+    /// either in global scope or do nothing, as for local it's already living
+    /// on the stack
+    fn define_variable(self: *Self, infos: *const AnalyzedAst.Variable) !void {
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup
+        // for now
+        if (infos.scope == .Global) {
+            try self.write_op_and_byte(.DefineGlobal, @intCast(infos.index));
+        }
     }
 
     fn emit_jump(self: *Self, kind: OpCode) !usize {
@@ -127,6 +140,10 @@ pub const Compiler = struct {
             try self.statement(stmt);
         }
 
+        return self.end();
+    }
+
+    pub fn end(self: *Self) !*ObjFunction {
         try self.get_chunk().write_op(.Return);
         return self.function;
     }
@@ -138,7 +155,7 @@ pub const Compiler = struct {
                 try self.expression(s.expr);
                 try self.get_chunk().write_op(.Pop);
             },
-            .FnDecl => {},
+            .FnDecl => |*s| self.fn_declaration(s),
             .Print => |*s| self.print_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
             .While => |*s| self.while_stmt(s),
@@ -164,6 +181,22 @@ pub const Compiler = struct {
         );
     }
 
+    fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
+        const extra = self.analyzed_stmts.next();
+        _ = stmt;
+
+        try self.define_variable(&extra.Variable);
+    }
+
+    // TODO: Check if *kind* is really needed
+    fn compile_function(self: *Self, kind: FnKind, stmt: Ast.FnDecl) !void {
+        var compiler = Compiler.init(self.vm, kind, stmt.name.text);
+        try compiler.expression(stmt.body);
+
+        const func = try compiler.end();
+        _ = func;
+    }
+
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
         try self.expression(stmt.expr);
         try self.get_chunk().write_op(.Print);
@@ -179,14 +212,7 @@ pub const Compiler = struct {
             if (extra.cast == .Yes) try c.write_op(.CastToFloat);
         } else try c.write_op(.Null);
 
-        const extra = self.analyzed_stmts.next().Variable;
-
-        // BUG: Protect the cast, we can't have more than 256 variable to lookup
-        // for now
-        if (extra.scope == .Global) {
-            try self.write_op_and_byte(.DefineGlobal, @intCast(extra.index));
-        }
-        // No else, if local variable value sits on top of stack
+        try self.define_variable(&self.analyzed_stmts.next().Variable);
     }
 
     fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {

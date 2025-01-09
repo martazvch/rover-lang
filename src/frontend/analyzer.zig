@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
@@ -312,7 +313,6 @@ pub const Analyzer = struct {
 
         // We mark it initialized so that it can be called in its body
         const fn_extra = try self.declare_variable(stmt.name.text, return_type, true);
-        try self.analyzed_stmts.append(.{ .Variable = fn_extra });
 
         self.scope_depth += 1;
 
@@ -358,8 +358,14 @@ pub const Analyzer = struct {
             );
         }
 
-        _ = try self.end_scope();
-        self.analyzed_stmts.items[idx] = .{ .FnDecl = .{ .arity = stmt.arity } };
+        // Here we close the function's parameters list, scope pops should
+        // be equal to arity
+        assert(try self.end_scope() == stmt.arity);
+
+        self.analyzed_stmts.items[idx] = .{ .FnDecl = .{
+            .arity = stmt.arity,
+            .variable = fn_extra,
+        } };
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {

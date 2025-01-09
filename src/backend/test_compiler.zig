@@ -31,7 +31,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, _: ?Config) !Ge
     defer vm.deinit();
     try vm.init();
 
-    var compiler = Compiler.init(&vm, .Global);
+    var compiler = Compiler.init(&vm, null, .Global, "Script");
     defer compiler.deinit();
     const function = try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
 
