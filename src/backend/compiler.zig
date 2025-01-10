@@ -22,13 +22,47 @@ const Float = AnalyzedAst.Float;
 const Bool = AnalyzedAst.Bool;
 const Str = AnalyzedAst.Str;
 
-pub const Compiler = struct {
+pub const CompilationManager = struct {
     vm: *Vm,
+    compiler: Compiler,
+    errs: ArrayList(CompilerReport),
+    stmts: []const Ast.Stmt,
+    analyzed_stmts: UnsafeIter(AnalyzedStmt),
+
+    const Self = @This();
+    const Error = error{err} || Chunk.Error;
+    const CompilerReport = GenReport(CompilerMsg);
+
+    pub fn init(vm: *Vm, stmts: []const Ast.Stmt, analyzed_stmts: []const AnalyzedStmt) Self {
+        return .{
+            .vm = vm,
+            .compiler = undefined,
+            .errs = ArrayList(CompilerReport).init(vm.allocator),
+            .stmts = stmts,
+            .analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts),
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.errs.deinit();
+    }
+
+    pub fn compile(self: *Self) !*ObjFunction {
+        self.compiler = Compiler.init(self, null, .Global, "Script");
+
+        for (self.stmts) |*stmt| {
+            try self.compiler.statement(stmt);
+        }
+
+        return self.compiler.end();
+    }
+};
+
+const Compiler = struct {
+    manager: *CompilationManager,
     enclosing: ?*Compiler,
     function: *ObjFunction,
     fn_kind: FnKind,
-    errs: ArrayList(CompilerReport),
-    analyzed_stmts: UnsafeIter(AnalyzedStmt),
 
     const Self = @This();
     const Error = error{err} || Chunk.Error;
@@ -42,23 +76,21 @@ pub const Compiler = struct {
     };
 
     // TODO: error handling?
-    pub fn init(vm: *Vm, enclosing: ?*Compiler, fn_kind: FnKind, name: []const u8) Self {
+    pub fn init(manager: *CompilationManager, enclosing: ?*Compiler, fn_kind: FnKind, name: []const u8) Self {
         return .{
-            .vm = vm,
+            .manager = manager,
             .enclosing = enclosing,
-            .function = ObjFunction.create(vm, ObjString.copy(vm, name) catch unreachable) catch unreachable,
+            .function = ObjFunction.create(manager.vm, ObjString.copy(manager.vm, name) catch unreachable) catch unreachable,
             .fn_kind = fn_kind,
-            .errs = ArrayList(CompilerReport).init(vm.allocator),
-            .analyzed_stmts = undefined,
         };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.errs.deinit();
     }
 
     inline fn get_chunk(self: *Self) *Chunk {
         return &self.function.chunk;
+    }
+
+    inline fn get_next_analyzed(self: *Self) *const AnalyzedStmt {
+        return self.manager.analyzed_stmts.next();
     }
 
     fn write_op_and_byte(self: *Self, op: OpCode, byte: u8) !void {
@@ -132,17 +164,6 @@ pub const Compiler = struct {
         try c.write_byte(@intCast(offset & 0xff));
     }
 
-    pub fn compile(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt) !*ObjFunction {
-        self.analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts);
-
-        for (stmts) |*stmt| {
-            // From here, we always want to pop results from expressions
-            try self.statement(stmt);
-        }
-
-        return self.end();
-    }
-
     pub fn end(self: *Self) !*ObjFunction {
         try self.get_chunk().write_op(.Return);
         return self.function;
@@ -167,11 +188,11 @@ pub const Compiler = struct {
         try self.expression(stmt.value);
 
         // We cast the value on top of stack if needed
-        const assign_extra = self.analyzed_stmts.next().Assignment;
+        const assign_extra = self.get_next_analyzed().Assignment;
         if (assign_extra.cast == .Yes) try self.get_chunk().write_op(.CastToFloat);
 
         // Scope and index resolution
-        const extra = self.analyzed_stmts.next().Variable;
+        const extra = self.get_next_analyzed().Variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
@@ -182,19 +203,18 @@ pub const Compiler = struct {
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
-        const extra = self.analyzed_stmts.next();
-        _ = stmt;
-
-        try self.define_variable(&extra.Variable);
+        const extra = self.get_next_analyzed();
+        try self.compile_function(.Fn, stmt);
+        try self.define_variable(&extra.FnDecl.variable);
     }
 
     // TODO: Check if *kind* is really needed
-    fn compile_function(self: *Self, kind: FnKind, stmt: Ast.FnDecl) !void {
-        var compiler = Compiler.init(self.vm, kind, stmt.name.text);
-        try compiler.expression(stmt.body);
+    fn compile_function(self: *Self, kind: FnKind, stmt: *const Ast.FnDecl) !void {
+        var compiler = Compiler.init(self.manager, self, kind, stmt.name.text);
+        try compiler.block(&stmt.body);
 
         const func = try compiler.end();
-        _ = func;
+        try self.emit_constant(Value.obj(func.as_obj()));
     }
 
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
@@ -207,12 +227,12 @@ pub const Compiler = struct {
 
         if (stmt.value) |v| {
             try self.expression(v);
-            const extra = self.analyzed_stmts.next().Assignment;
+            const extra = self.get_next_analyzed().Assignment;
 
             if (extra.cast == .Yes) try c.write_op(.CastToFloat);
         } else try c.write_op(.Null);
 
-        try self.define_variable(&self.analyzed_stmts.next().Variable);
+        try self.define_variable(&self.get_next_analyzed().Variable);
     }
 
     fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
@@ -250,7 +270,7 @@ pub const Compiler = struct {
     }
 
     fn block(self: *Self, expr: *const Ast.Block) Error!void {
-        const extra = self.analyzed_stmts.next().Block;
+        const extra = self.get_next_analyzed().Block;
 
         for (expr.stmts) |*stmt| {
             try self.statement(stmt);
@@ -269,7 +289,7 @@ pub const Compiler = struct {
     fn binop(self: *Self, expr: *const Ast.BinOp) !void {
         const c = self.get_chunk();
 
-        const extra = self.analyzed_stmts.next().Binop;
+        const extra = self.get_next_analyzed().Binop;
 
         // Special handle for logicals
         if (extra.type_ == Bool) return self.logical_binop(expr);
@@ -367,7 +387,7 @@ pub const Compiler = struct {
     }
 
     fn ident_expr(self: *Self) !void {
-        const extra = self.analyzed_stmts.next().Variable;
+        const extra = self.get_next_analyzed().Variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
@@ -380,7 +400,7 @@ pub const Compiler = struct {
     fn if_expr(self: *Self, expr: *const Ast.If) !void {
         const c = self.get_chunk();
 
-        const extra = self.analyzed_stmts.next().If;
+        const extra = self.get_next_analyzed().If;
 
         try self.expression(expr.condition);
         const then_jump = try self.emit_jump(.JumpIfFalse);
@@ -416,13 +436,13 @@ pub const Compiler = struct {
     }
 
     fn string_lit(self: *Self, expr: *const Ast.StringLit) !void {
-        try self.emit_constant(Value.obj((try ObjString.copy(self.vm, expr.value)).as_obj()));
+        try self.emit_constant(Value.obj((try ObjString.copy(self.manager.vm, expr.value)).as_obj()));
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) !void {
         const c = self.get_chunk();
 
-        const extra = self.analyzed_stmts.next().Unary;
+        const extra = self.get_next_analyzed().Unary;
         try self.expression(expr.rhs);
 
         if (expr.op == .Minus) {

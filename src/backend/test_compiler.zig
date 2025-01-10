@@ -4,7 +4,7 @@ const ArrayList = std.ArrayList;
 const Lexer = @import("../frontend/lexer.zig").Lexer;
 const Parser = @import("../frontend/parser.zig").Parser;
 const Analyzer = @import("../frontend/analyzer.zig").Analyzer;
-const Compiler = @import("compiler.zig").Compiler;
+const CompilationManager = @import("compiler.zig").CompilationManager;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const Disassembler = @import("disassembler.zig").Disassembler;
 const Vm = @import("../runtime/vm.zig").Vm;
@@ -31,9 +31,9 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, _: ?Config) !Ge
     defer vm.deinit();
     try vm.init();
 
-    var compiler = Compiler.init(&vm, null, .Global, "Script");
+    var compiler = CompilationManager.init(&vm, parser.stmts.items, analyzer.analyzed_stmts.items);
     defer compiler.deinit();
-    const function = try compiler.compile(parser.stmts.items, analyzer.analyzed_stmts.items);
+    const function = try compiler.compile();
 
     var disassembler = Disassembler.init(&function.chunk, allocator, true);
     defer disassembler.deinit();

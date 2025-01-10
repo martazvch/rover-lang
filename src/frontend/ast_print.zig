@@ -113,7 +113,7 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("body:\n");
         self.indent_level += 1;
-        try self.expression(stmt.body);
+        try self.block_expr(&stmt.body);
         self.indent_level -= 1;
 
         self.indent_level -= 1;

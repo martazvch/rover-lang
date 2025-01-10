@@ -1,4 +1,4 @@
-/// Unsafe iterator. Dosen't return a nullable value, assumes
+/// Unsafe iterator. Doesn't return a nullable value, assumes
 /// that the precise item count is known by the user
 pub fn UnsafeIter(comptime Item: type) type {
     return struct {

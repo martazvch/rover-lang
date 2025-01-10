@@ -7,7 +7,7 @@ const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
 const Gc = @import("gc.zig").Gc;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;
-const Compiler = @import("../backend/compiler.zig").Compiler;
+const CompilationManager = @import("../backend/compiler.zig").CompilationManager;
 const OpCode = @import("../backend/chunk.zig").OpCode;
 const Table = @import("table.zig").Table;
 const Obj = @import("obj.zig").Obj;
@@ -151,35 +151,18 @@ pub const Vm = struct {
         }
     }
 
-    // pub fn read_byte(self: *Self) u8 {
-    //     const byte = self.ip[0];
-    //     self.ip += 1;
-    //     return byte;
-    // }
-    //
-    // pub fn read_constant(self: *Self) Value {
-    //     return self.chunk.constants[self.read_byte()];
-    // }
-    //
-    // pub fn read_short(self: *Self) u16 {
-    //     const short = @as(u16, self.ip[0]) << 8 | self.ip[1];
-    //     self.ip += 2;
-    //     return short;
-    // }
-    //
     fn instruction_nb(self: *const Self) usize {
         const frame = &self.frame_stack.frames[self.frame_stack.count - 1];
         const addr1 = @intFromPtr(frame.ip);
         const addr2 = @intFromPtr(frame.function.chunk.code.items.ptr);
-        // const addr2 = @intFromPtr(frame.closure.function.chunk.code.items.ptr);
         return addr1 - addr2;
     }
 
     pub fn run(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
         // Compiler
-        var compiler = Compiler.init(self, null, .Global, "Script");
+        var compiler = CompilationManager.init(self, stmts, analyzed_stmts);
         defer compiler.deinit();
-        const function = try compiler.compile(stmts, analyzed_stmts);
+        const function = try compiler.compile();
 
         // Disassembler
         if (print_bytecode) {
@@ -203,13 +186,6 @@ pub const Vm = struct {
 
         try self.execute();
     }
-
-    // pub fn run_slice(self: *Self, chunk: *const Chunk, start: usize) !void {
-    // pub fn run_slice(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
-    //     self.chunk = chunk;
-    //     self.ip = self.chunk.code.items[start..].ptr;
-    //     try self.execute();
-    // }
 
     fn execute(self: *Self) !void {
         const frame = &self.frame_stack.frames[self.frame_stack.count - 1];

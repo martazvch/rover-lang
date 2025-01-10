@@ -124,6 +124,13 @@ pub const Analyzer = struct {
         return self.source[span.start..span.end];
     }
 
+    /// Reserve a slot in analyzed statements and returns the index
+    fn reserve_slot(self: *Self) !usize {
+        const idx = self.analyzed_stmts.items.len;
+        try self.analyzed_stmts.append(undefined);
+        return idx;
+    }
+
     /// Unincrement scope depth, discards all locals and return the number
     /// of discarded locals
     fn end_scope(self: *Self) !usize {
@@ -191,6 +198,7 @@ pub const Analyzer = struct {
         } else Void;
     }
 
+    // TODO: redo this part
     fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
         var extra: AnalyzedAst.Variable = undefined;
         var variable: Variable = .{
@@ -305,8 +313,7 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
-        const idx = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
+        const idx = try self.reserve_slot();
 
         // Check in current scope
         const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
@@ -346,7 +353,7 @@ pub const Analyzer = struct {
             try self.analyzed_stmts.append(.{ .Variable = param_extra });
         }
 
-        const result_type = try self.expression(stmt.body);
+        const result_type = try self.block(&stmt.body);
 
         if (result_type != return_type) {
             return self.err(
@@ -354,7 +361,7 @@ pub const Analyzer = struct {
                     .found = self.type_manager.str(result_type),
                     .expect = self.type_manager.str(return_type),
                 } },
-                stmt.body.span(),
+                stmt.body.span,
             );
         }
 
@@ -451,8 +458,7 @@ pub const Analyzer = struct {
     }
 
     fn block(self: *Self, expr: *const Ast.Block) Error!Type {
-        const idx = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
+        const idx = try self.reserve_slot();
 
         self.scope_depth += 1;
 
@@ -529,8 +535,7 @@ pub const Analyzer = struct {
     // dont check if type match, we exit scope anyway
     fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
         // We reserve the slot because of recursion
-        const idx = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
+        const idx = try self.reserve_slot();
         var extra: AnalyzedAst.If = .{};
 
         const cond_type = try self.expression(expr.condition);
@@ -590,8 +595,7 @@ pub const Analyzer = struct {
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
-        const idx = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
+        const idx = try self.reserve_slot();
         var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
 
         const rhs = try self.expression(expr.rhs);
@@ -616,8 +620,7 @@ pub const Analyzer = struct {
 
     fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
         // We reserve the slot because of recursion
-        const idx = self.analyzed_stmts.items.len;
-        try self.analyzed_stmts.append(undefined);
+        const idx = try self.reserve_slot();
         var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
 
         const lhs = try self.expression(expr.lhs);

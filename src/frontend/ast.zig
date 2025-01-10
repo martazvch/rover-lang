@@ -77,7 +77,7 @@ pub const FnDecl = struct {
     name: SourceSlice,
     params: [256]Parameter,
     arity: u16,
-    body: *const Expr,
+    body: Block,
     return_type: ?SourceSlice,
 };
 

@@ -266,7 +266,7 @@ pub const Parser = struct {
 
         self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
-        const body = try self.block_expr();
+        const body = try self.block();
 
         return .{ .FnDecl = .{
             .name = SourceSlice.from_token(ident, self.source),
@@ -460,11 +460,18 @@ pub const Parser = struct {
     }
 
     fn block_expr(self: *Self) Error!*Expr {
+        const expr = try self.allocator.create(Expr);
+
+        expr.* = .{ .Block = try self.block() };
+
+        return expr;
+    }
+
+    fn block(self: *Self) Error!Ast.Block {
         const openning_brace = self.prev();
 
         self.skip_new_lines();
         var span: Span = .{ .start = openning_brace.span.start, .end = 0 };
-        const expr = try self.allocator.create(Expr);
 
         var stmts = ArrayList(Stmt).init(self.allocator);
 
@@ -477,12 +484,10 @@ pub const Parser = struct {
 
         span.end = self.prev().span.end;
 
-        expr.* = .{ .Block = .{
+        return .{
             .stmts = try stmts.toOwnedSlice(),
             .span = span,
-        } };
-
-        return expr;
+        };
     }
 
     fn if_expr(self: *Self) Error!*Expr {
