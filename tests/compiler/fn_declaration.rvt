@@ -1,0 +1,28 @@
+// Function declaration
+
+// Global scope
+
+code:
+fn add() {}
+
+expect:
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+OP_RETURN
+
+================
+
+// Local scope
+
+code:
+{
+    fn add() {}
+}
+
+expect:
+OP_CONSTANT index 0, value <fn add>
+OP_POP
+OP_RETURN
+
+================
+
