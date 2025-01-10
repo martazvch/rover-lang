@@ -258,8 +258,9 @@ const Compiler = struct {
             .Block => |*e| self.block(e),
             .BoolLit => |*e| self.bool_lit(e),
             .BinOp => |*e| self.binop(e),
-            .Grouping => |*e| self.grouping(e),
             .FloatLit => |*e| self.float_lit(e),
+            .FnCall => |*e| self.fn_call(e),
+            .Grouping => |*e| self.grouping(e),
             .Identifier => self.ident_expr(),
             .If => |*e| self.if_expr(e),
             .IntLit => |*e| self.int_lit(e),
@@ -373,10 +374,6 @@ const Compiler = struct {
         }
     }
 
-    fn grouping(self: *Self, expr: *const Ast.Grouping) !void {
-        try self.expression(expr.expr);
-    }
-
     fn bool_lit(self: *Self, expr: *const Ast.BoolLit) !void {
         const op: OpCode = if (expr.value) .True else .False;
         try self.get_chunk().write_op(op);
@@ -384,6 +381,15 @@ const Compiler = struct {
 
     fn float_lit(self: *Self, expr: *const Ast.FloatLit) !void {
         try self.emit_constant(Value.float(expr.value));
+    }
+
+    fn fn_call(self: *Self, expr: *const Ast.FnCall) !void {
+        _ = self;
+        _ = expr;
+    }
+
+    fn grouping(self: *Self, expr: *const Ast.Grouping) !void {
+        try self.expression(expr.expr);
     }
 
     fn ident_expr(self: *Self) !void {

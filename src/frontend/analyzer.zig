@@ -443,8 +443,9 @@ pub const Analyzer = struct {
             .Block => |*e| self.block(e),
             .BoolLit => Bool,
             .BinOp => |*e| self.binop(e),
-            .Grouping => |*e| self.grouping(e),
             .FloatLit => Float,
+            .FnCall => |*e| self.fn_call(e),
+            .Grouping => |*e| self.grouping(e),
             .Identifier => |*e| {
                 const res = try self.identifier(e, true);
                 return res.type_;
@@ -478,6 +479,12 @@ pub const Analyzer = struct {
         } };
 
         return final;
+    }
+
+    fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
+        _ = self;
+        _ = expr;
+        return Void;
     }
 
     fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {

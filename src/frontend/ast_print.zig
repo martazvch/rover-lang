@@ -177,8 +177,9 @@ pub const AstPrinter = struct {
             .Block => |*e| self.block_expr(e),
             .BinOp => |*e| self.binop_expr(e),
             .BoolLit => |*e| self.bool_expr(e),
-            .Grouping => |*e| self.grouping_expr(e),
+            .FnCall => |*e| self.fn_call(e),
             .FloatLit => |*e| self.float_expr(e),
+            .Grouping => |*e| self.grouping_expr(e),
             .Identifier => |*e| self.ident_expr(e),
             .If => |*e| self.if_expr(e),
             .IntLit => |*e| self.int_expr(e),
@@ -212,15 +213,6 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
-    fn grouping_expr(self: *Self, expr: *const Ast.Grouping) Error!void {
-        try self.indent();
-        try self.tree.appendSlice("[Grouping]\n");
-
-        self.indent_level += 1;
-        try self.expression(expr.expr);
-        self.indent_level -= 1;
-    }
-
     fn bool_expr(self: *Self, expr: *const Ast.BoolLit) Error!void {
         try self.indent();
         var buf: [100]u8 = undefined;
@@ -233,6 +225,35 @@ pub const AstPrinter = struct {
         var buf: [100]u8 = undefined;
         const written = try std.fmt.bufPrint(&buf, "[Float literal {d}]\n", .{expr.value});
         try self.tree.appendSlice(written);
+    }
+
+    fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Fn call\n");
+        self.indent_level += 1;
+
+        try self.indent();
+        try self.tree.appendSlice("callee:\n");
+        try self.expression(expr.callee);
+        try self.indent();
+        try self.tree.appendSlice("args:\n");
+
+        for (0..expr.arity) |i| {
+            try self.expression(expr.args[i]);
+        }
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
+    fn grouping_expr(self: *Self, expr: *const Ast.Grouping) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Grouping]\n");
+
+        self.indent_level += 1;
+        try self.expression(expr.expr);
+        self.indent_level -= 1;
     }
 
     fn ident_expr(self: *Self, expr: *const Ast.Identifier) Error!void {

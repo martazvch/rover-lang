@@ -39,3 +39,47 @@ expect:
  
 ================
 
+code:
+-{add()}
+
+expect:
+[Unary -]
+    [Block]
+        [Fn call
+            callee:
+            [Identifier add]
+            args:
+        ]
+ 
+================
+
+code:
+not if true do "yes" else "no"
+
+expect:
+[Unary not]
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [String literal yes]
+        else body:
+        [String literal no]
+    ]
+ 
+================
+
+code:
+not -add()
+
+expect:
+[Unary not]
+    [Unary -]
+        [Fn call
+            callee:
+            [Identifier add]
+            args:
+        ]
+
+================
+

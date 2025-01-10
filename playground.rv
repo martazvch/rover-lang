@@ -1,2 +1,16 @@
-    fn add() {}
-    print add
+fn add() {}
+fn add(arg1: int){}
+fn add(arg1:int,) {
+
+}
+fn add(
+    arg1: int
+) {}
+fn add(
+    arg1: int) {}
+fn add(
+    args1: int,
+)
+{
+
+}

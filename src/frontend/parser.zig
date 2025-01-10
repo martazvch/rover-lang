@@ -70,7 +70,7 @@ pub const Parser = struct {
                 // If it's our own error, we continue on parsing
                 Error.err => {
                     // If last error was Eof, exit the parser
-                    if (self.errs.items[self.errs.items.len - 1].report == .UnexpectedEof) {
+                    if (self.errs.getLast().report == .UnexpectedEof) {
                         return;
                     }
 
@@ -242,8 +242,12 @@ pub const Parser = struct {
         var params: [256]Ast.Parameter = undefined;
 
         self.skip_new_lines();
-        while (!self.check(.RightParen) and !self.check(.Eof)) {
-            if (arity == 255) return self.error_at_current(.TooMuchFnParam);
+        while (!self.check(.RightParen)) {
+            if (self.check(.Eof)) {
+                return self.error_at_prev(.ExpectParenAfterFnParams);
+            }
+
+            if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "parameter" } });
 
             const var_infos = try self.var_name_and_type("parameter");
             const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
@@ -251,6 +255,7 @@ pub const Parser = struct {
             params[arity] = .{ .name = var_infos.name, .type_ = type_ };
             arity += 1;
 
+            self.skip_new_lines();
             if (!self.match(.Comma)) break;
             self.skip_new_lines();
         }
@@ -398,7 +403,7 @@ pub const Parser = struct {
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!*Expr {
         self.advance();
-        var node = try self.parse_prefix_expr();
+        var node = try self.parse_expr();
 
         var banned_prec: i8 = -1;
 
@@ -433,37 +438,42 @@ pub const Parser = struct {
         return node;
     }
 
-    /// Parses a prefix expression. If we hit a unary first, we recurse
-    /// to form an expression
-    fn parse_prefix_expr(self: *Self) Error!*Expr {
-        const unary_expr = switch (self.prev().kind) {
-            .LeftBrace => return self.block_expr(),
-            .If => return self.if_expr(),
-            .Minus, .Not => try self.allocator.create(Expr),
-            else => return self.parse_primary_expr(),
+    /// Parses expressions (prefix + sufix)
+    fn parse_expr(self: *Self) Error!*Expr {
+        // Prefix part
+        const expr = try switch (self.prev().kind) {
+            .LeftBrace => self.block_expr(),
+            .If => self.if_expr(),
+            .Minus, .Not => self.unary_expr(),
+            else => self.parse_primary_expr(),
         };
+
+        // Apply postfix on the prefix expression
+        return self.parse_postfix_expr(expr);
+    }
+
+    fn unary_expr(self: *Self) Error!*Expr {
+        const expr = try self.allocator.create(Expr);
 
         const op = self.prev();
         self.advance();
 
         // Recursion appens here
-        unary_expr.* = .{ .Unary = .{
+        expr.* = .{ .Unary = .{
             .op = op.kind,
-            .rhs = try self.parse_prefix_expr(),
+            .rhs = try self.parse_expr(),
             .span = .{
                 .start = op.span.start,
                 .end = self.current().span.start,
             },
         } };
 
-        return unary_expr;
+        return expr;
     }
 
     fn block_expr(self: *Self) Error!*Expr {
         const expr = try self.allocator.create(Expr);
-
         expr.* = .{ .Block = try self.block() };
-
         return expr;
     }
 
@@ -575,10 +585,7 @@ pub const Parser = struct {
 
         expr.* = .{ .BoolLit = .{
             .value = value,
-            .span = .{
-                .start = p.span.start,
-                .end = p.span.end,
-            },
+            .span = p.span,
         } };
 
         return expr;
@@ -592,10 +599,7 @@ pub const Parser = struct {
 
         expr.* = .{ .FloatLit = .{
             .value = value,
-            .span = .{
-                .start = p.span.start,
-                .end = p.span.end,
-            },
+            .span = p.span,
         } };
 
         return expr;
@@ -621,10 +625,7 @@ pub const Parser = struct {
 
         expr.* = .{ .IntLit = .{
             .value = value,
-            .span = .{
-                .start = p.span.start,
-                .end = p.span.end,
-            },
+            .span = p.span,
         } };
 
         return expr;
@@ -635,10 +636,7 @@ pub const Parser = struct {
         const expr = try self.allocator.create(Expr);
 
         expr.* = .{ .NullLit = .{
-            .span = .{
-                .start = p.span.start,
-                .end = p.span.end,
-            },
+            .span = p.span,
         } };
 
         return expr;
@@ -650,13 +648,59 @@ pub const Parser = struct {
 
         expr.* = .{ .StringLit = .{
             .value = self.source[p.span.start + 1 .. p.span.end - 1],
-            .span = .{
-                .start = p.span.start,
-                .end = p.span.end,
-            },
+            .span = p.span,
         } };
 
         return expr;
+    }
+
+    /// Parses postfix expressions: calls, member access
+    fn parse_postfix_expr(self: *Self, prefix_expr: *Expr) Error!*Expr {
+        var expr: *Expr = prefix_expr;
+
+        while (true) {
+            if (self.match(.LeftParen)) {
+                expr = try self.finish_call(expr);
+            } else if (self.match(.Dot)) {
+                // Member access
+                unreachable;
+            } else break;
+        }
+
+        return expr;
+    }
+
+    fn finish_call(self: *Self, expr: *Expr) Error!*Expr {
+        const call_expr = try self.allocator.create(Expr);
+
+        var arity: usize = 0;
+        var args: [256]*const Expr = undefined;
+
+        // All the skip_lines cover the different syntaxes
+        while (!self.check(.RightParen)) {
+            self.skip_new_lines();
+            if (self.check(.Eof)) return self.error_at_prev(.ExpectParenAfterFnArgs);
+
+            if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "argument" } });
+
+            args[arity] = try self.parse_precedence_expr(0);
+            arity += 1;
+
+            self.skip_new_lines();
+            if (!self.match(.Comma)) break;
+            self.skip_new_lines();
+        }
+
+        try self.expect(.RightParen, .ExpectParenAfterFnArgs);
+
+        call_expr.* = .{ .FnCall = .{
+            .callee = expr,
+            .args = args,
+            .arity = arity,
+            .span = .{ .start = expr.span().start, .end = self.prev().span.end },
+        } };
+
+        return call_expr;
     }
 };
 

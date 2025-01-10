@@ -108,6 +108,7 @@ pub const Expr = union(enum) {
     BinOp: BinOp,
     BoolLit: BoolLit,
     FloatLit: FloatLit,
+    FnCall: FnCall,
     Grouping: Grouping,
     Identifier: Identifier,
     If: If,
@@ -142,6 +143,13 @@ pub const BoolLit = struct {
 
 pub const FloatLit = struct {
     value: f64,
+    span: Span,
+};
+
+pub const FnCall = struct {
+    callee: *const Expr,
+    args: [256]*const Expr,
+    arity: usize,
     span: Span,
 };
 

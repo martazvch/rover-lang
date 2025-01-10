@@ -1,7 +1,23 @@
 // Function declaration
 
 code:
-// Trailing comma
+fn add() {}
+fn add(arg1: int){}
+fn add(arg1:int,) {
+
+}
+fn add(
+    arg1: int
+) {}
+fn add(
+    arg1: int) {}
+fn add(
+    arg1: int,
+)
+{
+
+}
+
 fn add(param1: int, param2: Person,) {}
 
 // Multiline body + no args
@@ -17,6 +33,42 @@ fn foo(
 {}
 
 expect:
+[Fn declaration add, type void, arity 0
+    params:
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+
 [Fn declaration add, type void, arity 2
     params:
         param1, type int
@@ -49,6 +101,7 @@ expect:
 code:
 fn
 fn add
+fn add(
 fn add(1)
 fn add(a)
 fn add(a: int -> bool
@@ -58,6 +111,7 @@ fn add() -> bool 1 + 1
 error:
 ExpectFnName
 ExpectParenAfterFnName
+ExpectParenAfterFnParams
 ExpectName, parameter
 MissingFnParamType
 ExpectParenAfterFnParams
