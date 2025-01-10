@@ -9,6 +9,68 @@ const allocator = testing.allocator;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 
+const RED = "\x1b[31m";
+const NORMAL = "\x1b[0m";
+
+fn colorize_dif(str1: []const u8, str2: []const u8) ![]const u8 {
+    var res = std.ArrayList(u8).init(allocator);
+
+    const State = enum {
+        normal,
+        until_nl1,
+        until_nl2,
+    };
+
+    var i: usize = 0;
+    var j: usize = 0;
+    dif: switch (State.normal) {
+        .normal => {
+            if (i >= str1.len) break :dif;
+            if (j >= str2.len) break :dif;
+
+            if (str1[i] != str2[j]) {
+                try res.appendSlice(RED);
+                try res.append(str2[j]);
+                i += 1;
+                j += 1;
+                continue :dif .until_nl1;
+            }
+
+            try res.append(str2[j]);
+            i += 1;
+            j += 1;
+            continue :dif .normal;
+        },
+        .until_nl1 => {
+            if (i >= str1.len) break :dif;
+
+            if (str1[i] == '\n') {
+                i += 1;
+                continue :dif .until_nl2;
+            }
+
+            i += 1;
+            continue :dif .until_nl1;
+        },
+        .until_nl2 => {
+            if (j >= str2.len) break :dif;
+
+            if (str2[j] == '\n') {
+                try res.appendSlice(NORMAL);
+                try res.append(str2[j]);
+                j += 1;
+                continue :dif .normal;
+            }
+
+            try res.append(str2[j]);
+            j += 1;
+            continue :dif .until_nl2;
+        },
+    }
+
+    return res.toOwnedSlice();
+}
+
 pub fn GenTestData(comptime Report: type) type {
     assert(@typeInfo(Report) == .@"union");
 
@@ -165,8 +227,11 @@ pub fn GenericTester(
 
             if (exp.len > 0) {
                 expect(eql(u8, test_data.expect, exp)) catch |e| {
+                    const color_dif = try colorize_dif(exp, test_data.expect);
+                    defer allocator.free(color_dif);
+
                     print("expect:\n{s}\n", .{exp});
-                    print("got:\n{s}\n", .{test_data.expect});
+                    print("got:\n{s}\n", .{color_dif});
                     return e;
                 };
             } else if (errors.len > 0) {
