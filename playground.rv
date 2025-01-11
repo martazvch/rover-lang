@@ -1,16 +1,5 @@
-fn add() {}
-fn add(arg1: int){}
-fn add(arg1:int,) {
+var number = 15.6 + .6
+var name = "Blender"
 
-}
-fn add(
-    arg1: int
-) {}
-fn add(
-    arg1: int) {}
-fn add(
-    args1: int,
-)
-{
-
-}
+number = 90
+name = "Best software"

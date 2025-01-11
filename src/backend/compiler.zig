@@ -15,12 +15,13 @@ const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
 const AnalyzedAst = @import("../frontend/analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
+const TypeSys = @import("../frontend/type_system.zig");
 
-const Null = AnalyzedAst.Null;
-const Int = AnalyzedAst.Int;
-const Float = AnalyzedAst.Float;
-const Bool = AnalyzedAst.Bool;
-const Str = AnalyzedAst.Str;
+const Null = TypeSys.Null;
+const Int = TypeSys.Int;
+const Float = TypeSys.Float;
+const Bool = TypeSys.Bool;
+const Str = TypeSys.Str;
 
 pub const CompilationManager = struct {
     vm: *Vm,
@@ -145,6 +146,7 @@ const Compiler = struct {
             return Error.err;
         }
 
+        // TODO: I think I don't need the first & 0xff
         c.code.items[offset] = @as(u8, @intCast(jump >> 8)) & 0xff;
         c.code.items[offset + 1] = @intCast(jump & 0xff);
     }

@@ -26,3 +26,18 @@ OP_RETURN
 
 ================
 
+code:
+fn add(a:int) {}
+fn sub(a:int, b: float) -> int {
+    5
+}
+
+expect:
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value <fn sub>
+OP_DEFINE_GLOBAL index 1
+OP_RETURN
+
+================
+

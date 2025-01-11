@@ -4,15 +4,10 @@ const ArrayList = std.ArrayList;
 const Token = @import("lexer.zig").Token;
 const Ast = @import("ast.zig");
 const Span = @import("ast.zig").Span;
-const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
+const TypeSys = @import("type_system.zig");
+const Type = TypeSys.Type;
 
-pub const Type = u32;
-pub const Void: Type = 0;
-pub const Null: Type = 1;
-pub const Int: Type = 2;
-pub const Float: Type = 3;
-pub const Bool: Type = 4;
-pub const Str: Type = 5;
+pub const Scope = enum { Global, Local };
 
 pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
@@ -69,6 +64,4 @@ pub const Unary = struct {
 pub const Variable = struct {
     scope: Scope,
     index: usize,
-
-    const Scope = enum { Global, Local };
 };

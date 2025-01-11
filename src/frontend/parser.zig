@@ -670,6 +670,7 @@ pub const Parser = struct {
         return expr;
     }
 
+    /// Takes the callee expression as input and output the full function call expression
     fn finish_call(self: *Self, expr: *Expr) Error!*Expr {
         const call_expr = try self.allocator.create(Expr);
 

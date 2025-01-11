@@ -17,3 +17,12 @@ print add // expect: <fn add>
 
 print sub // expect: <fn sub>
 print add // expect: <fn add>
+
+// With args, to see if it compiles well too and that args dosen't mess up stack
+fn fn1(a: int) {}
+fn fn2(a: int, b: float) -> str {
+    "booo"
+}
+
+print fn1 // expect: <fn fn1>
+print fn2 // expect: <fn fn2>

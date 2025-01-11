@@ -5,7 +5,6 @@ fn add(a: int) {}
 
 expect:
 [Fn declaration arity 1, scope Global, index 0]
-[Variable scope Local, index 0]
 [Block pop count 0]
 
 ================
@@ -30,8 +29,6 @@ expect:
 
 [Block pop count 1]
 [Fn declaration arity 2, scope Local, index 0]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
 [Block pop count 1]
 [Variable scope Local, index 3]
 [Binop cast None, type bool]
@@ -41,14 +38,14 @@ expect:
 // Errors
 
 code:
-fn add(arg1: void) {}
-fn add(arg1: int, arg1: float) {}
+fn add1(arg1: void) {}
+fn add2(arg1: int, arg1: float) {}
 
-fn add() -> int {
+fn add3() -> int {
     true
 }
 
-fn add() {
+fn add4() {
     1+1
 }
 

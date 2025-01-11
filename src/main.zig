@@ -146,4 +146,5 @@ test {
     _ = @import("backend/compiler.zig");
     _ = @import("runtime/table.zig");
     _ = @import("runtime/vm.zig");
+    _ = @import("frontend/type_system.zig");
 }

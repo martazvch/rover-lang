@@ -10,25 +10,34 @@ const Expr = Ast.Expr;
 const Span = Ast.Span;
 const AnalyzedAst = @import("analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
-const GenReport = @import("../reporter.zig").GenReport;
-const Type = AnalyzedAst.Type;
+const Scope = AnalyzedAst.Scope;
+const TypeSys = @import("type_system.zig");
+const Type = TypeSys.Type;
+const TypeInfo = TypeSys.TypeInfo;
 const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
+const GenReport = @import("../reporter.zig").GenReport;
 
-const Void = AnalyzedAst.Void;
-const Null = AnalyzedAst.Null;
-const Int = AnalyzedAst.Int;
-const Float = AnalyzedAst.Float;
-const Bool = AnalyzedAst.Bool;
-const Str = AnalyzedAst.Str;
+// Re-export constants
+const Void = TypeSys.Void;
+const Null = TypeSys.Null;
+const Int = TypeSys.Int;
+const Float = TypeSys.Float;
+const Bool = TypeSys.Bool;
+const Str = TypeSys.Str;
 
 pub const TypeManager = struct {
     declared: StringHashMap(Type),
+    type_infos: ArrayList(TypeInfo),
 
     const Self = @This();
+    const Error = error{TooManyTypeInfo} || Allocator.Error;
 
     pub fn init(allocator: Allocator) Self {
-        return .{ .declared = StringHashMap(Type).init(allocator) };
+        return .{
+            .declared = StringHashMap(Type).init(allocator),
+            .type_infos = ArrayList(TypeInfo).init(allocator),
+        };
     }
 
     pub fn init_builtins(self: *Self) !void {
@@ -42,6 +51,17 @@ pub const TypeManager = struct {
 
     pub fn deinit(self: *Self) void {
         self.declared.deinit();
+        self.type_infos.deinit();
+    }
+
+    pub fn add_info(self: *Self, info: TypeInfo) !TypeSys.Value {
+        try self.type_infos.append(info);
+        const count = self.type_infos.items.len - 1;
+
+        return if (count == std.math.maxInt(TypeSys.Value))
+            error.TooManyTypeInfo
+        else
+            @intCast(count);
     }
 
     // NOTE:
@@ -63,14 +83,14 @@ pub const Analyzer = struct {
     source: []const u8,
     errs: ArrayList(AnalyzerReport),
     warns: ArrayList(AnalyzerReport),
-    globals: StringHashMap(Variable),
+    globals: ArrayList(Variable),
     locals: ArrayList(Variable),
     scope_depth: usize,
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
 
     const Self = @This();
-    const Error = error{Err} || Allocator.Error;
+    const Error = error{Err} || TypeManager.Error || Allocator.Error;
 
     // Representation of a variable. Index is the declaration order
     // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
@@ -83,6 +103,13 @@ pub const Analyzer = struct {
         name: []const u8,
         initialized: bool = false,
     };
+
+    /// Start of variable declaration
+    const VarDecl = struct {
+        scope: Scope,
+        index: usize,
+    };
+
     const AnalyzerReport = GenReport(AnalyzerMsg);
 
     pub fn init(allocator: Allocator) Self {
@@ -90,7 +117,7 @@ pub const Analyzer = struct {
             .source = undefined,
             .errs = ArrayList(AnalyzerReport).init(allocator),
             .warns = ArrayList(AnalyzerReport).init(allocator),
-            .globals = StringHashMap(Variable).init(allocator),
+            .globals = ArrayList(Variable).init(allocator),
             .locals = ArrayList(Variable).init(allocator),
             .scope_depth = 0,
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
@@ -154,11 +181,7 @@ pub const Analyzer = struct {
 
     /// Checks if the variable name is in local or global scope
     fn ident_in_scope(self: *const Self, name: []const u8) bool {
-        if (self.scope_depth == 0) {
-            if (self.globals.get(name)) |_| {
-                return true;
-            }
-        } else {
+        if (self.scope_depth > 0) {
             if (self.locals.items.len == 0) return false;
 
             var idx = self.locals.items.len;
@@ -170,6 +193,14 @@ pub const Analyzer = struct {
 
                 // First condition might fail first avoiding string comparison
                 if (local.name.len == name.len and std.mem.eql(u8, local.name, name)) {
+                    return true;
+                }
+            }
+        } else {
+            if (self.globals.items.len == 0) return false;
+
+            for (self.globals.items) |*glob| {
+                if (glob.name.len == name.len and std.mem.eql(u8, glob.name, name)) {
                     return true;
                 }
             }
@@ -211,12 +242,12 @@ pub const Analyzer = struct {
 
         // Add the variable to the correct data structure
         if (self.scope_depth == 0) {
-            const index = self.globals.count();
+            const index = self.globals.items.len;
             extra.index = index;
             extra.scope = .Global;
             variable.index = index;
 
-            try self.globals.put(name, variable);
+            try self.globals.append(variable);
         } else {
             const index = self.locals.items.len;
             extra.index = index;
@@ -225,6 +256,43 @@ pub const Analyzer = struct {
 
             try self.locals.append(variable);
         }
+
+        return extra;
+    }
+
+    /// Allow to declare a variable in two times
+    fn start_var_decl(self: *Self, name: []const u8, initialized: bool) !VarDecl {
+        var variable: Variable = .{
+            .index = 0,
+            .name = name,
+            .type_ = undefined,
+            .depth = self.scope_depth,
+            .initialized = initialized,
+        };
+
+        // Add the variable to the correct data structure
+        if (self.scope_depth == 0) {
+            variable.index = self.globals.items.len;
+            try self.globals.append(variable);
+
+            return .{ .scope = .Global, .index = variable.index };
+        } else {
+            variable.index = self.locals.items.len;
+            try self.locals.append(variable);
+
+            return .{ .scope = .Local, .index = variable.index };
+        }
+    }
+
+    /// Ends the two-step variable declaration
+    fn end_var_decl(self: *Self, var_decl: VarDecl, type_: Type) AnalyzedAst.Variable {
+        if (var_decl.scope == .Global) {
+            self.globals.items[var_decl.index].type_ = type_;
+        } else self.locals.items[var_decl.index].type_ = type_;
+
+        var extra: AnalyzedAst.Variable = undefined;
+        extra.index = var_decl.index;
+        extra.scope = var_decl.scope;
 
         return extra;
     }
@@ -318,10 +386,12 @@ pub const Analyzer = struct {
         // Check in current scope
         const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
 
-        // We mark it initialized so that it can be called in its body
-        const fn_extra = try self.declare_variable(stmt.name.text, return_type, true);
+        // Mark it initialized to allow recursion
+        const started_decl = try self.start_var_decl(stmt.name.text, true);
 
         self.scope_depth += 1;
+
+        var params_type: [256]Type = undefined;
 
         for (0..stmt.arity) |i| {
             // Check on parameter
@@ -349,11 +419,18 @@ pub const Analyzer = struct {
                 return self.err(.VoidParam, Span.from_source_slice(stmt.params[i].name));
             }
 
-            const param_extra = try self.declare_variable(stmt.params[i].name.text, param_type, true);
-            try self.analyzed_stmts.append(.{ .Variable = param_extra });
+            // const param_extra = try self.declare_variable(stmt.params[i].name.text, param_type, true);
+            _ = try self.declare_variable(stmt.params[i].name.text, param_type, true);
+            // try self.analyzed_stmts.append(.{ .Variable = param_extra });
+            params_type[i] = param_type;
         }
 
         const result_type = try self.block(&stmt.body);
+
+        // Here we close the function's parameters list, scope pops should
+        // be equal to arity
+        const end = try self.end_scope();
+        assert(end == stmt.arity);
 
         if (result_type != return_type) {
             return self.err(
@@ -365,9 +442,22 @@ pub const Analyzer = struct {
             );
         }
 
-        // Here we close the function's parameters list, scope pops should
-        // be equal to arity
-        assert(try self.end_scope() == stmt.arity);
+        // Creation of function real type
+        // TODO: error handling?
+        const type_idx = self.type_manager.add_info(.{ .Fn = .{
+            .arity = stmt.arity,
+            .params = params_type,
+            .return_type = return_type,
+        } }) catch |e| switch (e) {
+            error.TooManyTypeInfo => {
+                std.debug.print("TOO MANY TYPE VALUE\n", .{});
+                unreachable;
+            },
+            else => return e,
+        };
+
+        const fn_type = TypeSys.create(TypeSys.Fn, type_idx);
+        const fn_extra = self.end_var_decl(started_decl, fn_type);
 
         self.analyzed_stmts.items[idx] = .{ .FnDecl = .{
             .arity = stmt.arity,
@@ -482,8 +572,12 @@ pub const Analyzer = struct {
     }
 
     fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
-        _ = self;
-        _ = expr;
+        const callee = try self.expression(expr.callee);
+
+        if (TypeSys.is(callee, TypeSys.Fn)) {
+            std.debug.print("It's a function!\n", .{});
+        } else std.debug.print("It's NOT a function!\n", .{});
+
         return Void;
     }
 
@@ -514,17 +608,18 @@ pub const Analyzer = struct {
             }
         }
 
-        // We then check for global
-        if (self.globals.getPtr(expr.name)) |glob| {
-            if (initialized and !glob.initialized) {
-                return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+        for (self.globals.items) |*glob| {
+            if (std.mem.eql(u8, glob.name, expr.name)) {
+                if (initialized and !glob.initialized) {
+                    return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+                }
+
+                try self.analyzed_stmts.append(.{
+                    .Variable = .{ .scope = .Global, .index = glob.index },
+                });
+
+                return glob;
             }
-
-            try self.analyzed_stmts.append(.{
-                .Variable = .{ .scope = .Global, .index = glob.index },
-            });
-
-            return glob;
         }
 
         // Else, it's undeclared
