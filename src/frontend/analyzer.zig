@@ -31,7 +31,7 @@ pub const TypeManager = struct {
     type_infos: ArrayList(TypeInfo),
 
     const Self = @This();
-    const Error = error{TooManyTypeInfo} || Allocator.Error;
+    const Error = error{TooManyTypes} || std.fmt.BufPrintError || Allocator.Error;
 
     pub fn init(allocator: Allocator) Self {
         return .{
@@ -59,9 +59,14 @@ pub const TypeManager = struct {
         const count = self.type_infos.items.len - 1;
 
         return if (count == std.math.maxInt(TypeSys.Value))
-            error.TooManyTypeInfo
+            error.TooManyTypes
         else
             @intCast(count);
+    }
+
+    /// Set type information at a specific index in list (index gave by *reserve_info* method)
+    pub inline fn set_info(self: *Self, index: usize, info: TypeInfo) void {
+        self.type_infos.items[index] = info;
     }
 
     // NOTE:
@@ -153,9 +158,8 @@ pub const Analyzer = struct {
 
     /// Reserve a slot in analyzed statements and returns the index
     fn reserve_slot(self: *Self) !usize {
-        const idx = self.analyzed_stmts.items.len;
         try self.analyzed_stmts.append(undefined);
-        return idx;
+        return self.analyzed_stmts.items.len - 1;
     }
 
     /// Unincrement scope depth, discards all locals and return the number
@@ -229,9 +233,8 @@ pub const Analyzer = struct {
         } else Void;
     }
 
-    // TODO: redo this part
+    /// Declares a variable either in globals or in locals based on current scope depth
     fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
-        var extra: AnalyzedAst.Variable = undefined;
         var variable: Variable = .{
             .index = 0,
             .name = name,
@@ -243,58 +246,17 @@ pub const Analyzer = struct {
         // Add the variable to the correct data structure
         if (self.scope_depth == 0) {
             const index = self.globals.items.len;
-            extra.index = index;
-            extra.scope = .Global;
             variable.index = index;
 
             try self.globals.append(variable);
+            return .{ .index = index, .scope = .Global };
         } else {
             const index = self.locals.items.len;
-            extra.index = index;
-            extra.scope = .Local;
             variable.index = index;
 
             try self.locals.append(variable);
+            return .{ .index = index, .scope = .Local };
         }
-
-        return extra;
-    }
-
-    /// Allow to declare a variable in two times
-    fn start_var_decl(self: *Self, name: []const u8, initialized: bool) !VarDecl {
-        var variable: Variable = .{
-            .index = 0,
-            .name = name,
-            .type_ = undefined,
-            .depth = self.scope_depth,
-            .initialized = initialized,
-        };
-
-        // Add the variable to the correct data structure
-        if (self.scope_depth == 0) {
-            variable.index = self.globals.items.len;
-            try self.globals.append(variable);
-
-            return .{ .scope = .Global, .index = variable.index };
-        } else {
-            variable.index = self.locals.items.len;
-            try self.locals.append(variable);
-
-            return .{ .scope = .Local, .index = variable.index };
-        }
-    }
-
-    /// Ends the two-step variable declaration
-    fn end_var_decl(self: *Self, var_decl: VarDecl, type_: Type) AnalyzedAst.Variable {
-        if (var_decl.scope == .Global) {
-            self.globals.items[var_decl.index].type_ = type_;
-        } else self.locals.items[var_decl.index].type_ = type_;
-
-        var extra: AnalyzedAst.Variable = undefined;
-        extra.index = var_decl.index;
-        extra.scope = var_decl.scope;
-
-        return extra;
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
@@ -305,6 +267,7 @@ pub const Analyzer = struct {
                 switch (e) {
                     // If it's our own error, we continue
                     error.Err => continue,
+                    error.TooManyTypes => return self.err(.TooManyTypes, stmt.span()),
                     else => return e,
                 }
             };
@@ -386,9 +349,10 @@ pub const Analyzer = struct {
         // Check in current scope
         const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
 
-        // Mark it initialized to allow recursion
-        const started_decl = try self.start_var_decl(stmt.name.text, true);
+        const type_idx = try self.type_manager.add_info(undefined);
+        const fn_type = TypeSys.create(TypeSys.Fn, type_idx);
 
+        const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
         self.scope_depth += 1;
 
         var params_type: [256]Type = undefined;
@@ -419,16 +383,14 @@ pub const Analyzer = struct {
                 return self.err(.VoidParam, Span.from_source_slice(stmt.params[i].name));
             }
 
-            // const param_extra = try self.declare_variable(stmt.params[i].name.text, param_type, true);
             _ = try self.declare_variable(stmt.params[i].name.text, param_type, true);
-            // try self.analyzed_stmts.append(.{ .Variable = param_extra });
             params_type[i] = param_type;
         }
 
         const result_type = try self.block(&stmt.body);
 
         // Here we close the function's parameters list, scope pops should
-        // be equal to arity
+        // be equal to arity. In two part to allow optimization by removing the call
         const end = try self.end_scope();
         assert(end == stmt.arity);
 
@@ -442,22 +404,12 @@ pub const Analyzer = struct {
             );
         }
 
-        // Creation of function real type
-        // TODO: error handling?
-        const type_idx = self.type_manager.add_info(.{ .Fn = .{
+        // TODO: why one have a set method?
+        self.type_manager.set_info(type_idx, .{ .Fn = .{
             .arity = stmt.arity,
             .params = params_type,
             .return_type = return_type,
-        } }) catch |e| switch (e) {
-            error.TooManyTypeInfo => {
-                std.debug.print("TOO MANY TYPE VALUE\n", .{});
-                unreachable;
-            },
-            else => return e,
-        };
-
-        const fn_type = TypeSys.create(TypeSys.Fn, type_idx);
-        const fn_extra = self.end_var_decl(started_decl, fn_type);
+        } });
 
         self.analyzed_stmts.items[idx] = .{ .FnDecl = .{
             .arity = stmt.arity,
@@ -571,14 +523,48 @@ pub const Analyzer = struct {
         return final;
     }
 
+    /// Checks if an expression if of a certain type kind and returns the associated value or error
+    fn expect_type_kind(self: *Self, expr: *const Expr, kind: TypeSys.Kind) !TypeSys.Value {
+        const expr_type = try self.expression(expr);
+
+        return if (TypeSys.is(expr_type, kind))
+            TypeSys.get_value(expr_type)
+        else
+            self.err(
+                .{ .TypeMismatch = .{
+                    .expect = TypeSys.str_kind(kind),
+                    .found = TypeSys.str_kind(TypeSys.get_kind(expr_type)),
+                } },
+                expr.span(),
+            );
+    }
+
     fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
-        const callee = try self.expression(expr.callee);
+        const type_value = try self.expect_type_kind(expr.callee, TypeSys.Fn);
+        const type_info = self.type_manager.type_infos.items[type_value].Fn;
 
-        if (TypeSys.is(callee, TypeSys.Fn)) {
-            std.debug.print("It's a function!\n", .{});
-        } else std.debug.print("It's NOT a function!\n", .{});
+        if (type_info.arity != expr.arity) {
+            return self.err(
+                try AnalyzerMsg.wrong_args_count(type_info.arity, expr.arity),
+                expr.span,
+            );
+        }
 
-        return Void;
+        for (0..expr.arity) |i| {
+            const arg_type = try self.expression(expr.args[i]);
+
+            if (arg_type != type_info.params[i]) {
+                return self.err(
+                    .{ .TypeMismatch = .{
+                        .expect = self.type_manager.str(type_info.params[i]),
+                        .found = self.type_manager.str(arg_type),
+                    } },
+                    expr.args[i].span(),
+                );
+            }
+        }
+
+        return type_info.return_type;
     }
 
     fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {

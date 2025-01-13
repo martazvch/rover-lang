@@ -1,0 +1,31 @@
+// Tests function calls
+
+code:
+fn add(a: int) {}
+
+expect:
+[Fn declaration arity 1, scope Global, index 0]
+[Block pop count 0]
+
+================
+
+// Errors
+
+code:
+fn add(arg1: str) {}
+fn sub(arg1: float, args2: bool) {}
+
+add(1)
+add(1, 2)
+sub("true")
+var a = add("hoy")
+
+error:
+TypeMismatch, str, int
+WrongFnArgsCount, 1, 2
+WrongFnArgsCount, 2, 1
+VoidAssignment
+
+================
+
+

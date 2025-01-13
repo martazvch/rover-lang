@@ -269,7 +269,7 @@ pub fn GenericTester(
 
                                 if (line.next()) |extra| {
                                     expect(eql(u8, std.mem.trimLeft(u8, extra, " "), subv)) catch |e| {
-                                        print("assertion {}, expect error extra arg: {s}, got {s}\n", .{ i, subv, extra });
+                                        print("assertion {}, expect error extra arg: {s}, got {s}\n", .{ i, extra, subv });
                                         return e;
                                     };
                                 } else {

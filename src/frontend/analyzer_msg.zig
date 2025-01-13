@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const AnalyzerMsg = union(enum) {
     AlreadyDeclared: struct { name: []const u8 },
     DuplicateParam: struct { name: []const u8 },
@@ -15,6 +17,8 @@ pub const AnalyzerMsg = union(enum) {
     MissingElseClause: struct { if_type: []const u8 },
     NonBoolCond: struct { what: []const u8, found: []const u8 },
     NonVoidWhile: struct { found: []const u8 },
+    TooManyTypes,
+    TypeMismatch: struct { expect: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
     UndeclaredVar: struct { name: []const u8 },
     UnusedValue,
@@ -22,6 +26,7 @@ pub const AnalyzerMsg = union(enum) {
     VoidAssignment,
     VoidDiscard,
     VoidParam,
+    WrongFnArgsCount: struct { expect: []const u8, found: []const u8 },
 
     const Self = @This();
 
@@ -49,6 +54,11 @@ pub const AnalyzerMsg = union(enum) {
             .NonBoolCond => |e| writer.print("non boolean condition, found type '{s}'", .{e.found}),
             .NonVoidWhile => writer.print("'while' statements can't return a value", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
+            .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
+            .TypeMismatch => |e| writer.print(
+                "type mismatch, expect a '{s}' but found '{s}' ",
+                .{ e.expect, e.found },
+            ),
             .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
             .UnusedValue => writer.print("unused value", .{}),
@@ -56,6 +66,10 @@ pub const AnalyzerMsg = union(enum) {
             .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
             .VoidDiscard => writer.print("trying to discard a non value", .{}),
             .VoidParam => writer.print("function parameters can't be of 'void' type", .{}),
+            .WrongFnArgsCount => |e| writer.print(
+                "expect {s} function arguments but found {s}",
+                .{ e.expect, e.found },
+            ),
         };
     }
 
@@ -73,15 +87,18 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidUnary,
             .NonBoolCond,
             => writer.print("expression is not a boolean type", .{}),
-            .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
-            .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
+            .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
+            .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
+            .TooManyTypes => writer.print("this is the exceding one", .{}),
+            .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
             .UnusedValue => writer.print("this expression produces a value", .{}),
             .VoidAssignment => writer.print("this expression procuses no value", .{}),
             .VoidDiscard => writer.print("this expression produces no value", .{}),
             .VoidParam => writer.print("this parameter", .{}),
+            .WrongFnArgsCount => writer.print("this call", .{}),
         };
     }
 
@@ -127,12 +144,18 @@ pub const AnalyzerMsg = union(enum) {
             .MissingElseClause => writer.print("add an 'else' block that evaluate to the expected type", .{}),
             .NonBoolCond => |e| writer.print("'{s}' conditions can only be boolean type", .{e.what}),
             .NonVoidWhile => writer.print("use '_' to ignore the value or modify the body", .{}),
+            .TooManyTypes => writer.print(
+                "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",
+                .{},
+            ),
+            .TypeMismatch => writer.print("change the type to match expected one", .{}),
             .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
             .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
             .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
             .VoidAssignment => writer.print("consider returning a value from expression or remove assignment", .{}),
             .VoidParam => writer.print("use a any other type than 'void' or remove parameter", .{}),
+            .WrongFnArgsCount => writer.print("refer to the function's definition to correct the call", .{}),
         };
     }
 
@@ -154,5 +177,23 @@ pub const AnalyzerMsg = union(enum) {
             .found1 = found1,
             .found2 = found2,
         } };
+    }
+
+    // TODO: No other way to take ownership of string??
+    pub fn wrong_args_count(expect: usize, found: usize) !Self {
+        var list = std.ArrayList(u8).init(std.heap.page_allocator);
+        const writer = list.writer();
+        try writer.print("{}", .{expect});
+
+        var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
+        const writer1 = list1.writer();
+        try writer1.print("{}", .{found});
+
+        const tmp: AnalyzerMsg = .{ .WrongFnArgsCount = .{
+            .expect = try list.toOwnedSlice(),
+            .found = try list1.toOwnedSlice(),
+        } };
+
+        return tmp;
     }
 };
