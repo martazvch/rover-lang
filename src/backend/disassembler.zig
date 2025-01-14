@@ -52,7 +52,7 @@ pub const Disassembler = struct {
         return switch (op) {
             .AddFloat => self.simple_instruction("OP_ADD_FLOAT", offset, writer),
             .AddInt => self.simple_instruction("OP_ADD_INT", offset, writer),
-            // .Call => self.byte_instruction("OP_CALL", offset),
+            .CallFn => self.index_instruction("OP_CALL", offset, writer),
             // .CloseUpValue => simple_instruction("OP_CLOSE_UPVALUE", offset, writer),
             // .Closure => {
             //     var local_offset = offset + 1;

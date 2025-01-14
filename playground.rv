@@ -1,5 +1,25 @@
-var number = 15.6 + .6
-var name = "Blender"
+// Last expression returned while discarding inbetween locals
+var a: int = {
+    var space = 67
+    var other = "just chillin"
+    var nb = 7
+    var sneaky = 90
+    nb
+}
 
-number = 90
-name = "Best software"
+print a // expect: 7
+
+
+// Returning a global from a scope
+var b = 56
+
+var c: int = {
+    var space = 67
+    var other = "just chillin"
+    var nb = 7
+    var sneaky = 90
+    _ = nb
+    b
+}
+
+print c // expect: 56

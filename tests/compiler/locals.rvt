@@ -1,5 +1,8 @@
 // Tests locals
 
+config:
+ignore return
+
 code:
 {
     var loc1 = 1.5
@@ -21,7 +24,6 @@ OP_PRINT
 OP_POP
 OP_POP
 OP_POP
-OP_RETURN
 
 ================
 
@@ -72,7 +74,6 @@ OP_PRINT
 OP_POP
 OP_POP
 OP_POP
-OP_RETURN
 
 ================
 
@@ -106,7 +107,6 @@ OP_STRING_CONCAT
 OP_PRINT
 OP_POP
 OP_POP
-OP_RETURN
 
 ================
 
@@ -146,8 +146,6 @@ OP_POP
 
 OP_CONSTANT index 6, value "still global"
 OP_SET_GLOBAL index 0
-OP_RETURN
 
 ================
-
 

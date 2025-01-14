@@ -1,5 +1,8 @@
 // Test blocks
 
+config:
+ignore return
+
 // Here, the scope returns a value -> SCOPE_RETURN
 // but the scope is invoked without assigning the value
 // A OP_POP will be triggered as an expression statement
@@ -10,7 +13,6 @@ expect:
 OP_CONSTANT index 0, value 5
 OP_SCOPE_RETURN index 0
 OP_POP
-OP_RETURN
 
 ================
 
@@ -20,7 +22,6 @@ code:
 expect:
 OP_CONSTANT index 0, value 5
 OP_POP
-OP_RETURN
 
 ================
 
@@ -30,7 +31,6 @@ code:
 expect:
 OP_NULL
 OP_POP
-OP_RETURN
 
 ================
 
@@ -56,7 +56,6 @@ OP_GET_LOCAL index 1
 OP_PRINT
 OP_POP
 OP_POP
-OP_RETURN
 
 ================
 
@@ -71,7 +70,6 @@ OP_CONSTANT index 0, value 7
 OP_GET_LOCAL index 0
 OP_SCOPE_RETURN index 1
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================
 
@@ -93,6 +91,5 @@ OP_CONSTANT index 3, value 90
 OP_GET_LOCAL index 2
 OP_SCOPE_RETURN index 4
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================

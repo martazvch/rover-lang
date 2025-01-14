@@ -1,12 +1,14 @@
 // Tests literals
 
+config:
+ignore return
+
 code:
 var a = 15.6
 
 expect:
 OP_CONSTANT index 0, value 15.6
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================
 
@@ -18,7 +20,6 @@ OP_CONSTANT index 0, value 15.6
 OP_CONSTANT index 1, value 0.6
 OP_ADD_FLOAT
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================
 
@@ -41,8 +42,6 @@ OP_CAST_TO_FLOAT
 OP_SET_GLOBAL index 0
 OP_CONSTANT index 4, value "Best software"
 OP_SET_GLOBAL index 1
-
-OP_RETURN
 
 ================
 

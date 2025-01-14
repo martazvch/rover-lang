@@ -1,5 +1,8 @@
 // Tests logicals
 
+config:
+ignore return
+
 code:
 if true and false do print "yes"
 
@@ -14,6 +17,5 @@ OP_CONSTANT index 0, value "yes"
 OP_PRINT
 OP_JUMP 13 -> 17
 OP_POP
-OP_RETURN
 
 ================

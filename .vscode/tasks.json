@@ -4,12 +4,17 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "zig build",
+            "command": "zig",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
+            "args": [
+                "build",
+                "-Dprint-stack",
+                "-Dprint-instr"
+            ]
         },
         {
             "label": "build stress gc",

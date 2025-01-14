@@ -445,30 +445,12 @@ pub const Parser = struct {
             .LeftBrace => self.block_expr(),
             .If => self.if_expr(),
             .Minus, .Not => self.unary_expr(),
+            .Return => self.return_expr(),
             else => self.parse_primary_expr(),
         };
 
         // Apply postfix on the prefix expression
         return self.parse_postfix_expr(expr);
-    }
-
-    fn unary_expr(self: *Self) Error!*Expr {
-        const expr = try self.allocator.create(Expr);
-
-        const op = self.prev();
-        self.advance();
-
-        // Recursion appens here
-        expr.* = .{ .Unary = .{
-            .op = op.kind,
-            .rhs = try self.parse_expr(),
-            .span = .{
-                .start = op.span.start,
-                .end = self.current().span.start,
-            },
-        } };
-
-        return expr;
     }
 
     fn block_expr(self: *Self) Error!*Expr {
@@ -536,6 +518,37 @@ pub const Parser = struct {
             .then_body = then_body,
             .else_body = else_body,
             .span = span,
+        } };
+
+        return expr;
+    }
+
+    fn unary_expr(self: *Self) Error!*Expr {
+        const expr = try self.allocator.create(Expr);
+
+        const op = self.prev();
+        self.advance();
+
+        // Recursion appens here
+        expr.* = .{ .Unary = .{
+            .op = op.kind,
+            .rhs = try self.parse_expr(),
+            .span = .{
+                .start = op.span.start,
+                .end = self.current().span.start,
+            },
+        } };
+
+        return expr;
+    }
+
+    fn return_expr(self: *Self) Error!*Expr {
+        const expr = try self.allocator.create(Expr);
+        const op = self.prev();
+
+        expr.* = .{ .Return = .{
+            .expr = if (self.check(.NewLine)) null else try self.parse_precedence_expr(0),
+            .span = .{ .start = op.span.start, .end = self.prev().span.end },
         } };
 
         return expr;

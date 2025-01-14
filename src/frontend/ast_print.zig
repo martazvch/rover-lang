@@ -184,6 +184,7 @@ pub const AstPrinter = struct {
             .If => |*e| self.if_expr(e),
             .IntLit => |*e| self.int_expr(e),
             .NullLit => self.null_expr(),
+            .Return => |*e| self.return_expr(e),
             .StringLit => |*e| self.string_expr(e),
             .Unary => |*e| self.unary_expr(e),
         };
@@ -298,6 +299,19 @@ pub const AstPrinter = struct {
     fn null_expr(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Null literal]\n");
+    }
+
+    fn return_expr(self: *Self, expr: *const Ast.Return) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Return");
+
+        if (expr.expr) |e| {
+            self.indent_level += 1;
+            try self.expression(e);
+            self.indent_level -= 1;
+        }
+
+        try self.tree.appendSlice("]\n");
     }
 
     fn string_expr(self: *Self, expr: *const Ast.StringLit) Error!void {

@@ -1,5 +1,8 @@
 // Tests if
 
+config:
+ignore return
+
 // Note:
 //  - each jump count as 3 OP (the jump + 2x8bits jump value)
 //  - OP count begins at 0
@@ -16,7 +19,6 @@ OP_CONSTANT index 0, value "yes"
 OP_PRINT
 OP_JUMP 8 -> 12
 OP_POP
-OP_RETURN
 
 ================
 
@@ -34,7 +36,6 @@ OP_CONSTANT index 0, value "yes"
 OP_PRINT
 OP_JUMP 13 -> 17
 OP_POP
-OP_RETURN
 
 ================
 
@@ -54,7 +55,6 @@ OP_JUMP 13 -> 20
 OP_POP
 OP_CONSTANT index 1, value "no"
 OP_PRINT
-OP_RETURN
 
 ================
 
@@ -75,7 +75,6 @@ OP_POP
 OP_CONSTANT index 1, value 2
 OP_SCOPE_RETURN index 0
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================
 
@@ -97,7 +96,6 @@ OP_POP
 OP_CONSTANT index 2, value 1
 OP_SCOPE_RETURN index 0
 OP_DEFINE_GLOBAL index 0
-OP_RETURN
 
 ================
 
@@ -139,6 +137,5 @@ OP_GET_LOCAL index 0
 OP_ADD_INT
 OP_SCOPE_RETURN index 1
 OP_DEFINE_GLOBAL index 2
-OP_RETURN
 
 ================

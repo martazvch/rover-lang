@@ -99,7 +99,7 @@ pub const Analyzer = struct {
 
     // Representation of a variable. Index is the declaration order
     // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
-    // de 48 à 40 bits
+    // de 48 à 47 bits
     // Voir si possible de faire autrement que de stocker le nom des vars
     const Variable = struct {
         index: usize,
@@ -107,12 +107,6 @@ pub const Analyzer = struct {
         depth: usize,
         name: []const u8,
         initialized: bool = false,
-    };
-
-    /// Start of variable declaration
-    const VarDecl = struct {
-        scope: Scope,
-        index: usize,
     };
 
     const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -262,6 +256,8 @@ pub const Analyzer = struct {
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
         self.source = source;
 
+        try self.locals.append(.{ .name = "", .initialized = true, .index = 0, .type_ = TypeSys.Fn, .depth = 0 });
+
         for (stmts) |*stmt| {
             const stmt_type = self.statement(stmt) catch |e| {
                 switch (e) {
@@ -344,6 +340,20 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
+        // TODO: Analyzer
+        // if name == main && scope == 0 => save pointer to treat it last and return
+        // call fn_declaration again with the pointer
+        // if pointer is null at the end of all stmt -> error no main
+        // add an implicit call to main?? *Not sure if necessary*
+        // return the pointer to compiler so it only compares addresses to find it back
+        //
+        // TODO: Compiler
+        // compile every thing but end with the main
+        //
+        // TODO: VM
+        // call the returned function, the main
+        //
+        // NOTE: string comparison is slow, add a field in Ast node?
         const idx = try self.reserve_slot();
 
         // Check in current scope
@@ -495,6 +505,7 @@ pub const Analyzer = struct {
             .If => |*e| self.if_expr(e),
             .IntLit => Int,
             .NullLit => Null,
+            .Return => |*e| self.return_expr(e),
             .StringLit => Str,
             .Unary => |*e| self.unary(e),
         };
@@ -680,6 +691,10 @@ pub const Analyzer = struct {
         self.analyzed_stmts.items[idx] = .{ .If = extra };
 
         return then_type;
+    }
+
+    fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
+        return if (expr.expr) |val| self.expression(val) else Void;
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

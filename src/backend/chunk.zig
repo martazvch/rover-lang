@@ -6,6 +6,7 @@ const Value = @import("../runtime/values.zig").Value;
 pub const OpCode = enum(u8) {
     AddInt,
     AddFloat,
+    CallFn,
     CastToFloat,
     Constant,
     DifferentInt,
@@ -53,6 +54,7 @@ pub const OpCode = enum(u8) {
 
 pub const Chunk = struct {
     code: ArrayList(u8),
+    offsets: ArrayList(usize),
     constants: [CONST_MAX]Value,
     constant_count: u8,
 
@@ -63,6 +65,7 @@ pub const Chunk = struct {
     pub fn init(allocator: Allocator) Self {
         return .{
             .code = ArrayList(u8).init(allocator),
+            .offsets = ArrayList(usize).init(allocator),
             .constants = undefined,
             .constant_count = 0,
         };
@@ -70,14 +73,17 @@ pub const Chunk = struct {
 
     pub fn deinit(self: *Self) void {
         self.code.deinit();
+        self.offsets.deinit();
     }
 
-    pub fn write_op(self: *Self, op: OpCode) Error!void {
+    pub fn write_op(self: *Self, op: OpCode, offset: usize) Error!void {
         try self.code.append(@intFromEnum(op));
+        try self.offsets.append(offset);
     }
 
-    pub fn write_byte(self: *Self, byte: u8) Error!void {
+    pub fn write_byte(self: *Self, byte: u8, offset: usize) Error!void {
         try self.code.append(byte);
+        try self.offsets.append(offset);
     }
 
     pub fn write_constant(self: *Self, value: Value) Error!u8 {

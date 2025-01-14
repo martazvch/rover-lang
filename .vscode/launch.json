@@ -25,15 +25,6 @@
             ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build",
-        },
-        {
-            "type": "cppvsdbg",
-            "request": "launch",
-            "name": "Debug test",
-            "program": "${workspaceFolder}/zig-out/bin/${fileBasenameNoExtension}-test",
-            "args": [],
-            "cwd": "${workspaceFolder}",
-            "preLaunchTask": "test"
         }
     ]
 }

@@ -114,6 +114,7 @@ pub const Expr = union(enum) {
     If: If,
     IntLit: IntLit,
     NullLit: NullLit,
+    Return: Return,
     StringLit: StringLit,
     Unary: Unary,
 
@@ -177,6 +178,11 @@ pub const IntLit = struct {
 };
 
 pub const NullLit = struct {
+    span: Span,
+};
+
+pub const Return = struct {
+    expr: ?*Expr,
     span: Span,
 };
 

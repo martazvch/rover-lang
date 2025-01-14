@@ -112,6 +112,7 @@ pub const Vm = struct {
     globals: [256]Value, // TODO: ArrayList or constant, not hard written
 
     const Self = @This();
+    const Error = error{StackOverflow} || Allocator.Error;
 
     pub fn new(allocator: Allocator) Self {
         return .{
@@ -151,6 +152,24 @@ pub const Vm = struct {
         }
     }
 
+    /// Returns the error gave in *kind* parameter and prints backtrace
+    fn err(self: *Self, kind: Error) Error {
+        for (0..self.frame_stack.count) |i| {
+            const idx = self.frame_stack.count - i - 1;
+            const frame = self.frame_stack.frames[idx];
+            const function = frame.function;
+
+            const instr = self.instruction_nb();
+            self.stdout.print("[line {}] in ", .{function.chunk.offsets.items[instr]});
+
+            if (function.name) |name| {
+                print("{s}()\n", .{name});
+            } else print("script\n", .{});
+        }
+
+        return kind;
+    }
+
     fn instruction_nb(self: *const Self) usize {
         const frame = &self.frame_stack.frames[self.frame_stack.count - 1];
         const addr1 = @intFromPtr(frame.ip);
@@ -160,17 +179,9 @@ pub const Vm = struct {
 
     pub fn run(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
         // Compiler
-        var compiler = CompilationManager.init(self, stmts, analyzed_stmts);
+        var compiler = CompilationManager.init(self, stmts, analyzed_stmts, print_bytecode);
         defer compiler.deinit();
         const function = try compiler.compile();
-
-        // Disassembler
-        if (print_bytecode) {
-            var dis = Disassembler.init(&function.chunk, self.allocator, false);
-            defer dis.deinit();
-            try dis.dis_chunk("main");
-            std.debug.print("\n{s}", .{dis.disassembled.items});
-        }
 
         // Reinit stack here (usefull for repl mode)
         self.stack.init();
@@ -178,17 +189,14 @@ pub const Vm = struct {
         // Initialization of stack and frame
         self.stack.push(Value.obj(function.as_obj()));
 
-        const frame = &self.frame_stack.frames[self.frame_stack.count];
-        frame.function = function;
-        frame.ip = function.chunk.code.items.ptr;
-        frame.slots = self.stack.top;
-        self.frame_stack.count += 1;
+        // Initialize the call stack frame
+        try self.call(function, 0);
 
         try self.execute();
     }
 
     fn execute(self: *Self) !void {
-        const frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+        var frame = &self.frame_stack.frames[self.frame_stack.count - 1];
 
         while (true) {
             if (comptime config.print_stack) {
@@ -221,6 +229,14 @@ pub const Vm = struct {
                 .AddInt => {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int += rhs;
+                },
+                .CallFn => {
+                    const args_count = frame.read_byte();
+                    const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
+                    try self.call(callee, args_count);
+
+                    // If call success, we need to to set frame pointer back
+                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
                 },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
                 .Constant => self.stack.push(frame.read_constant()),
@@ -286,7 +302,19 @@ pub const Vm = struct {
                     try self.stack.pop().print(self.stdout);
                     _ = try self.stdout.write("\n");
                 },
-                .Return => break,
+                .Return => {
+                    const result = self.stack.pop();
+                    self.frame_stack.count -= 1;
+
+                    if (self.frame_stack.count == 0) {
+                        _ = self.stack.pop();
+                        break;
+                    }
+
+                    self.stack.top = frame.slots;
+                    self.stack.push(result);
+                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                },
                 .ScopeReturn => {
                     const locals_count = frame.read_byte();
                     const res = self.stack.pop();
@@ -340,5 +368,18 @@ pub const Vm = struct {
         _ = self.stack.pop();
 
         self.stack.push(Value.obj((try ObjString.take(self, res)).as_obj()));
+    }
+
+    fn call(self: *Self, callee: *ObjFunction, args_count: usize) Error!void {
+        if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
+            return error.StackOverflow;
+        }
+
+        const frame = &self.frame_stack.frames[self.frame_stack.count];
+        self.frame_stack.count += 1;
+        frame.function = callee;
+        frame.ip = callee.chunk.code.items.ptr;
+        // -1 for the function itself
+        frame.slots = self.stack.top - args_count - 1;
     }
 };

@@ -1,12 +1,14 @@
 // Tests literals
 
+config:
+ignore return
+
 code:
 _ = 1
 
 expect:
 OP_CONSTANT index 0, value 1
 OP_POP
-OP_RETURN
 
 ================
 
@@ -16,7 +18,6 @@ _ = 65.82
 expect:
 OP_CONSTANT index 0, value 65.82
 OP_POP
-OP_RETURN
 
 ================
 
@@ -26,7 +27,6 @@ _ = true
 expect:
 OP_TRUE
 OP_POP
-OP_RETURN
 
 ================
 
@@ -36,7 +36,6 @@ _ = false
 expect:
 OP_FALSE
 OP_POP
-OP_RETURN
 
 ================
 
@@ -46,7 +45,6 @@ _ = null
 expect:
 OP_NULL
 OP_POP
-OP_RETURN
 
 ================
 
@@ -56,7 +54,6 @@ _ = "foo"
 expect:
 OP_CONSTANT index 0, value "foo"
 OP_POP
-OP_RETURN
 
 ================
 
