@@ -93,6 +93,7 @@ pub const Analyzer = struct {
     scope_depth: usize,
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
+    main: ?*const Ast.FnDecl,
 
     const Self = @This();
     const Error = error{Err} || TypeManager.Error || Allocator.Error;
@@ -121,6 +122,7 @@ pub const Analyzer = struct {
             .scope_depth = 0,
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
             .type_manager = TypeManager.init(allocator),
+            .main = null,
         };
     }
 
@@ -253,9 +255,10 @@ pub const Analyzer = struct {
         }
     }
 
-    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
+    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8, repl: bool) !void {
         self.source = source;
 
+        // HACK: needed while there is no call to main function at start of program
         try self.locals.append(.{ .name = "", .initialized = true, .index = 0, .type_ = TypeSys.Fn, .depth = 0 });
 
         for (stmts) |*stmt| {
@@ -275,6 +278,16 @@ pub const Analyzer = struct {
                 self.err(.UnusedValue, stmt.Expr.span()) catch {};
             }
         }
+
+        // In REPL mode, no need for main function
+        if (repl) return;
+
+        if (self.main) |main| {
+            self.fn_declaration(main) catch |e| switch (e) {
+                error.Err => {},
+                else => return e,
+            };
+        } else self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
     fn statement(self: *Self, stmt: *const Stmt) !Type {
@@ -340,20 +353,27 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
+        // If we find a main function in global scope, we save it to analyze last
+        // If there is another global scoped main function, it's going to be analyzed
+        // and when we analyze the first one there will be an error anyway
+        if (self.main == null and self.scope_depth == 0 and std.mem.eql(u8, stmt.name.text, "main")) {
+            self.main = stmt;
+            return;
+        }
+
         // TODO: Analyzer
-        // if name == main && scope == 0 => save pointer to treat it last and return
-        // call fn_declaration again with the pointer
-        // if pointer is null at the end of all stmt -> error no main
-        // add an implicit call to main?? *Not sure if necessary*
-        // return the pointer to compiler so it only compares addresses to find it back
+        // [x] - if name == main && scope == 0 => save pointer to treat it last and return
+        // [x] - call fn_declaration again with the pointer
+        // [x] - if pointer is null at the end of all stmt -> error no main
+        // [] - return the pointer to compiler so it only compares addresses to find it back
         //
         // TODO: Compiler
-        // compile every thing but end with the main
+        // [] - compile every thing but end with the main
         //
-        // TODO: VM
-        // call the returned function, the main
+        // VM will automatically call the last retruned function, the main
         //
         // NOTE: string comparison is slow, add a field in Ast node?
+
         const idx = try self.reserve_slot();
 
         // Check in current scope

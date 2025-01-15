@@ -126,7 +126,6 @@ fn repl(
 
         input.clearRetainingCapacity();
         try stdin.streamUntilDelimiter(input.writer(), '\n', null);
-        // const trimmed = std.mem.trimRight(u8, input.items, "\r");
 
         // For ease of use of the parser
         try input.append('\n');

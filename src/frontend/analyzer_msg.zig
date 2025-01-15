@@ -17,6 +17,7 @@ pub const AnalyzerMsg = union(enum) {
     MissingElseClause: struct { if_type: []const u8 },
     NonBoolCond: struct { what: []const u8, found: []const u8 },
     NonVoidWhile: struct { found: []const u8 },
+    NoMain,
     TooManyTypes,
     TypeMismatch: struct { expect: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
@@ -53,6 +54,7 @@ pub const AnalyzerMsg = union(enum) {
             .ImplicitCast => writer.print("implicit cast", .{}),
             .NonBoolCond => |e| writer.print("non boolean condition, found type '{s}'", .{e.found}),
             .NonVoidWhile => writer.print("'while' statements can't return a value", .{}),
+            .NoMain => writer.print("no main function found", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
             .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
             .TypeMismatch => |e| writer.print(
@@ -90,6 +92,7 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
+            .NoMain => writer.print("in this file", .{}),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .TooManyTypes => writer.print("this is the exceding one", .{}),
             .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
@@ -144,6 +147,7 @@ pub const AnalyzerMsg = union(enum) {
             .MissingElseClause => writer.print("add an 'else' block that evaluate to the expected type", .{}),
             .NonBoolCond => |e| writer.print("'{s}' conditions can only be boolean type", .{e.what}),
             .NonVoidWhile => writer.print("use '_' to ignore the value or modify the body", .{}),
+            .NoMain => writer.print("add a 'main' function that will be called automatically at execution", .{}),
             .TooManyTypes => writer.print(
                 "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",
                 .{},

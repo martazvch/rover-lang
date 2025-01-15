@@ -183,9 +183,6 @@ pub const Vm = struct {
         defer compiler.deinit();
         const function = try compiler.compile();
 
-        // Reinit stack here (usefull for repl mode)
-        self.stack.init();
-
         // Initialization of stack and frame
         self.stack.push(Value.obj(function.as_obj()));
 

@@ -1,0 +1,34 @@
+// Tests variable declaration type
+
+// The arity below shows that the main in analyzed last
+code:
+fn main() {}
+fn add(a: int, b: int) {}
+
+expect:
+[Fn declaration arity 2, scope Global, index 0]
+[Block pop count 0]
+[Fn declaration arity 0, scope Global, index 1]
+[Block pop count 0]
+
+================
+
+code:
+fn main() {}
+fn add(a: int, b: int) {}
+fn main() {}
+
+expect:
+AlreadyDeclared, main
+
+================
+
+code:
+var main = 1
+fn add(a: int, b: int) {}
+
+expect:
+NoMain
+
+================
+

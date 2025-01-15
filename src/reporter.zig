@@ -135,124 +135,125 @@ pub fn GenReporter(comptime Report: type) type {
         }
 
         fn display(self: *Self, report: *const GenReport(Report), file_name: []const u8) !void {
-            var current: usize = 0;
-            var line_start: usize = 0;
-            var line_count: usize = 0;
-            var previous_line: ?[]const u8 = null;
-
-            // Looking for current line where it occured and buffers the previous one
-            // for context
-            while (true) {
-                if (self.source[current] == '\n') {
-                    if (current >= report.start) break;
-
-                    const end = if (self.source[current - 1] == '\r') current - 1 else current;
-                    previous_line = self.source[line_start..end];
-
-                    line_count += 1;
-                    // Skip the \n
-                    line_start = current + 1;
-                }
-
-                current += 1;
-            }
-
-            // Line index start to 1
-            line_count += 1;
-
-            var buf: [10]u8 = undefined;
-            // We consider the maximum line number being 99 999. The extra space
-            // is for space between line number and gutter and the one at the beginning
-            const buf2: [7]u8 = [_]u8{' '} ** 7;
-
-            // Gets line number digit count
-            const written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
-            const line_digit_count = written.len;
-            const left_padding = buf2[0 .. written.len + 2];
-
             // Prints the error part
             //  Error: <err-msg>
             try self.writer.print("{s} ", .{report.level.get_level_msg()});
             try report.get_msg(self.writer);
             _ = try self.writer.write("\n");
 
-            // Prints file name and location infos
-            //  ╭─[file_name.rv:1:5]
-            try self.writer.print(
-                "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
-                .{
-                    left_padding,
-                    box_char(.UpperLeft),
-                    box_char(.Horitzontal),
-                    color(.Blue),
-                    file_name,
-                    color(.NoColor),
-                    line_count,
-                    report.end - line_start + 1,
-                },
-            );
+            // If there is visual indication on text
+            if (report.end > 0) {
+                var current: usize = 0;
+                var line_start: usize = 0;
+                var line_count: usize = 0;
+                var previous_line: ?[]const u8 = null;
 
-            // Prints previous line number, separation and line itself
-            //  56 | var a = 3
-            if (previous_line) |pl| {
-                try self.print_line(line_count - 1, pl, line_digit_count);
-            }
+                // Looking for current line where it occured and buffers the previous one
+                // for context
+                while (true) {
+                    if (self.source[current] == '\n') {
+                        if (current >= report.start) break;
 
-            // Prints current line number, separation and line
-            //  57 | fn add(a, b c)
-            try self.print_line(line_count, self.source[line_start..current], line_digit_count);
+                        const end = if (self.source[current - 1] == '\r') current - 1 else current;
+                        previous_line = self.source[line_start..end];
 
-            // Underlines the problem
-            // Takes padding into account + separator + space
-            //  <space><space> |
-            try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+                        line_count += 1;
+                        // Skip the \n
+                        line_start = current + 1;
+                    }
 
-            // We get the length of the error code and the half to underline it
-            var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
-            const start_space = report.start - line_start;
-            const lexeme_len = @max(report.end - report.start, 1);
-            const half = @divFloor(lexeme_len, 2);
-
-            // Prints initial space
-            _ = try self.writer.write(space_buf[0..start_space]);
-
-            // We write in yellow
-            _ = try self.writer.write(color(.Yellow));
-
-            // Prints ─┬─
-            for (0..lexeme_len) |i| {
-                if (i == half) {
-                    _ = try self.writer.write(box_char(.UnderT));
-                } else {
-                    _ = try self.writer.write(box_char(.Horitzontal));
+                    current += 1;
                 }
+
+                // Line index start to 1
+                line_count += 1;
+
+                var buf: [10]u8 = undefined;
+                // We consider the maximum line number being 99 999. The extra space
+                // is for space between line number and gutter and the one at the beginning
+                const buf2: [7]u8 = [_]u8{' '} ** 7;
+
+                // Gets line number digit count
+                const written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
+                const line_digit_count = written.len;
+                const left_padding = buf2[0 .. written.len + 2];
+
+                // Prints file name and location infos
+                //  ╭─[file_name.rv:1:5]
+                try self.writer.print(
+                    "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
+                    .{
+                        left_padding,
+                        box_char(.UpperLeft),
+                        box_char(.Horitzontal),
+                        color(.Blue),
+                        file_name,
+                        color(.NoColor),
+                        line_count,
+                        report.end - line_start + 1,
+                    },
+                );
+                // Prints previous line number, separation and line itself
+                //  56 | var a = 3
+                if (previous_line) |pl| {
+                    try self.print_line(line_count - 1, pl, line_digit_count);
+                }
+
+                // Prints current line number, separation and line
+                //  57 | fn add(a, b c)
+                try self.print_line(line_count, self.source[line_start..current], line_digit_count);
+
+                // Underlines the problem
+                // Takes padding into account + separator + space
+                //  <space><space> |
+                try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+
+                // We get the length of the error code and the half to underline it
+                var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
+                const start_space = report.start - line_start;
+                const lexeme_len = @max(report.end - report.start, 1);
+                const half = @divFloor(lexeme_len, 2);
+
+                // Prints initial space
+                _ = try self.writer.write(space_buf[0..start_space]);
+
+                // We write in yellow
+                _ = try self.writer.write(color(.Yellow));
+
+                // Prints ─┬─
+                for (0..lexeme_len) |i| {
+                    if (i == half) {
+                        _ = try self.writer.write(box_char(.UnderT));
+                    } else {
+                        _ = try self.writer.write(box_char(.Horitzontal));
+                    }
+                }
+                _ = try self.writer.write("\n");
+
+                // We switch back to no color
+                _ = try self.writer.write(color(.NoColor));
+
+                // Prints to indication (written state is the good one at this stage
+                // for the beginning of the sequence to print)
+                //  <space><space> | ╰─── <indication txt>
+                try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+                _ = try self.writer.write(space_buf[0 .. start_space + half]);
+
+                _ = try self.writer.write(color(.Yellow));
+
+                try self.writer.print("{s} ", .{corner_to_hint});
+                _ = try report.get_hint(self.writer);
+                _ = try self.writer.write("\n");
+                _ = try self.writer.write(color(.NoColor));
+
+                _ = try self.writer.write(left_padding);
+                try self.writer.print("{s}\n", .{corner_to_end});
             }
-            _ = try self.writer.write("\n");
-
-            // We switch back to no color
-            _ = try self.writer.write(color(.NoColor));
-
-            // Prints to indication (written state is the good one at this stage
-            // for the beginning of the sequence to print)
-            //  <space><space> | ╰─── <indication txt>
-            try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
-            _ = try self.writer.write(space_buf[0 .. start_space + half]);
-
-            _ = try self.writer.write(color(.Yellow));
-
-            try self.writer.print("{s} ", .{corner_to_hint});
-            _ = try report.get_hint(self.writer);
-            _ = try self.writer.write("\n");
-            _ = try self.writer.write(color(.NoColor));
-
-            _ = try self.writer.write(left_padding);
-            try self.writer.print("{s}\n", .{corner_to_end});
 
             var fba = try std.BoundedArray(u8, 1000).init(0);
             try report.get_help(fba.writer());
 
             if (fba.slice().len > 0) {
-                // try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..help_bytes] });
                 try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
             }
 

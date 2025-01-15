@@ -1,0 +1,4 @@
+fn main(){
+    print "main"
+}
+fn add(a: int, b: int) {}

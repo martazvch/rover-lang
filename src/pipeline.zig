@@ -23,12 +23,6 @@ pub const Config = struct {
     print_analyzed_ast: bool,
 };
 
-/// Complete interpreter pipeline:
-/// - Lexer
-/// - Parser
-/// - Analyzer
-/// - Compiler
-/// - Vm
 pub const ReplPipeline = struct {
     allocator: Allocator,
     config: Config,
@@ -101,7 +95,7 @@ pub const ReplPipeline = struct {
         // Analyzer
         // TODO: init analyzer extra info with exact number of element per array list
         // for optimal memory allocation
-        try self.analyzer.analyze(parser.stmts.items, source);
+        try self.analyzer.analyze(parser.stmts.items, source, true);
         // We don't keep errors/warnings from a prompt to another
         defer self.analyzer.errs.clearRetainingCapacity();
         defer self.analyzer.warns.clearRetainingCapacity();
@@ -136,23 +130,9 @@ pub const ReplPipeline = struct {
             analyzed_ast_printer.display();
         }
 
-        // Compiler
-        // try self.compiler.compile(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
-        // // We isolate only new compiled code
-        // const code_len = self.compiler.chunk.code.items.len;
-        //
-        // // Disassembler
-        // if (self.config.print_bytecode) {
-        //     var dis = Disassembler.init(&self.compiler.chunk, self.allocator, false);
-        //     defer dis.deinit();
-        //     try dis.dis_slice("main", self.code_count);
-        //     std.debug.print("\n{s}", .{dis.disassembled.items});
-        // }
-
         // Vm run
         try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
 
-        // self.code_count = self.vm.;
         self.stmts_count = self.analyzer.analyzed_stmts.items.len;
     }
 };
@@ -163,9 +143,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     var lexer = Lexer.init(allocator);
     try lexer.lex(source);
     defer lexer.deinit();
-
-    // In case we have an error, we initialize the parser because here it's still
-    // undefined and we are gonna call deinit on it
 
     if (lexer.errs.items.len > 0) {
         var reporter = GenReporter(LexerMsg).init(source);
@@ -202,7 +179,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
 
-    try analyzer.analyze(parser.stmts.items, source);
+    try analyzer.analyze(parser.stmts.items, source, false);
 
     // Analyzer errors
     if (analyzer.errs.items.len > 0) {
@@ -237,7 +214,5 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     var vm: Vm = Vm.new(allocator);
     try vm.init();
     defer vm.deinit();
-
-    // Vm run
     try vm.run(parser.stmts.items, analyzer.analyzed_stmts.items, config.print_bytecode);
 }
