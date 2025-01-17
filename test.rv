@@ -1,4 +1,19 @@
-fn main(){
-    print "main"
+fn add(a:int, b:int) -> int {
+    a+b
 }
-fn add(a: int, b: int) {}
+
+fn sub(a: int, b: int) -> int {
+    _ = 5
+    return a - b
+    print "oui"
+}
+
+var c
+
+fn main() {
+    var a = add(1,2)
+    print a
+
+    c = sub(5, 3)
+    print c
+}

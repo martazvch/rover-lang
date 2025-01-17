@@ -11,6 +11,7 @@ const Span = Ast.Span;
 const AnalyzedAst = @import("analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const Scope = AnalyzedAst.Scope;
+const ReturnKind = AnalyzedAst.ReturnKind;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
@@ -94,20 +95,27 @@ pub const Analyzer = struct {
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
     main: ?*const Ast.FnDecl,
+    states: ArrayList(State),
 
     const Self = @This();
     const Error = error{Err} || TypeManager.Error || Allocator.Error;
 
     // Representation of a variable. Index is the declaration order
     // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
-    // de 48 à 47 bits
+    // de 48 à 47 bits, mais bon il y a padding
     // Voir si possible de faire autrement que de stocker le nom des vars
     const Variable = struct {
-        index: usize,
-        type_: Type,
+        index: usize = 0,
+        type_: Type = Void,
         depth: usize,
-        name: []const u8,
+        name: []const u8 = "",
         initialized: bool = false,
+    };
+
+    const State = struct {
+        in_control_flow: bool = false,
+        in_fn: bool = false,
+        returns: bool = false,
     };
 
     const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -123,6 +131,7 @@ pub const Analyzer = struct {
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
             .type_manager = TypeManager.init(allocator),
             .main = null,
+            .states = ArrayList(State).init(allocator),
         };
     }
 
@@ -133,6 +142,7 @@ pub const Analyzer = struct {
         self.locals.deinit();
         self.analyzed_stmts.deinit();
         self.type_manager.deinit();
+        self.states.deinit();
     }
 
     fn is_numeric(t: Type) bool {
@@ -156,6 +166,10 @@ pub const Analyzer = struct {
     fn reserve_slot(self: *Self) !usize {
         try self.analyzed_stmts.append(undefined);
         return self.analyzed_stmts.items.len - 1;
+    }
+
+    fn last_state(self: *Self) *State {
+        return &self.states.items[self.states.items.len - 1];
     }
 
     /// Unincrement scope depth, discards all locals and return the number
@@ -232,7 +246,6 @@ pub const Analyzer = struct {
     /// Declares a variable either in globals or in locals based on current scope depth
     fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
         var variable: Variable = .{
-            .index = 0,
             .name = name,
             .type_ = type_,
             .depth = self.scope_depth,
@@ -258,8 +271,7 @@ pub const Analyzer = struct {
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8, repl: bool) !void {
         self.source = source;
 
-        // HACK: needed while there is no call to main function at start of program
-        try self.locals.append(.{ .name = "", .initialized = true, .index = 0, .type_ = TypeSys.Fn, .depth = 0 });
+        if (repl) self.scope_depth += 1;
 
         for (stmts) |*stmt| {
             const stmt_type = self.statement(stmt) catch |e| {
@@ -280,14 +292,12 @@ pub const Analyzer = struct {
         }
 
         // In REPL mode, no need for main function
-        if (repl) return;
+        if (repl) {
+            self.scope_depth -= 1;
+            return;
+        }
 
-        if (self.main) |main| {
-            self.fn_declaration(main) catch |e| switch (e) {
-                error.Err => {},
-                else => return e,
-            };
-        } else self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+        if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
     fn statement(self: *Self, stmt: *const Stmt) !Type {
@@ -352,27 +362,14 @@ pub const Analyzer = struct {
         if (discarded == Void) return self.err(.VoidDiscard, stmt.expr.span());
     }
 
-    fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
+    fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) Error!void {
         // If we find a main function in global scope, we save it to analyze last
         // If there is another global scoped main function, it's going to be analyzed
         // and when we analyze the first one there will be an error anyway
+        // NOTE: string comparison is slow, add a field in Ast node?
         if (self.main == null and self.scope_depth == 0 and std.mem.eql(u8, stmt.name.text, "main")) {
             self.main = stmt;
-            return;
         }
-
-        // TODO: Analyzer
-        // [x] - if name == main && scope == 0 => save pointer to treat it last and return
-        // [x] - call fn_declaration again with the pointer
-        // [x] - if pointer is null at the end of all stmt -> error no main
-        // [] - return the pointer to compiler so it only compares addresses to find it back
-        //
-        // TODO: Compiler
-        // [] - compile every thing but end with the main
-        //
-        // VM will automatically call the last retruned function, the main
-        //
-        // NOTE: string comparison is slow, add a field in Ast node?
 
         const idx = try self.reserve_slot();
 
@@ -384,6 +381,12 @@ pub const Analyzer = struct {
 
         const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
         self.scope_depth += 1;
+
+        // We add a empty variable to anticipate the function it self on the stack. Here,
+        // it's declared in the outter scope to allow create a new function with the same name
+        // in function's body but in real life the function itself is at the very beginning of
+        // its stack window because it's the returned address for the function
+        try self.locals.append(.{ .depth = self.scope_depth });
 
         var params_type: [256]Type = undefined;
 
@@ -417,34 +420,58 @@ pub const Analyzer = struct {
             params_type[i] = param_type;
         }
 
-        const result_type = try self.block(&stmt.body);
+        // Body
+        try self.states.append(.{ .in_fn = true });
 
-        // Here we close the function's parameters list, scope pops should
-        // be equal to arity. In two part to allow optimization by removing the call
-        const end = try self.end_scope();
-        assert(end == stmt.arity);
+        var body_type: Type = Void;
+        self.scope_depth += 1;
 
-        if (result_type != return_type) {
+        // We don't use block because we don't want to emit extra data from the block
+        for (stmt.body.stmts) |*s| {
+            if (self.last_state().returns) {
+                // TODO: DeadCode
+                break;
+            }
+            body_type = try self.statement(s);
+        }
+
+        // Two levels: 1 for function's name + params and another one for body
+        _ = try self.end_scope();
+        _ = try self.end_scope();
+
+        const state = self.states.pop();
+
+        const return_kind: ReturnKind = if (state.returns)
+            .Explicit
+        else if (body_type == Void)
+            .ImplicitVoid
+        else
+            .ImplicitValue;
+
+        if (body_type != return_type) {
             return self.err(
                 .{ .IncompatibleFnType = .{
-                    .found = self.type_manager.str(result_type),
+                    .found = self.type_manager.str(body_type),
                     .expect = self.type_manager.str(return_type),
                 } },
                 stmt.body.span,
             );
         }
 
-        // TODO: why one have a set method?
+        // TODO: why one have a set method and not analyzed_stmts?
         self.type_manager.set_info(type_idx, .{ .Fn = .{
             .arity = stmt.arity,
             .params = params_type,
             .return_type = return_type,
         } });
 
-        self.analyzed_stmts.items[idx] = .{ .FnDecl = .{
-            .arity = stmt.arity,
-            .variable = fn_extra,
-        } };
+        self.analyzed_stmts.items[idx] = .{
+            .FnDecl = .{
+                .arity = stmt.arity,
+                .variable = fn_extra,
+                .return_kind = return_kind,
+            },
+        };
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
@@ -511,6 +538,10 @@ pub const Analyzer = struct {
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
+        // TODO: refine this, not all expressions must be considered unpure
+        // by default
+        if (self.scope_depth == 0) return self.err(.UnpureInGlobal, expr.span());
+
         return switch (expr.*) {
             .Block => |*e| self.block(e),
             .BoolLit => Bool,
@@ -546,10 +577,16 @@ pub const Analyzer = struct {
             }
         }
 
-        self.analyzed_stmts.items[idx] = .{ .Block = .{
-            .pop_count = try self.end_scope(),
-            .is_expr = if (final != Void) true else false,
-        } };
+        const count = try self.end_scope();
+
+        // If inside a function, we don't emit ScopeReturn because we need a real
+        // return to reset instruction pointer and stuff
+        if (!self.last_state().in_fn) {
+            self.analyzed_stmts.items[idx] = .{ .Block = .{
+                .pop_count = count,
+                .is_expr = if (final != Void) true else false,
+            } };
+        }
 
         return final;
     }
@@ -714,7 +751,14 @@ pub const Analyzer = struct {
     }
 
     fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
-        return if (expr.expr) |val| self.expression(val) else Void;
+        var state = self.last_state();
+
+        if (state.in_fn) {
+            state.returns = true;
+            return if (expr.expr) |val| self.expression(val) else Void;
+        } else {
+            return self.err(.ReturnOutsideFn, expr.span);
+        }
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

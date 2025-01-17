@@ -31,6 +31,8 @@ pub const CompilationManager = struct {
     stmts: []const Ast.Stmt,
     analyzed_stmts: UnsafeIter(AnalyzedStmt),
     print_bytecode: bool,
+    main: ?*const Ast.FnDecl,
+    main_index: ?u8,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error;
@@ -41,6 +43,7 @@ pub const CompilationManager = struct {
         stmts: []const Ast.Stmt,
         analyzed_stmts: []const AnalyzedStmt,
         print_bytecode: bool,
+        main: ?*const Ast.FnDecl,
     ) Self {
         return .{
             .vm = vm,
@@ -49,6 +52,8 @@ pub const CompilationManager = struct {
             .stmts = stmts,
             .analyzed_stmts = UnsafeIter(AnalyzedStmt).init(analyzed_stmts),
             .print_bytecode = print_bytecode,
+            .main = main,
+            .main_index = null,
         };
     }
 
@@ -57,11 +62,19 @@ pub const CompilationManager = struct {
     }
 
     pub fn compile(self: *Self) !*ObjFunction {
-        self.compiler = Compiler.init(self, null, .Global, "Script");
+        self.compiler = Compiler.init(self, null, .Global, "Global scope");
 
         for (self.stmts) |*stmt| {
             try self.compiler.statement(stmt);
         }
+
+        // Insert a call to main with arity of 0 for now
+        try self.compiler.write_op_and_byte(
+            .GetGlobal,
+            self.main_index.?,
+            0,
+        );
+        try self.compiler.write_op_and_byte(.CallFn, 0, 0);
 
         return self.compiler.end();
     }
@@ -184,7 +197,8 @@ const Compiler = struct {
 
     pub fn end(self: *Self) !*ObjFunction {
         // TODO: real offset
-        try self.emit_return(0);
+        // TODO: don't emit when
+        // try self.emit_return(0);
 
         // Disassembler
         if (self.manager.print_bytecode) {
@@ -233,15 +247,35 @@ const Compiler = struct {
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) !void {
-        const extra = self.get_next_analyzed();
-        try self.compile_function(.Fn, stmt);
-        try self.define_variable(&extra.FnDecl.variable, stmt.name.start);
+        const extra = self.get_next_analyzed().FnDecl;
+
+        try self.compile_function(.Fn, stmt, &extra);
+        try self.define_variable(&extra.variable, stmt.name.start);
+
+        // Check for main function
+        if (self.manager.main_index == null and stmt == self.manager.main.?) {
+            self.manager.main_index = @intCast(extra.variable.index);
+        }
     }
 
     // TODO: Check if *kind* is really needed
-    fn compile_function(self: *Self, kind: FnKind, stmt: *const Ast.FnDecl) !void {
+    fn compile_function(
+        self: *Self,
+        kind: FnKind,
+        stmt: *const Ast.FnDecl,
+        extra: *const AnalyzedAst.FnDecl,
+    ) Error!void {
         var compiler = Compiler.init(self.manager, self, kind, stmt.name.text);
-        try compiler.block(&stmt.body);
+
+        for (stmt.body.stmts) |*s| {
+            try compiler.statement(s);
+        }
+
+        if (extra.return_kind == .ImplicitValue) {
+            try compiler.get_chunk().write_op(.Return, stmt.name.start);
+        } else if (extra.return_kind == .ImplicitVoid) {
+            try compiler.emit_return(stmt.name.start);
+        }
 
         const func = try compiler.end();
         try self.emit_constant(Value.obj(func.as_obj()), stmt.name.start);

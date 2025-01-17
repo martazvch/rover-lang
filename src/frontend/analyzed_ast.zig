@@ -8,6 +8,7 @@ const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 
 pub const Scope = enum { Global, Local };
+pub const ReturnKind = enum { Explicit, ImplicitValue, ImplicitVoid };
 
 pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
@@ -47,6 +48,8 @@ pub const FnDecl = struct {
     arity: usize,
     /// The variable holding the function
     variable: Variable,
+    /// How this function returns a value
+    return_kind: ReturnKind,
 };
 
 pub const If = struct {

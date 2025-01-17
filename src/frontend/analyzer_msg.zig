@@ -18,10 +18,12 @@ pub const AnalyzerMsg = union(enum) {
     NonBoolCond: struct { what: []const u8, found: []const u8 },
     NonVoidWhile: struct { found: []const u8 },
     NoMain,
+    ReturnOutsideFn,
     TooManyTypes,
     TypeMismatch: struct { expect: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
     UndeclaredVar: struct { name: []const u8 },
+    UnpureInGlobal,
     UnusedValue,
     UseUninitVar: struct { name: []const u8 },
     VoidAssignment,
@@ -39,7 +41,7 @@ pub const AnalyzerMsg = union(enum) {
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
             .IncompatibleFnType => |e| writer.print(
                 "function declared as returning '{s}' type but found '{s}'",
-                .{ e.found, e.expect },
+                .{ e.expect, e.found },
             ),
             .IncompatibleIfType => |e| writer.print(
                 "'if' and 'else' have incompatible types, found '{s}'  and '{s}'",
@@ -56,6 +58,7 @@ pub const AnalyzerMsg = union(enum) {
             .NonVoidWhile => writer.print("'while' statements can't return a value", .{}),
             .NoMain => writer.print("no main function found", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
+            .ReturnOutsideFn => writer.print("return outside of a function", .{}),
             .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
             .TypeMismatch => |e| writer.print(
                 "type mismatch, expect a '{s}' but found '{s}' ",
@@ -63,6 +66,7 @@ pub const AnalyzerMsg = union(enum) {
             ),
             .UndeclaredType => |e| writer.print("undeclared type '{s}'", .{e.found}),
             .UndeclaredVar => |e| writer.print("undeclared variable '{s}'", .{e.name}),
+            .UnpureInGlobal => writer.print("non-constant expressions are not allowed in global scope", .{}),
             .UnusedValue => writer.print("unused value", .{}),
             .UseUninitVar => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
@@ -81,7 +85,7 @@ pub const AnalyzerMsg = union(enum) {
             .FloatEqual => writer.print("both sides are 'floats'", .{}),
             .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
             .IncompatibleFnType => |e| writer.print("this expression is of type '{s}'", .{e.found}),
-            .IncompatibleIfType => writer.print("this expression", .{}),
+            .IncompatibleIfType, .UnpureInGlobal => writer.print("this expression", .{}),
             .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
             .InvalidAssignTarget => writer.print("cannot assign to this expression", .{}),
             .InvalidComparison => writer.print("expressions have different types", .{}),
@@ -94,6 +98,7 @@ pub const AnalyzerMsg = union(enum) {
             .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
             .NoMain => writer.print("in this file", .{}),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
+            .ReturnOutsideFn => writer.print("here", .{}),
             .TooManyTypes => writer.print("this is the exceding one", .{}),
             .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
@@ -148,6 +153,11 @@ pub const AnalyzerMsg = union(enum) {
             .NonBoolCond => |e| writer.print("'{s}' conditions can only be boolean type", .{e.what}),
             .NonVoidWhile => writer.print("use '_' to ignore the value or modify the body", .{}),
             .NoMain => writer.print("add a 'main' function that will be called automatically at execution", .{}),
+            .ReturnOutsideFn => writer.print(
+                "return statements are only allow to exit a function's body." ++
+                    "If in loops, use 'break' otherwise remove the return",
+                .{},
+            ),
             .TooManyTypes => writer.print(
                 "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",
                 .{},
@@ -155,6 +165,10 @@ pub const AnalyzerMsg = union(enum) {
             .TypeMismatch => writer.print("change the type to match expected one", .{}),
             .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
             .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
+            .UnpureInGlobal => writer.print(
+                "use a constant expression or initialize the value later in a local scope",
+                .{},
+            ),
             .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
             .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
             .VoidAssignment => writer.print("consider returning a value from expression or remove assignment", .{}),

@@ -7,7 +7,6 @@ const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
 const Gc = @import("gc.zig").Gc;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;
-const CompilationManager = @import("../backend/compiler.zig").CompilationManager;
 const OpCode = @import("../backend/chunk.zig").OpCode;
 const Table = @import("table.zig").Table;
 const Obj = @import("obj.zig").Obj;
@@ -68,7 +67,6 @@ const CallFrame = struct {
     }
 
     pub fn read_constant(self: *Self) Value {
-        // return self.closure.function.chunk.constants.items[self.read_byte()];
         return self.function.chunk.constants[self.read_byte()];
     }
 
@@ -177,18 +175,9 @@ pub const Vm = struct {
         return addr1 - addr2;
     }
 
-    pub fn run(self: *Self, stmts: []const Stmt, analyzed_stmts: []const AnalyzedStmt, print_bytecode: bool) !void {
-        // Compiler
-        var compiler = CompilationManager.init(self, stmts, analyzed_stmts, print_bytecode);
-        defer compiler.deinit();
-        const function = try compiler.compile();
-
-        // Initialization of stack and frame
-        self.stack.push(Value.obj(function.as_obj()));
-
-        // Initialize the call stack frame
-        try self.call(function, 0);
-
+    pub fn run(self: *Self, func: *ObjFunction) !void {
+        // Initialize with the 'main' function
+        try self.call(func, 0);
         try self.execute();
     }
 
@@ -303,7 +292,9 @@ pub const Vm = struct {
                     const result = self.stack.pop();
                     self.frame_stack.count -= 1;
 
-                    if (self.frame_stack.count == 0) {
+                    // The last standing frame is the artificial one created when we run
+                    // the global scope at the very beginning
+                    if (self.frame_stack.count == 1) {
                         _ = self.stack.pop();
                         break;
                     }

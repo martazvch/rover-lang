@@ -11,6 +11,7 @@ const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 const Analyzer = @import("frontend/analyzer.zig").Analyzer;
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Compiler = @import("backend/compiler.zig").Compiler;
+const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Chunk = @import("backend/chunk.zig").Chunk;
 const Vm = @import("runtime/vm.zig").Vm;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
@@ -210,9 +211,22 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         analyzed_ast_printer.display();
     }
 
-    // Vm
+    // Start of Vm for compilation
     var vm: Vm = Vm.new(allocator);
     try vm.init();
     defer vm.deinit();
-    try vm.run(parser.stmts.items, analyzer.analyzed_stmts.items, config.print_bytecode);
+
+    // Compiler
+    var compiler = CompilationManager.init(
+        &vm,
+        parser.stmts.items,
+        analyzer.analyzed_stmts.items,
+        config.print_bytecode,
+        analyzer.main,
+    );
+    defer compiler.deinit();
+    const function = try compiler.compile();
+
+    // Run the program
+    try vm.run(function);
 }
