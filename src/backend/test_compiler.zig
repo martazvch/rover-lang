@@ -25,7 +25,7 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
     defer parser.deinit();
     try parser.parse(source, lexer.tokens.items);
 
-    var analyzer = Analyzer.init(allocator);
+    var analyzer = Analyzer.init(allocator, true);
     try analyzer.type_manager.init_builtins();
     defer analyzer.deinit();
     try analyzer.analyze(parser.stmts.items, source);
@@ -34,7 +34,13 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
     defer vm.deinit();
     try vm.init();
 
-    var compiler = CompilationManager.init(&vm, parser.stmts.items, analyzer.analyzed_stmts.items, false);
+    var compiler = CompilationManager.init(
+        &vm,
+        parser.stmts.items,
+        analyzer.analyzed_stmts.items,
+        false,
+        analyzer.main,
+    );
     defer compiler.deinit();
     const function = try compiler.compile();
 

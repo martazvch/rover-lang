@@ -1,5 +1,8 @@
 // Tests variable declaration type
 
+config:
+mode repl
+
 code:
 var a = 0
 var b = true

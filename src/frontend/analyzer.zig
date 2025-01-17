@@ -94,6 +94,7 @@ pub const Analyzer = struct {
     scope_depth: usize,
     analyzed_stmts: ArrayList(AnalyzedStmt),
     type_manager: TypeManager,
+    repl: bool,
     main: ?*const Ast.FnDecl,
     states: ArrayList(State),
 
@@ -120,7 +121,7 @@ pub const Analyzer = struct {
 
     const AnalyzerReport = GenReport(AnalyzerMsg);
 
-    pub fn init(allocator: Allocator) Self {
+    pub fn init(allocator: Allocator, repl: bool) Self {
         return .{
             .source = undefined,
             .errs = ArrayList(AnalyzerReport).init(allocator),
@@ -131,6 +132,7 @@ pub const Analyzer = struct {
             .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
             .type_manager = TypeManager.init(allocator),
             .main = null,
+            .repl = repl,
             .states = ArrayList(State).init(allocator),
         };
     }
@@ -268,10 +270,11 @@ pub const Analyzer = struct {
         }
     }
 
-    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8, repl: bool) !void {
+    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
         self.source = source;
+        try self.states.append(.{});
 
-        if (repl) self.scope_depth += 1;
+        // if (self.repl) self.scope_depth += 1;
 
         for (stmts) |*stmt| {
             const stmt_type = self.statement(stmt) catch |e| {
@@ -292,8 +295,8 @@ pub const Analyzer = struct {
         }
 
         // In REPL mode, no need for main function
-        if (repl) {
-            self.scope_depth -= 1;
+        if (self.repl) {
+            // self.scope_depth -= 1;
             return;
         }
 
@@ -467,7 +470,6 @@ pub const Analyzer = struct {
 
         self.analyzed_stmts.items[idx] = .{
             .FnDecl = .{
-                .arity = stmt.arity,
                 .variable = fn_extra,
                 .return_kind = return_kind,
             },
@@ -540,7 +542,7 @@ pub const Analyzer = struct {
     fn expression(self: *Self, expr: *const Expr) !Type {
         // TODO: refine this, not all expressions must be considered unpure
         // by default
-        if (self.scope_depth == 0) return self.err(.UnpureInGlobal, expr.span());
+        if (self.scope_depth == 0 and !self.repl) return self.err(.UnpureInGlobal, expr.span());
 
         return switch (expr.*) {
             .Block => |*e| self.block(e),
@@ -577,16 +579,10 @@ pub const Analyzer = struct {
             }
         }
 
-        const count = try self.end_scope();
-
-        // If inside a function, we don't emit ScopeReturn because we need a real
-        // return to reset instruction pointer and stuff
-        if (!self.last_state().in_fn) {
-            self.analyzed_stmts.items[idx] = .{ .Block = .{
-                .pop_count = count,
-                .is_expr = if (final != Void) true else false,
-            } };
-        }
+        self.analyzed_stmts.items[idx] = .{ .Block = .{
+            .pop_count = try self.end_scope(),
+            .is_expr = if (final != Void) true else false,
+        } };
 
         return final;
     }
@@ -683,12 +679,6 @@ pub const Analyzer = struct {
         );
     }
 
-    // For nullable, use bitmasking!
-    // like: first 5 digit for type id (should be enough) and the 6th one
-    // is 1 for nullable and 0 for non-nullable for example
-    // The 7th digit could tell if we exit scope. For example if the
-    // else branch isn't the same type but is an explicit return, we
-    // dont check if type match, we exit scope anyway
     fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
         // We reserve the slot because of recursion
         const idx = try self.reserve_slot();

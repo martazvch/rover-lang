@@ -2,6 +2,7 @@
 
 config:
 ignore UnusedValue
+mode repl
 
 // Math binop
 

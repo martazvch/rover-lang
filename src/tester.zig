@@ -82,13 +82,18 @@ pub fn GenTestData(comptime Report: type) type {
 
 pub const Config = struct {
     ignores: ArrayList([]const u8),
+    modes: ArrayList([]const u8),
 
     pub fn init() Config {
-        return .{ .ignores = ArrayList([]const u8).init(allocator) };
+        return .{
+            .ignores = ArrayList([]const u8).init(allocator),
+            .modes = ArrayList([]const u8).init(allocator),
+        };
     }
 
     pub fn deinit(self: *Config) void {
         self.ignores.deinit();
+        self.modes.deinit();
     }
 };
 
@@ -178,6 +183,7 @@ pub fn GenericTester(
                         config,
                     ) catch |e| {
                         print("Error in test {} in file {s}\n\n", .{ test_count + 1, file_path });
+                        if (config) |*conf| conf.deinit();
                         return e;
                     };
 
@@ -211,9 +217,12 @@ pub fn GenericTester(
 
             while (split_conf.next()) |conf| {
                 var split = std.mem.splitScalar(u8, conf, ' ');
+                const kind = split.next().?;
 
-                if (std.mem.eql(u8, split.next().?, "ignore")) {
+                if (std.mem.eql(u8, kind, "ignore")) {
                     try config.ignores.append(split.next().?);
+                } else if (std.mem.eql(u8, kind, "mode")) {
+                    try config.modes.append(split.next().?);
                 }
             }
 

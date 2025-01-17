@@ -1,19 +1,6 @@
-fn add(a:int, b:int) -> int {
-    a+b
-}
-
-fn sub(a: int, b: int) -> int {
-    _ = 5
-    return a - b
-    print "oui"
-}
-
-var c
-
 fn main() {
-    var a = add(1,2)
-    print a
-
-    c = sub(5, 3)
-    print c
+    var res = if true {1}
+    var res = if true do -5.5
+    if true {5} else 4
+    if true do 3+4 else { 4 }
 }

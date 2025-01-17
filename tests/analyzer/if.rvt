@@ -3,35 +3,38 @@
 // Extras
 
 code:
-var res = if true do 4 else 5.6
-var res2 = if true {
-    5.6
-} else 4
+fn main() {
+    var res = if true do 4 else 5.6
+    var res2 = if true {
+        5.6
+    } else 4
 
-var res3 = if true {
-    8.7
-} else if true {
-    6
-} else { 4 }
+    var res3 = if true {
+        8.7
+    } else if true {
+        6
+    } else { 4 }
 
-_ = if true { "ok" } else "ko"
-_ = if true do "ok"  else "ko"
-_ = if true do false  else { true }
+    _ = if true { "ok" } else "ko"
+    _ = if true do "ok"  else "ko"
+    _ = if true do false  else { true }
+}
 
 expect:
+[Fn declaration, scope Global, index 0]
 [If cast Then]
-[Variable scope Global, index 0]
+[Variable scope Local, index 1]
 
 [If cast Else]
 [Block pop count 0]
-[Variable scope Global, index 1]
+[Variable scope Local, index 2]
 
 [If cast Else]
 [Block pop count 0]
 [If cast None]
 [Block pop count 0]
 [Block pop count 0]
-[Variable scope Global, index 2]
+[Variable scope Local, index 3]
 
 [If cast None]
 [Block pop count 0]
@@ -42,51 +45,60 @@ expect:
 ================
 
 code:
-_ = if true {
-    var tmp = 5.5
-    var adder = 8.7
-    tmp + adder
-} else 4
+fn main() {
+    _ = if true {
+        var tmp = 5.5
+        var adder = 8.7
+        tmp + adder
+    } else 4
+}
 
 
 expect:
+[Fn declaration, scope Global, index 0]
 [If cast Else]
 [Block pop count 2]
-[Variable scope Local, index 0]
 [Variable scope Local, index 1]
+[Variable scope Local, index 2]
 [Binop cast None, type float]
-[Variable scope Local, index 0]
 [Variable scope Local, index 1]
+[Variable scope Local, index 2]
 
 ================
 
 // Condition as block
 
 code:
-_ = if {
-    var tmp = true
-    var noise = 1
-    tmp
-} do 1.5 else {4}
+fn main() {
+    _ = if {
+        var tmp = true
+        var noise = 1
+        tmp
+    } do 1.5 else {4}
+}
 
 
 expect:
+[Fn declaration, scope Global, index 0]
 [If cast Else]
 [Block pop count 2]
-[Variable scope Local, index 0]
 [Variable scope Local, index 1]
-[Variable scope Local, index 0]
+[Variable scope Local, index 2]
+[Variable scope Local, index 1]
 [Block pop count 0]
 
 ================
 
 code:
-_ = if {
-    if true do true else false
-} do 1 else {4.5}
+fn main() {
+    _ = if {
+        if true do true else false
+    } do 1 else {4.5}
+}
 
 
 expect:
+[Fn declaration, scope Global, index 0]
 [If cast Then]
 [Block pop count 0]
 [If cast None]
@@ -97,10 +109,12 @@ expect:
 // Non bool condition
 
 code:
-_ = if {
-    var tmp = 62
-    tmp
-} do 1.5 else {4}
+fn main() {
+    _ = if {
+        var tmp = 62
+        tmp
+    } do 1.5 else {4}
+}
 
 
 error:
@@ -110,10 +124,12 @@ NonBoolCond, if, int
 
 // Missing else
 code:
-var res = if true {1}
-var res = if true do -5.5
-if true {5} else 4
-if true do 3+4 else { 4 }
+fn main() {
+    var res = if true {1}
+    var res = if true do -5.5
+    if true {5} else 4
+    if true do 3+4 else { 4 }
+}
 
 error:
 MissingElseClause, int
@@ -126,8 +142,10 @@ UnusedValue
 // Incompatible types warnings
 
 code:
-var res = if true {1} else {5.6}
-var res1 = if true {1.5} else {5*2}
+fn main() {
+    var res = if true {1} else {5.6}
+    var res1 = if true {1.5} else {5*2}
+}
 
 error:
 ImplicitCast, then branch, float
@@ -138,18 +156,20 @@ ImplicitCast, else branch, float
 // Incompatible types errors
 
 code:
-var res = if true {1} else {"pipou"}
-var res1 = if true {} else {
-    56. / 3.5
-}
+fn main() {
+    var res = if true {1} else {"pipou"}
+    var res1 = if true {} else {
+        56. / 3.5
+    }
 
-var res2 = if true do 1+2 else if false { 4.1 } else "dragon"
+    var res2 = if true do 1+2 else if false { 4.1 } else "dragon"
 
-var res3 = if (true) {
-    24 / 2
-} else if (true) do 5
-else {
-    "you know"
+    var res3 = if (true) {
+        24 / 2
+    } else if (true) do 5
+    else {
+        "you know"
+    }
 }
 
 error:
@@ -163,8 +183,10 @@ IncompatibleIfType, int, str
 // Non expression if return a value
 
 code:
-if true do 1 else 2
-if false {5.1} else 4.2
+fn main() {
+    if true do 1 else 2
+    if false {5.1} else 4.2
+}
 
 error:
 UnusedValue

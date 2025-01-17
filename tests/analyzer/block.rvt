@@ -1,5 +1,8 @@
 // Test blocks
 
+config:
+mode repl
+
 // Void assignment
 
 code:
