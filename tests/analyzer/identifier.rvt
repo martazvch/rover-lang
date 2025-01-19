@@ -2,7 +2,9 @@
 
 // Errors
 code:
-value = 1
+fn main() {
+    value = 1
+}
 
 error:
 UndeclaredVar, value

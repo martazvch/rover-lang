@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Stage = enum { all, parser, analyzer, compiler, vm };
+
 pub fn build(b: *std.Build) void {
     const options = b.addOptions();
 
@@ -58,6 +60,21 @@ pub fn build(b: *std.Build) void {
     // -------
     //  Tests
     // -------
+
+    // Options
+    const test_options = b.addOptions();
+
+    var stage = b.option(Stage, "stage", "pipeline stage to test, defaults to all") orelse .all;
+
+    const file_path = b.option([]const u8, "file", "specific file to test, defaults to all") orelse "";
+    test_options.addOption([]const u8, "file", file_path);
+
+    if (!std.mem.eql(u8, file_path, "")) {
+        stage = get_stage_from_file(file_path);
+    }
+
+    test_options.addOption(Stage, "stage", stage);
+
     // All unit tests within source code
     const tests_exe = b.addTest(.{
         .root_source_file = b.path("src/main.zig"),
@@ -66,6 +83,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const run_exe_tests = b.addRunArtifact(tests_exe);
+    tests_exe.root_module.addOptions("test_config", test_options);
+
     tests_exe.root_module.addOptions("config", options);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
@@ -74,17 +93,33 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_tests.step);
 
-    // Vm tests use the compiled Vm to run, with a special main
-    const runtime_tests_exe = b.addTest(.{
-        .root_source_file = b.path("tests/vm/runtime_tester.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // Enable Vm tests
+    if (stage == .vm or stage == .all) {
+        // Vm tests use the compiled Vm to run, with a special main
+        const runtime_tests_exe = b.addTest(.{
+            .root_source_file = b.path("tests/vm/runtime_tester.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
 
-    const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
+        const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
 
-    test_step.dependOn(&run_runtime_tests_exe.step);
+        test_step.dependOn(&run_runtime_tests_exe.step);
 
-    // Compiles the exe for the runtime tests
-    test_step.dependOn(b.getInstallStep());
+        // Compiles the exe for the runtime tests
+        test_step.dependOn(b.getInstallStep());
+    }
+}
+
+fn get_stage_from_file(file_path: []const u8) Stage {
+    return if (std.mem.indexOf(u8, file_path, "parser")) |_|
+        .parser
+    else if (std.mem.indexOf(u8, file_path, "analyzer")) |_|
+        .analyzer
+    else if (std.mem.indexOf(u8, file_path, "compiler")) |_|
+        .compiler
+    else if (std.mem.indexOf(u8, file_path, "vm")) |_|
+        .vm
+    else
+        .all;
 }

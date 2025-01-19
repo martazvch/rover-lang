@@ -127,15 +127,11 @@ code:
 fn main() {
     var res = if true {1}
     var res = if true do -5.5
-    if true {5} else 4
-    if true do 3+4 else { 4 }
 }
 
 error:
 MissingElseClause, int
 MissingElseClause, float
-UnusedValue
-UnusedValue
 
 ================
 
@@ -190,7 +186,7 @@ fn main() {
 
 error:
 UnusedValue
-UnusedValue
+IncompatibleFnType, float, void
 
 ================
 

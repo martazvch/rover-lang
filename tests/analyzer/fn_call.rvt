@@ -2,10 +2,11 @@
 
 code:
 fn add(a: int) {}
+fn main() {}
 
 expect:
-[Fn declaration arity 1, scope Global, index 0]
-[Block pop count 0]
+[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 
 ================
 
@@ -15,10 +16,13 @@ code:
 fn add(arg1: str) {}
 fn sub(arg1: float, args2: bool) {}
 
-add(1)
-add(1, 2)
-sub("true")
-var a = add("hoy")
+
+fn main() {
+    add(1)
+    add(1, 2)
+    sub("true")
+    var a = add("hoy")
+}
 
 error:
 TypeMismatch, str, int

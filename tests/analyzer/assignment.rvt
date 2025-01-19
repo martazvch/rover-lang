@@ -13,6 +13,8 @@ noval_binop = 12/-.7
 var noval_binop_typed: float
 noval_binop_typed = 1/2
 
+fn main() {}
+
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 0]
@@ -30,6 +32,8 @@ expect:
 [Assignment cast to float]
 [Variable scope Global, index 3]
 
+[Fn declaration, scope Global, index 4]
+
 ================
 
 // Type error
@@ -37,6 +41,8 @@ expect:
 code:
 var noval: int
 noval = 1.4
+
+fn main() {}
 
 errors:
 InvalidAssignType, int, float
@@ -49,10 +55,13 @@ code:
 var noval: float
 noval = 1
 
+fn main() {}
+
 expect:
 [Variable scope Global, index 0]
 [Assignment cast to float]
 [Variable scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 
 ================
 

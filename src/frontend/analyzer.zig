@@ -147,6 +147,39 @@ pub const Analyzer = struct {
         self.states.deinit();
     }
 
+    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
+        self.source = source;
+        try self.states.append(.{});
+
+        // if (self.repl) self.scope_depth += 1;
+
+        for (stmts) |*stmt| {
+            const stmt_type = self.statement(stmt) catch |e| {
+                switch (e) {
+                    // If it's our own error, we continue
+                    error.Err => continue,
+                    error.TooManyTypes => return self.err(.TooManyTypes, stmt.span()),
+                    else => return e,
+                }
+            };
+
+            // If at this stage we have a type, it means that nobody
+            // consumed it. It might be a standalone expression like:
+            // 3+4
+            if (stmt_type != Void) {
+                self.err(.UnusedValue, stmt.Expr.span()) catch {};
+            }
+        }
+
+        // In REPL mode, no need for main function
+        if (self.repl) {
+            // self.scope_depth -= 1;
+            return;
+        }
+
+        if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+    }
+
     fn is_numeric(t: Type) bool {
         return t == Int or t == Float;
     }
@@ -270,37 +303,24 @@ pub const Analyzer = struct {
         }
     }
 
-    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
-        self.source = source;
-        try self.states.append(.{});
-
-        // if (self.repl) self.scope_depth += 1;
-
-        for (stmts) |*stmt| {
-            const stmt_type = self.statement(stmt) catch |e| {
-                switch (e) {
-                    // If it's our own error, we continue
-                    error.Err => continue,
-                    error.TooManyTypes => return self.err(.TooManyTypes, stmt.span()),
-                    else => return e,
-                }
-            };
-
-            // If at this stage we have a type, it means that nobody
-            // consumed it. It might be a standalone expression like:
-            // 3+4
-            if (stmt_type != Void) {
-                self.err(.UnusedValue, stmt.Expr.span()) catch {};
-            }
-        }
-
-        // In REPL mode, no need for main function
-        if (self.repl) {
-            // self.scope_depth -= 1;
-            return;
-        }
-
-        if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+    fn is_pure(expr: *const Expr) bool {
+        // TODO: manage those
+        // Block: Block,
+        // FnCall: FnCall,
+        // Identifier: Identifier,
+        // If: If,
+        return switch (expr.*) {
+            .BoolLit,
+            .FloatLit,
+            .IntLit,
+            .NullLit,
+            .StringLit,
+            => true,
+            .BinOp => |e| is_pure(e.lhs) and is_pure(e.rhs),
+            .Grouping => |e| is_pure(e.expr),
+            .Unary => |e| is_pure(e.rhs),
+            else => false,
+        };
     }
 
     fn statement(self: *Self, stmt: *const Stmt) !Type {
@@ -384,6 +404,7 @@ pub const Analyzer = struct {
 
         const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
         self.scope_depth += 1;
+        errdefer self.scope_depth -= 1;
 
         // We add a empty variable to anticipate the function it self on the stack. Here,
         // it's declared in the outter scope to allow create a new function with the same name
@@ -428,14 +449,36 @@ pub const Analyzer = struct {
 
         var body_type: Type = Void;
         self.scope_depth += 1;
+        errdefer self.scope_depth -= 1;
 
         // We don't use block because we don't want to emit extra data from the block
-        for (stmt.body.stmts) |*s| {
+        for (stmt.body.stmts, 0..) |*s, i| {
             if (self.last_state().returns) {
                 // TODO: DeadCode
                 break;
             }
-            body_type = try self.statement(s);
+
+            // We try to analyze the whole body
+            body_type = self.statement(s) catch |e| switch (e) {
+                error.Err => continue,
+                else => return e,
+            };
+
+            if (body_type != Void and i != stmt.body.stmts.len - 1) {
+                self.err(.UnusedValue, s.span()) catch {};
+            }
+        }
+
+        // We check before ending scopes otherwise the errdefer triggers when
+        // we exited the 2 scopes
+        if (body_type != return_type) {
+            return self.err(
+                .{ .IncompatibleFnType = .{
+                    .found = self.type_manager.str(body_type),
+                    .expect = self.type_manager.str(return_type),
+                } },
+                stmt.body.span,
+            );
         }
 
         // Two levels: 1 for function's name + params and another one for body
@@ -450,16 +493,6 @@ pub const Analyzer = struct {
             .ImplicitVoid
         else
             .ImplicitValue;
-
-        if (body_type != return_type) {
-            return self.err(
-                .{ .IncompatibleFnType = .{
-                    .found = self.type_manager.str(body_type),
-                    .expect = self.type_manager.str(return_type),
-                } },
-                stmt.body.span,
-            );
-        }
 
         // TODO: why one have a set method and not analyzed_stmts?
         self.type_manager.set_info(type_idx, .{ .Fn = .{
@@ -540,9 +573,9 @@ pub const Analyzer = struct {
     }
 
     fn expression(self: *Self, expr: *const Expr) !Type {
-        // TODO: refine this, not all expressions must be considered unpure
-        // by default
-        if (self.scope_depth == 0 and !self.repl) return self.err(.UnpureInGlobal, expr.span());
+        if (self.scope_depth == 0 and !self.repl and !is_pure(expr)) {
+            return self.err(.UnpureInGlobal, expr.span());
+        }
 
         return switch (expr.*) {
             .Block => |*e| self.block(e),
@@ -572,7 +605,11 @@ pub const Analyzer = struct {
         var final: Type = Void;
 
         for (expr.stmts, 0..) |*s, i| {
-            final = try self.statement(s);
+            // Try to analyze the whole block
+            final = self.statement(s) catch |e| switch (e) {
+                error.Err => continue,
+                else => return e,
+            };
 
             if (final != Void and i != expr.stmts.len - 1) {
                 return self.err(.UnusedValue, s.span());

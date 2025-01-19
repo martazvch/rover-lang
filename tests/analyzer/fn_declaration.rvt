@@ -2,10 +2,11 @@
 
 code:
 fn add(a: int) {}
+fn main() {}
 
 expect:
-[Fn declaration arity 1, scope Global, index 0]
-[Block pop count 0]
+[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 
 ================
 
@@ -16,21 +17,22 @@ fn get_bool() -> bool {
     true
 }
 
-{
-    fn another_bool(a: int, b: str) -> bool {
-        var tmp = 5
-        true or false
+fn main() {
+    {
+        fn another_bool(a: int, b: str) -> bool {
+            var tmp = 5
+            true or false
+        }
     }
 }
 
 expect:
-[Fn declaration arity 0, scope Global, index 0]
-[Block pop count 0]
+[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 
 [Block pop count 1]
-[Fn declaration arity 2, scope Local, index 0]
-[Block pop count 1]
-[Variable scope Local, index 3]
+[Fn declaration, scope Local, index 1]
+[Variable scope Local, index 5]
 [Binop cast None, type bool]
 
 ================
@@ -51,6 +53,7 @@ fn add4() {
 
 fn bis() {}
 fn bis() {}
+fn main() {}
 
 error:
 VoidParam

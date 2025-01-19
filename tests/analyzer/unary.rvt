@@ -3,9 +3,11 @@
 // Errors
 
 code:
--true
--null
-not -8.2
+fn main() {
+    -true
+    -null
+    not -8.2
+}
 
 error:
 InvalidArithmetic, bool
@@ -17,11 +19,14 @@ InvalidUnary, float
 // Types
 
 code:
--6.7
-not not true
---5
+fn main() {
+    _ = -6.7
+    _ = not not true
+    _ = --5
+}
 
 expect:
+[Fn declaration, scope Global, index 0]
 [Unary type float]
 [Unary type bool]
 [Unary type bool]

@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const test_config = @import("test_config");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
@@ -139,11 +140,25 @@ fn repl(
 }
 
 test {
+    const stage = test_config.stage;
+
+    if (stage == .parser or stage == .all) {
+        _ = @import("frontend/parser.zig");
+    }
+
+    if (stage == .analyzer or stage == .all) {
+        _ = @import("frontend/analyzer.zig");
+    }
+
+    if (stage == .compiler or stage == .all) {
+        _ = @import("backend/compiler.zig");
+    }
+
+    if (stage == .vm or stage == .all) {
+        _ = @import("runtime/vm.zig");
+    }
+
     _ = @import("frontend/lexer.zig");
-    _ = @import("frontend/parser.zig");
-    _ = @import("frontend/analyzer.zig");
-    _ = @import("backend/compiler.zig");
     _ = @import("runtime/table.zig");
-    _ = @import("runtime/vm.zig");
     _ = @import("frontend/type_system.zig");
 }

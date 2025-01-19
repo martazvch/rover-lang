@@ -7,6 +7,7 @@ var a: int = 7.5
 var b: float = "foo"
 var c: bool = 8
 var e: str = 2/4
+fn main() {}
 
 error:
 InvalidAssignType, int, float
@@ -20,6 +21,7 @@ code:
 var a: floa = 7.5
 var b: Int = 4
 var c: House
+fn main() {}
 
 error:
 UndeclaredType, floa
@@ -31,6 +33,7 @@ UndeclaredType, House
 code:
 var declared: int
 var declared: float
+fn main() {}
 
 error:
 AlreadyDeclared, declared
@@ -43,11 +46,13 @@ code:
 var a = 0
 var b = true
 var c = 56.7
+fn main() {}
 
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
 [Variable scope Global, index 2]
+[Fn declaration, scope Global, index 3]
 
 ================
 
@@ -55,10 +60,12 @@ expect:
 
 code:
 var a = 12 / 34
+fn main() {}
 
 expect:
 [Binop cast None, type int]
 [Variable scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 
 ================
 
@@ -67,6 +74,7 @@ expect:
 code:
 var a: float = 12 / 34
 var b: float = 4. / 3
+fn main() {}
 
 expect:
 [Binop cast None, type int]
@@ -75,6 +83,7 @@ expect:
 
 [Binop cast Rhs, type float]
 [Variable scope Global, index 1]
+[Fn declaration, scope Global, index 2]
 
 ================
 

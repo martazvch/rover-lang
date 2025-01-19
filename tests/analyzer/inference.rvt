@@ -3,12 +3,16 @@
 code:
 var a = 7.5 // float
 var b: float = 1.2
-print a + b
+
+fn main() {
+    print a + b
+}
 
 // There is no cast in the binop
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
+[Fn declaration, scope Global, index 2]
 [Binop cast None, type float]
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
@@ -17,11 +21,15 @@ expect:
 
 code:
 var res = true // bool
-print not res
+
+fn main() {
+    print not res
+}
 
 // No errors
 expect:
 [Variable scope Global, index 0]
+[Fn declaration, scope Global, index 1]
 [Unary type bool]
 [Variable scope Global, index 0]
 
@@ -31,10 +39,13 @@ expect:
 
 code:
 var a
-print a + 1
 
 var _empty: str
-print _empty
+
+fn main() {
+    print a + 1
+    print _empty
+}
 
 error:
 UseUninitVar, a
