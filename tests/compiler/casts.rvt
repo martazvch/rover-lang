@@ -1,30 +1,38 @@
 // Implicit cast
 
 config:
-ignore return
+ignore main-call
 
 code:
-var noval: float
-noval = 1
+fn main() {
+    var noval: float
+    noval = 1
+}
 
 expect:
+-- Function main
 OP_NULL
-OP_DEFINE_GLOBAL index 0
 OP_CONSTANT index 0, value 1
 OP_CAST_TO_FLOAT
-OP_SET_GLOBAL index 0
+OP_SET_LOCAL index 1
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-var noval: float = 1 + 6
+fn main() {
+    var noval: float = 1 + 6
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 6
 OP_ADD_INT
 OP_CAST_TO_FLOAT
-OP_DEFINE_GLOBAL index 0
+OP_NULL
+OP_RETURN
 
 ================
 

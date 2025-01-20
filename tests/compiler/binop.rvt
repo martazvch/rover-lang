@@ -1,274 +1,388 @@
 // Tests binop
 
 config:
-ignore return
+ignore main-call
 
 code:
-_ = 1+ -2
+fn main() {
+    _ = 1+ -2
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2
 OP_NEGATE_INT
 OP_ADD_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 1. + -2.
+fn main() {
+    _ = 1. + -2.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2
 OP_NEGATE_FLOAT
 OP_ADD_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = "foo" + " bar"
+fn main() {
+    _ = "foo" + " bar"
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value "foo"
 OP_CONSTANT index 1, value " bar"
 OP_STRING_CONCAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12.5 - -78.2
+fn main() {
+    _ = 12.5 - -78.2
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12.5
 OP_CONSTANT index 1, value 78.2
 OP_NEGATE_FLOAT
 OP_SUBTRACT_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12 - -78
+fn main() {
+    _ = 12 - -78
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12
 OP_CONSTANT index 1, value 78
 OP_NEGATE_INT
 OP_SUBTRACT_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12 * -56.
+fn main() {
+    _ = 12 * -56.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12
 OP_CAST_TO_FLOAT
 OP_CONSTANT index 1, value 56
 OP_NEGATE_FLOAT
 OP_MULTIPLY_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12 * -56
+fn main() {
+    _ = 12 * -56
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12
 OP_CONSTANT index 1, value 56
 OP_NEGATE_INT
 OP_MULTIPLY_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 2 * "foo"
+fn main() {
+    _ = 2 * "foo"
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 2
 OP_CONSTANT index 1, value "foo"
 OP_STRING_MUL_L
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = "foo" * 4
+fn main() {
+    _ = "foo" * 4
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value "foo"
 OP_CONSTANT index 1, value 4
 OP_STRING_MUL_R
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 6.789 / -1
+fn main() {
+    _ = 6.789 / -1
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 6.789
 OP_CONSTANT index 1, value 1
 OP_NEGATE_INT
 OP_CAST_TO_FLOAT
 OP_DIVIDE_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 6 / -1
+fn main() {
+    _ = 6 / -1
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 6
 OP_CONSTANT index 1, value 1
 OP_NEGATE_INT
 OP_DIVIDE_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 // Logical
 
 code:
-_ = 5 > 3
+fn main() {
+    _ = 5 > 3
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value 3
 OP_GREATER_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 23. > 32.
+fn main() {
+    _ = 23. > 32.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 23
 OP_CONSTANT index 1, value 32
 OP_GREATER_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 5 >= 3.
+fn main() {
+    _ = 5 >= 3.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CAST_TO_FLOAT
 OP_CONSTANT index 1, value 3
 OP_GREATER_EQUAL_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 8 >= 9
+fn main() {
+    _ = 8 >= 9
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 8
 OP_CONSTANT index 1, value 9
 OP_GREATER_EQUAL_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12. < -56.
+fn main() {
+    _ = 12. < -56.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12
 OP_CONSTANT index 1, value 56
 OP_NEGATE_FLOAT
 OP_LESS_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 12 < -56
+fn main() {
+    _ = 12 < -56
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 12
 OP_CONSTANT index 1, value 56
 OP_NEGATE_INT
 OP_LESS_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 34 <= 5
+fn main() {
+    _ = 34 <= 5
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 34
 OP_CONSTANT index 1, value 5
 OP_LESS_EQUAL_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 34. <= 5.
+fn main() {
+    _ = 34. <= 5.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 34
 OP_CONSTANT index 1, value 5
 OP_LESS_EQUAL_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 5 == 3
+fn main() {
+    _ = 5 == 3
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value 3
 OP_EQUAL_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 5. == 3.
+fn main() {
+    _ = 5. == 3.
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value 3
 OP_EQUAL_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 5 != 3
+fn main() {
+    _ = 5 != 3
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value 3
 OP_DIFFERENT_INT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 5. != 3
+fn main() {
+    _ = 5. != 3
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value 3
 OP_CAST_TO_FLOAT
 OP_DIFFERENT_FLOAT
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
-

@@ -216,14 +216,6 @@ pub const Vm = struct {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int += rhs;
                 },
-                .CallFn => {
-                    const args_count = frame.read_byte();
-                    const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
-                    try self.call(callee, args_count);
-
-                    // If call success, we need to to set frame pointer back
-                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
-                },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
                 .Constant => self.stack.push(frame.read_constant()),
                 .DifferentInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
@@ -244,6 +236,15 @@ pub const Vm = struct {
                 .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
+                .False => self.stack.push(Value.bool_(false)),
+                .FnCall => {
+                    const args_count = frame.read_byte();
+                    const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
+                    try self.call(callee, args_count);
+
+                    // If call success, we need to to set frame pointer back
+                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                },
                 .GetGlobal => self.stack.push(self.globals[frame.read_byte()]),
                 .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
                 .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
@@ -270,7 +271,6 @@ pub const Vm = struct {
                     const jump = frame.read_short();
                     frame.ip -= jump;
                 },
-                .False => self.stack.push(Value.bool_(false)),
                 .MultiplyFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float *= rhs;

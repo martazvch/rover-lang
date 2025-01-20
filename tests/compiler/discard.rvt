@@ -1,16 +1,22 @@
 // Discard
 
 config:
-ignore return
+ignore main-call
 
 code:
-_ = 3 + 4
+fn main() {
+    _ = 3 + 4
+}
 
 expect:
 OP_CONSTANT index 0, value 3
 OP_CONSTANT index 1, value 4
 OP_ADD_INT
 OP_POP
+
+-- Function main
+OP_NULL
+OP_RETURN
 
 ================
 

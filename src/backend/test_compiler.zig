@@ -14,6 +14,7 @@ const Vm = @import("../runtime/vm.zig").Vm;
 const Tester = @import("../tester.zig");
 const GenTestData = Tester.GenTestData;
 const Config = Tester.Config;
+const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
 
 pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config) !GenTestData(CompilerMsg) {
     var lexer = Lexer.init(allocator);
@@ -46,17 +47,45 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
 
     if (config) |conf| {
         for (conf.ignores.items) |ignore| {
-            // Ignores implicit return and the void value associated
-            if (eql(u8, ignore, "return")) {
-                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .Return);
-                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .Null);
+            // Ignores the call the main function, it corresponds to those last code
+            if (eql(u8, ignore, "main-call")) {
+                _ = function.chunk.code.pop();
+                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .FnCall);
+                _ = function.chunk.code.pop();
+                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .GetGlobal);
+                _ = function.chunk.code.pop();
+                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .DefineGlobal);
+                _ = function.chunk.code.pop();
+                try expect(@as(OpCode, @enumFromInt(function.chunk.code.pop())) == .Constant);
+            }
+        }
+    }
+
+    var bytecode = ArrayList(u8).init(allocator);
+    var writer = bytecode.writer();
+
+    for (0..function.chunk.constant_count) |i| {
+        const cte = &function.chunk.constants[i];
+
+        if (cte.* == .Obj) {
+            const obj = cte.Obj;
+
+            if (obj.kind == .Fn) {
+                const func = obj.as(ObjFunction);
+
+                try writer.print("-- Function {s}\n", .{func.name.?.chars});
+                var disassembler = Disassembler.init(&func.chunk, allocator, true);
+                defer disassembler.deinit();
+                try disassembler.dis_chunk(func.name.?.chars);
+                try writer.print("{s}", .{disassembler.disassembled.items});
             }
         }
     }
 
     var disassembler = Disassembler.init(&function.chunk, allocator, true);
     defer disassembler.deinit();
-    try disassembler.dis_chunk("main");
+    try disassembler.dis_chunk("Global scope");
+    try writer.print("{s}", .{disassembler.disassembled.items});
 
     var msgs = ArrayList(CompilerMsg).init(allocator);
 
@@ -64,5 +93,5 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
         try msgs.append(err.report);
     }
 
-    return .{ .expect = try disassembler.disassembled.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
+    return .{ .expect = try bytecode.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
 }

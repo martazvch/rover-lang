@@ -6,7 +6,6 @@ const Value = @import("../runtime/values.zig").Value;
 pub const OpCode = enum(u8) {
     AddInt,
     AddFloat,
-    CallFn,
     CastToFloat,
     Constant,
     DifferentInt,
@@ -18,6 +17,7 @@ pub const OpCode = enum(u8) {
     EqualFloat,
     EqualStr,
     False,
+    FnCall,
     GetGlobal,
     GetLocal,
     GreaterInt,

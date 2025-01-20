@@ -1,36 +1,51 @@
 // Test blocks
 
 config:
-ignore return
+ignore main-call
 
 // Here, the scope returns a value -> SCOPE_RETURN
 // but the scope is invoked without assigning the value
 // A OP_POP will be triggered as an expression statement
 code:
-_ = {5}
+fn main() {
+    _ = {5}
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_SCOPE_RETURN index 0
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-{ var a = 5 }
+fn main() {
+    { var a = 5 }
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 5
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-{ var a }
+fn main() {
+    { var a }
+}
 
 expect:
+-- Function main
 OP_NULL
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
@@ -38,58 +53,71 @@ OP_POP
 // Discard statement expressions (unused one)
 
 code:
-{
-    var a = 1
-    _ = 3+4
-    var b = 5
-    print b
+fn main() {
+    {
+        var a = 1
+        _ = 3+4
+        var b = 5
+        print b
+    }
 }
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 3
 OP_CONSTANT index 2, value 4
 OP_ADD_INT
 OP_POP
 OP_CONSTANT index 3, value 5
-OP_GET_LOCAL index 1
+OP_GET_LOCAL index 2
 OP_PRINT
 OP_POP
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-var a: int = {
-    var nb = 7
-    nb
+fn main() {
+    var a: int = {
+        var nb = 7
+        nb
+    }
 }
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 7
-OP_GET_LOCAL index 0
+OP_GET_LOCAL index 1
 OP_SCOPE_RETURN index 1
-OP_DEFINE_GLOBAL index 0
+OP_NULL
+OP_RETURN
 
 ================
 
 
 code:
-var a: int = {
-    var space = 67
-    var other = "just chillin"
-    var nb = 7
-    var sneaky = 90
-    nb
+fn main() {
+    var a: int = {
+        var space = 67
+        var other = "just chillin"
+        var nb = 7
+        var sneaky = 90
+        nb
+    }
 }
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 67
 OP_CONSTANT index 1, value "just chillin"
 OP_CONSTANT index 2, value 7
 OP_CONSTANT index 3, value 90
-OP_GET_LOCAL index 2
+OP_GET_LOCAL index 3
 OP_SCOPE_RETURN index 4
-OP_DEFINE_GLOBAL index 0
+OP_NULL
+OP_RETURN
 
 ================

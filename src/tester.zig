@@ -8,6 +8,7 @@ const testing = std.testing;
 const allocator = testing.allocator;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const test_config = @import("test_config");
 
 const RED = "\x1b[31m";
 const NORMAL = "\x1b[0m";
@@ -106,21 +107,36 @@ pub fn GenericTester(
         const Section = enum { Code, Config, Expect, Err, None };
 
         pub fn run() !void {
-            const path = try std.fs.path.join(allocator, &[_][]const u8{
-                "tests", foldername,
-            });
-            defer allocator.free(path);
+            if (eql(u8, test_config.file, "")) {
+                const path = try std.fs.path.join(allocator, &[_][]const u8{
+                    "tests", foldername,
+                });
+                defer allocator.free(path);
 
-            var cwd = try std.fs.cwd().openDir(path, .{ .iterate = true });
-            defer cwd.close();
+                var cwd = try std.fs.cwd().openDir(path, .{ .iterate = true });
+                defer cwd.close();
 
-            var walker = try cwd.walk(allocator);
-            defer walker.deinit();
+                var walker = try cwd.walk(allocator);
+                defer walker.deinit();
 
-            while (try walker.next()) |*entry| {
-                if (std.mem.endsWith(u8, entry.basename, ".rvt")) {
-                    try test_file(&cwd, entry.path);
+                while (try walker.next()) |*entry| {
+                    if (std.mem.endsWith(u8, entry.basename, ".rvt")) {
+                        try test_file(&cwd, entry.path);
+                    }
                 }
+            } else {
+                const last_slash = std.mem.lastIndexOfScalar(u8, test_config.file, '/').?;
+                const dir = test_config.file[0..last_slash];
+                const filename = test_config.file[last_slash + 1 .. test_config.file.len];
+
+                // Weird behavior, all tests are imported even if filtered in main...
+                // We filter it by hand here. Maybe importing them via other testers do this
+                if (!std.mem.eql(u8, foldername, @tagName(test_config.stage))) return;
+
+                var cwd = try std.fs.cwd().openDir(dir, .{});
+                defer cwd.close();
+
+                try test_file(&cwd, filename);
             }
         }
 

@@ -74,7 +74,7 @@ pub const CompilationManager = struct {
             self.main_index.?,
             0,
         );
-        try self.compiler.write_op_and_byte(.CallFn, 0, 0);
+        try self.compiler.write_op_and_byte(.FnCall, 0, 0);
 
         return self.compiler.end();
     }
@@ -460,7 +460,7 @@ const Compiler = struct {
             try self.expression(expr.args[i]);
         }
 
-        try self.write_op_and_byte(.CallFn, @intCast(expr.arity), expr.span.start);
+        try self.write_op_and_byte(.FnCall, @intCast(expr.arity), expr.span.start);
     }
 
     fn grouping(self: *Self, expr: *const Ast.Grouping) !void {
