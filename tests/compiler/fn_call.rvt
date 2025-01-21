@@ -1,0 +1,163 @@
+// Discard
+
+config:
+ignore main-call
+
+
+// Global
+code:
+fn add() {}
+fn main() {
+    add()
+}
+
+expect:
+-- Function add
+OP_NULL
+OP_RETURN
+
+-- Function main
+OP_GET_GLOBAL index 0
+OP_CALL index 0
+OP_NULL
+OP_RETURN
+
+// Global scope
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+
+================
+
+// Global with args
+code:
+fn add(arg1: int, arg2: float,) {}
+fn main() {
+    add(1, 2.5)
+}
+
+expect:
+-- Function add
+OP_NULL
+OP_RETURN
+
+-- Function main
+// Get function
+OP_GET_GLOBAL index 0
+// Compile args
+OP_CONSTANT index 0, value 1
+OP_CONSTANT index 1, value 2.5
+// Call
+OP_CALL index 2
+OP_NULL
+OP_RETURN
+
+// Global scope
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+
+================
+
+// Global with args return kinds
+code:
+fn add1(arg1: int, arg2: float,) -> float {
+    arg2
+}
+fn add2(arg1: str) -> str {
+    return arg1
+}
+fn add3() {
+    return
+}
+
+fn main() { }
+
+expect:
+-- Function add1
+OP_GET_LOCAL index 2
+OP_RETURN
+
+-- Function add2
+OP_GET_LOCAL index 1
+OP_RETURN
+
+-- Function add3
+OP_NULL
+OP_RETURN
+
+-- Function main
+OP_NULL
+OP_RETURN
+
+// Global scope
+OP_CONSTANT index 0, value <fn add1>
+OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value <fn add2>
+OP_DEFINE_GLOBAL index 1
+OP_CONSTANT index 2, value <fn add3>
+OP_DEFINE_GLOBAL index 2
+
+================
+
+// Global args and body
+code:
+fn add1(arg1: int, arg2: float,) -> float {
+    var tmp = 1
+    var local = arg1 + tmp
+    arg2
+}
+
+fn main() { }
+
+expect:
+-- Function add1
+OP_CONSTANT index 0, value 1
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 3
+OP_ADD_INT
+OP_GET_LOCAL index 2
+OP_RETURN
+
+-- Function main
+OP_NULL
+OP_RETURN
+
+// Global scope
+OP_CONSTANT index 0, value <fn add1>
+OP_DEFINE_GLOBAL index 0
+
+================
+
+// Local args and body
+code:
+
+fn main() {
+    fn add1(arg1: int, arg2: float,) -> float {
+        var tmp = 1
+        var local = arg1 + tmp
+        arg2
+    }
+
+    _ = add1(1, 2.)
+}
+
+expect:
+-- Function main
+OP_CONSTANT index 0, value <fn add1>
+OP_GET_LOCAL index 1
+OP_CONSTANT index 1, value 1
+OP_CONSTANT index 2, value 2
+OP_CALL index 2
+OP_POP
+OP_NULL
+OP_RETURN
+
+-- Function add1
+OP_CONSTANT index 0, value 1
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 3
+OP_ADD_INT
+OP_GET_LOCAL index 2
+OP_RETURN
+
+================
+

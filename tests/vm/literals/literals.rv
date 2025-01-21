@@ -8,5 +8,7 @@ fn main() {
     print -.8 // expect: -0.8
 
     print "foo" // expect: "foo"
+    print true // expect: true
+    print false // expect: false
     print null // expect: null
 }

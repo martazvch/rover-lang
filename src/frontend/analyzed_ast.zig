@@ -14,6 +14,7 @@ pub const AnalyzedStmt = union(enum) {
     Assignment: Assignment,
     Block: Block,
     Binop: BinOp,
+    FnCall: FnCall,
     FnDecl: FnDecl,
     If: If,
     Unary: Unary,
@@ -41,6 +42,11 @@ pub const BinOp = struct {
     // We assume we only need to know the side because the cast will always
     // be from int to float
     const Cast = enum { Lhs, Rhs, None };
+};
+
+pub const FnCall = struct {
+    /// Arguments indices to cast to float
+    casts: std.BoundedArray(usize, 256),
 };
 
 pub const FnDecl = struct {

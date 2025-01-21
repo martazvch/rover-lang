@@ -64,6 +64,25 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
     var bytecode = ArrayList(u8).init(allocator);
     var writer = bytecode.writer();
 
+    // All functions recursively
+    try dis_function(allocator, function, writer);
+
+    // Global scope
+    var disassembler = Disassembler.init(&function.chunk, allocator, true);
+    defer disassembler.deinit();
+    try disassembler.dis_chunk("Global scope");
+    try writer.print("{s}", .{disassembler.disassembled.items});
+
+    var msgs = ArrayList(CompilerMsg).init(allocator);
+
+    for (compiler.errs.items) |err| {
+        try msgs.append(err.report);
+    }
+
+    return .{ .expect = try bytecode.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
+}
+
+fn dis_function(allocator: Allocator, function: *const ObjFunction, writer: anytype) !void {
     for (0..function.chunk.constant_count) |i| {
         const cte = &function.chunk.constants[i];
 
@@ -78,20 +97,9 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
                 defer disassembler.deinit();
                 try disassembler.dis_chunk(func.name.?.chars);
                 try writer.print("{s}", .{disassembler.disassembled.items});
+
+                try dis_function(allocator, func, writer);
             }
         }
     }
-
-    var disassembler = Disassembler.init(&function.chunk, allocator, true);
-    defer disassembler.deinit();
-    try disassembler.dis_chunk("Global scope");
-    try writer.print("{s}", .{disassembler.disassembled.items});
-
-    var msgs = ArrayList(CompilerMsg).init(allocator);
-
-    for (compiler.errs.items) |err| {
-        try msgs.append(err.report);
-    }
-
-    return .{ .expect = try bytecode.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
 }

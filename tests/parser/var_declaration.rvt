@@ -29,7 +29,7 @@ expect:
         [Int literal 12]
         [Float literal 4]
 ]
- 
+
 ================
 
 code:
@@ -41,46 +41,21 @@ expect:
         [Int literal 12]
         [Float literal 4]
 ]
- 
+
 ================
 
 code:
-var 
-
-error:
-ExpectName, variable
- 
-================
-
-code:
+var
 var : House
-
-error:
-ExpectName, variable
- 
-================
-
-code:
 var home House
-
-error:
-ExpectColonBeforeType
- 
-================
-
-code:
 var home : 12+4
-
-error:
-ExpectTypeName
- 
-================
-
-code:
 var home : House = var a
 
 error:
+ExpectName, variable
+ExpectName, variable
+ExpectColonBeforeType
+ExpectTypeName
 ExpectExpr, var
- 
-================
 
+================

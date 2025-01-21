@@ -1,17 +1,27 @@
+// Implicit void return type
 fn add() {}
 
 var tmp = 1
-fn sub() {}
+
+// Implicit return
+fn sub() -> int {
+    56
+}
 
 fn main() {
     print add // expect: <fn add>
     print sub // expect: <fn sub>
     print add // expect: <fn add>
 
+    // Local declaration
     {
         var local = 56-6
 
-        fn mul() {}
+        // Explicit return
+        fn mul() -> str {
+            return "mul"
+        }
+
         print sub // expect: <fn sub>
         print add // expect: <fn add>
         print mul // expect: <fn mul>
@@ -25,6 +35,9 @@ fn main() {
     fn fn2(a: int, b: float) -> str {
         "booo"
     }
+
+    // Trailing comma
+    fn fn3(a: int,) {}
 
     print fn1 // expect: <fn fn1>
     print fn2 // expect: <fn fn2>

@@ -65,3 +65,33 @@ expect:
 
 ================
 
+// Locals
+
+code:
+
+fn main() {
+    var noval: float
+    noval = 1
+
+    {
+        var noval = 1
+        print noval
+    }
+    print noval
+}
+
+expect:
+[Fn declaration, scope Global, index 0]
+[Variable scope Local, index 1]
+[Assignment cast to float]
+[Variable scope Local, index 1]
+
+// Sub scope
+[Block pop count 1]
+[Variable scope Local, index 2]
+[Variable scope Local, index 2]
+
+// Exit sub scope
+[Variable scope Local, index 1]
+
+================

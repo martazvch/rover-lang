@@ -52,6 +52,7 @@ pub const AnalyzedAstPrinter = struct {
             .Assignment => |*s| self.assign(s),
             .Block => |*s| self.block(s),
             .Binop => |*s| self.binop(s),
+            .FnCall => |*s| self.fn_call(s),
             .FnDecl => |*s| self.fn_declaration(s),
             .If => |*s| self.if_expr(s),
             .Unary => |*s| self.unary(s),
@@ -88,6 +89,18 @@ pub const AnalyzedAstPrinter = struct {
             .{ @tagName(stmt.cast), self.type_manager.str(stmt.type_) },
         );
         try self.tree.appendSlice(written);
+    }
+
+    fn fn_call(self: *Self, stmt: *const AnalyzedAst.FnCall) !void {
+        try self.indent();
+        try self.tree.appendSlice("[Fn call, casts: [");
+        var writer = self.tree.writer();
+
+        for (0..stmt.casts.len) |i| {
+            try writer.print("{}", .{stmt.casts.buffer[i]});
+        }
+
+        try self.tree.appendSlice("]]\n");
     }
 
     fn fn_declaration(self: *Self, stmt: *const AnalyzedAst.FnDecl) !void {

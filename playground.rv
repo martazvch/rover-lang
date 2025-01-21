@@ -1,25 +1,5 @@
-// Last expression returned while discarding inbetween locals
-var a: int = {
-    var space = 67
-    var other = "just chillin"
-    var nb = 7
-    var sneaky = 90
-    nb
+fn add(a: float) {}
+
+fn main() {
+    add(1)
 }
-
-print a // expect: 7
-
-
-// Returning a global from a scope
-var b = 56
-
-var c: int = {
-    var space = 67
-    var other = "just chillin"
-    var nb = 7
-    var sneaky = 90
-    _ = nb
-    b
-}
-
-print c // expect: 56

@@ -32,8 +32,37 @@ expect:
 
 [Block pop count 1]
 [Fn declaration, scope Local, index 1]
-[Variable scope Local, index 5]
+[Variable scope Local, index 3]
 [Binop cast None, type bool]
+
+================
+
+// Nested
+
+code:
+fn main() {
+    fn add(a:int, b:float) {
+        fn sub(a:int) {
+            print a
+        }
+
+        sub(1)
+    }
+}
+
+expect:
+[Fn declaration, scope Global, index 0]
+
+// Add
+[Fn declaration, scope Local, index 1]
+
+// Sub
+[Fn declaration, scope Local, index 3]
+[Variable scope Local, index 1]
+// Fin sub
+
+[Variable scope Local, index 3]
+// Fin add
 
 ================
 

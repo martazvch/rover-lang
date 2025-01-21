@@ -3,4 +3,11 @@ fn main() {
     var res = 180
 
     if cond do print res // expect: 180
+
+    if { cond } do {
+        var tmp = 0
+        print res
+    } // expect: 180
+
+    if not { not not cond } do print "no" else print "yes" // expect: "yes"
 }

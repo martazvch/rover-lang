@@ -3,6 +3,8 @@
 code:
 var a
 a = 1
+a = add()
+a = {}
 
 expect:
 [Var declaration a, type void, value
@@ -13,6 +15,22 @@ expect:
     [Identifier a]
     value:
     [Int literal 1]
+]
+[Assignment
+    assigne:
+    [Identifier a]
+    value:
+    [Fn call
+        callee:
+        [Identifier add]
+        args:
+    ]
+]
+[Assignment
+    assigne:
+    [Identifier a]
+    value:
+    [Block]
 ]
 
 ================

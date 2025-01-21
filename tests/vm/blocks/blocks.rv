@@ -1,3 +1,6 @@
+var glob1 = 7.5
+var glob2 = 42.5
+
 fn main() {
     // Last expression returned while discarding inbetween locals
     var a: int = {
@@ -11,7 +14,7 @@ fn main() {
     print a // expect: 7
 
 
-    // Returning a global from a scope
+    // Returning an outter local from a scope
     var b = 56
 
     var c: int = {
@@ -32,19 +35,19 @@ fn main() {
         print b // expect: 81
     }
 
-    // Returning again a global
+    // Returning a global
     var scope = {
         print "in scope" // expect: "in scope"
-        b
+        glob1
     }
 
-    print scope // expect: 56
+    print scope // expect: 7.5
 
     // Returning again a global
     var scope2 = {
         print "in scope2" // expect: "in scope2"
         var inside = 45
-        print b - 50 // expect: 6
+        print glob2 - 50 // expect: -7.5
         inside
     }
 

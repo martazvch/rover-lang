@@ -40,6 +40,10 @@ OP_POP
 OP_NULL
 OP_RETURN
 
+-- Function add
+OP_NULL
+OP_RETURN
+
 ================
 
 code:

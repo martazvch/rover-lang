@@ -1,19 +1,18 @@
 // Test blocks
 
-config:
-mode repl
-
 // Void assignment
 
 code:
-var noval = {
-    var integer = 1
-}
+fn main() {
+    var noval = {
+        var integer = 1
+    }
 
-var void_post_assign
-void_post_assign = {
-    _ = 3 + 4
-    var empty
+    var void_post_assign
+    void_post_assign = {
+        _ = 3 + 4
+        var empty
+    }
 }
 
 error:
@@ -23,7 +22,10 @@ VoidAssignment
 ================
 
 code:
-{5}
+fn main() {
+    {5}
+    print "unused"
+}
 
 error:
 UnusedValue
@@ -31,9 +33,11 @@ UnusedValue
 ================
 
 code:
-var a: int = {
-    var nb = 7.5
-    nb
+fn main() {
+    var a: int = {
+        var nb = 7.5
+        nb
+    }
 }
 
 error:
@@ -44,21 +48,30 @@ InvalidAssignType, int, float
 code:
 // Declare local 0, declare local 1, use local 0 in binop
 // assign to local 1, returns local 0, defines global 0
-var a: int = {
-    var nb = 7
-    var c = 56
-    c = nb - 5
-    nb
+fn main() {
+    var a: int = {
+        var nb = 7
+        var c = 56
+        c = nb - 5
+        nb
+    }
 }
 
 expect:
+[Fn declaration, scope Global, index 0]
 [Block pop count 2]
-[Variable scope Local, index 0]
 [Variable scope Local, index 1]
+[Variable scope Local, index 2]
+
 [Binop cast None, type int]
-[Variable scope Local, index 0]
 [Variable scope Local, index 1]
-[Variable scope Local, index 0]
-[Variable scope Global, index 0]
+
+// Assign to "c"
+[Variable scope Local, index 2]
+// Return "nb"
+[Variable scope Local, index 1]
+
+// Assign to "a"
+[Variable scope Local, index 1]
 
 ================

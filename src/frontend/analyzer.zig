@@ -97,9 +97,10 @@ pub const Analyzer = struct {
     repl: bool,
     main: ?*const Ast.FnDecl,
     states: ArrayList(State),
+    allocator: Allocator,
 
     const Self = @This();
-    const Error = error{Err} || TypeManager.Error || Allocator.Error;
+    const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
 
     // Representation of a variable. Index is the declaration order
     // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
@@ -134,6 +135,7 @@ pub const Analyzer = struct {
             .main = null,
             .repl = repl,
             .states = ArrayList(State).init(allocator),
+            .allocator = allocator,
         };
     }
 
@@ -406,6 +408,16 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
 
+        // Temporary locals to imitate function's frame at runtime, locals start at 0
+        // TODO: store an offset in states stack? To see how it behaves with upvalues
+        // and closures
+        const locals_save = self.locals;
+        self.locals = ArrayList(Variable).init(self.allocator);
+
+        // Switch back to locals before function call
+        errdefer self.locals = locals_save;
+        errdefer self.locals.deinit();
+
         // We add a empty variable to anticipate the function it self on the stack. Here,
         // it's declared in the outter scope to allow create a new function with the same name
         // in function's body but in real life the function itself is at the very beginning of
@@ -484,6 +496,10 @@ pub const Analyzer = struct {
         // Two levels: 1 for function's name + params and another one for body
         _ = try self.end_scope();
         _ = try self.end_scope();
+
+        // Switch back to locals before function call
+        self.locals.deinit();
+        self.locals = locals_save;
 
         const state = self.states.pop();
 
@@ -641,6 +657,7 @@ pub const Analyzer = struct {
     }
 
     fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
+        // Resolve the callee
         const type_value = try self.expect_type_kind(expr.callee, TypeSys.Fn);
         const type_info = self.type_manager.type_infos.items[type_value].Fn;
 
@@ -651,11 +668,18 @@ pub const Analyzer = struct {
             );
         }
 
+        const idx = try self.reserve_slot();
+        var casts = try std.BoundedArray(usize, 256).init(expr.arity);
+
         for (0..expr.arity) |i| {
             const arg_type = try self.expression(expr.args[i]);
 
             if (arg_type != type_info.params[i]) {
-                return self.err(
+                // If it's an implicit cast between int and float, save the
+                // argument indices for compiler. Otherwise, error
+                if (type_info.params[i] == Float and arg_type == Int) {
+                    casts.appendAssumeCapacity(i);
+                } else return self.err(
                     .{ .TypeMismatch = .{
                         .expect = self.type_manager.str(type_info.params[i]),
                         .found = self.type_manager.str(arg_type),
@@ -664,6 +688,8 @@ pub const Analyzer = struct {
                 );
             }
         }
+
+        self.analyzed_stmts.items[idx] = .{ .FnCall = .{ .casts = casts } };
 
         return type_info.return_type;
     }

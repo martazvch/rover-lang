@@ -456,8 +456,17 @@ const Compiler = struct {
     fn fn_call(self: *Self, expr: *const Ast.FnCall) !void {
         try self.expression(expr.callee);
 
+        var counter: usize = 0;
+        const extra = self.get_next_analyzed().FnCall;
+
         for (0..expr.arity) |i| {
             try self.expression(expr.args[i]);
+
+            // Check one by one if we must implicit cast the argument
+            if (extra.casts.len > 0 and extra.casts.buffer[counter] == i) {
+                try self.get_chunk().write_op(.CastToFloat, expr.span.start);
+                counter += 1;
+            }
         }
 
         try self.write_op_and_byte(.FnCall, @intCast(expr.arity), expr.span.start);

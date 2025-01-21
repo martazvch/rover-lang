@@ -1,0 +1,16 @@
+var glob = 12
+
+fn main() {
+    print if true { 5 } else { 3 } // expect: 5
+
+    print if { true and false } {
+        var tmp = 56
+        glob = 4
+        tmp
+    } else {
+        555
+    } // expect: 555
+
+    var res = { if { if true do true else false } do 7 else 20 }
+    print res // expect: 7
+}

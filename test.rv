@@ -1,3 +1,6 @@
-var a = 15.6
-fn main() {}
 
+fn main() {
+    fn add(a: int, b: int) -> int { a + b }
+
+    print -20 / add(5, 5) // expect: -2
+}

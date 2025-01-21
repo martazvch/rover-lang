@@ -1,4 +1,4 @@
-// Globals
+// Globals pure declaration
 var name = "Adri"
 var age = "24"
 
@@ -9,6 +9,7 @@ fn main() {
     print name + " is " + age // expect: "Adri is 24"
     print rhs * lhs // expect: -17
 
+    // Change their value
     age = "27"
     name = "Martin"
     print name + " is " + age // expect: "Martin is 27"

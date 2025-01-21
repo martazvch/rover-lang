@@ -10,17 +10,6 @@ expect:
 ================
 
 code:
-_ = { 5 }
-
-expect:
-[Discard
-    [Block]
-        [Int literal 5]
-]
-
-================
-
-code:
 {
     var a }
 
@@ -33,7 +22,7 @@ expect:
 ================
 
 code:
-{ var a 
+{ var a
 a = 1+56}
 
 expect:
@@ -61,4 +50,3 @@ error:
 UnclosedBrace
 
 ================
-
