@@ -1,57 +1,59 @@
 // Tests locals
 
-{
-    var loc1 = 1.5
-    var loc2 = 5
-    var _loc3 = -.5
-
-    print _loc3 + loc1 // expect: 1
-}
-
-{
-    var loc1 = 3.5
-    var loc2 = 5
-    var _loc3 = -2.5
-
-    print _loc3 + loc1 // expect: 1
-
+fn main() {
     {
-        var loc1 = 6.
-        var loc2 = 1.5
+        var loc1 = 1.5
+        var loc2 = 5
+        var _loc3 = -.5
 
-        print loc2 + loc1 // expect: 7.5
-        print loc1 + _loc3 // expect: 3.5
+        print _loc3 + loc1 // expect: 1
     }
 
-    print loc2 // expect: 5
-}
-
-var glob = 1
-var period = "."
-var loc2 = "sneaky"
-{
-    var loc1 = "local"
-    var loc2 = " var"
-
-    print loc1 + loc2 + period // expect: "local var."
-}
-
-{
-    var loc1 = "local"
-    var loc2 = " var"
-
-    loc2 = "assign local"
     {
-        var loc1 = "tmp"
-        var loc2 = "sublocal"
-        print loc2             // expect: "sublocal"
-        loc2 = "assign sub"
-        print loc2             // expect: "assign sub"
+        var loc1 = 3.5
+        var loc2 = 5
+        var _loc3 = -2.5
+
+        print _loc3 + loc1 // expect: 1
+
+        {
+            var loc1 = 6.
+            var loc2 = 1.5
+
+            print loc2 + loc1 // expect: 7.5
+            print loc1 + _loc3 // expect: 3.5
+        }
+
+        print loc2 // expect: 5
     }
 
-    print loc2                 // expect: "assign local"
-    loc2 = loc1
-    print loc2                 // expect: "local"
+    var glob = 1
+    var period = "."
+    var loc2 = "sneaky"
+    {
+        var loc1 = "local"
+        var loc2 = " var"
+
+        print loc1 + loc2 + period // expect: "local var."
+    }
+
+    {
+        var loc1 = "local"
+        var loc2 = " var"
+
+        loc2 = "assign local"
+        {
+            var loc1 = "tmp"
+            var loc2 = "sublocal"
+            print loc2             // expect: "sublocal"
+            loc2 = "assign sub"
+            print loc2             // expect: "assign sub"
+        }
+
+        print loc2                 // expect: "assign local"
+        loc2 = loc1
+        print loc2                 // expect: "local"
+    }
+    loc2 = "still global"
+    print loc2                     // exepct: " var"
 }
-loc2 = "still global"
-print loc2                     // exepct: " var"

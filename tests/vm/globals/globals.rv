@@ -2,14 +2,14 @@
 var name = "Adri"
 var age = "24"
 
-print name + " is " + age // expect: "Adri is 24"
-
 var lhs = 34
 var rhs = -.5
 
-print rhs * lhs // expect: -17
+fn main() {
+    print name + " is " + age // expect: "Adri is 24"
+    print rhs * lhs // expect: -17
 
-age = "27"
-name = "Martin"
-
-print name + " is " + age // expect: "Martin is 27"
+    age = "27"
+    name = "Martin"
+    print name + " is " + age // expect: "Martin is 27"
+}

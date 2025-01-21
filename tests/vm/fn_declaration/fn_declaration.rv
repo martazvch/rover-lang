@@ -1,28 +1,31 @@
 fn add() {}
-print add // expect: <fn add>
 
 var tmp = 1
 fn sub() {}
-print sub // expect: <fn sub>
-print add // expect: <fn add>
 
-{
-    var local = 56-6
-
-    fn mul() {}
+fn main() {
+    print add // expect: <fn add>
     print sub // expect: <fn sub>
     print add // expect: <fn add>
-    print mul // expect: <fn mul>
+
+    {
+        var local = 56-6
+
+        fn mul() {}
+        print sub // expect: <fn sub>
+        print add // expect: <fn add>
+        print mul // expect: <fn mul>
+    }
+
+    print sub // expect: <fn sub>
+    print add // expect: <fn add>
+
+    // With args, to see if it compiles well too and that args dosen't mess up stack
+    fn fn1(a: int) {}
+    fn fn2(a: int, b: float) -> str {
+        "booo"
+    }
+
+    print fn1 // expect: <fn fn1>
+    print fn2 // expect: <fn fn2>
 }
-
-print sub // expect: <fn sub>
-print add // expect: <fn add>
-
-// With args, to see if it compiles well too and that args dosen't mess up stack
-fn fn1(a: int) {}
-fn fn2(a: int, b: float) -> str {
-    "booo"
-}
-
-print fn1 // expect: <fn fn1>
-print fn2 // expect: <fn fn2>

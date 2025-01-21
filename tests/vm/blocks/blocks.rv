@@ -1,50 +1,52 @@
-// Last expression returned while discarding inbetween locals
-var a: int = {
-    var space = 67
-    var other = "just chillin"
-    var nb = 7
-    var sneaky = 90
-    nb
+fn main() {
+    // Last expression returned while discarding inbetween locals
+    var a: int = {
+        var space = 67
+        var other = "just chillin"
+        var nb = 7
+        var sneaky = 90
+        nb
+    }
+
+    print a // expect: 7
+
+
+    // Returning a global from a scope
+    var b = 56
+
+    var c: int = {
+        var space = 67
+        var other = "just chillin"
+        var nb = 7
+        var sneaky = 90
+        _ = nb
+        b
+    }
+
+    print c // expect: 56
+
+    // Void scope without assignment to see if stack is corrupt
+    {
+        var tmp = 67
+        var b = 87 - 6.
+        print b // expect: 81
+    }
+
+    // Returning again a global
+    var scope = {
+        print "in scope" // expect: "in scope"
+        b
+    }
+
+    print scope // expect: 56
+
+    // Returning again a global
+    var scope2 = {
+        print "in scope2" // expect: "in scope2"
+        var inside = 45
+        print b - 50 // expect: 6
+        inside
+    }
+
+    print scope2 // expect: 45
 }
-
-print a // expect: 7
-
-
-// Returning a global from a scope
-var b = 56
-
-var c: int = {
-    var space = 67
-    var other = "just chillin"
-    var nb = 7
-    var sneaky = 90
-    _ = nb
-    b
-}
-
-print c // expect: 56
-
-// Void scope without assignment to see if stack is corrupt
-{
-    var tmp = 67
-    var b = 87 - 6.
-    print b // expect: 81
-}
-
-// Returning again a global
-var scope = {
-    print "in scope" // expect: "in scope"
-    b
-}
-
-print scope // expect: 56
-
-// Returning again a global
-var scope2 = {
-    print "in scope2" // expect: "in scope2"
-    var inside = 45
-    print b - 50 // expect: 6
-    inside
-}
-
-print scope2 // expect: 45

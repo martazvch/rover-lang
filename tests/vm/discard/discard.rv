@@ -1,14 +1,16 @@
 // Here, we test that the discard dosen't corrupt the stack
 
-var nb1 = 10
-var nb2: float = -.5
+fn main() {
+    var nb1 = 10
+    var nb2: float = -.5
 
-_ = nb1 * nb2
+    _ = nb1 * nb2
 
-print nb1 // expect: 10
-print nb2 // expect: -0.5
+    print nb1 // expect: 10
+    print nb2 // expect: -0.5
 
-var res = nb1 * 4.
-_ = 3
+    var res = nb1 * 4.
+    _ = 3
 
-print res // expect: 40
+    print res // expect: 40
+}

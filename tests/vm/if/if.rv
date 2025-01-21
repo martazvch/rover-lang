@@ -1,38 +1,40 @@
-var a = if true {1} else {2}
-print a // expect: 1
+fn main() {
+    var a = if true {1} else {2}
+    print a // expect: 1
 
-var b = if { true } do 5 + 6 else {
-    1
+    var b = if { true } do 5 + 6 else {
+        1
+    }
+    print b // expect: 11
+
+    var c = if { not true } { 5 + 6 } else {
+        var tmp = 1
+        print tmp // expect: 1
+        tmp = 5
+        print tmp // expect: 5
+        a + b + tmp
+    }
+
+    print c // expect: 17
+
+    var d = if {
+        var tmp = "garbage"
+        5 == 5
+    } {
+        var tmp = "other trash"
+        _ = tmp == "trash"
+        -5
+    } else -10
+
+    print d // expect: -5
+
+    var e = if not not true do 6/2 else 0
+    print e // expect: 3
+
+    var f = if if true do true else false {
+        var tmp = 3
+        tmp + e
+    } else -8
+
+    print f // expect: 6
 }
-print b // expect: 11
-
-var c = if { not true } { 5 + 6 } else {
-    var tmp = 1
-    print tmp // expect: 1
-    tmp = 5
-    print tmp // expect: 5
-    a + b + tmp
-}
-
-print c // expect: 17
-
-var d = if {
-    var tmp = "garbage"
-    5 == 5
-} {
-    var tmp = "other trash"
-    _ = tmp == "trash"
-    -5
-} else -10
-
-print d // expect: -5
-
-var e = if not not true do 6/2 else 0
-print e // expect: 3
-
-var f = if if true do true else false {
-    var tmp = 3
-    tmp + e
-} else -8
-
-print f // expect: 6

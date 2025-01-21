@@ -1,42 +1,44 @@
 // Global
 var i = 0
 
-// expect: 0
-// expect: 1
-// expect: 2
-// expect: 3
-while i<4 {
-    print i
-    i = i + 1
-}
-
-// Local with condition manipulation
-{
-    var i = 3
+fn main() {
+    // expect: 0
+    // expect: 1
+    // expect: 2
     // expect: 3
-    // expect: 5
-    // expect: 7
-    // expect: 9
-    while i > 2 {
+    while i<4 {
         print i
-
-        i = i + 2
-        if i > 10 do i = 1
+        i = i + 1
     }
-}
 
-// Local with stack manipulation
-var offset = 3
-{
-    var i = 5
-    var j = 8
+    // Local with condition manipulation
+    {
+        var i = 3
+        // expect: 3
+        // expect: 5
+        // expect: 7
+        // expect: 9
+        while i > 2 {
+            print i
 
-    // expect: 8
-    // expect: 11
-    while i < 9 {
-        var tmp = 12/3
-        j = i + offset
-        print j
-        i = i + offset
+            i = i + 2
+            if i > 10 do i = 1
+        }
+    }
+
+    // Local with stack manipulation
+    var offset = 3
+    {
+        var i = 5
+        var j = 8
+
+        // expect: 8
+        // expect: 11
+        while i < 9 {
+            var tmp = 12/3
+            j = i + offset
+            print j
+            i = i + offset
+        }
     }
 }

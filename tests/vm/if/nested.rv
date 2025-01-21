@@ -1,21 +1,23 @@
 var cond = true
 var res = 180
 
-if { not not cond } {
-    cond = false
-    var res = 8
+fn main() {
+    if { not not cond } {
+        cond = false
+        var res = 8
 
-    if cond { res = 1 } else {
-        cond = true
+        if cond { res = 1 } else {
+            cond = true
 
-        if cond {
-            res = 56
+            if cond {
+                res = 56
 
-            if not cond do res = 100
-        } else res = 66
+                if not cond do res = 100
+            } else res = 66
+        }
+
+        print res // expect: 56
     }
 
-    print res // expect: 56
+    if cond do print res // expect: 180
 }
-
-if cond do print res // expect: 180

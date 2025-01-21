@@ -2,20 +2,22 @@
 
 // Ints
 
-print 1 + 1            // expect: 2
-print 5 * (4 - 6 / 3)  // expect: 10
-print -----7           // expect: -7
+fn main() {
+    print 1 + 1            // expect: 2
+    print 5 * (4 - 6 / 3)  // expect: 10
+    print -----7           // expect: -7
 
-// Floats
-print .5 * 14.8 // expect: 7.4
-print -6. + 2.000 - 1.// expect: -5
-print 0.2 / -.2 // expect: -1
+    // Floats
+    print .5 * 14.8 // expect: 7.4
+    print -6. + 2.000 - 1.// expect: -5
+    print 0.2 / -.2 // expect: -1
 
-// Ints and floats
-print 1 + .6 // expect: 1.6
-print 0.7 * -5 // expect: -3.5
-print 1 + 6 / 2. * .5 // expect: 2.5
+    // Ints and floats
+    print 1 + .6 // expect: 1.6
+    print 0.7 * -5 // expect: -3.5
+    print 1 + 6 / 2. * .5 // expect: 2.5
 
-// Strings
-print "Tom is " + "poor" // expect: "Tom is poor"
-print "ooo" * 3 + "k" // expect: "oooooooook"
+    // Strings
+    print "Tom is " + "poor" // expect: "Tom is poor"
+    print "ooo" * 3 + "k" // expect: "oooooooook"
+}
