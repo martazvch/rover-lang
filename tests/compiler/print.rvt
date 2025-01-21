@@ -1,14 +1,19 @@
 // Tests print statement
 
 config:
-ignore return
+ignore main-call
 
 code:
-print 1
+fn main() {
+    print 1
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_PRINT
+OP_NULL
+OP_RETURN
 
 ================
 

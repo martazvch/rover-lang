@@ -168,7 +168,11 @@ pub fn GenericTester(
             var test_count: usize = 0;
 
             while (lines.next()) |line| {
-                if (line.len == 0 or std.mem.eql(u8, line, "\r")) continue;
+                if (line.len == 0 or eql(u8, line, "\r")) continue;
+
+                // Skip comments
+                if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " "), "//")) continue;
+
                 // If after removing the \r there is only spaces, we skip it
                 if (std.mem.trimRight(u8, std.mem.trimRight(u8, line, "\r"), " ").len == 0) continue;
 

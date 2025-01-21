@@ -1,59 +1,89 @@
 // Tests literals
 
 config:
-ignore return
+ignore main-call
 
 code:
-_ = 1
+fn main() {
+    _ = 1
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 1
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = 65.82
+fn main() {
+    _ = 65.82
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value 65.82
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = true
+fn main() {
+    _ = true
+}
 
 expect:
+-- Function main
 OP_TRUE
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = false
+fn main() {
+    _ = false
+}
 
 expect:
+-- Function main
 OP_FALSE
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = null
+fn main() {
+    _ = null
+}
 
 expect:
+-- Function main
 OP_NULL
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
 code:
-_ = "foo"
+fn main() {
+    _ = "foo"
+}
 
 expect:
+-- Function main
 OP_CONSTANT index 0, value "foo"
 OP_POP
+OP_NULL
+OP_RETURN
 
 ================
 
