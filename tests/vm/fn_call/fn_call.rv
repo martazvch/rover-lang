@@ -16,5 +16,8 @@ fn main() {
         if glob_add(tmp, local) == "under" do arg2 else arg1
     }
 
+    // Tests: implicit cast of return in 'if'
+    // implicit cast in function args
     print add1(1, 2.) // expect: 2
+    print add1(15, 12) // expect: 15
 }

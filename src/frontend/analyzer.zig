@@ -669,7 +669,7 @@ pub const Analyzer = struct {
         }
 
         const idx = try self.reserve_slot();
-        var casts = try std.BoundedArray(usize, 256).init(expr.arity);
+        var casts = try std.BoundedArray(usize, 256).init(0);
 
         for (0..expr.arity) |i| {
             const arg_type = try self.expression(expr.args[i]);

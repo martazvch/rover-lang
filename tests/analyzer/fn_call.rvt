@@ -1,12 +1,56 @@
 // Tests function calls
 
+// Global call
+
 code:
 fn add(a: int) {}
-fn main() {}
+fn main() {
+    add(2)
+}
 
 expect:
 [Fn declaration, scope Global, index 0]
 [Fn declaration, scope Global, index 1]
+[Variable scope Global, index 0]
+[Fn call, casts: []]
+
+================
+
+// Local call
+
+code:
+fn main() {
+    fn add(a: int) {}
+    add(2)
+}
+
+expect:
+[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Local, index 1]
+[Variable scope Local, index 1]
+[Fn call, casts: []]
+
+================
+
+// Args cast
+
+code:
+fn sub(a: int, b: float, c: float, d: bool, e: str) {}
+
+fn main() {
+    fn add(a: float, b: int, c: float, d: float, e: str) {}
+    add(2, 3, 45, 67., "yup")
+    sub(2, 3, 45, true, "yup")
+}
+
+expect:
+[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Local, index 1]
+[Variable scope Local, index 1]
+[Fn call, casts: [0, 2]]
+[Variable scope Global, index 0]
+[Fn call, casts: [1, 2]]
 
 ================
 

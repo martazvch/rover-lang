@@ -1,6 +1,21 @@
+fn glob_add(a: int, b: float) -> str {
+    if a + b < 12 do "under" else "above"
+}
 
 fn main() {
-    fn add(a: int, b: int) -> int { a + b }
+    var arg1 = 2
+    var arg2 = 10.
+    var arg3 = 5
 
-    print -20 / add(5, 5) // expect: -2
+    print glob_add(arg1, arg2) // expect: "above"
+
+    fn add1(arg1: int, arg2: float,) -> float {
+        var tmp = 1
+        var local = arg1 + tmp
+
+        if glob_add(tmp, local) == "under" do arg2 else arg1
+    }
+
+    print add1(15, 12) // expect: 2
 }
+

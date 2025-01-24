@@ -62,6 +62,7 @@ expect:
 // Fin sub
 
 [Variable scope Local, index 3]
+[Fn call, casts: []]
 // Fin add
 
 ================

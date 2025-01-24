@@ -1,5 +1,5 @@
-fn add(a: float) {}
+fn add(tmp: int, a: float) {}
 
 fn main() {
-    add(1)
+    add(1, 1)
 }

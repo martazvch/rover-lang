@@ -69,26 +69,17 @@ pub const AnalyzedAstPrinter = struct {
 
     fn block(self: *Self, stmt: *const AnalyzedAst.Block) !void {
         try self.indent();
-
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
-            "[Block pop count {}]\n",
-            .{stmt.pop_count},
-        );
-        try self.tree.appendSlice(written);
+        var writer = self.tree.writer();
+        try writer.print("[Block pop count {}]\n", .{stmt.pop_count});
     }
 
     fn binop(self: *Self, stmt: *const AnalyzedAst.BinOp) !void {
         try self.indent();
-
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
+        var writer = self.tree.writer();
+        try writer.print(
             "[Binop cast {s}, type {s}]\n",
             .{ @tagName(stmt.cast), self.type_manager.str(stmt.type_) },
         );
-        try self.tree.appendSlice(written);
     }
 
     fn fn_call(self: *Self, stmt: *const AnalyzedAst.FnCall) !void {
@@ -98,6 +89,10 @@ pub const AnalyzedAstPrinter = struct {
 
         for (0..stmt.casts.len) |i| {
             try writer.print("{}", .{stmt.casts.buffer[i]});
+
+            if (i < stmt.casts.len - 1) {
+                try writer.print(", ", .{});
+            }
         }
 
         try self.tree.appendSlice("]]\n");
@@ -105,47 +100,32 @@ pub const AnalyzedAstPrinter = struct {
 
     fn fn_declaration(self: *Self, stmt: *const AnalyzedAst.FnDecl) !void {
         try self.indent();
+        var writer = self.tree.writer();
 
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
+        try writer.print(
             "[Fn declaration, scope {s}, index {}]\n",
             .{ @tagName(stmt.variable.scope), stmt.variable.index },
         );
-        try self.tree.appendSlice(written);
     }
 
     fn if_expr(self: *Self, stmt: *const AnalyzedAst.If) !void {
         try self.indent();
-
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
-            "[If cast {s}]\n",
-            .{@tagName(stmt.cast)},
-        );
-        try self.tree.appendSlice(written);
+        var writer = self.tree.writer();
+        try writer.print("[If cast {s}]\n", .{@tagName(stmt.cast)});
     }
 
     fn unary(self: *Self, stmt: *const AnalyzedAst.Unary) !void {
         try self.indent();
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
-            "[Unary type {s}]\n",
-            .{self.type_manager.str(stmt.type_)},
-        );
-        try self.tree.appendSlice(written);
+        var writer = self.tree.writer();
+        try writer.print("[Unary type {s}]\n", .{self.type_manager.str(stmt.type_)});
     }
 
     fn variable(self: *Self, stmt: *const AnalyzedAst.Variable) !void {
         try self.indent();
-        var buf: [100]u8 = undefined;
-        const written = try std.fmt.bufPrint(
-            &buf,
+        var writer = self.tree.writer();
+        try writer.print(
             "[Variable scope {s}, index {}]\n",
             .{ @tagName(stmt.scope), stmt.index },
         );
-        try self.tree.appendSlice(written);
     }
 };
