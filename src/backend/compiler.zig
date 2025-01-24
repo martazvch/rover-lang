@@ -476,7 +476,11 @@ const Compiler = struct {
             }
         }
 
-        try self.write_op_and_byte(.FnCall, @intCast(expr.arity), expr.span.start);
+        try self.write_op_and_byte(
+            if (extra.builtin) .NativeFnCall else .FnCall,
+            @intCast(expr.arity),
+            expr.span.start,
+        );
     }
 
     fn grouping(self: *Self, expr: *const Ast.Grouping) !void {

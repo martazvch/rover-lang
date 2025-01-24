@@ -18,7 +18,7 @@ pub const Obj = struct {
         Fn,
         // Instance,
         // Iter,
-        // NativeFn,
+        NativeFn,
         String,
         // Struct,
         // UpValue,
@@ -61,10 +61,10 @@ pub const Obj = struct {
             //     const iter = self.as(ObjIter);
             //     vm.allocator.destroy(iter);
             // },
-            // .NativeFn => {
-            //     const function = self.as(ObjNativeFn);
-            //     function.deinit(vm.allocator);
-            // },
+            .NativeFn => {
+                const function = self.as(ObjNativeFn);
+                function.deinit(vm.allocator);
+            },
             .String => self.as(ObjString).deinit(vm.allocator),
             // .Struct => {
             //     const structure = self.as(ObjStruct);
@@ -93,7 +93,7 @@ pub const Obj = struct {
             //     const iter = self.as(ObjIter);
             //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
             // },
-            // .NativeFn => writer.print("<native fn>", .{}),
+            .NativeFn => writer.print("<native fn>", .{}),
             .String => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
             // .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
             // .UpValue => writer.print("upvalue", .{}),
@@ -220,5 +220,32 @@ pub const ObjFunction = struct {
 
         // Name already in the linked list, don't free manually
         allocator.destroy(self);
+    }
+};
+//
+// Many item pointer for args?
+pub const NativeFn = *const fn ([]const Value) Value;
+
+pub const ObjNativeFn = struct {
+    obj: Obj,
+    function: NativeFn,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, function: NativeFn) Allocator.Error!*Self {
+        const obj = try Obj.allocate(vm, Self, .NativeFn);
+        obj.function = function;
+
+        // if (config.LOG_GC) std.debug.print("\n", .{});
+
+        return obj;
+    }
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        allocator.destroy(self);
+    }
+
+    pub fn as_obj(self: *ObjNativeFn) *Obj {
+        return &self.obj;
     }
 };

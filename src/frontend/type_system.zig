@@ -68,6 +68,7 @@ pub const FnInfo = struct {
     arity: usize,
     params: [256]Type,
     return_type: Type,
+    builtin: bool,
 };
 
 test "types" {

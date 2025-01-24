@@ -42,11 +42,12 @@ expect:
 code:
 fn main() {
     fn add(a:int, b:float) {
-        fn sub(a:int) {
+        fn sub(a:int) -> str {
             print a
+            "yes"
         }
 
-        sub(1)
+        _ = sub(1)
     }
 }
 
@@ -57,7 +58,7 @@ expect:
 [Fn declaration, scope Local, index 1, return ImplicitVoid]
 
 // Sub
-[Fn declaration, scope Local, index 3, return ImplicitVoid]
+[Fn declaration, scope Local, index 3, return ImplicitValue]
 [Variable scope Local, index 1]
 // Fin sub
 

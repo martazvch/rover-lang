@@ -65,7 +65,7 @@ pub const TypeManager = struct {
             @intCast(count);
     }
 
-    /// Set type information at a specific index in list (index gave by *reserve_info* method)
+    /// Set type information at a specific index in list (index gave by *add_info* method)
     pub inline fn set_info(self: *Self, index: usize, info: TypeInfo) void {
         self.type_infos.items[index] = info;
     }
@@ -513,6 +513,7 @@ pub const Analyzer = struct {
             .arity = stmt.arity,
             .params = params_type,
             .return_type = return_type,
+            .builtin = false,
         } });
 
         self.analyzed_stmts.items[idx] = .{
@@ -687,7 +688,7 @@ pub const Analyzer = struct {
             }
         }
 
-        self.analyzed_stmts.items[idx] = .{ .FnCall = .{ .casts = casts } };
+        self.analyzed_stmts.items[idx] = .{ .FnCall = .{ .casts = casts, .builtin = type_info.builtin } };
 
         return type_info.return_type;
     }

@@ -47,6 +47,8 @@ pub const BinOp = struct {
 pub const FnCall = struct {
     /// Arguments indices to cast to float
     casts: std.BoundedArray(usize, 256),
+    /// Flag to know if it's a builtin function
+    builtin: bool,
 };
 
 pub const FnDecl = struct {

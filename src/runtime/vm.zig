@@ -12,6 +12,7 @@ const Table = @import("table.zig").Table;
 const Obj = @import("obj.zig").Obj;
 const ObjString = @import("obj.zig").ObjString;
 const ObjFunction = @import("obj.zig").ObjFunction;
+const ObjNativeFn = @import("obj.zig").ObjNativeFn;
 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
 
 // PERF: bench avec BoundedArray
@@ -285,6 +286,14 @@ pub const Vm = struct {
                 .MultiplyInt => {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int *= rhs;
+                },
+                .NativeFnCall => {
+                    const args_count = frame.read_byte();
+                    const native = self.stack.peek_ref(args_count).Obj.as(ObjNativeFn).function;
+                    const result = native((self.stack.top - args_count)[0..args_count]);
+
+                    self.stack.top -= args_count + 1;
+                    self.stack.push(result);
                 },
                 .NegateFloat => self.stack.peek_ref(0).Float *= -1,
                 .NegateInt => self.stack.peek_ref(0).Int *= -1,
