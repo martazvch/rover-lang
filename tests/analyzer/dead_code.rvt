@@ -1,3 +1,8 @@
+// Tests dead code
+
+// Global call
+
+code:
 fn add(a: int) {
     var b = 1
     return
@@ -8,4 +13,10 @@ fn add(a: int) {
 fn main() {
     add(2)
 }
+
+error:
+DeadCode
+
+================
+
 

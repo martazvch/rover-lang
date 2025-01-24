@@ -58,7 +58,7 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [Block pop count 2]
 [Variable scope Local, index 1]
 [Variable scope Local, index 2]

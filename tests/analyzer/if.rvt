@@ -21,7 +21,7 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [If cast Then]
 [Variable scope Local, index 1]
 
@@ -55,7 +55,7 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [If cast Else]
 [Block pop count 2]
 [Variable scope Local, index 1]
@@ -79,7 +79,7 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [If cast Else]
 [Block pop count 2]
 [Variable scope Local, index 1]
@@ -98,7 +98,7 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [If cast Then]
 [Block pop count 0]
 [If cast None]

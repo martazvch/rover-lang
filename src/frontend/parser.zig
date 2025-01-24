@@ -546,8 +546,12 @@ pub const Parser = struct {
         const expr = try self.allocator.create(Expr);
         const op = self.prev();
 
+        // Checks cases like: fn add() { return }
         expr.* = .{ .Return = .{
-            .expr = if (self.check(.NewLine)) null else try self.parse_precedence_expr(0),
+            .expr = if (self.check(.NewLine) or self.check(.RightBrace))
+                null
+            else
+                try self.parse_precedence_expr(0),
             .span = .{ .start = op.span.start, .end = self.prev().span.end },
         } };
 

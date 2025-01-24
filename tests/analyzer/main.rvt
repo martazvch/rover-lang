@@ -6,8 +6,8 @@ fn main() {}
 fn add(a: int, b: int) {}
 
 expect:
-[Fn declaration, scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 
 ================
 

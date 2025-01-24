@@ -5,8 +5,8 @@ fn add(a: int) {}
 fn main() {}
 
 expect:
-[Fn declaration, scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 
 ================
 
@@ -27,11 +27,11 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 0, return ImplicitValue]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 
 [Block pop count 1]
-[Fn declaration, scope Local, index 1]
+[Fn declaration, scope Local, index 1, return ImplicitValue]
 [Variable scope Local, index 3]
 [Binop cast None, type bool]
 
@@ -51,19 +51,38 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 
 // Add
-[Fn declaration, scope Local, index 1]
+[Fn declaration, scope Local, index 1, return ImplicitVoid]
 
 // Sub
-[Fn declaration, scope Local, index 3]
+[Fn declaration, scope Local, index 3, return ImplicitVoid]
 [Variable scope Local, index 1]
 // Fin sub
 
 [Variable scope Local, index 3]
 [Fn call, casts: []]
 // Fin add
+
+================
+
+// Return kinds
+
+code:
+fn add() { return }
+fn add1() -> int { 5 }
+fn add2()  {  }
+fn add3() -> int { return 5 }
+
+fn main() { }
+
+expect:
+[Fn declaration, scope Global, index 0, return Explicit]
+[Fn declaration, scope Global, index 1, return ImplicitValue]
+[Fn declaration, scope Global, index 2, return ImplicitVoid]
+[Fn declaration, scope Global, index 3, return Explicit]
+[Fn declaration, scope Global, index 4, return ImplicitVoid]
 
 ================
 

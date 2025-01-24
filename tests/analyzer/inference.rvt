@@ -12,7 +12,7 @@ fn main() {
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
-[Fn declaration, scope Global, index 2]
+[Fn declaration, scope Global, index 2, return ImplicitVoid]
 [Binop cast None, type float]
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
@@ -29,7 +29,7 @@ fn main() {
 // No errors
 expect:
 [Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 [Unary type bool]
 [Variable scope Global, index 0]
 

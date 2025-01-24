@@ -103,8 +103,8 @@ pub const AnalyzedAstPrinter = struct {
         var writer = self.tree.writer();
 
         try writer.print(
-            "[Fn declaration, scope {s}, index {}]\n",
-            .{ @tagName(stmt.variable.scope), stmt.variable.index },
+            "[Fn declaration, scope {s}, index {}, return {s}]\n",
+            .{ @tagName(stmt.variable.scope), stmt.variable.index, @tagName(stmt.return_kind) },
         );
     }
 

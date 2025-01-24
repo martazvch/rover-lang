@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const AnalyzerMsg = union(enum) {
     AlreadyDeclared: struct { name: []const u8 },
+    DeadCode,
     DuplicateParam: struct { name: []const u8 },
     FloatEqual,
     FloatEqualCast,
@@ -36,6 +37,7 @@ pub const AnalyzerMsg = union(enum) {
     pub fn get_msg(self: Self, writer: anytype) !void {
         try switch (self) {
             .AlreadyDeclared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
+            .DeadCode => writer.print("unreachable code", .{}),
             .DuplicateParam => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .FloatEqual => writer.print("floating-point values equality is unsafe", .{}),
             .FloatEqualCast => writer.print("unsafe floating-point values comparison", .{}),
@@ -82,6 +84,7 @@ pub const AnalyzerMsg = union(enum) {
     pub fn get_hint(self: Self, writer: anytype) !void {
         try switch (self) {
             .AlreadyDeclared, .DuplicateParam => writer.print("this name", .{}),
+            .DeadCode => writer.print("code after this expression can't be reached", .{}),
             .FloatEqual => writer.print("both sides are 'floats'", .{}),
             .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
             .IncompatibleFnType => |e| writer.print("this expression is of type '{s}'", .{e.found}),
@@ -115,6 +118,7 @@ pub const AnalyzerMsg = union(enum) {
             .AlreadyDeclared,
             .DuplicateParam,
             => writer.print("use another name or introduce numbers, underscore, ...", .{}),
+            .DeadCode => writer.print("remove unreachable code", .{}),
             .VoidDiscard => writer.print("remove the discard", .{}),
             .FloatEqual => writer.print(
                 \\floating-point values are approximations to infinitly precise real numbers. 

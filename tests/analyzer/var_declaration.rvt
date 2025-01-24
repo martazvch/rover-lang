@@ -52,7 +52,7 @@ expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
 [Variable scope Global, index 2]
-[Fn declaration, scope Global, index 3]
+[Fn declaration, scope Global, index 3, return ImplicitVoid]
 
 ================
 
@@ -65,7 +65,7 @@ fn main() {}
 expect:
 [Binop cast None, type int]
 [Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 
 ================
 
@@ -83,7 +83,7 @@ expect:
 
 [Binop cast Rhs, type float]
 [Variable scope Global, index 1]
-[Fn declaration, scope Global, index 2]
+[Fn declaration, scope Global, index 2, return ImplicitVoid]
 
 ================
 

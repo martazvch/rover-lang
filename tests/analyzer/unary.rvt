@@ -26,7 +26,7 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [Unary type float]
 [Unary type bool]
 [Unary type bool]

@@ -453,6 +453,7 @@ pub const Analyzer = struct {
 
         // Body
         try self.states.append(.{ .in_fn = true });
+        const prev_state = self.last_state();
 
         var body_type: Type = Void;
         self.scope_depth += 1;
@@ -460,9 +461,9 @@ pub const Analyzer = struct {
 
         // We don't use block because we don't want to emit extra data from the block
         for (stmt.body.stmts, 0..) |*s, i| {
-            if (self.last_state().returns) {
-                // TODO: DeadCode
-                break;
+            // We don't skip compilation for now
+            if (prev_state.returns) {
+                try self.warn(.DeadCode, stmt.body.stmts[i - 1].span());
             }
 
             // We try to analyze the whole body
@@ -471,7 +472,9 @@ pub const Analyzer = struct {
                 else => return e,
             };
 
-            if (body_type != Void and i != stmt.body.stmts.len - 1) {
+            // If last expression produced a value and that it wasn't the last one and it
+            // wasn't a return, error
+            if (body_type != Void and i != stmt.body.stmts.len - 1 and !prev_state.returns) {
                 self.err(.UnusedValue, s.span()) catch {};
             }
         }
@@ -801,12 +804,16 @@ pub const Analyzer = struct {
     fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
         var state = self.last_state();
 
-        if (state.in_fn) {
-            state.returns = true;
-            return if (expr.expr) |val| self.expression(val) else Void;
-        } else {
-            return self.err(.ReturnOutsideFn, expr.span);
-        }
+        // For now, no need, we first check for unpure expressions so here
+        // we are in a function, if not in global scope we are mandatory in
+        // a function
+
+        // if (state.in_fn) {
+        state.returns = true;
+        return if (expr.expr) |val| self.expression(val) else Void;
+        // } else {
+        //     return self.err(.ReturnOutsideFn, expr.span);
+        // }
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

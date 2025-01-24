@@ -32,7 +32,7 @@ expect:
 [Assignment cast to float]
 [Variable scope Global, index 3]
 
-[Fn declaration, scope Global, index 4]
+[Fn declaration, scope Global, index 4, return ImplicitVoid]
 
 ================
 
@@ -61,7 +61,7 @@ expect:
 [Variable scope Global, index 0]
 [Assignment cast to float]
 [Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1]
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
 
 ================
 
@@ -81,7 +81,7 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0]
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [Variable scope Local, index 1]
 [Assignment cast to float]
 [Variable scope Local, index 1]
