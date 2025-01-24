@@ -127,12 +127,19 @@ pub const Vm = struct {
         };
     }
 
-    pub fn init(self: *Self) !void {
+    pub fn init(self: *Self, repl: bool) !void {
         self.gc.link(self);
         self.allocator = self.gc.allocator();
         self.stack.init();
         self.strings = Table.init(self.allocator);
         self.init_string = try ObjString.copy(self, "init");
+
+        // In REPL mode, we won't call the main function (there is not)
+        // so we increment ourself the frame stack (discaring the first one)
+        // but the count is coherent of what is expected below, for example
+        // for function call we exit if the frame stack count == 1. In REPL
+        // it would be always true
+        if (repl) self.frame_stack.count += 1;
     }
 
     pub fn deinit(self: *Self) void {
@@ -176,7 +183,7 @@ pub const Vm = struct {
     }
 
     pub fn run(self: *Self, func: *ObjFunction) !void {
-        // Initialize with the 'main' function
+        // Initialize with the global scope
         try self.call(func, 0);
         try self.execute();
     }
@@ -287,6 +294,22 @@ pub const Vm = struct {
                 .Print => {
                     try self.stack.pop().print(self.stdout);
                     _ = try self.stdout.write("\n");
+                },
+                .ExitRepl => {
+                    // Here, there is no value to pop for now, no implicit null is
+                    // put on top of the stack
+                    self.frame_stack.count -= 1;
+
+                    // Implicit print the last expression in REPL mode. For now, analyzer
+                    // dosen't allow to write an expression returning a value without
+                    // assignment or so
+
+                    // if (self.stack.top == self.stack.values[0..].ptr) {
+                    //     const res = self.stack.pop();
+                    //     try res.print(self.stdout);
+                    // }
+
+                    break;
                 },
                 .Return => {
                     const result = self.stack.pop();

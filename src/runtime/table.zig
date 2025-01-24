@@ -148,7 +148,7 @@ test "set" {
     const allocator = std.testing.allocator;
 
     var vm = Vm.new(allocator);
-    try vm.init();
+    try vm.init(false);
     defer vm.deinit();
 
     var table = Table.init(allocator);
@@ -171,7 +171,7 @@ test "grow" {
     const allocator = std.testing.allocator;
 
     var vm = Vm.new(allocator);
-    try vm.init();
+    try vm.init(false);
     defer vm.deinit();
 
     var table = Table.init(allocator);
@@ -196,7 +196,7 @@ test "get" {
     const allocator = std.testing.allocator;
 
     var vm = Vm.new(allocator);
-    try vm.init();
+    try vm.init(false);
     defer vm.deinit();
 
     var table = Table.init(allocator);
@@ -237,7 +237,7 @@ test "delete" {
     const allocator = std.testing.allocator;
 
     var vm = Vm.new(allocator);
-    try vm.init();
+    try vm.init(false);
     defer vm.deinit();
 
     var table = Table.init(allocator);

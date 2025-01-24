@@ -89,6 +89,7 @@ pub const Disassembler = struct {
             .EqualInt => self.simple_instruction("OP_EQUAL_INT", offset, writer),
             .EqualFloat => self.simple_instruction("OP_EQUAL_FLOAT", offset, writer),
             .EqualStr => self.simple_instruction("OP_EQUAL_STRING", offset, writer),
+            .ExitRepl => self.simple_instruction("OP_EXIT_REPL", offset, writer),
             .False => self.simple_instruction("OP_FALSE", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
             .GetGlobal => self.index_instruction("OP_GET_GLOBAL", offset, writer),

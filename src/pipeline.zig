@@ -50,7 +50,7 @@ pub const ReplPipeline = struct {
     }
 
     pub fn init(self: *Self) !void {
-        try self.vm.init();
+        try self.vm.init(true);
     }
 
     pub fn deinit(self: *Self) void {
@@ -132,7 +132,22 @@ pub const ReplPipeline = struct {
         }
 
         // Vm run
-        try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
+        // try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
+
+        // Compiler
+        var compiler = CompilationManager.init(
+            &self.vm,
+            parser.stmts.items,
+            self.analyzer.analyzed_stmts.items[self.stmts_count..],
+            self.config.print_bytecode,
+            undefined,
+            true,
+        );
+        defer compiler.deinit();
+        const function = try compiler.compile();
+
+        // Run the program
+        try self.vm.run(function);
 
         self.stmts_count = self.analyzer.analyzed_stmts.items.len;
     }
@@ -213,7 +228,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
 
     // Start of Vm for compilation
     var vm: Vm = Vm.new(allocator);
-    try vm.init();
+    try vm.init(false);
     defer vm.deinit();
 
     // Compiler
@@ -222,7 +237,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         parser.stmts.items,
         analyzer.analyzed_stmts.items,
         config.print_bytecode,
-        analyzer.main,
+        analyzer.main.?,
+        false,
     );
     defer compiler.deinit();
     const function = try compiler.compile();

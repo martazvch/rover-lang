@@ -31,8 +31,9 @@ pub const CompilationManager = struct {
     stmts: []const Ast.Stmt,
     analyzed_stmts: UnsafeIter(AnalyzedStmt),
     print_bytecode: bool,
-    main: ?*const Ast.FnDecl,
+    main: *const Ast.FnDecl,
     main_index: ?u8,
+    repl: bool,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error;
@@ -43,7 +44,8 @@ pub const CompilationManager = struct {
         stmts: []const Ast.Stmt,
         analyzed_stmts: []const AnalyzedStmt,
         print_bytecode: bool,
-        main: ?*const Ast.FnDecl,
+        main: *const Ast.FnDecl,
+        repl: bool,
     ) Self {
         return .{
             .vm = vm,
@@ -54,6 +56,7 @@ pub const CompilationManager = struct {
             .print_bytecode = print_bytecode,
             .main = main,
             .main_index = null,
+            .repl = repl,
         };
     }
 
@@ -68,13 +71,17 @@ pub const CompilationManager = struct {
             try self.compiler.statement(stmt);
         }
 
-        // Insert a call to main with arity of 0 for now
-        try self.compiler.write_op_and_byte(
-            .GetGlobal,
-            self.main_index.?,
-            0,
-        );
-        try self.compiler.write_op_and_byte(.FnCall, 0, 0);
+        if (!self.repl) {
+            // Insert a call to main with arity of 0 for now
+            try self.compiler.write_op_and_byte(
+                .GetGlobal,
+                self.main_index.?,
+                0,
+            );
+            try self.compiler.write_op_and_byte(.FnCall, 0, 0);
+        } else {
+            try self.compiler.get_chunk().write_op(.ExitRepl, 0);
+        }
 
         return self.compiler.end();
     }
@@ -253,7 +260,7 @@ const Compiler = struct {
         try self.define_variable(&extra.variable, stmt.name.start);
 
         // Check for main function
-        if (self.manager.main_index == null and stmt == self.manager.main.?) {
+        if (self.manager.main_index == null and !self.manager.repl and stmt == self.manager.main) {
             self.manager.main_index = @intCast(extra.variable.index);
         }
     }

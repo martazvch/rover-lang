@@ -153,8 +153,6 @@ pub const Analyzer = struct {
         self.source = source;
         try self.states.append(.{});
 
-        // if (self.repl) self.scope_depth += 1;
-
         for (stmts) |*stmt| {
             const stmt_type = self.statement(stmt) catch |e| {
                 switch (e) {
@@ -174,10 +172,7 @@ pub const Analyzer = struct {
         }
 
         // In REPL mode, no need for main function
-        if (self.repl) {
-            // self.scope_depth -= 1;
-            return;
-        }
+        if (self.repl) return;
 
         if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }

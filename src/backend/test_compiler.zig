@@ -33,14 +33,15 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
 
     var vm = Vm.new(allocator);
     defer vm.deinit();
-    try vm.init();
+    try vm.init(false);
 
     var compiler = CompilationManager.init(
         &vm,
         parser.stmts.items,
         analyzer.analyzed_stmts.items,
         false,
-        analyzer.main,
+        analyzer.main.?,
+        false,
     );
     defer compiler.deinit();
     const function = try compiler.compile();

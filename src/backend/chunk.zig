@@ -16,6 +16,7 @@ pub const OpCode = enum(u8) {
     EqualInt,
     EqualFloat,
     EqualStr,
+    ExitRepl,
     False,
     FnCall,
     GetGlobal,
