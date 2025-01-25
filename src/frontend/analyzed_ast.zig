@@ -71,11 +71,13 @@ pub const Unary = struct {
     type_: Type,
 };
 
+/// This structure owns the memory of the lists
+/// *WARNING* memory must be freed
 pub const Use = struct {
-    /// Variable informations for each imported element
-    variables: []const Variable,
     /// Indices of builtin functions pointer
-    indices: []const u8,
+    indices: ArrayList(u8),
+    /// Variable informations for each imported element
+    variables: ArrayList(Variable),
 };
 
 pub const Variable = struct {

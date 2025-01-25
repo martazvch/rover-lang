@@ -154,8 +154,11 @@ pub fn GenReporter(comptime Report: type) type {
                     if (self.source[current] == '\n') {
                         if (current >= report.start) break;
 
-                        const end = if (self.source[current - 1] == '\r') current - 1 else current;
-                        previous_line = self.source[line_start..end];
+                        // line_start > 0 otherwise if first line of file is \n, current - 1 crashes
+                        if (line_start > 0) {
+                            const end = if (self.source[current - 1] == '\r') current - 1 else current;
+                            previous_line = self.source[line_start..end];
+                        }
 
                         line_count += 1;
                         // Skip the \n

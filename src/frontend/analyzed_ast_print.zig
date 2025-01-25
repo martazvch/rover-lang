@@ -56,7 +56,7 @@ pub const AnalyzedAstPrinter = struct {
             .FnDecl => |*s| self.fn_declaration(s),
             .If => |*s| self.if_expr(s),
             .Unary => |*s| self.unary(s),
-            .Use => |*s| _ = s,
+            .Use => |*s| self.use(s),
             .Variable => |*s| self.variable(s),
         };
     }
@@ -122,6 +122,25 @@ pub const AnalyzedAstPrinter = struct {
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Unary type {s}]\n", .{self.type_manager.str(stmt.type_)});
+    }
+
+    fn use(self: *Self, stmt: *const AnalyzedAst.Use) !void {
+        try self.indent();
+        var writer = self.tree.writer();
+        try self.tree.appendSlice("[Use\n");
+        self.indent_level += 1;
+
+        for (0..stmt.indices.items.len) |i| {
+            try self.indent();
+            const v = stmt.variables.items[i];
+            try writer.print(
+                "[Variable scope {s}, index {}, builtin index {}]\n",
+                .{ @tagName(v.scope), v.index, stmt.indices.items[i] },
+            );
+        }
+
+        self.indent_level -= 1;
+        try self.tree.appendSlice("]\n");
     }
 
     fn variable(self: *Self, stmt: *const AnalyzedAst.Variable) !void {

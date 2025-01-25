@@ -1,22 +1,22 @@
 // Tests variable declaration type
 
-config:
-mode repl
-
 code:
 var a = 0
 var b = true
 var c = 56.7
 
-print b
-print c
-print a
+fn main() {
+    print b
+    print c
+    print a
+}
 
 expect:
 [Variable scope Global, index 0]
 [Variable scope Global, index 1]
 [Variable scope Global, index 2]
 
+[Fn declaration, scope Global, index 3, return ImplicitVoid]
 [Variable scope Global, index 1]
 [Variable scope Global, index 2]
 [Variable scope Global, index 0]

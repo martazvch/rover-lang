@@ -24,18 +24,8 @@ pub fn get_test_data(
     defer parser.deinit();
     try parser.parse(source, lexer.tokens.items);
 
-    var repl = false;
-
-    if (config) |conf| {
-        for (conf.modes.items) |mode| {
-            if (std.mem.eql(u8, mode, "repl")) {
-                repl = true;
-            }
-        }
-    }
-
-    var analyzer = Analyzer.init(allocator, repl);
-    try analyzer.type_manager.init_builtins();
+    var analyzer: Analyzer = undefined;
+    try analyzer.init(allocator, false);
     defer analyzer.deinit();
 
     try analyzer.analyze(parser.stmts.items, source);

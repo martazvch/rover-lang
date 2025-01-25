@@ -9,3 +9,7 @@ pub const NativeFnMeta = struct {
     return_type: Type,
     function: NativeFn,
 };
+
+pub const ModuleMeta = struct {
+    name: []const u8,
+};

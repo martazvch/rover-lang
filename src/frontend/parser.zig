@@ -342,6 +342,10 @@ pub const Parser = struct {
         var span = self.prev().span;
         var list = ArrayList(SourceSlice).init(self.allocator);
 
+        if (!self.check(.Identifier)) {
+            return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
+        }
+
         while (self.match(.Identifier) and !self.check(.Eof)) {
             try list.append(SourceSlice.from_token(self.prev(), self.source));
 

@@ -1,11 +1,17 @@
-fn add(a: int) {
-    var b = 1
-    return
-
-    var c = 4
-}
-
 fn main() {
-    add(2)
-}
+    {
+        use std._test1
+        print _cast_f2i(false, 3.)
+    }
+    {
+        var tmp = 1
+        use std._test1
+        print _cast_i2f(56)
+    }
 
+    // Reimport locally
+    use std._test1
+    {
+        use std._test1
+    }
+}

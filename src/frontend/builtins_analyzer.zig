@@ -1,8 +1,9 @@
 const std = @import("std");
 const Type = @import("type_system.zig").Type;
 const Meta = @import("../std/meta.zig");
-const NativeFnMeta = Meta.NativeFnMeta;
 const NativeFn = Meta.NativeFn;
+const NativeFnMeta = Meta.NativeFnMeta;
+const ModuleMeta = Meta.ModuleMeta;
 
 // Modules are identified by name and map to a HashMap fn_name -> fn_definition
 const ModuleKV = struct { []const u8, std.StaticStringMap(FnDeclaration) };
@@ -17,8 +18,8 @@ pub const FnDeclaration = struct {
 };
 
 const AnalyzedModule = struct {
+    name: []const u8,
     declarations: []const FnKV = &.{},
-    // functions: []const NativeFn,
 };
 
 pub const BuiltinAnalyzer = struct {
@@ -29,44 +30,46 @@ pub const BuiltinAnalyzer = struct {
 pub fn init() BuiltinAnalyzer {
     comptime {
         var all_fn: []const NativeFn = &.{};
-        const analyzed = analyze_module(@import("../std/time/time.zig"), &all_fn);
+        const modules = analyze_all(
+            &.{
+                // Testing purpose only
+                @import("../std/_test/_test1/test1.zig"),
+                @import("../std/_test/_test2/test2.zig"),
 
-        const module: []const ModuleKV = &.{
-            .{
-                "time",
-                std.StaticStringMap(FnDeclaration).initComptime(analyzed.declarations),
+                @import("../std/time/time.zig"),
+                @import("../std/testing/testing.zig"),
             },
-        };
+            &all_fn,
+        );
 
         return .{
-            .declarations = std.StaticStringMap(std.StaticStringMap(FnDeclaration)).initComptime(module),
-            // .functions = analyzed.functions,
+            .declarations = std.StaticStringMap(std.StaticStringMap(FnDeclaration)).initComptime(modules),
             .functions = all_fn,
         };
     }
 }
 
-fn analyze_all(Modules: []const type) AnalyzedModule {
+fn analyze_all(Modules: []const type, current_fns: *[]const NativeFn) []const ModuleKV {
     comptime {
-        var declarations: []const FnKV = &.{};
-        var functions: []const NativeFn = &.{};
+        var modules: []const ModuleKV = &.{};
 
         for (Modules) |Module| {
-            const analyzed = analyze_module(Module);
+            const analyzed = analyze_module(Module, current_fns);
 
-            declarations = declarations ++ analyzed.declarations;
-            functions = functions ++ analyzed.functions;
+            modules = modules ++ .{.{
+                analyzed.name,
+                std.StaticStringMap(FnDeclaration).initComptime(analyzed.declarations),
+            }};
         }
 
-        return .{ .declarations = declarations, .functions = functions };
+        return modules;
     }
 }
 
-// fn analyze_module(Module: type, current_fns: []const NativeFn) AnalyzedModule {
 fn analyze_module(Module: type, current_fns: *[]const NativeFn) AnalyzedModule {
     comptime {
         var all_kv: []const FnKV = &.{};
-        // var all_fn: []const NativeFn = current_fns;
+        var name: []const u8 = undefined;
 
         for (@typeInfo(Module).@"struct".decls) |decl| {
             const field = @field(Module, decl.name);
@@ -75,7 +78,6 @@ fn analyze_module(Module: type, current_fns: *[]const NativeFn) AnalyzedModule {
                 const infos = @typeInfo(@TypeOf(field));
 
                 var value: FnDeclaration = undefined;
-                // value.index = all_fn.len - 1;
                 value.index = current_fns.len;
 
                 for (infos.@"struct".fields) |f| {
@@ -90,16 +92,23 @@ fn analyze_module(Module: type, current_fns: *[]const NativeFn) AnalyzedModule {
                     } else if (std.mem.eql(u8, "return_type", f.name)) {
                         value.return_type = @field(field, f.name);
                     } else if (std.mem.eql(u8, "function", f.name)) {
-                        // current_fns = current_fns ++ @field(field, f.name);
                         current_fns.* = current_fns.* ++ .{@field(field, f.name)};
                     }
                 }
 
                 all_kv = all_kv ++ .{FnKV{ decl.name, value }};
+                // Module meta data
+            } else if (@TypeOf(field) == ModuleMeta) {
+                const infos = @typeInfo(@TypeOf(field));
+
+                for (infos.@"struct".fields) |f| {
+                    if (std.mem.eql(u8, "name", f.name)) {
+                        name = @field(field, f.name);
+                    }
+                }
             }
         }
 
-        // return .{ .declarations = all_kv, .functions = all_fn };
-        return .{ .declarations = all_kv };
+        return .{ .name = name, .declarations = all_kv };
     }
 }

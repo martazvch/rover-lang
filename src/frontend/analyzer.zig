@@ -101,30 +101,8 @@ pub const TypeManager = struct {
 
     /// Use builtins function whose informations are gathered at compile time. Import the
     /// informations among other declared types
-    /// Take a reference to the `Analyzer` because we declare the functions into the global
-    /// scope at the same time
-    /// *WARNING*: for now, only import std.time
-    // pub fn import_builtins(self: *Self, analyzer: *Analyzer) !std.StaticStringMap(FnDeclaration) {
-    pub fn import_builtins(self: *Self) !std.StaticStringMap(FnDeclaration) {
-        // const time_module = self.builtins.declarations.get("time").?;
-        return self.builtins.declarations.get("time").?;
-
-        // for (time_module.keys()) |fn_name| {
-        //     const func = time_module.get(fn_name).?;
-        //
-        //     const info: TypeInfo = .{ .Fn = .{
-        //         .arity = func.arity,
-        //         .params = func.params,
-        //         .return_type = func.return_type,
-        //         .builtin = true,
-        //     } };
-        //
-        //     // Declare the type and additional informations
-        //     const type_ = try self.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
-        //
-        //     const variable = try analyzer.declare_variable(fn_name, type_, true);
-        //
-        // }
+    pub fn import_builtins(self: *Self, name: []const u8) !?std.StaticStringMap(FnDeclaration) {
+        return self.builtins.declarations.get(name);
     }
 
     // NOTE:
@@ -154,6 +132,7 @@ pub const Analyzer = struct {
     repl: bool,
     main: ?*const Ast.FnDecl,
     states: ArrayList(State),
+    arena: std.heap.ArenaAllocator,
     allocator: Allocator,
 
     const Self = @This();
@@ -179,35 +158,30 @@ pub const Analyzer = struct {
 
     const AnalyzerReport = GenReport(AnalyzerMsg);
 
-    pub fn init(allocator: Allocator, repl: bool) Self {
-        return .{
-            .source = undefined,
-            .errs = ArrayList(AnalyzerReport).init(allocator),
-            .warns = ArrayList(AnalyzerReport).init(allocator),
-            .globals = ArrayList(Variable).init(allocator),
-            .locals = ArrayList(Variable).init(allocator),
-            .scope_depth = 0,
-            .analyzed_stmts = ArrayList(AnalyzedStmt).init(allocator),
-            .type_manager = TypeManager.init(allocator),
-            .main = null,
-            .repl = repl,
-            .states = ArrayList(State).init(allocator),
-            .allocator = allocator,
-        };
+    pub fn init(self: *Self, allocator: Allocator, repl: bool) !void {
+        self.arena = std.heap.ArenaAllocator.init(allocator);
+        self.allocator = self.arena.allocator();
+
+        self.errs = ArrayList(AnalyzerReport).init(self.allocator);
+        self.warns = ArrayList(AnalyzerReport).init(self.allocator);
+        self.globals = ArrayList(Variable).init(self.allocator);
+        self.locals = ArrayList(Variable).init(self.allocator);
+        self.scope_depth = 0;
+        self.analyzed_stmts = ArrayList(AnalyzedStmt).init(self.allocator);
+        self.type_manager = TypeManager.init(self.allocator);
+        try self.type_manager.init_builtins();
+        self.repl = repl;
+        self.main = null;
+        self.states = ArrayList(State).init(self.allocator);
     }
 
     pub fn deinit(self: *Self) void {
-        self.errs.deinit();
-        self.warns.deinit();
-        self.globals.deinit();
-        self.locals.deinit();
-        self.analyzed_stmts.deinit();
-        self.type_manager.deinit();
-        self.states.deinit();
+        self.arena.deinit();
     }
 
     pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
         self.source = source;
+        // HACK: to protect an -1 access
         try self.states.append(.{});
 
         for (stmts) |*stmt| {
@@ -586,11 +560,11 @@ pub const Analyzer = struct {
     }
 
     fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
-        if (std.mem.eql(u8, stmt.module[0].text, "std")) {
-            if (std.mem.eql(u8, stmt.module[1].text, "time")) {
-                // return self.type_manager.import_builtins(self);
+        var idx_unknown: usize = 0;
 
-                const module = try self.type_manager.import_builtins();
+        // For now, can only import std modules
+        if (std.mem.eql(u8, stmt.module[0].text, "std")) {
+            if (try self.type_manager.import_builtins(stmt.module[1].text)) |module| {
                 const all_fn_names = module.keys();
 
                 var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
@@ -617,13 +591,20 @@ pub const Analyzer = struct {
                 }
 
                 try self.analyzed_stmts.append(.{ .Use = .{
-                    .variables = try all_var.toOwnedSlice(),
-                    .indices = try all_ptr.toOwnedSlice(),
+                    .indices = all_ptr,
+                    .variables = all_var,
                 } });
-            }
+
+                return;
+            } else idx_unknown = 1;
         }
 
-        // TODO: Unknown import
+        return self.err(
+            .{ .UnknownModule = .{ .name = stmt.module[idx_unknown].text } },
+            Span.from_source_slice(
+                stmt.module[idx_unknown],
+            ),
+        );
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {

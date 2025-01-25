@@ -1,0 +1,21 @@
+code:
+use std.time
+
+fn main() {
+    {
+        use std.time
+        print clock()
+    }
+    {
+        var tmp = 1
+        use std.time
+        print clock()
+    }
+
+    // Reimport locally
+    use std.time
+    {
+        use std.time
+    }
+}
+

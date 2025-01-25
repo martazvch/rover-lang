@@ -36,12 +36,12 @@ pub fn get_kind(type_: Type) Kind {
     return @as(Kind, @intCast(type_ >> 28));
 }
 
-// We shift to get the lase 8bits. After, we want the first 4bits
+// We shift to get the last 8bits. After, we want the first 4bits
 //  value: x x x x  x x x x
 //  mask:  0 0 0 0  1 1 1 1  -> 15 -> 0xf
 /// Get extra information bits about a type
 pub fn get_extra(type_: Type) Extra {
-    return @as(Extra, @as(u8, @intCast(type_ >> 24)) | 0xf);
+    return @as(Extra, @intCast(@as(u8, @intCast(type_ >> 24)) & 0x0f));
 }
 
 // Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
@@ -97,8 +97,13 @@ test "types" {
     try expect(is(var1, Var));
     try expect(!is(var2, Fn));
 
-    const str = create(Var, Str);
+    const str = create(Var, 0, Str);
     try expect(str == Str);
     try expect(is(str, Var));
     try expect(get_value(str) == Str);
+
+    const func = create(Fn, Builtin, 16777214);
+    try expect(is(func, Fn));
+    try expect(is_builtin(func));
+    try expect(get_value(func) == 16777214);
 }

@@ -35,14 +35,11 @@ pub const ReplPipeline = struct {
     const Self = @This();
 
     pub fn new(allocator: Allocator, config: Config) !Self {
-        var analyzer = Analyzer.init(allocator, true);
-        try analyzer.type_manager.init_builtins();
-
-        // Init of parser in two times, maybe fix later when RLS is fixed in the lang
+        // Init of parser and analyzer in two times, maybe fix later when RLS is fixed in the lang
         return .{
             .allocator = allocator,
             .config = config,
-            .analyzer = analyzer,
+            .analyzer = undefined,
             .vm = Vm.new(allocator),
             .stmts_count = 0,
             .code_count = 0,
@@ -50,6 +47,7 @@ pub const ReplPipeline = struct {
     }
 
     pub fn init(self: *Self) !void {
+        try self.analyzer.init(self.allocator, true);
         try self.vm.init(true);
     }
 
@@ -192,8 +190,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     // Analyzer
     // TODO: init analyzer extra info with exact number of element per array list
     // for optimal memory allocation
-    var analyzer = Analyzer.init(allocator, false);
-    try analyzer.type_manager.init_builtins();
+    var analyzer: Analyzer = undefined;
+    try analyzer.init(allocator, false);
     defer analyzer.deinit();
 
     try analyzer.analyze(parser.stmts.items, source);

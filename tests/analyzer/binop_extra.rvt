@@ -1,13 +1,16 @@
 // Tests invalid binop
 
 code:
-1 + 2.
-5.6 + 4
-"steak" * 3
-5 * "house"
-"juicy " + "orange"
+fn main() {
+    _ = 1 + 2.
+    _ = 5.6 + 4
+    _ = "steak" * 3
+    _ = 5 * "house"
+    _ = "juicy " + "orange"
+}
 
 expect:
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
 [Binop cast Lhs, type float]
 [Binop cast Rhs, type float]
 [Binop cast Rhs, type str]

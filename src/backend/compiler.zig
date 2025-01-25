@@ -302,15 +302,17 @@ const Compiler = struct {
     fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
         const extra = self.get_next_analyzed().Use;
 
-        for (extra.indices) |i| {
+        for (0..extra.indices.items.len) |i| {
             try self.emit_constant(
                 Value.obj(
-                    (try ObjNativeFn.create(self.manager.vm, self.manager.natives[i]))
-                        .as_obj(),
+                    (try ObjNativeFn.create(
+                        self.manager.vm,
+                        self.manager.natives[extra.indices.items[i]],
+                    )).as_obj(),
                 ),
                 stmt.span.start,
             );
-            try self.define_variable(&extra.variables[i], stmt.span.start);
+            try self.define_variable(&extra.variables.items[i], stmt.span.start);
         }
     }
 
