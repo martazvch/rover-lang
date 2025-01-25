@@ -56,6 +56,7 @@ pub const AnalyzedAstPrinter = struct {
             .FnDecl => |*s| self.fn_declaration(s),
             .If => |*s| self.if_expr(s),
             .Unary => |*s| self.unary(s),
+            .Use => |*s| _ = s,
             .Variable => |*s| self.variable(s),
         };
     }
@@ -94,8 +95,11 @@ pub const AnalyzedAstPrinter = struct {
                 try writer.print(", ", .{});
             }
         }
+        try self.tree.appendSlice("]");
 
-        try self.tree.appendSlice("]]\n");
+        if (stmt.builtin) try self.tree.appendSlice(", builtin");
+
+        try self.tree.appendSlice("]\n");
     }
 
     fn fn_declaration(self: *Self, stmt: *const AnalyzedAst.FnDecl) !void {

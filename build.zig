@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Stage = enum { all, parser, analyzer, compiler, vm };
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
 
     const print_instr = b.option(bool, "print-instr", "prints the current instruction") orelse false;
@@ -31,6 +31,10 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addOptions("config", options);
 
+    // Generates the tree structure of the std
+    // const std_tree = try generate_std_tree(b);
+    // exe.root_module.addOptions("std_tree", std_tree);
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -43,7 +47,9 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    // --------
     // For ZLS
+    // --------
     const exe_check = b.addExecutable(.{
         .name = "foo",
         .root_source_file = b.path("src/main.zig"),
@@ -51,6 +57,7 @@ pub fn build(b: *std.Build) void {
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
     exe_check.root_module.addOptions("config", options);
+    // exe_check.root_module.addOptions("std_tree", std_tree);
 
     // These two lines you might want to copy
     // (make sure to rename 'exe_check')
@@ -122,4 +129,31 @@ fn get_stage_from_file(file_path: []const u8) Stage {
         .vm
     else
         .all;
+}
+
+/// Generates the filetree of std to pass it to BuiltinAnalyzer in comptime
+/// We don't have access to allocators in comptime outside the build.zig file
+fn generate_std_tree(b: *std.Build) !*std.Build.Step.Options {
+    var tree = std.ArrayList([]const u8).init(b.allocator);
+    var options = b.addOptions();
+
+    // Add all files names in the src folder to `files`
+    const path = try std.fs.path.join(b.allocator, &.{ "src", "std" });
+    defer b.allocator.free(path);
+
+    var dir = try std.fs.cwd().openDir(path, .{ .iterate = true });
+    defer dir.close();
+
+    var walker = try dir.walk(b.allocator);
+    defer walker.deinit();
+
+    while (try walker.next()) |*entry| {
+        try tree.append(b.dupe(entry.path));
+    }
+
+    // Add the file names as an option to the exe, making it available
+    // as a string array at comptime in main.zig
+    options.addOption([]const []const u8, "tree", try tree.toOwnedSlice());
+
+    return options;
 }

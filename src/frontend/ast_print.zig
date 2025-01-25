@@ -50,6 +50,7 @@ pub const AstPrinter = struct {
             .Discard => |*s| self.discard(s),
             .FnDecl => |*s| self.fn_decl(s),
             .Print => |*s| self.print_stmt(s),
+            .Use => |*s| self.use_stmt(s),
             .VarDecl => |*s| self.var_decl(s),
             .While => |*s| self.while_stmt(s),
             .Expr => |s| self.expression(s),
@@ -127,6 +128,21 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
         try self.expression(stmt.expr);
         self.indent_level -= 1;
+    }
+
+    fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Use ", .{});
+
+        for (stmt.module, 0..) |m, i| {
+            try writer.print("{s}", .{m.text});
+
+            if (i < stmt.module.len - 1) {
+                try writer.print(" ", .{});
+            }
+        }
+        try writer.print("]\n", .{});
     }
 
     fn var_decl(self: *Self, stmt: *const Ast.VarDecl) !void {

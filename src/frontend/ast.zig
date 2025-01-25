@@ -34,6 +34,7 @@ pub const Stmt = union(enum) {
     Discard: Discard,
     FnDecl: FnDecl,
     Print: Print,
+    Use: Use,
     VarDecl: VarDecl,
     While: While,
     Expr: *Expr,
@@ -50,6 +51,7 @@ pub const Stmt = union(enum) {
                 .end = s.name.start + s.name.text.len,
             },
             .Print => |s| s.expr.span(),
+            .Use => |s| s.span,
             // NOTE: wrong, but sufficient
             .VarDecl => |s| .{
                 .start = s.name.start,
@@ -88,6 +90,11 @@ pub const Parameter = struct {
 
 pub const Print = struct {
     expr: *const Expr,
+};
+
+pub const Use = struct {
+    module: []const SourceSlice,
+    span: Span,
 };
 
 pub const VarDecl = struct {

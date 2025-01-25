@@ -227,6 +227,8 @@ pub const Parser = struct {
             return self.var_declaration(false);
         } else if (self.match(.Underscore)) {
             return self.discard();
+        } else if (self.match(.Use)) {
+            return self.use();
         } else {
             return self.statement();
         }
@@ -334,6 +336,22 @@ pub const Parser = struct {
                 .expr = try self.parse_precedence_expr(0),
             },
         };
+    }
+
+    fn use(self: *Self) !Stmt {
+        var span = self.prev().span;
+        var list = ArrayList(SourceSlice).init(self.allocator);
+
+        while (self.match(.Identifier) and !self.check(.Eof)) {
+            try list.append(SourceSlice.from_token(self.prev(), self.source));
+
+            if (self.match(.Dot)) continue;
+            break;
+        }
+
+        span.end = self.prev().span.end;
+
+        return .{ .Use = .{ .module = try list.toOwnedSlice(), .span = span } };
     }
 
     fn statement(self: *Self) !Stmt {

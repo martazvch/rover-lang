@@ -18,6 +18,10 @@ const TypeInfo = TypeSys.TypeInfo;
 const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const GenReport = @import("../reporter.zig").GenReport;
+const BA = @import("builtins_analyzer.zig");
+const BuiltinAnalyzer = BA.BuiltinAnalyzer;
+const FnDeclaration = BA.FnDeclaration;
+const builtin_init = BA.init;
 
 // Re-export constants
 const Void = TypeSys.Void;
@@ -30,6 +34,7 @@ const Str = TypeSys.Str;
 pub const TypeManager = struct {
     declared: StringHashMap(Type),
     type_infos: ArrayList(TypeInfo),
+    builtins: BuiltinAnalyzer = builtin_init(),
 
     const Self = @This();
     const Error = error{TooManyTypes} || std.fmt.BufPrintError || Allocator.Error;
@@ -55,8 +60,11 @@ pub const TypeManager = struct {
         self.type_infos.deinit();
     }
 
-    pub fn add_info(self: *Self, info: TypeInfo) !TypeSys.Value {
-        try self.type_infos.append(info);
+    /// Adds information about a type. Requires the kind and extra info, the value (aka
+    /// index in information array) is computed in the function.
+    /// Returns the complete type
+    pub fn reserve_info(self: *Self) !TypeSys.Value {
+        try self.type_infos.append(undefined);
         const count = self.type_infos.items.len - 1;
 
         return if (count == std.math.maxInt(TypeSys.Value))
@@ -65,9 +73,58 @@ pub const TypeManager = struct {
             @intCast(count);
     }
 
-    /// Set type information at a specific index in list (index gave by *add_info* method)
+    /// Set type information at a specific index in list (index gave by *reserve_info* method)
     pub inline fn set_info(self: *Self, index: usize, info: TypeInfo) void {
         self.type_infos.items[index] = info;
+    }
+
+    /// Declares a new type built with `kind` and `extra` parameters and add the informations
+    pub fn declare(
+        self: *Self,
+        name: []const u8,
+        kind: TypeSys.Kind,
+        extra: TypeSys.Extra,
+        info: TypeInfo,
+    ) !TypeSys.Type {
+        const count = self.type_infos.items.len;
+
+        // Error
+        if (count == std.math.maxInt(TypeSys.Value)) return error.TooManyTypes;
+
+        const type_ = TypeSys.create(kind, extra, @intCast(count));
+        try self.type_infos.append(info);
+
+        try self.declared.put(name, type_);
+
+        return type_;
+    }
+
+    /// Use builtins function whose informations are gathered at compile time. Import the
+    /// informations among other declared types
+    /// Take a reference to the `Analyzer` because we declare the functions into the global
+    /// scope at the same time
+    /// *WARNING*: for now, only import std.time
+    // pub fn import_builtins(self: *Self, analyzer: *Analyzer) !std.StaticStringMap(FnDeclaration) {
+    pub fn import_builtins(self: *Self) !std.StaticStringMap(FnDeclaration) {
+        // const time_module = self.builtins.declarations.get("time").?;
+        return self.builtins.declarations.get("time").?;
+
+        // for (time_module.keys()) |fn_name| {
+        //     const func = time_module.get(fn_name).?;
+        //
+        //     const info: TypeInfo = .{ .Fn = .{
+        //         .arity = func.arity,
+        //         .params = func.params,
+        //         .return_type = func.return_type,
+        //         .builtin = true,
+        //     } };
+        //
+        //     // Declare the type and additional informations
+        //     const type_ = try self.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
+        //
+        //     const variable = try analyzer.declare_variable(fn_name, type_, true);
+        //
+        // }
     }
 
     // NOTE:
@@ -245,6 +302,7 @@ pub const Analyzer = struct {
         } else {
             if (self.globals.items.len == 0) return false;
 
+            // TODO: reverse order, user tend to used recently declared variables
             for (self.globals.items) |*glob| {
                 if (glob.name.len == name.len and std.mem.eql(u8, glob.name, name)) {
                     return true;
@@ -328,6 +386,7 @@ pub const Analyzer = struct {
             .Discard => |*s| try self.discard(s),
             .FnDecl => |*s| try self.fn_declaration(s),
             .Print => |*s| _ = try self.expression(s.expr),
+            .Use => |*s| try self.use_stmt(s),
             .VarDecl => |*s| try self.var_declaration(s),
             .While => |*s| try self.while_stmt(s),
             .Expr => |e| final = try self.expression(e),
@@ -396,10 +455,11 @@ pub const Analyzer = struct {
         // Check in current scope
         const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
 
-        const type_idx = try self.type_manager.add_info(undefined);
-        const fn_type = TypeSys.create(TypeSys.Fn, type_idx);
-
+        // We declare before body for recursion. We need to correct type to check those recursions
+        const type_idx = try self.type_manager.reserve_info();
+        const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
         const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
+
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
 
@@ -451,7 +511,9 @@ pub const Analyzer = struct {
             params_type[i] = param_type;
         }
 
-        // Body
+        // ------
+        //  Body
+        // ------
         try self.states.append(.{ .in_fn = true });
         const prev_state = self.last_state();
 
@@ -513,7 +575,6 @@ pub const Analyzer = struct {
             .arity = stmt.arity,
             .params = params_type,
             .return_type = return_type,
-            .builtin = false,
         } });
 
         self.analyzed_stmts.items[idx] = .{
@@ -522,6 +583,47 @@ pub const Analyzer = struct {
                 .return_kind = return_kind,
             },
         };
+    }
+
+    fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
+        if (std.mem.eql(u8, stmt.module[0].text, "std")) {
+            if (std.mem.eql(u8, stmt.module[1].text, "time")) {
+                // return self.type_manager.import_builtins(self);
+
+                const module = try self.type_manager.import_builtins();
+                const all_fn_names = module.keys();
+
+                var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
+                var all_var = try ArrayList(AnalyzedAst.Variable).initCapacity(self.allocator, all_fn_names.len);
+
+                for (all_fn_names) |fn_name| {
+                    const func = module.get(fn_name).?;
+
+                    const info: TypeInfo = .{ .Fn = .{
+                        .arity = func.arity,
+                        .params = func.params,
+                        .return_type = func.return_type,
+                        .builtin = true,
+                    } };
+
+                    // Declare the type and additional informations
+                    const type_ = try self.type_manager.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
+                    // Declare the variable
+                    const variable = try self.declare_variable(fn_name, type_, true);
+
+                    // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
+                    all_ptr.appendAssumeCapacity(@intCast(func.index));
+                    all_var.appendAssumeCapacity(variable);
+                }
+
+                try self.analyzed_stmts.append(.{ .Use = .{
+                    .variables = try all_var.toOwnedSlice(),
+                    .indices = try all_ptr.toOwnedSlice(),
+                } });
+            }
+        }
+
+        // TODO: Unknown import
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
@@ -720,6 +822,7 @@ pub const Analyzer = struct {
             }
         }
 
+        // TODO: in reverse? People tend to use latest declared variables
         for (self.globals.items) |*glob| {
             if (std.mem.eql(u8, glob.name, expr.name)) {
                 if (initialized and !glob.initialized) {

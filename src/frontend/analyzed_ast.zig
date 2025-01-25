@@ -7,7 +7,7 @@ const Span = @import("ast.zig").Span;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 
-pub const Scope = enum { Global, Local };
+pub const Scope = enum { Builtin, Global, Local };
 pub const ReturnKind = enum { Explicit, ImplicitValue, ImplicitVoid };
 
 pub const AnalyzedStmt = union(enum) {
@@ -18,6 +18,7 @@ pub const AnalyzedStmt = union(enum) {
     FnDecl: FnDecl,
     If: If,
     Unary: Unary,
+    Use: Use,
     Variable: Variable,
 };
 
@@ -68,6 +69,13 @@ pub const If = struct {
 
 pub const Unary = struct {
     type_: Type,
+};
+
+pub const Use = struct {
+    /// Variable informations for each imported element
+    variables: []const Variable,
+    /// Indices of builtin functions pointer
+    indices: []const u8,
 };
 
 pub const Variable = struct {

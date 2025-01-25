@@ -12,11 +12,13 @@ const Value = @import("../runtime/values.zig").Value;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 const ObjString = @import("../runtime/obj.zig").ObjString;
 const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
+const ObjNativeFn = @import("../runtime/obj.zig").ObjNativeFn;
 const AnalyzedAst = @import("../frontend/analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const UnsafeIter = @import("../unsafe_iter.zig").UnsafeIter;
 const TypeSys = @import("../frontend/type_system.zig");
 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
+const NativeFn = @import("../std/meta.zig").NativeFn;
 
 const Null = TypeSys.Null;
 const Int = TypeSys.Int;
@@ -26,6 +28,7 @@ const Str = TypeSys.Str;
 
 pub const CompilationManager = struct {
     vm: *Vm,
+    natives: []const NativeFn,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
     stmts: []const Ast.Stmt,
@@ -41,6 +44,7 @@ pub const CompilationManager = struct {
 
     pub fn init(
         vm: *Vm,
+        natives: []const NativeFn,
         stmts: []const Ast.Stmt,
         analyzed_stmts: []const AnalyzedStmt,
         print_bytecode: bool,
@@ -49,6 +53,7 @@ pub const CompilationManager = struct {
     ) Self {
         return .{
             .vm = vm,
+            .natives = natives,
             .compiler = undefined,
             .errs = ArrayList(CompilerReport).init(vm.allocator),
             .stmts = stmts,
@@ -227,6 +232,7 @@ const Compiler = struct {
             },
             .FnDecl => |*s| self.fn_declaration(s),
             .Print => |*s| self.print_stmt(s),
+            .Use => |*s| self.use_stmt(s),
             .VarDecl => |*s| self.var_declaration(s),
             .While => |*s| self.while_stmt(s),
             .Expr => |expr| self.expression(expr),
@@ -291,6 +297,21 @@ const Compiler = struct {
     fn print_stmt(self: *Self, stmt: *const Ast.Print) !void {
         try self.expression(stmt.expr);
         try self.get_chunk().write_op(.Print, stmt.expr.span().start);
+    }
+
+    fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
+        const extra = self.get_next_analyzed().Use;
+
+        for (extra.indices) |i| {
+            try self.emit_constant(
+                Value.obj(
+                    (try ObjNativeFn.create(self.manager.vm, self.manager.natives[i]))
+                        .as_obj(),
+                ),
+                stmt.span.start,
+            );
+            try self.define_variable(&extra.variables[i], stmt.span.start);
+        }
     }
 
     fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {

@@ -1,7 +1,7 @@
 // Types are 32 bits long
 pub const Type = u32;
 
-// 4 first bytes (16 values) are for:
+// 4 first bits (16 values) are for:
 pub const Kind = u4;
 pub const Var: Kind = 0;
 pub const Fn: Kind = 1;
@@ -12,6 +12,67 @@ pub const HashMap: Kind = 5;
 pub const Nullable: Kind = 6;
 pub const Ptr: Kind = 7;
 pub const Error: Kind = 8;
+
+// 4 next bits are for extra infos:
+pub const Extra = u4;
+pub const Builtin = 0;
+
+// 24 other allow 16777215 different types
+pub const Value = u24;
+pub const Void: Value = 0;
+pub const Null: Value = 1;
+pub const Int: Value = 2;
+pub const Float: Value = 3;
+pub const Bool: Value = 4;
+pub const Str: Value = 5;
+
+/// Creates a type from kind and value information
+pub fn create(kind: Kind, extra: Extra, value: Value) Type {
+    return @as(Type, kind) << 28 | @as(Type, extra) << 24 | value;
+}
+
+/// Get a type kind, discarding extra and value information bits
+pub fn get_kind(type_: Type) Kind {
+    return @as(Kind, @intCast(type_ >> 28));
+}
+
+// We shift to get the lase 8bits. After, we want the first 4bits
+//  value: x x x x  x x x x
+//  mask:  0 0 0 0  1 1 1 1  -> 15 -> 0xf
+/// Get extra information bits about a type
+pub fn get_extra(type_: Type) Extra {
+    return @as(Extra, @as(u8, @intCast(type_ >> 24)) | 0xf);
+}
+
+// Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
+// all to one and mask it
+/// Extract the value bits associated to a type
+pub fn get_value(type_: Type) Value {
+    return @as(Value, @intCast(type_ & 0xffffff));
+}
+
+/// Checks if a type is of a certain kind
+pub fn is(type_: Type, kind: Kind) bool {
+    return get_kind(type_) == kind;
+}
+
+/// Checks if a type is a builtin one, regardless of the kind
+pub fn is_builtin(type_: Type) bool {
+    const extra = get_extra(type_);
+    return extra == Builtin;
+}
+
+// Custom types
+pub const TypeInfo = union(enum) {
+    Fn: FnInfo,
+};
+
+pub const FnInfo = struct {
+    arity: usize,
+    params: [256]Type,
+    return_type: Type,
+    builtin: bool = false,
+};
 
 pub fn str_kind(kind: Kind) []const u8 {
     return switch (kind) {
@@ -27,49 +88,6 @@ pub fn str_kind(kind: Kind) []const u8 {
         else => unreachable,
     };
 }
-
-// 28 other allow 268435455 different types
-pub const Value = u28;
-pub const Void: Value = 0;
-pub const Null: Value = 1;
-pub const Int: Value = 2;
-pub const Float: Value = 3;
-pub const Bool: Value = 4;
-pub const Str: Value = 5;
-
-/// Checks if a type is of a certain kind
-pub inline fn is(type_: Type, kind: Kind) bool {
-    return get_kind(type_) == kind;
-}
-
-/// Creates a type from kind and value information
-pub inline fn create(kind: Kind, value: Value) Type {
-    return @as(Type, kind) << 28 | value;
-}
-
-// 0xff -> 31
-// 0x0f -> 15
-// 0x7f -> 27 for the 28th first bits
-/// Extract the value associated to a type, whatever kind it is
-pub inline fn get_value(type_: Type) Value {
-    return @as(Value, @intCast(type_ & 0x7f));
-}
-
-pub inline fn get_kind(type_: Type) Kind {
-    return @as(Kind, @intCast(type_ >> 28));
-}
-
-// Custom types
-pub const TypeInfo = union(enum) {
-    Fn: FnInfo,
-};
-
-pub const FnInfo = struct {
-    arity: usize,
-    params: [256]Type,
-    return_type: Type,
-    builtin: bool,
-};
 
 test "types" {
     const expect = @import("std").testing.expect;

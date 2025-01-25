@@ -137,6 +137,7 @@ pub const ReplPipeline = struct {
         // Compiler
         var compiler = CompilationManager.init(
             &self.vm,
+            self.analyzer.type_manager.builtins.functions,
             parser.stmts.items,
             self.analyzer.analyzed_stmts.items[self.stmts_count..],
             self.config.print_bytecode,
@@ -234,6 +235,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     // Compiler
     var compiler = CompilationManager.init(
         &vm,
+        analyzer.type_manager.builtins.functions,
         parser.stmts.items,
         analyzer.analyzed_stmts.items,
         config.print_bytecode,

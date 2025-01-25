@@ -6,6 +6,7 @@ const config = @import("config");
 const Vm = @import("vm.zig").Vm;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;
+const NativeFn = @import("../std/meta.zig").NativeFn;
 
 pub const Obj = struct {
     kind: ObjKind,
@@ -222,9 +223,6 @@ pub const ObjFunction = struct {
         allocator.destroy(self);
     }
 };
-//
-// Many item pointer for args?
-pub const NativeFn = *const fn ([]const Value) Value;
 
 pub const ObjNativeFn = struct {
     obj: Obj,
