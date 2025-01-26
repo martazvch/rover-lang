@@ -134,6 +134,8 @@ pub const Analyzer = struct {
     states: ArrayList(State),
     arena: std.heap.ArenaAllocator,
     allocator: Allocator,
+    /// Offset updated at each fn call, emulate the frame pointer at runtime
+    local_offset: usize,
 
     const Self = @This();
     const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
@@ -177,6 +179,7 @@ pub const Analyzer = struct {
         self.repl = repl;
         self.main = null;
         self.states = ArrayList(State).init(self.allocator);
+        self.local_offset = 0;
     }
 
     pub fn deinit(self: *Self) void {
@@ -328,7 +331,7 @@ pub const Analyzer = struct {
             try self.globals.append(variable);
             return .{ .index = index, .scope = .Global };
         } else {
-            const index = self.locals.items.len;
+            const index = self.locals.items.len - self.local_offset;
             variable.index = index;
 
             try self.locals.append(variable);
@@ -446,15 +449,12 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
 
-        // Temporary locals to imitate function's frame at runtime, locals start at 0
-        // TODO: store an offset in states stack? To see how it behaves with upvalues
-        // and closures
-        const locals_save = self.locals;
-        self.locals = ArrayList(Variable).init(self.allocator);
+        // Stores the previous offset
+        const local_offset_save = self.local_offset;
+        self.local_offset = self.locals.items.len;
 
         // Switch back to locals before function call
-        errdefer self.locals = locals_save;
-        errdefer self.locals.deinit();
+        errdefer self.local_offset = local_offset_save;
 
         // We add a empty variable to anticipate the function it self on the stack. Here,
         // it's declared in the outter scope to allow create a new function with the same name
@@ -493,6 +493,13 @@ pub const Analyzer = struct {
             _ = try self.declare_variable(stmt.params[i].name.text, param_type, true);
             params_type[i] = param_type;
         }
+
+        // Set all the informations now that we have every thing
+        self.type_manager.set_info(type_idx, .{ .Fn = .{
+            .arity = stmt.arity,
+            .params = params_type,
+            .return_type = return_type,
+        } });
 
         // ------
         //  Body
@@ -546,8 +553,7 @@ pub const Analyzer = struct {
         _ = try self.end_scope();
 
         // Switch back to locals before function call
-        self.locals.deinit();
-        self.locals = locals_save;
+        self.local_offset = local_offset_save;
 
         const state = self.states.pop();
 
@@ -557,13 +563,6 @@ pub const Analyzer = struct {
             .ImplicitVoid
         else
             .ImplicitValue;
-
-        // TODO: why one have a set method and not analyzed_stmts?
-        self.type_manager.set_info(type_idx, .{ .Fn = .{
-            .arity = stmt.arity,
-            .params = params_type,
-            .return_type = return_type,
-        } });
 
         self.analyzed_stmts.items[idx] = .{
             .FnDecl = .{
@@ -722,12 +721,6 @@ pub const Analyzer = struct {
         var final: Type = Void;
 
         for (expr.stmts, 0..) |*s, i| {
-            // Try to analyze the whole block
-            // final = self.statement(s) catch |e| switch (e) {
-            //     error.Err => continue,
-            //     else => return e,
-            // };
-
             final = try self.statement(s);
 
             if (final != Void and i != expr.stmts.len - 1) {

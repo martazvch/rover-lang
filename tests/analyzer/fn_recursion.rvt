@@ -1,0 +1,43 @@
+// Test to see if there is no problem with recursion
+
+// Global
+
+code:
+fn add(a: int, b: float) -> int {
+    add(a, b)
+}
+
+fn main() { }
+
+expect:
+[Fn declaration, scope Global, index 0, return ImplicitValue]
+[Variable scope Global, index 0]
+[Fn call, casts: []]
+// Args
+[Variable scope Local, index 1]
+[Variable scope Local, index 2]
+
+[Fn declaration, scope Global, index 1, return ImplicitVoid]
+
+================
+
+// Local
+
+code:
+fn main() {
+    fn add(a: int, b: float) -> int {
+        add(a, b)
+    }
+}
+
+expect:
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
+[Fn declaration, scope Local, index 1, return ImplicitValue]
+[Variable scope Local, index 1]
+[Fn call, casts: []]
+// Args
+[Variable scope Local, index 1]
+[Variable scope Local, index 2]
+
+================
+
