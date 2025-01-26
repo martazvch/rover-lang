@@ -520,8 +520,8 @@ pub const Analyzer = struct {
         if (body_type != return_type) {
             return self.err(
                 .{ .IncompatibleFnType = .{
-                    .found = self.type_manager.str(body_type),
                     .expect = self.type_manager.str(return_type),
+                    .found = self.type_manager.str(body_type),
                 } },
                 stmt.body.span,
             );

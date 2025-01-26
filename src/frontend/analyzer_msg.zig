@@ -7,7 +7,7 @@ pub const AnalyzerMsg = union(enum) {
     FloatEqual,
     FloatEqualCast,
     IncompatibleIfType: struct { found1: []const u8, found2: []const u8 },
-    IncompatibleFnType: struct { found: []const u8, expect: []const u8 },
+    IncompatibleFnType: struct { expect: []const u8, found: []const u8 },
     InvalidArithmetic: struct { found: []const u8 },
     InvalidAssignTarget,
     InvalidAssignType: struct { expect: []const u8, found: []const u8 },

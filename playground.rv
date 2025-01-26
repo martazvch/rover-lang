@@ -1,17 +1,5 @@
-fn main() {
-    {
-        use std._test1
-        print _cast_f2i(false, 3.)
-    }
-    {
-        var tmp = 1
-        use std._test1
-        print _cast_i2f(56)
-    }
+use std._test1
 
-    // Reimport locally
-    use std._test1
-    {
-        use std._test1
-    }
+fn main() {
+    _cast_i2f(3.5)
 }

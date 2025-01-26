@@ -108,8 +108,8 @@ fn main() {}
 error:
 VoidParam
 DuplicateParam, arg1
-IncompatibleFnType, bool, int
-IncompatibleFnType, int, void
+IncompatibleFnType, int, bool
+IncompatibleFnType, void, int
 AlreadyDeclared, bis
 
 ================

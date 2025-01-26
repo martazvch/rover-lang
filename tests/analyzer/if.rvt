@@ -186,7 +186,7 @@ fn main() {
 
 error:
 UnusedValue
-IncompatibleFnType, float, void
+IncompatibleFnType, void, float
 
 ================
 
