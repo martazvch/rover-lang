@@ -151,8 +151,12 @@ pub const Analyzer = struct {
     };
 
     const State = struct {
-        in_control_flow: bool = false,
-        in_fn: bool = false,
+        /// in a context that allow partially returning a value
+        allow_partial: bool = true,
+        // in_fn: bool = false,
+        /// Current function's type
+        fn_type: Type = 0,
+        /// Flag to tell if last statement returned from scope
         returns: bool = false,
     };
 
@@ -370,7 +374,12 @@ pub const Analyzer = struct {
     }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
+        const state = self.last_state();
+        const last = state.allow_partial;
+        state.allow_partial = false;
+
         const value_type = try self.expression(stmt.value);
+        state.allow_partial = last;
 
         if (value_type == Void) {
             return self.err(.VoidAssignment, stmt.value.span());
@@ -488,7 +497,7 @@ pub const Analyzer = struct {
         // ------
         //  Body
         // ------
-        try self.states.append(.{ .in_fn = true });
+        try self.states.append(.{ .fn_type = return_type });
         const prev_state = self.last_state();
 
         var body_type: Type = Void;
@@ -497,9 +506,14 @@ pub const Analyzer = struct {
 
         // We don't use block because we don't want to emit extra data from the block
         for (stmt.body.stmts, 0..) |*s, i| {
-            // We don't skip compilation for now
+            // If previous statement returned, it's only dead code now
             if (prev_state.returns) {
                 try self.warn(.DeadCode, stmt.body.stmts[i - 1].span());
+            }
+
+            // If last statement, we don't allow partial anymore (for return)
+            if (i == stmt.body.stmts.len - 1) {
+                prev_state.allow_partial = false;
             }
 
             // We try to analyze the whole body
@@ -613,7 +627,12 @@ pub const Analyzer = struct {
         var initialized = false;
 
         if (stmt.value) |v| {
+            const state = self.last_state();
+            const last = state.allow_partial;
+            state.allow_partial = false;
+
             const value_type = try self.expression(v);
+            state.allow_partial = last;
 
             // Void assignment check
             if (value_type == Void) {
@@ -839,66 +858,90 @@ pub const Analyzer = struct {
             expr.condition.span(),
         );
 
+        var then_return: bool = false;
+        var else_return: bool = false;
+
         const then_type = try self.statement(&expr.then_body);
+        var final_type = then_type;
+
+        // State managment
+        const state = self.last_state();
+
+        // If we hit a return, we transfert it first to the then branch
+        if (state.returns) {
+            // Reset return  for else branch
+            state.returns = false;
+            then_return = true;
+            // As we exit scope, we don't return any type (checked in return_expr)
+            final_type = Void;
+        }
 
         var else_type: Type = Void;
         if (expr.else_body) |*body| {
             else_type = try self.statement(body);
-        } else if (then_type != Void) {
-            // If there is no else body but the then returns a value
-            // it's an error because not all paths return a value
+
+            // If it returns
+            if (state.returns) {
+                else_return = true;
+                // If not then, unmark as globally returning from scope
+                if (!then_return) state.returns = false;
+            } else if (then_return) {
+                // If else only then branch returns, final_type becomes else branch
+                final_type = else_type;
+            }
+
+            // Type coherence. If branches don't exit scope and branches have
+            // diffrent types
+            if (!then_return and !else_return and then_type != else_type) {
+                if (then_type == Int and else_type == Float) {
+                    extra.cast = .Then;
+
+                    try self.warn(
+                        AnalyzerMsg.implicit_cast("then branch", "float"),
+                        expr.then_body.span(),
+                    );
+                } else if (then_type == Float and else_type == Int) {
+                    extra.cast = .Else;
+
+                    // Safe unsafe access, if there is a non void type
+                    // there is an else body
+                    try self.warn(
+                        AnalyzerMsg.implicit_cast("else branch", "float"),
+                        expr.else_body.?.span(),
+                    );
+                } else {
+                    return self.err(
+                        .{ .IncompatibleIfType = .{
+                            .found1 = self.type_manager.str(then_type),
+                            .found2 = self.type_manager.str(else_type),
+                        } },
+                        expr.span,
+                    );
+                }
+            }
+        } else if (then_type != Void and !state.allow_partial) {
             return self.err(
                 .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
                 expr.span,
             );
         }
 
-        if (then_type != else_type) {
-            if (then_type == Int and else_type == Float) {
-                extra.cast = .Then;
-
-                try self.warn(
-                    AnalyzerMsg.implicit_cast("then branch", "float"),
-                    expr.then_body.span(),
-                );
-            } else if (then_type == Float and else_type == Int) {
-                extra.cast = .Else;
-
-                // Safe unsafe access, if there is a non void type
-                // there is an else body
-                try self.warn(
-                    AnalyzerMsg.implicit_cast("else branch", "float"),
-                    expr.else_body.?.span(),
-                );
-            } else {
-                return self.err(
-                    .{ .IncompatibleIfType = .{
-                        .found1 = self.type_manager.str(then_type),
-                        .found2 = self.type_manager.str(else_type),
-                    } },
-                    expr.span,
-                );
-            }
-        }
-
         self.analyzed_stmts.items[idx] = .{ .If = extra };
 
-        return then_type;
+        return final_type;
     }
 
     fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
+        const return_type = if (expr.expr) |val| try self.expression(val) else Void;
         var state = self.last_state();
 
-        // For now, no need, we first check for unpure expressions so here
-        // we are in a function, if not in global scope we are mandatory in
-        // a function
+        if (state.fn_type != return_type) {
+            // TODO: err
+            std.debug.print("INCOMPATIBLE RETURN TYPE\n", .{});
+        }
 
-        // if (state.in_fn) {
         state.returns = true;
-        return if (expr.expr) |val| self.expression(val) else Void;
-        // } else {
-        //     return self.err(.ReturnOutsideFn, expr.span);
-        // }
+        return return_type;
     }
 
     fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

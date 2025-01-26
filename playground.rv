@@ -1,5 +1,13 @@
-use std._test1
+use std.time
+
+fn fib(n: int) -> int {
+    if n < 2 do return n
+
+    return fib(n-2) + fib(n-1)
+}
 
 fn main() {
-    _cast_i2f(3.5)
+    var start = clock()
+    print fib(35)
+    print clock() - start
 }

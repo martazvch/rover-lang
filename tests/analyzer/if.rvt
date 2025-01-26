@@ -122,6 +122,27 @@ NonBoolCond, if, int
 
 ================
 
+// Partial return value
+
+code:
+fn main() {
+    fn add() -> int {
+        if true do return 1
+        2
+    }
+    _ = add()
+}
+
+
+error:
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
+[If cast Then]
+[Block pop count 0]
+[If cast None]
+[Block pop count 0]
+
+================
+
 // Missing else
 code:
 fn main() {
