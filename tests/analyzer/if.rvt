@@ -134,12 +134,14 @@ fn main() {
 }
 
 
-error:
+expect:
 [Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast Then]
-[Block pop count 0]
+[Fn declaration, scope Local, index 1, return ImplicitValue]
 [If cast None]
-[Block pop count 0]
+
+// Call
+[Variable scope Local, index 1]
+[Fn call, casts: []]
 
 ================
 

@@ -723,10 +723,12 @@ pub const Analyzer = struct {
 
         for (expr.stmts, 0..) |*s, i| {
             // Try to analyze the whole block
-            final = self.statement(s) catch |e| switch (e) {
-                error.Err => continue,
-                else => return e,
-            };
+            // final = self.statement(s) catch |e| switch (e) {
+            //     error.Err => continue,
+            //     else => return e,
+            // };
+
+            final = try self.statement(s);
 
             if (final != Void and i != expr.stmts.len - 1) {
                 return self.err(.UnusedValue, s.span());
@@ -936,8 +938,13 @@ pub const Analyzer = struct {
         var state = self.last_state();
 
         if (state.fn_type != return_type) {
-            // TODO: err
-            std.debug.print("INCOMPATIBLE RETURN TYPE\n", .{});
+            return self.err(
+                .{ .IncompatibleFnType = .{
+                    .expect = self.type_manager.str(state.fn_type),
+                    .found = self.type_manager.str(return_type),
+                } },
+                expr.span,
+            );
         }
 
         state.returns = true;

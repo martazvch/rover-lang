@@ -1,0 +1,145 @@
+// If epxressions with return scenarios
+
+// Extras
+
+code:
+fn main() {
+    // Only one path produces a value
+    var a = if true { return } else 4
+    var b = if false do 5 else return
+
+    fn func(a: int) -> int {
+        // Only one path generates a value, returns a value otherwise
+        print if true do "str" else return a
+
+        var tmp: str = if true do return a + 2 else {
+            var local = 56.4
+            "champ"
+        }
+
+        // If without else but not as last stmt
+        if true do return 8
+
+        return if true {
+            if true {
+                return { 1 }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3
+            } else 8
+        }
+    }
+}
+
+expect:
+[Fn declaration, scope Global, index 0, return ImplicitVoid]
+[If cast None]
+[Block pop count 0]
+[Variable scope Local, index 1]
+
+[If cast None]
+[Variable scope Local, index 2]
+
+[Fn declaration, scope Local, index 3, return Explicit]
+[If cast None]
+[Variable scope Local, index 1]
+
+[If cast None]
+[Binop cast None, type int]
+[Variable scope Local, index 1]
+[Block pop count 1]
+// Definition of "local"
+[Variable scope Local, index 2]
+
+// Definition of tmp
+[Variable scope Local, index 2]
+
+// If without else
+[If cast None]
+
+[If cast None]
+[Block pop count 0]
+[If cast None]
+[Block pop count 0]
+[Block pop count 0]
+
+// Else
+[Block pop count 0]
+[If cast None]
+[Block pop count 0]
+[If cast None]
+[Block pop count 0]
+
+================
+
+code:
+fn main() {
+    // First error, retuns an int
+    var a = if true { return 1 } else 4
+    // Second, same with str
+    var b = if false do 5 else return "oui"
+
+    // If without else in non-partial context
+    var c = if true do 6
+
+    fn func(a: int, b: float) -> int {
+        // Returns b, which is a float
+        print if true do "str" else return b
+
+        var tmp: str = if true do return a + 2 else {
+            var local = 56.4
+            if false do "champ"
+        }
+
+        return if true {
+            if true {
+                return { 1. }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3
+            } else 8
+        }
+    }
+
+    fn func2() -> int {
+        return if true {
+            if true {
+                return { 1 }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3.6
+            } else 8
+        }
+    }
+}
+
+error:
+IncompatibleFnType, void, int
+IncompatibleFnType, void, str
+
+// Partial if
+MissingElseClause, int
+
+// func return
+IncompatibleFnType, int, float
+
+// Partial if for tmp
+MissingElseClause, str
+
+// Nested if
+IncompatibleFnType, int, float
+// Here void because first nested return invalidates the whole if
+// so analyze produces a "void" for then branch that is incompatible
+// from function return type. After that, the else branch is skipped
+IncompatibleFnType, int, void
+
+// Func 2, very nested type error
+IncompatibleFnType, int, float
+// Same, because of first error, resulting type is void, so new error
+IncompatibleFnType, int, void
+
+================
+
