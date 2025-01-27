@@ -1,0 +1,24 @@
+fn add(a: int, b: int) -> int {
+    a + b
+}
+
+fn main() {
+    var f = add
+    var name = "theprimeagen"
+    print name // expect: "theprimeagen"
+
+    print f(4, -9) // expect: -5
+
+    // Local function
+    var arg1 = 9
+
+    fn sub(a: int, b: float) -> float {
+        a - b
+    }
+
+    var f2 = sub
+    print name // expect: "theprimeagen"
+    var arg2 = 2.5
+
+    print f2(arg1, arg2) // expect: 6.5
+}

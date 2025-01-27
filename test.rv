@@ -7,7 +7,9 @@ fn fib(n: int) -> int {
 }
 
 fn main() {
-    var start = clock()
-    print fib(35)
-    print clock() - start
+    var tmp = fib
+
+    var name = "theprimeagen"
+    print name
+    print tmp(4)
 }
