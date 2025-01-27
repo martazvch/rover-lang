@@ -1,8 +1,13 @@
+use std.time
+
+fn fib(n: int) -> int {
+    if n < 2 do return n
+
+    fib(n-2) + fib(n-1)
+}
+
 fn main() {
-    fn add(a: int) -> int {
-        _=if a < 10 do add(a+1)
-        a
-    }
-    
-    print add(1)
+    var start = clock()
+    print fib(35)
+    print clock() - start
 }

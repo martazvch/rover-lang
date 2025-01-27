@@ -87,7 +87,6 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
 fn dis_function(allocator: Allocator, function: *const ObjFunction, writer: anytype) !void {
     for (0..function.chunk.constant_count) |i| {
         const cte = &function.chunk.constants[i];
-
         if (cte.* == .Obj) {
             const obj = cte.Obj;
 

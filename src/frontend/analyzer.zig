@@ -799,7 +799,9 @@ pub const Analyzer = struct {
         if (self.locals.items.len > 0) {
             var idx = self.locals.items.len;
 
-            while (idx > 0) : (idx -= 1) {
+            // while (idx > 0) : (idx -= 1) {
+            // NOTE: for now, can't see outside function's frame
+            while (idx > self.local_offset) : (idx -= 1) {
                 const local = &self.locals.items[idx - 1];
 
                 if (std.mem.eql(u8, local.name, expr.name)) {

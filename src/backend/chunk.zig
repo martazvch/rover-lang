@@ -58,6 +58,7 @@ pub const Chunk = struct {
     code: ArrayList(u8),
     offsets: ArrayList(usize),
     constants: [CONST_MAX]Value,
+    // constants: ArrayList(Value),
     constant_count: u8,
 
     const Self = @This();
@@ -68,6 +69,7 @@ pub const Chunk = struct {
         return .{
             .code = ArrayList(u8).init(allocator),
             .offsets = ArrayList(usize).init(allocator),
+            // .constants = ArrayList(Value).init(allocator),
             .constants = undefined,
             .constant_count = 0,
         };
@@ -90,8 +92,12 @@ pub const Chunk = struct {
 
     pub fn write_constant(self: *Self, value: Value) Error!u8 {
         if (self.constant_count == CONST_MAX) {
+            // if (self.constants.items.len == CONST_MAX) {
             return error.TooManyConst;
         }
+
+        // try self.constants.append(value);
+        // return @intCast(self.constants.items.len - 1);
 
         self.constants[self.constant_count] = value;
         self.constant_count += 1;

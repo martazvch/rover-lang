@@ -62,13 +62,13 @@ const CallFrame = struct {
     const Self = @This();
 
     pub fn read_byte(self: *Self) u8 {
-        const byte = self.ip[0];
-        self.ip += 1;
-        return byte;
+        defer self.ip += 1;
+        return self.ip[0];
     }
 
     pub fn read_constant(self: *Self) Value {
-        return self.function.chunk.constants[self.read_byte()];
+        // Compiler bug: https://github.com/ziglang/zig/issues/13938
+        return (&self.function.chunk.constants)[self.read_byte()];
     }
 
     pub fn read_string(self: *Self) *ObjString {
@@ -199,6 +199,9 @@ pub const Vm = struct {
                 var value = self.stack.values[0..].ptr;
 
                 while (value != self.stack.top) : (value += 1) {
+                    // Start of call frame
+                    if (value == frame.slots) print(">", .{});
+
                     print("[", .{});
                     try value[0].print(self.stdout);
                     print("] ", .{});
@@ -253,7 +256,8 @@ pub const Vm = struct {
                     // If call success, we need to to set frame pointer back
                     frame = &self.frame_stack.frames[self.frame_stack.count - 1];
                 },
-                .GetGlobal => self.stack.push(self.globals[frame.read_byte()]),
+                // Compiler bug: https://github.com/ziglang/zig/issues/13938
+                .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
                 .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
                 .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
                 .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
