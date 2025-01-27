@@ -4,6 +4,4 @@ fn create_add() -> fn(int) -> int {
     add
 }
 
-fn main() {
-
-}
+fn main() { }

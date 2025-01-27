@@ -2,6 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const builtin = @import("builtin");
 const expect = testing.expect;
+const print = std.debug.print;
 const allocator = std.testing.allocator;
 
 pub fn main() !void {}
@@ -47,8 +48,6 @@ test "runtime" {
             defer allocator.free(res.stderr);
 
             var got_expects = std.mem.splitScalar(u8, res.stdout, '\n');
-            var got_errors = std.mem.splitScalar(u8, res.stderr, '\n');
-            _ = &got_errors;
 
             // Read file
             const file = try test_dir.openFile(item.path, .{ .mode = .read_only });
@@ -76,10 +75,10 @@ test "runtime" {
 
                     const got = got_expects.next().?;
                     expect(std.mem.eql(u8, got, exp)) catch |e| {
-                        std.debug.print("Error in file: {s} line: {}\n", .{ item.path, i });
-                        std.debug.print("expect:\n{s}\n", .{exp});
-                        std.debug.print("got:\n{s}\n", .{got});
-                        std.debug.print("\nStderr: {s}\n", .{res.stderr});
+                        print("Error in file: {s} line: {}\n", .{ item.path, i });
+                        print("expect:\n{s}\n", .{exp});
+                        print("got:\n{s}\n", .{got});
+                        print("\nStderr: {s}\n", .{res.stderr});
                         return e;
                     };
                 }

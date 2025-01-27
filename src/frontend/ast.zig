@@ -29,6 +29,17 @@ pub const SourceSlice = struct {
     }
 };
 
+pub const Type = union(enum) {
+    Entity: SourceSlice,
+    Function: Fn,
+
+    pub const Fn = struct {
+        params: []const SourceSlice,
+        return_type: SourceSlice,
+        start: usize,
+    };
+};
+
 pub const Stmt = union(enum) {
     Assignment: Assignment,
     Discard: Discard,
@@ -80,12 +91,12 @@ pub const FnDecl = struct {
     params: [256]Parameter,
     arity: u16,
     body: Block,
-    return_type: ?SourceSlice,
+    return_type: ?Type,
 };
 
 pub const Parameter = struct {
     name: SourceSlice,
-    type_: SourceSlice,
+    type_: Type,
 };
 
 pub const Print = struct {
@@ -100,7 +111,7 @@ pub const Use = struct {
 pub const VarDecl = struct {
     name: SourceSlice,
     is_const: bool,
-    type_: ?SourceSlice,
+    type_: ?Type,
     value: ?*Expr,
 };
 

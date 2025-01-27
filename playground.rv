@@ -3,11 +3,14 @@ use std.time
 fn fib(n: int) -> int {
     if n < 2 do return n
 
-    return fib(n-2) + fib(n-1)
+    fib(n-2) + fib(n-1)
 }
 
 fn main() {
-    var start = clock()
-    print fib(35)
-    print clock() - start
+    var tmp = fib
+
+    var name = "theprimeagen"
+    print name
+    print tmp(4)
 }
+

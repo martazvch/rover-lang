@@ -6,6 +6,7 @@ const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Span = Ast.Span;
+const Type = Ast.Type;
 const GenReport = @import("../reporter.zig").GenReport;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Token = @import("lexer.zig").Token;
@@ -249,7 +250,9 @@ pub const Parser = struct {
                 return self.error_at_prev(.ExpectParenAfterFnParams);
             }
 
-            if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "parameter" } });
+            if (arity == 255) return self.error_at_current(
+                .{ .TooManyFnArgs = .{ .what = "parameter" } },
+            );
 
             const var_infos = try self.var_name_and_type("parameter");
             const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
@@ -264,12 +267,12 @@ pub const Parser = struct {
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-        var return_type: ?SourceSlice = null;
-        if (self.match(.SmallArrow)) {
-            return_type = try self.parse_type();
-        } else if (self.check(.Identifier)) {
-            return self.error_at_current(.ExpectArrowBeforeFnType);
-        }
+        const return_type: ?Type = if (self.match(.SmallArrow))
+            try self.parse_type()
+        else if (self.check(.Identifier))
+            return self.error_at_current(.ExpectArrowBeforeFnType)
+        else
+            null;
 
         self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
@@ -303,11 +306,11 @@ pub const Parser = struct {
         };
     }
 
-    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: SourceSlice, type_: ?SourceSlice } {
+    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: SourceSlice, type_: ?Type } {
         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = var_kind } });
         const ident = self.prev();
 
-        var type_: ?SourceSlice = null;
+        var type_: ?Type = null;
 
         if (self.match(.Colon)) {
             type_ = try self.parse_type();
@@ -318,13 +321,47 @@ pub const Parser = struct {
         return .{ .name = SourceSlice.from_token(ident, self.source), .type_ = type_ };
     }
 
-    fn parse_type(self: *Self) !SourceSlice {
-        // NOTE: make builtin types basic identifier to treat the the same?
-        if (self.match(.FloatKw) or self.match(.IntKw) or self.match(.StrKw) or self.match(.Bool)) {
-            return SourceSlice.from_token(self.prev(), self.source);
+    fn parse_type(self: *Self) !Type {
+        if (self.match(.FloatKw) or
+            self.match(.IntKw) or
+            self.match(.StrKw) or
+            self.match(.Bool) or
+            self.match(.Identifier))
+        {
+            return .{ .Entity = SourceSlice.from_token(self.prev(), self.source) };
+        } else if (self.match(.Fn)) {
+            const start = self.prev().span.start;
+            try self.expect(.LeftParen, .ExpectParenAfterFnName);
+
+            var param_types = ArrayList(SourceSlice).init(self.allocator);
+
+            while (!self.check(.RightParen)) {
+                if (self.check(.Eof)) {
+                    return self.error_at_prev(.ExpectParenAfterFnParams);
+                }
+                // Parse parameters type
+                try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
+                try param_types.append(try self.parse_type());
+
+                if (!self.match(.Comma)) break;
+            }
+
+            try self.expect(.RightParen, .ExpectParenAfterFnParams);
+
+            const return_type: ?Type = if (self.match(.SmallArrow))
+                try self.parse_type()
+            else if (self.check(.Identifier))
+                return self.error_at_current(.ExpectArrowBeforeFnType)
+            else
+                null;
+
+            return .{ .Function = .{
+                .params = try param_types.toOwnedSlice(),
+                .return_type = return_type,
+                .span = .{ .start = start, .end = self.prev().span.end },
+            } };
         } else {
-            try self.expect(.Identifier, .ExpectTypeName);
-            return SourceSlice.from_token(self.prev(), self.source);
+            return self.error_at_current(.ExpectTypeName);
         }
     }
 

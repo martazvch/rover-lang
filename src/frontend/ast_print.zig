@@ -44,6 +44,13 @@ pub const AstPrinter = struct {
         }
     }
 
+    fn print_type(self: *Self, type_: Ast.Type) []const u8 {
+        return switch (type_) {
+            .Entity => |t| t.text,
+            .Function => |t| self.source[t.span.start..t.span.end],
+        };
+    }
+
     fn statement(self: *Self, stmt: *const Ast.Stmt) !void {
         try switch (stmt.*) {
             .Assignment => |*s| self.assignment(s),
@@ -86,7 +93,10 @@ pub const AstPrinter = struct {
     fn fn_decl(self: *Self, stmt: *const Ast.FnDecl) !void {
         try self.indent();
 
-        const return_type = if (stmt.return_type) |rt| rt.text else "void";
+        const return_type = if (stmt.return_type) |rt|
+            self.print_type(rt)
+        else
+            "void";
 
         var buf: [100]u8 = undefined;
         var written = try std.fmt.bufPrint(
@@ -105,7 +115,7 @@ pub const AstPrinter = struct {
             written = try std.fmt.bufPrint(
                 &buf,
                 "{s}, type {s}\n",
-                .{ stmt.params[i].name.text, stmt.params[i].type_.text },
+                .{ stmt.params[i].name.text, self.print_type(stmt.params[i].type_) },
             );
             try self.tree.appendSlice(written);
         }
@@ -149,8 +159,7 @@ pub const AstPrinter = struct {
         try self.indent();
         var buf: [100]u8 = undefined;
 
-        // const type_name = stmt.type_ orelse "none";
-        const type_name = if (stmt.type_) |t| t.text else "void";
+        const type_name = if (stmt.type_) |t| self.print_type(t) else "void";
         const written = try std.fmt.bufPrint(
             &buf,
             "[Var declaration {s}, type {s}, value\n",

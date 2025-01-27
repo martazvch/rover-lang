@@ -8,6 +8,7 @@ const Ast = @import("ast.zig");
 const Stmt = Ast.Stmt;
 const Expr = Ast.Expr;
 const Span = Ast.Span;
+const AstType = Ast.Type;
 const AnalyzedAst = @import("analyzed_ast.zig");
 const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
 const Scope = AnalyzedAst.Scope;
@@ -295,8 +296,8 @@ pub const Analyzer = struct {
     }
 
     /// Checks if an identifier already exists in current scope and if it's type exists
-    /// Returns the type of the variable
-    fn check_ident_and_type(self: *Self, ident: SourceSlice, type_: ?SourceSlice) !Type {
+    /// Returns the type of the variable, void if none provided
+    fn check_ident_and_type(self: *Self, ident: SourceSlice, type_: ?AstType) !Type {
         // Name check
         if (self.ident_in_scope(ident.text)) {
             return self.err(
@@ -305,12 +306,13 @@ pub const Analyzer = struct {
             );
         }
 
-        // If a type was declared
-        return if (type_) |t| self.type_manager.declared.get(t.text) orelse {
-            return self.err(
-                .{ .UndeclaredType = .{ .found = t.text } },
-                Span.from_source_slice(t),
-            );
+        return if (type_) |t| switch (t) {
+            .Entity => |entity| self.type_manager.declared.get(entity.text) orelse
+                return self.err(
+                .{ .UndeclaredType = .{ .found = entity.text } },
+                Span.from_source_slice(entity),
+            ),
+            .Function => Void,
         } else Void;
     }
 
