@@ -45,9 +45,10 @@ pub const AstPrinter = struct {
     }
 
     fn print_type(self: *Self, type_: Ast.Type) []const u8 {
+        _ = self;
         return switch (type_) {
             .Entity => |t| t.text,
-            .Function => |t| self.source[t.span.start..t.span.end],
+            .Function => |_| "",
         };
     }
 

@@ -14,8 +14,16 @@ pub fn build(b: *std.Build) !void {
     const log_gc = b.option(bool, "log-gc", "logs each GC actions (alloc and free)") orelse false;
     options.addOption(bool, "log_gc", log_gc);
 
+    const tracy_enabled = b.option(bool, "tracy", "Enable tracy client library") orelse false;
+
     // const log_analyzer = b.option(bool, "log-analyzer", "prints the analyzer's logs") orelse false;
     // options.addOption(bool, "log_analyzer", log_analyzer);
+
+    // Tracy module or empty one
+    const tracy_dep = if (tracy_enabled) b.dependency("tracy", .{}) else undefined;
+    const tracy_mod = if (tracy_enabled) tracy_dep.module("tracy") else b.createModule(.{
+        .root_source_file = b.path("src/tracy_noop.zig"),
+    });
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -29,7 +37,14 @@ pub fn build(b: *std.Build) !void {
 
     const clap = b.dependency("clap", .{});
     exe.root_module.addImport("clap", clap.module("clap"));
+    exe.root_module.addImport("tracy", tracy_mod);
     exe.root_module.addOptions("config", options);
+
+    // For tracy, as it's a cpp project
+    if (tracy_enabled) {
+        exe.linkLibrary(tracy_dep.artifact("tracy"));
+        exe.linkLibCpp();
+    }
 
     // Generates the tree structure of the std
     // const std_tree = try generate_std_tree(b);
@@ -56,6 +71,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
+    exe_check.root_module.addImport("tracy", tracy_mod);
     exe_check.root_module.addOptions("config", options);
     // exe_check.root_module.addOptions("std_tree", std_tree);
 

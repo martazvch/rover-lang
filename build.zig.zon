@@ -27,6 +27,10 @@
             .url = "git+https://github.com/Hejsil/zig-clap#cfa86f64ea1e94f8579f46816632f3c6ce7e09ef",
             .hash = "1220d57cc0b08eb183b11d513eec44c5518468dc5bb39c6fa8a53d1bb62defe6e1a1",
         },
+        .tracy = .{
+            .url = "https://github.com/martinrov/zig-tracy/archive/252a0fb2f6e9d04638ae86130bfce79aff3352c1.tar.gz",
+            .hash = "1220ca4c62b5b568073dadb0532e5a2df49e22ce04c5fb5a19375908ea88eb8dc02b",
+        },
     },
     .paths = .{
         "build.zig",

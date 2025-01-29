@@ -341,25 +341,29 @@ pub const Parser = struct {
                 }
                 // Parse parameters type
                 try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
-                try param_types.append(try self.parse_type());
+                // try param_types.append(try self.parse_type());
 
                 if (!self.match(.Comma)) break;
             }
 
             try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-            const return_type: ?Type = if (self.match(.SmallArrow))
-                try self.parse_type()
-            else if (self.check(.Identifier))
-                return self.error_at_current(.ExpectArrowBeforeFnType)
-            else
-                null;
+            // const return_type: ?Type = if (self.match(.SmallArrow))
+            //     try self.parse_type()
+            // else if (self.check(.Identifier))
+            //     return self.error_at_current(.ExpectArrowBeforeFnType)
+            // else
+            //     null;
 
-            return .{ .Function = .{
-                .params = try param_types.toOwnedSlice(),
-                .return_type = return_type,
-                .span = .{ .start = start, .end = self.prev().span.end },
-            } };
+            return .{
+                .Function = .{
+                    .params = try param_types.toOwnedSlice(),
+                    // .return_type = return_type,
+                    .return_type = null,
+                    .start = start,
+                    // .span = .{ .start = start, .end = self.prev().span.end },
+                },
+            };
         } else {
             return self.error_at_current(.ExpectTypeName);
         }

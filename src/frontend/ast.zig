@@ -35,7 +35,7 @@ pub const Type = union(enum) {
 
     pub const Fn = struct {
         params: []const SourceSlice,
-        return_type: SourceSlice,
+        return_type: ?SourceSlice,
         start: usize,
     };
 };

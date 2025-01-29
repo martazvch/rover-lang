@@ -1,0 +1,98 @@
+fn func1(a: int, b: float, c: str) -> bool { true }
+fn func2(a: int, b: float, c: str) -> bool { true }
+fn func3(a: int, b: float, c: str) -> bool { true }
+fn func4(a: int, b: float, c: str) -> bool { true }
+fn func5(a: int, b: float, c: str) -> bool { true }
+fn func6(a: int, b: float, c: str) -> bool { true }
+fn func7(a: int, b: float, c: str) -> bool { true }
+fn func8(a: int, b: float, c: str) -> bool { true }
+fn func9(a: int, b: float, c: str) -> bool { true }
+fn func10(a: int, b: float, c: str) -> bool { true }
+fn func11(a: int, b: float, c: str) -> bool { true }
+fn func12(a: int, b: float, c: str) -> bool { true }
+fn func13(a: int, b: float, c: str) -> bool { true }
+fn func14(a: int, b: float, c: str) -> bool { true }
+fn func15(a: int, b: float, c: str) -> bool { true }
+fn func16(a: int, b: float, c: str) -> bool { true }
+fn func17(a: int, b: float, c: str) -> bool { true }
+fn func18(a: int, b: float, c: str) -> bool { true }
+fn func19(a: int, b: float, c: str) -> bool { true }
+fn func20(a: int, b: float, c: str) -> bool { true }
+fn func21(a: int, b: float, c: str) -> bool { true }
+fn func22(a: int, b: float, c: str) -> bool { true }
+fn func23(a: int, b: float, c: str) -> bool { true }
+fn func24(a: int, b: float, c: str) -> bool { true }
+fn func25(a: int, b: float, c: str) -> bool { true }
+fn func26(a: int, b: float, c: str) -> bool { true }
+fn func27(a: int, b: float, c: str) -> bool { true }
+fn func28(a: int, b: float, c: str) -> bool { true }
+fn func29(a: int, b: float, c: str) -> bool { true }
+
+fn main() {
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+    _ = func1(1, 2., "3")
+
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+    if true do print "do"
+}
