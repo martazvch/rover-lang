@@ -1,15 +1,24 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
+const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 const GenReport = @import("../reporter.zig").GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
-const Span = @import("ast.zig").Span;
+
+pub const Span = struct {
+    start: usize,
+    end: usize,
+
+    pub fn text(self: *const Span, source: []const u8) []const u8 {
+        return source[self.start..self.end];
+    }
+};
 
 pub const Token = struct {
-    kind: Kind,
+    tag: Tag,
     span: Span,
 
-    const keywords = std.StaticStringMap(Kind).initComptime(.{
+    const keywords = std.StaticStringMap(Tag).initComptime(.{
         .{ "and", .And },
         .{ "as", .As },
         .{ "bool", .Bool },
@@ -38,7 +47,7 @@ pub const Token = struct {
         .{ "while", .While },
     });
 
-    pub const Kind = enum {
+    pub const Tag = enum {
         And,
         As,
         Bang,
@@ -105,7 +114,7 @@ pub const Token = struct {
         UnexpectedChar,
 
         // Only used by AST printer for binop and unary nodes
-        pub fn symbol(self: Kind) []const u8 {
+        pub fn symbol(self: Tag) []const u8 {
             return switch (self) {
                 .And => "and",
                 // .As => "as",
@@ -178,7 +187,7 @@ pub const Token = struct {
         return source[self.span.start..self.span.end];
     }
 
-    pub fn get_keyword(ident: []const u8) ?Kind {
+    pub fn get_keyword(ident: []const u8) ?Tag {
         return keywords.get(ident);
     }
 };
@@ -186,8 +195,9 @@ pub const Token = struct {
 pub const Lexer = struct {
     source: [:0]const u8,
     index: usize,
-    tokens: ArrayList(Token),
+    tokens: std.MultiArrayList(Token),
     errs: ArrayList(LexerReport),
+    allocator: Allocator,
 
     const Self = @This();
     pub const LexerReport = GenReport(LexerMsg);
@@ -213,13 +223,14 @@ pub const Lexer = struct {
         return .{
             .source = undefined,
             .index = 0,
-            .tokens = ArrayList(Token).init(allocator),
+            .tokens = MultiArrayList(Token){},
             .errs = ArrayList(LexerReport).init(allocator),
+            .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.tokens.deinit();
+        self.tokens.deinit(self.allocator);
         self.errs.deinit();
     }
 
@@ -231,25 +242,25 @@ pub const Lexer = struct {
 
             // TODO: redo this part. As we lex every thing at once, use arraylist for
             // errors like parser, analyzer, ...? Or use compitme to associate both sides
-            try switch (tk.kind) {
+            try switch (tk.tag) {
                 .LeadingZeros => self.error_at(.LeadingZeros, &tk),
                 .UnterminatedStr => self.error_at(.UnterminatedStr, &tk),
                 .UnexpectedChar => self.error_at(.UnexpectedChar, &tk),
-                else => self.tokens.append(tk),
+                else => self.tokens.append(self.allocator, tk),
             };
 
-            if (tk.kind == .Eof) break;
+            if (tk.tag == .Eof) break;
         }
     }
 
-    fn error_at(self: *Self, kind: LexerMsg, token: *const Token) !void {
-        const report = LexerReport.err(kind, token.span);
+    fn error_at(self: *Self, tag: LexerMsg, token: *const Token) !void {
+        const report = LexerReport.err(tag, token.span);
         try self.errs.append(report);
     }
 
     pub fn next(self: *Self) Token {
         var res = Token{
-            .kind = undefined,
+            .tag = undefined,
             .span = .{
                 .start = self.index,
                 .end = undefined,
@@ -260,7 +271,7 @@ pub const Lexer = struct {
             .Start => {
                 switch (self.source[self.index]) {
                     'a'...'z', 'A'...'Z' => {
-                        res.kind = .Identifier;
+                        res.tag = .Identifier;
                         continue :state .Identifier;
                     },
                     ' ', '\t', '\r' => {
@@ -269,31 +280,31 @@ pub const Lexer = struct {
                         continue :state .Start;
                     },
                     '(' => {
-                        res.kind = .LeftParen;
+                        res.tag = .LeftParen;
                         self.index += 1;
                     },
                     ')' => {
-                        res.kind = .RightParen;
+                        res.tag = .RightParen;
                         self.index += 1;
                     },
                     '{' => {
-                        res.kind = .LeftBrace;
+                        res.tag = .LeftBrace;
                         self.index += 1;
                     },
                     '}' => {
-                        res.kind = .RightBrace;
+                        res.tag = .RightBrace;
                         self.index += 1;
                     },
                     ':' => {
-                        res.kind = .Colon;
+                        res.tag = .Colon;
                         self.index += 1;
                     },
                     ',' => {
-                        res.kind = .Comma;
+                        res.tag = .Comma;
                         self.index += 1;
                     },
                     '+' => {
-                        res.kind = .Plus;
+                        res.tag = .Plus;
                         self.index += 1;
                     },
                     '-' => {
@@ -301,16 +312,16 @@ pub const Lexer = struct {
 
                         if (self.source[self.index] == '>') {
                             self.index += 1;
-                            res.kind = .SmallArrow;
-                        } else res.kind = .Minus;
+                            res.tag = .SmallArrow;
+                        } else res.tag = .Minus;
                     },
                     '*' => {
-                        res.kind = .Star;
+                        res.tag = .Star;
                         self.index += 1;
                     },
                     '/' => continue :state .Slash,
                     '\n' => {
-                        res.kind = .NewLine;
+                        res.tag = .NewLine;
                         self.index += 1;
                     },
                     '<' => continue :state .Less,
@@ -319,7 +330,7 @@ pub const Lexer = struct {
                     '=' => continue :state .Equal,
                     '.' => continue :state .Dot,
                     '"' => {
-                        res.kind = .String;
+                        res.tag = .String;
                         continue :state .String;
                     },
                     '0' => {
@@ -330,18 +341,18 @@ pub const Lexer = struct {
                             self.index += 1;
                             switch (self.source[self.index]) {
                                 '0'...'9' => return .{
-                                    .kind = .LeadingZeros,
+                                    .tag = .LeadingZeros,
                                     .span = .{
                                         .start = self.index - 1,
                                         .end = self.index,
                                     },
                                 },
-                                else => res.kind = .Int,
+                                else => res.tag = .Int,
                             }
                         }
                     },
                     '1'...'9' => {
-                        res.kind = .Int;
+                        res.tag = .Int;
                         self.index += 1;
                         continue :state .Int;
                     },
@@ -349,22 +360,22 @@ pub const Lexer = struct {
                         self.index += 1;
                         switch (self.source[self.index]) {
                             'a'...'z', 'A'...'Z', '0'...'9', '_' => {
-                                res.kind = .Identifier;
+                                res.tag = .Identifier;
                                 continue :state .Identifier;
                             },
-                            else => res.kind = .Underscore,
+                            else => res.tag = .Underscore,
                         }
                     },
                     0 => {
                         if (self.index == self.source.len) {
                             return .{
-                                .kind = .Eof,
+                                .tag = .Eof,
                                 .span = .{ .start = self.index, .end = self.index },
                             };
                         } else continue :state .Invalid;
                     },
                     else => {
-                        res.kind = .UnexpectedChar;
+                        res.tag = .UnexpectedChar;
                         self.index += 1;
                     },
                 }
@@ -374,10 +385,10 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.kind = .BangEqual;
+                        res.tag = .BangEqual;
                         self.index += 1;
                     },
-                    else => res.kind = .Bang,
+                    else => res.tag = .Bang,
                 }
             },
             .Comment => {
@@ -395,18 +406,18 @@ pub const Lexer = struct {
                     '0'...'9' => continue :state .Float,
                     '.' => continue :state .DotDot,
                     '*' => {
-                        res.kind = .DotStar;
+                        res.tag = .DotStar;
                         self.index += 1;
                     },
                     '?' => {
-                        res.kind = .DotQuestionMark;
+                        res.tag = .DotQuestionMark;
                         self.index += 1;
                     },
                     '!' => {
-                        res.kind = .DotBang;
+                        res.tag = .DotBang;
                         self.index += 1;
                     },
-                    else => res.kind = .Dot,
+                    else => res.tag = .Dot,
                 }
             },
             .DotDot => {
@@ -414,10 +425,10 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '.' => {
-                        res.kind = .DotDotDot;
+                        res.tag = .DotDotDot;
                         self.index += 1;
                     },
-                    else => res.kind = .DotDot,
+                    else => res.tag = .DotDot,
                 }
             },
             .Equal => {
@@ -425,10 +436,10 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.kind = .EqualEqual;
+                        res.tag = .EqualEqual;
                         self.index += 1;
                     },
-                    else => res.kind = .Equal,
+                    else => res.tag = .Equal,
                 }
             },
             .Float => {
@@ -436,7 +447,7 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '0'...'9' => continue :state .Float,
-                    else => res.kind = .Float,
+                    else => res.tag = .Float,
                 }
             },
             .Greater => {
@@ -444,10 +455,10 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.kind = .GreaterEqual;
+                        res.tag = .GreaterEqual;
                         self.index += 1;
                     },
-                    else => res.kind = .Greater,
+                    else => res.tag = .Greater,
                 }
             },
             .Identifier => {
@@ -459,7 +470,7 @@ pub const Lexer = struct {
                         const ident = self.source[res.span.start..self.index];
 
                         if (Token.get_keyword(ident)) |kw| {
-                            res.kind = kw;
+                            res.tag = kw;
                         }
                     },
                 }
@@ -480,10 +491,10 @@ pub const Lexer = struct {
                 switch (self.source[self.index]) {
                     0 => {
                         if (self.index == self.source.len) {
-                            res.kind = .Eof;
+                            res.tag = .Eof;
                         } else continue :state .Invalid;
                     },
-                    ' ' => res.kind = .Error,
+                    ' ' => res.tag = .Error,
                     else => continue :state .Invalid,
                 }
             },
@@ -492,10 +503,10 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.kind = .LessEqual;
+                        res.tag = .LessEqual;
                         self.index += 1;
                     },
-                    else => res.kind = .Less,
+                    else => res.tag = .Less,
                 }
             },
             .Slash => {
@@ -503,7 +514,7 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '/' => continue :state .Comment,
-                    else => res.kind = .Slash,
+                    else => res.tag = .Slash,
                 }
             },
             .String => {
@@ -514,7 +525,7 @@ pub const Lexer = struct {
                         if (self.index == self.source.len) {
                             // For error reporting, one byte length
                             return .{
-                                .kind = .UnterminatedStr,
+                                .tag = .UnterminatedStr,
                                 .span = .{
                                     .start = res.span.start,
                                     .end = res.span.start + 1,
@@ -544,15 +555,15 @@ test "ident and strings" {
     try lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
-        .{ .kind = .Identifier, .span = .{ .start = 0, .end = 3 } },
-        .{ .kind = .Identifier, .span = .{ .start = 4, .end = 7 } },
-        .{ .kind = .Identifier, .span = .{ .start = 8, .end = 16 } },
-        .{ .kind = .Identifier, .span = .{ .start = 18, .end = 23 } },
+        .{ .tag = .Identifier, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .Identifier, .span = .{ .start = 4, .end = 7 } },
+        .{ .tag = .Identifier, .span = .{ .start = 8, .end = 16 } },
+        .{ .tag = .Identifier, .span = .{ .start = 18, .end = 23 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i].kind);
+        try expect(tk.tag == res[i].tag);
         try expect(tk.span.start == res[i].span.start);
         try expect(tk.span.end == res[i].span.end);
     }
@@ -564,15 +575,15 @@ test "numbers" {
     try lexer.lex("123 45.6 7. .86");
 
     const res = [_]Token{
-        .{ .kind = .Int, .span = .{ .start = 0, .end = 3 } },
-        .{ .kind = .Float, .span = .{ .start = 4, .end = 8 } },
-        .{ .kind = .Float, .span = .{ .start = 9, .end = 11 } },
-        .{ .kind = .Float, .span = .{ .start = 12, .end = 15 } },
+        .{ .tag = .Int, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .Float, .span = .{ .start = 4, .end = 8 } },
+        .{ .tag = .Float, .span = .{ .start = 9, .end = 11 } },
+        .{ .tag = .Float, .span = .{ .start = 12, .end = 15 } },
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i].kind);
+        try expect(tk.tag == res[i].tag);
         try expect(tk.span.start == res[i].span.start);
         try expect(tk.span.end == res[i].span.end);
     }
@@ -583,7 +594,7 @@ test "tokens" {
     defer lexer.deinit();
     try lexer.lex("(){}.:,=!< ><= >= !=+-*/");
 
-    const res = [_]Token.Kind{
+    const res = [_]Token.Tag{
         .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
         .Comma,        .Equal,      .Bang,      .Less,       .Greater, .LessEqual,
         .GreaterEqual, .BangEqual,  .Plus,      .Minus,      .Star,    .Slash,
@@ -591,7 +602,7 @@ test "tokens" {
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i]);
+        try expect(tk.tag == res[i]);
     }
 }
 
@@ -603,7 +614,7 @@ test "keywords" {
         \\\self struct true var while not int float str do use
     );
 
-    const res = [_]Token.Kind{
+    const res = [_]Token.Tag{
         .And,    .Else,    .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
         .Return, .NewLine, .Self,  .Struct, .True, .Var, .While, .Not,  .IntKw, .FloatKw,
         .StrKw,  .Do,      .Use,   .Eof,
@@ -611,7 +622,7 @@ test "keywords" {
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i]);
+        try expect(tk.tag == res[i]);
     }
 }
 
@@ -638,14 +649,14 @@ test "underscore" {
     defer lexer.deinit();
     try lexer.lex("var _under   _=1   var _1art   var ___yo");
 
-    const res = [_]Token.Kind{
+    const res = [_]Token.Tag{
         .Var, .Identifier, .Underscore, .Equal,      .Int,
         .Var, .Identifier, .Var,        .Identifier, .Eof,
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i]);
+        try expect(tk.tag == res[i]);
     }
 }
 
@@ -654,14 +665,14 @@ test "arrow" {
     defer lexer.deinit();
     try lexer.lex("- > -5> >- -< ->");
 
-    const res = [_]Token.Kind{
+    const res = [_]Token.Tag{
         .Minus, .Greater, .Minus,      .Int, .Greater, .Greater, .Minus,
         .Minus, .Less,    .SmallArrow,
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i]);
+        try expect(tk.tag == res[i]);
     }
 }
 
@@ -670,13 +681,13 @@ test "dot" {
     defer lexer.deinit();
     try lexer.lex(". .. ... .! .? .* ....!");
 
-    const res = [_]Token.Kind{
+    const res = [_]Token.Tag{
         .Dot,     .DotDot,    .DotDotDot, .DotBang, .DotQuestionMark,
         .DotStar, .DotDotDot, .DotBang,
     };
 
     for (0..res.len) |i| {
         const tk = lexer.tokens.items[i];
-        try expect(tk.kind == res[i]);
+        try expect(tk.tag == res[i]);
     }
 }
