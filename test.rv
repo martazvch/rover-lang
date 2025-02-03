@@ -2,3 +2,29 @@ true
 false
 
 true + false
+
+54 + 1.234 - null
+(
+    "ouioui" + 345
+)
+
+-56
+not true
+
+return true
+
+
+print "oui"
+
+
+var a = 456
+var b: str
+
+_ = 45
+
+use std.lib.time
+
+{
+    var a = 1
+    print 1+4
+}

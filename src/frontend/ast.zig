@@ -108,33 +108,42 @@ const Token = @import("lexer.zig").Token;
 
 pub const TokenIndex = usize;
 
+pub const NullNode = 0;
+
 // Behaves like a binary tree, tupple of (root, lhs, rhs)
 pub const Node = struct {
     tag: Tag,
-    span: Span,
+    root: TokenIndex,
     data: Data,
 
     pub const Index = usize;
     pub const Data = struct { lhs: Index, rhs: Index };
-    pub const Span = struct { start: TokenIndex, end: TokenIndex };
 
     pub const Tag = enum {
         // Block,
         Add,
-        Sub,
-        Mul,
+        Assignment,
+        Block,
+        Bool,
+        Discard,
         Div,
-        BoolLit,
-        // FloatLit,
+        Float,
         // FnCall,
-        // Grouping,
-        // Identifier,
+        Grouping,
+        Identifier,
         // If,
-        // IntLit,
-        // NullLit,
-        // Return,
-        // StringLit,
-        // Unary,
+        Int,
+        Mul,
+        Null,
+        Print,
+        Return,
+        String,
+        Sub,
+        Type,
+        Unary,
+        Use,
+        VarDecl,
+        While,
     };
 };
 

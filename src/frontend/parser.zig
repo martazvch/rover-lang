@@ -6,8 +6,7 @@ const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const Ast = @import("ast.zig");
 const Node = Ast.Node;
-// const Stmt = Ast.Stmt;
-// const Expr = Ast.Expr;
+const NullNode = Ast.NullNode;
 const Type = Ast.Type;
 const TokenIndex = Ast.TokenIndex;
 const GenReport = @import("../reporter.zig").GenReport;
@@ -80,6 +79,9 @@ pub const Parser = struct {
         self.source = source;
         self.token_tags = token_tags;
         self.token_spans = token_spans;
+
+        // Saves slot 0 for null node
+        _ = try self.add_node(undefined);
 
         self.skip_new_lines();
 
@@ -158,6 +160,18 @@ pub const Parser = struct {
     fn add_node(self: *Self, node: Node) !Node.Index {
         try self.nodes.append(self.allocator, node);
         return self.nodes.len - 1;
+    }
+
+    /// Reserves a slot in the main nodes
+    fn reserve_main(self: *Self) !Node.Index {
+        try self.main_nodes.append(undefined);
+        return self.main_nodes.items.len - 1;
+    }
+
+    /// Sets a main nodes at the given index. Returns the index back
+    fn set_main(self: *Self, index: usize, node: Node.Index) Node.Index {
+        self.main_nodes.items[index] = node;
+        return node;
     }
 
     fn skip_new_lines(self: *Self) void {
@@ -247,17 +261,19 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Self) Error!Node.Index {
-        // if (self.match(.Fn)) {
-        //     return self.fn_declaration();
-        // } else if (self.match(.Var)) {
-        //     return self.var_declaration(false);
-        // } else if (self.match(.Underscore)) {
-        //     return self.discard();
-        // } else if (self.match(.Use)) {
-        //     return self.use();
-        // } else {
-        return self.statement();
-        // }
+        if (self.match(.Fn)) {
+            // return self.fn_declaration();
+            return NullNode;
+        } else if (self.match(.Var)) {
+            // return self.var_declaration(false);
+            return self.var_declaration();
+        } else if (self.match(.Underscore)) {
+            return self.discard();
+        } else if (self.match(.Use)) {
+            return self.use();
+        } else {
+            return self.statement();
+        }
     }
 
     fn fn_declaration(self: *Self) Error!Node.Index {
@@ -312,30 +328,35 @@ pub const Parser = struct {
         } };
     }
 
-    // fn var_declaration(self: *Self, is_const: bool) !Node.Index {
-    //     const var_infos = try self.var_name_and_type("variable");
-    //
-    //     var value: ?*Expr = null;
-    //
-    //     if (self.match(.Equal)) {
-    //         value = try self.parse_precedence_expr(0);
-    //     }
-    //
-    //     return .{
-    //         .VarDecl = .{
-    //             .name = var_infos.name,
-    //             .is_const = is_const,
-    //             .type_ = var_infos.type_,
-    //             .value = value,
-    //         },
-    //     };
-    // }
+    fn var_declaration(self: *Self) !Node.Index {
+        const var_infos = try self.var_name_and_type("variable");
 
-    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: SourceSlice, type_: ?Type } {
+        const value: Node.Index = if (self.match(.Equal))
+            try self.parse_precedence_expr(0)
+        else
+            NullNode;
+
+        return self.add_node(.{
+            .tag = .VarDecl,
+            .root = var_infos.name,
+            .data = .{ .lhs = var_infos.type_, .rhs = value },
+        });
+        //
+        // return .{
+        //     .VarDecl = .{
+        //         .name = var_infos.name,
+        //         .is_const = is_const,
+        //         .type_ = var_infos.type_,
+        //         .value = value,
+        //     },
+        // };
+    }
+
+    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: TokenIndex, type_: Node.Index } {
         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = var_kind } });
-        const ident = self.prev();
+        const ident = self.token_idx - 1;
 
-        var type_: ?Type = null;
+        var type_: TokenIndex = NullNode;
 
         if (self.match(.Colon)) {
             type_ = try self.parse_type();
@@ -343,129 +364,180 @@ pub const Parser = struct {
             return self.error_at_current(.ExpectColonBeforeType);
         }
 
-        return .{ .name = SourceSlice.from_token(ident, self.source), .type_ = type_ };
+        return .{ .name = ident, .type_ = type_ };
     }
 
-    fn parse_type(self: *Self) !Type {
+    fn parse_type(self: *Self) Error!Node.Index {
         if (self.match(.FloatKw) or
             self.match(.IntKw) or
             self.match(.StrKw) or
             self.match(.Bool) or
             self.match(.Identifier))
         {
-            return .{ .Entity = SourceSlice.from_token(self.prev(), self.source) };
-        } else if (self.match(.Fn)) {
-            const start = self.prev().span.start;
-            try self.expect(.LeftParen, .ExpectParenAfterFnName);
-
-            var param_types = ArrayList(SourceSlice).init(self.allocator);
-
-            while (!self.check(.RightParen)) {
-                if (self.check(.Eof)) {
-                    return self.error_at_prev(.ExpectParenAfterFnParams);
-                }
-                // Parse parameters type
-                try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
-                // try param_types.append(try self.parse_type());
-
-                if (!self.match(.Comma)) break;
-            }
-
-            try self.expect(.RightParen, .ExpectParenAfterFnParams);
-
-            // const return_type: ?Type = if (self.match(.SmallArrow))
-            //     try self.parse_type()
-            // else if (self.check(.Identifier))
-            //     return self.error_at_current(.ExpectArrowBeforeFnType)
-            // else
-            //     null;
-
-            return .{
-                .Function = .{
-                    .params = try param_types.toOwnedSlice(),
-                    // .return_type = return_type,
-                    .return_type = null,
-                    .start = start,
-                    // .span = .{ .start = start, .end = self.prev().span.end },
-                },
-            };
+            return self.add_node(
+                .{ .tag = .Type, .root = self.token_idx - 1, .data = undefined },
+            );
+            // } else if (self.match(.Fn)) {
+            //     const start = self.prev().span.start;
+            //     try self.expect(.LeftParen, .ExpectParenAfterFnName);
+            //
+            //     var param_types = ArrayList(SourceSlice).init(self.allocator);
+            //
+            //     while (!self.check(.RightParen)) {
+            //         if (self.check(.Eof)) {
+            //             return self.error_at_prev(.ExpectParenAfterFnParams);
+            //         }
+            //         // Parse parameters type
+            //         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
+            //         // try param_types.append(try self.parse_type());
+            //
+            //         if (!self.match(.Comma)) break;
+            //     }
+            //
+            //     try self.expect(.RightParen, .ExpectParenAfterFnParams);
+            //
+            //     // const return_type: ?Type = if (self.match(.SmallArrow))
+            //     //     try self.parse_type()
+            //     // else if (self.check(.Identifier))
+            //     //     return self.error_at_current(.ExpectArrowBeforeFnType)
+            //     // else
+            //     //     null;
+            //
+            //     return .{
+            //         .Function = .{
+            //             .params = try param_types.toOwnedSlice(),
+            //             // .return_type = return_type,
+            //             .return_type = null,
+            //             .start = start,
+            //             // .span = .{ .start = start, .end = self.prev().span.end },
+            //         },
+            //     };
         } else {
             return self.error_at_current(.ExpectTypeName);
         }
     }
 
-    // fn discard(self: *Self) !Stmt {
-    //     try self.expect(.Equal, .InvalidDiscard);
-    //
-    //     return .{
-    //         .Discard = .{
-    //             .expr = try self.parse_precedence_expr(0),
-    //         },
-    //     };
-    // }
+    fn discard(self: *Self) !Node.Index {
+        try self.expect(.Equal, .InvalidDiscard);
 
-    // fn use(self: *Self) !Stmt {
-    //     var span = self.prev().span;
-    //     var list = ArrayList(SourceSlice).init(self.allocator);
-    //
-    //     if (!self.check(.Identifier)) {
-    //         return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
-    //     }
-    //
-    //     while (self.match(.Identifier) and !self.check(.Eof)) {
-    //         try list.append(SourceSlice.from_token(self.prev(), self.source));
-    //
-    //         if (self.match(.Dot)) continue;
-    //         break;
-    //     }
-    //
-    //     span.end = self.prev().span.end;
-    //
-    //     return .{ .Use = .{ .module = try list.toOwnedSlice(), .span = span } };
-    // }
+        return self.add_node(.{
+            .tag = .Discard,
+            .root = self.token_idx - 1,
+            .data = .{
+                .lhs = try self.parse_precedence_expr(0),
+                .rhs = NullNode,
+            },
+        });
 
-    fn statement(self: *Self) !Node.Index {
-        // if (self.match(.Print)) {
-        //     return self.print_stmt();
-        // } else if (self.match(.While)) {
-        //     return self.while_stmt();
-        // } else {
-        const assigne = try self.parse_precedence_expr(0);
-        return assigne;
-
-        // if (self.match(.Equal)) {
-        //     return self.assignment(assigne);
-        // } else return .{ .Expr = assigne };
-        // }
+        // return .{
+        //     .Discard = .{
+        //         .expr = try self.parse_precedence_expr(0),
+        //     },
+        // };
     }
 
-    // fn print_stmt(self: *Self) Error!Stmt {
-    //     return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
-    // }
+    fn use(self: *Self) Error!Node.Index {
+        const use_kw = self.token_idx - 1;
+        const first = self.nodes.len;
+        // var list = ArrayList(SourceSlice).init(self.allocator);
 
-    // fn while_stmt(self: *Self) !Stmt {
-    //     const condition = try self.parse_precedence_expr(0);
-    //
-    //     const body = try self.allocator.create(Ast.Stmt);
-    //     body.* = if (self.match_and_skip(.LeftBrace))
-    //         .{ .Expr = try self.block_expr() }
-    //     else if (self.match_and_skip(.Do))
-    //         try self.declaration()
-    //     else
-    //         return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
-    //
-    //     return .{ .While = .{
-    //         .condition = condition,
-    //         .body = body,
-    //     } };
-    // }
+        if (!self.check(.Identifier)) {
+            return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
+        }
 
-    // fn assignment(self: *Self, assigne: *const Expr) !Stmt {
-    //     return .{ .Assignment = .{
-    //         .assigne = assigne,
-    //         .value = try self.parse_precedence_expr(0),
-    //     } };
-    // }
+        while (self.match(.Identifier) and !self.check(.Eof)) {
+            // try list.append(SourceSlice.from_token(self.prev(), self.source));
+            _ = try self.add_node(.{
+                .tag = .Identifier,
+                .root = self.token_idx - 1,
+                .data = undefined,
+            });
+
+            if (self.match(.Dot)) continue;
+            break;
+        }
+
+        return self.add_node(.{
+            .tag = .Use,
+            .root = use_kw,
+            .data = .{ .lhs = first, .rhs = self.nodes.len },
+        });
+        // span.end = self.prev().span.end;
+
+        // return .{ .Use = .{ .module = try list.toOwnedSlice(), .span = span } };
+    }
+
+    fn statement(self: *Self) !Node.Index {
+        if (self.match(.Print)) {
+            return self.print_stmt();
+        } else if (self.match(.While)) {
+            return self.while_stmt();
+        } else {
+            const assigne = try self.parse_precedence_expr(0);
+
+            if (self.match(.Equal)) {
+                return self.assignment(assigne);
+            } else return assigne;
+        }
+    }
+
+    fn print_stmt(self: *Self) Error!Node.Index {
+        return self.add_node(.{
+            .tag = .Print,
+            .root = self.token_idx - 1,
+            .data = .{
+                .lhs = try self.parse_precedence_expr(0),
+                .rhs = undefined,
+            },
+        });
+        // return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
+    }
+
+    fn while_stmt(self: *Self) !Node.Index {
+        const while_kw = self.token_idx - 1;
+        const condition = try self.parse_precedence_expr(0);
+
+        const body = if (self.match_and_skip(.LeftBrace))
+            try self.block_expr()
+        else if (self.match_and_skip(.Do))
+            try self.declaration()
+        else
+            return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
+
+        return self.add_node(.{
+            .tag = .While,
+            .root = while_kw,
+            .data = .{ .lhs = condition, .rhs = body },
+        });
+
+        // const body = try self.allocator.create(Ast.Stmt);
+        // body.* = if (self.match_and_skip(.LeftBrace))
+        //     .{ .Expr = try self.block_expr() }
+        // else if (self.match_and_skip(.Do))
+        //     try self.declaration()
+        // else
+        //     return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
+
+        // return .{ .While = .{
+        //     .condition = condition,
+        //     .body = body,
+        // } };
+    }
+
+    fn assignment(self: *Self, assigne: Node.Index) !Node.Index {
+        return self.add_node(.{
+            .tag = .Assignment,
+            .root = self.token_idx - 1,
+            .data = .{
+                .lhs = assigne,
+                .rhs = try self.parse_precedence_expr(0),
+            },
+        });
+        // return .{ .Assignment = .{
+        //     .assigne = assigne,
+        //     .value = try self.parse_precedence_expr(0),
+        // } };
+    }
 
     const Assoc = enum { Left, None };
 
@@ -526,10 +598,7 @@ pub const Parser = struct {
 
             node = try self.add_node(.{
                 .tag = get_tag(self.token_tags[op]),
-                .span = .{
-                    .start = start,
-                    .end = self.token_idx - 1,
-                },
+                .root = start,
                 .data = .{ .lhs = node, .rhs = rhs },
             });
 
@@ -555,10 +624,10 @@ pub const Parser = struct {
     fn parse_expr(self: *Self) Error!Node.Index {
         // Prefix part
         const expr = try switch (self.prev()) {
-            // .LeftBrace => self.block_expr(),
+            .LeftBrace => self.block_expr(),
             // .If => self.if_expr(),
-            // .Minus, .Not => self.unary_expr(),
-            // .Return => self.return_expr(),
+            .Minus, .Not => self.unary_expr(),
+            .Return => self.return_expr(),
             else => self.parse_primary_expr(),
         };
         return expr;
@@ -567,11 +636,42 @@ pub const Parser = struct {
         // return self.parse_postfix_expr(expr);
     }
 
-    // fn block_expr(self: *Self) Error!*Expr {
-    //     const expr = try self.allocator.create(Expr);
-    //     expr.* = .{ .Block = try self.block() };
-    //     return expr;
-    // }
+    fn block_expr(self: *Self) Error!Node.Index {
+        // const expr = try self.allocator.create(Expr);
+        // expr.* = .{ .Block = try self.block() };
+        // return expr;
+        const openning_brace = self.token_idx - 1;
+
+        self.skip_new_lines();
+        // var span: Span = .{ .start = openning_brace.span.start, .end = 0 };
+
+        // var stmts = ArrayList(Stmt).init(self.allocator);
+
+        const idx = try self.reserve_main();
+
+        const start = self.main_nodes.items.len;
+        while (!self.check(.RightBrace) and !self.check(.Eof)) {
+            // try stmts.append(try self.declaration());
+            try self.main_nodes.append(try self.declaration());
+            self.skip_new_lines();
+        }
+
+        try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, openning_brace);
+
+        return self.set_main(idx, try self.add_node(.{
+            .tag = .Block,
+            .root = openning_brace,
+            .data = .{ .lhs = self.main_nodes.items.len - start, .rhs = undefined },
+        }));
+
+        // span.end = self.prev().span.end;
+        //
+        // return .{
+        //     .stmts = try stmts.toOwnedSlice(),
+        //     .span = span,
+        // };
+
+    }
 
     // fn block(self: *Self) Error!Ast.Block {
     //     const openning_brace = self.prev();
@@ -637,52 +737,73 @@ pub const Parser = struct {
     //     return expr;
     // }
 
-    // fn unary_expr(self: *Self) Error!*Expr {
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     const op = self.prev();
-    //     self.advance();
-    //
-    //     // Recursion appens here
-    //     expr.* = .{ .Unary = .{
-    //         .op = op.kind,
-    //         .rhs = try self.parse_expr(),
-    //         .span = .{
-    //             .start = op.span.start,
-    //             .end = self.current().span.start,
-    //         },
-    //     } };
-    //
-    //     return expr;
-    // }
+    fn unary_expr(self: *Self) Error!Node.Index {
+        const op = self.token_idx - 1;
+        return self.add_node(.{
+            .tag = .Unary,
+            .root = op,
+            .data = .{ .lhs = try self.parse_precedence_expr(0), .rhs = undefined },
+        });
 
-    // fn return_expr(self: *Self) Error!*Expr {
-    //     const expr = try self.allocator.create(Expr);
-    //     const op = self.prev();
-    //
-    //     // Checks cases like: fn add() { return }
-    //     expr.* = .{ .Return = .{
-    //         .expr = if (self.check(.NewLine) or self.check(.RightBrace))
-    //             null
-    //         else
-    //             try self.parse_precedence_expr(0),
-    //         .span = .{ .start = op.span.start, .end = self.prev().span.end },
-    //     } };
-    //
-    //     return expr;
-    // }
+        // const expr = try self.allocator.create(Expr);
+        //
+        // const op = self.prev();
+        // self.advance();
+        //
+        // // Recursion appens here
+        // expr.* = .{ .Unary = .{
+        //     .op = op.kind,
+        //     .rhs = try self.parse_expr(),
+        //     .span = .{
+        //         .start = op.span.start,
+        //         .end = self.current().span.start,
+        //     },
+        // } };
+        //
+        // return expr;
+    }
+
+    fn return_expr(self: *Self) Error!Node.Index {
+        const tk = self.token_idx - 1;
+
+        return self.add_node(.{
+            .tag = .Return,
+            .root = tk,
+            .data = .{
+                .lhs = if (self.check(.NewLine) or self.check(.RightBrace))
+                    NullNode
+                else
+                    try self.parse_precedence_expr(0),
+                .rhs = NullNode,
+            },
+        });
+
+        // const expr = try self.allocator.create(Expr);
+        // const op = self.prev();
+        //
+        // // Checks cases like: fn add() { return }
+        // expr.* = .{ .Return = .{
+        //     .expr = if (self.check(.NewLine) or self.check(.RightBrace))
+        //         null
+        //     else
+        //         try self.parse_precedence_expr(0),
+        //     .span = .{ .start = op.span.start, .end = self.prev().span.end },
+        // } };
+        //
+        // return expr;
+    }
 
     fn parse_primary_expr(self: *Self) Error!Node.Index {
         const tag = self.prev();
 
         return switch (tag) {
             .False => self.bool_(),
-            // .Float => self.float(),
-            // .Identifier => self.identifier(),
-            // .Int => self.int(),
-            // .LeftParen => self.grouping(),
-            // .Null => self.null_(),
-            // .String => self.string(),
+            .Float => self.literal(.Float),
+            .Identifier => self.literal(.Identifier),
+            .Int => self.literal(.Int),
+            .LeftParen => self.grouping(),
+            .Null => self.literal(.Null),
+            .String => self.literal(.String),
             .True => self.bool_(),
             else => |k| {
                 if (k == .Eof) {
@@ -696,102 +817,35 @@ pub const Parser = struct {
         };
     }
 
-    // fn grouping(self: *Self) Error!*Expr {
-    //     const opening = self.prev();
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .Grouping = .{
-    //         .expr = try self.parse_precedence_expr(0),
-    //         .span = .{
-    //             .start = opening.span.start,
-    //             .end = self.current().span.start,
-    //         },
-    //     } };
-    //
-    //     try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, &opening);
-    //     return expr;
-    // }
+    fn grouping(self: *Self) Error!Node.Index {
+        const opening = self.token_idx - 1;
+        self.skip_new_lines();
+        const expr = try self.parse_precedence_expr(0);
+        self.skip_new_lines();
+        try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, opening);
+
+        return self.add_node(.{
+            .tag = .Grouping,
+            .root = opening,
+            .data = .{ .lhs = expr, .rhs = undefined },
+        });
+    }
 
     fn bool_(self: *Self) Error!Node.Index {
         return self.add_node(.{
-            .tag = .BoolLit,
-            .span = .{ .start = self.token_idx - 1, .end = 0 },
+            .tag = .Bool,
+            .root = self.token_idx - 1,
             .data = undefined,
         });
-
-        // const p = self.prev();
-        // const expr = try self.allocator.create(Expr);
-        //
-        // expr.* = .{ .BoolLit = .{
-        //     .value = value,
-        //     .span = p.span,
-        // } };
-        //
-        // return expr;
     }
 
-    // fn float(self: *Self) Error!*Expr {
-    //     const p = self.prev();
-    //     const lexeme = p.from_source(self.source);
-    //     const value = try std.fmt.parseFloat(f64, lexeme);
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .FloatLit = .{
-    //         .value = value,
-    //         .span = p.span,
-    //     } };
-    //
-    //     return expr;
-    // }
-
-    // fn identifier(self: *Self) Error!*Expr {
-    //     const p = self.prev();
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .Identifier = .{
-    //         .name = p.from_source(self.source),
-    //         .span = p.span,
-    //     } };
-    //
-    //     return expr;
-    // }
-
-    // fn int(self: *Self) Error!*Expr {
-    //     const p = self.prev();
-    //     const lexeme = p.from_source(self.source);
-    //     const value = try std.fmt.parseInt(i64, lexeme, 10);
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .IntLit = .{
-    //         .value = value,
-    //         .span = p.span,
-    //     } };
-    //
-    //     return expr;
-    // }
-
-    // fn null_(self: *Self) Error!*Expr {
-    //     const p = self.prev();
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .NullLit = .{
-    //         .span = p.span,
-    //     } };
-    //
-    //     return expr;
-    // }
-
-    // fn string(self: *Self) Error!*Expr {
-    //     const p = self.prev();
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .StringLit = .{
-    //         .value = self.source[p.span.start + 1 .. p.span.end - 1],
-    //         .span = p.span,
-    //     } };
-    //
-    //     return expr;
-    // }
+    fn literal(self: *Self, tag: Node.Tag) Error!Node.Index {
+        return self.add_node(.{
+            .tag = tag,
+            .root = self.token_idx - 1,
+            .data = undefined,
+        });
+    }
 
     // / Parses postfix expressions: calls, member access
     // fn parse_postfix_expr(self: *Self, prefix_expr: *Expr) Error!*Expr {

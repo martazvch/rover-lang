@@ -189,7 +189,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
             lexer.tokens.items(.tag),
             lexer.tokens.items(.span),
             parser.nodes.items(.tag),
-            parser.nodes.items(.span),
+            parser.nodes.items(.root),
             parser.nodes.items(.data),
             parser.main_nodes.items,
         );
