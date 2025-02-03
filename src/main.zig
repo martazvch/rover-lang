@@ -54,7 +54,7 @@ pub fn main() !void {
     if (res.args.file) |f| {
         try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
     } else {
-        try repl(allocator, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
+        // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
     }
 }
 

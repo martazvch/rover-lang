@@ -1,9 +1,4 @@
-fn create_add() -> fn(int) -> int {
-    fn add(a: int) -> int {}
+true
+false
 
-    add
-}
-
-fn main() {
-
-}
+true + false

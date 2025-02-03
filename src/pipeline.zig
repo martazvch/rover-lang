@@ -170,79 +170,91 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     parser.init(allocator);
     defer parser.deinit();
 
-    try parser.parse(source, lexer.tokens.items);
+    try parser.parse(
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+    );
 
     if (parser.errs.items.len > 0) {
         var reporter = GenReporter(ParserMsg).init(source);
         try reporter.report_all(filename, parser.errs.items);
         return;
     }
-
     // Printer
     if (config.print_ast) {
-        var ast_printer = AstPrinter.init(allocator);
+        var ast_printer = AstPrinter.init(
+            allocator,
+            source,
+            lexer.tokens.items(.tag),
+            lexer.tokens.items(.span),
+            parser.nodes.items(.tag),
+            parser.nodes.items(.span),
+            parser.nodes.items(.data),
+            parser.main_nodes.items,
+        );
         defer ast_printer.deinit();
 
-        try ast_printer.parse_ast(source, parser.stmts.items);
+        try ast_printer.parse_ast();
         ast_printer.display();
     }
 
-    // Analyzer
-    // TODO: init analyzer extra info with exact number of element per array list
-    // for optimal memory allocation
-    var analyzer: Analyzer = undefined;
-    try analyzer.init(allocator, false);
-    defer analyzer.deinit();
-
-    try analyzer.analyze(parser.stmts.items, source);
-
-    // Analyzer errors
-    if (analyzer.errs.items.len > 0) {
-        var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.report_all(filename, analyzer.errs.items);
-
-        if (analyzer.warns.items.len > 0) {
-            reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.report_all(filename, analyzer.warns.items);
-        }
-
-        return;
-    }
+    // // Analyzer
+    // // TODO: init analyzer extra info with exact number of element per array list
+    // // for optimal memory allocation
+    // var analyzer: Analyzer = undefined;
+    // try analyzer.init(allocator, false);
+    // defer analyzer.deinit();
+    //
+    // try analyzer.analyze(parser.stmts.items, source);
+    //
+    // // Analyzer errors
+    // if (analyzer.errs.items.len > 0) {
+    //     var reporter = GenReporter(AnalyzerMsg).init(source);
+    //     try reporter.report_all(filename, analyzer.errs.items);
+    //
+    //     if (analyzer.warns.items.len > 0) {
+    //         reporter = GenReporter(AnalyzerMsg).init(source);
+    //         try reporter.report_all(filename, analyzer.warns.items);
+    //     }
+    //
+    //     return;
+    // }
 
     // Analyzer warnings
-    if (config.static_analyzis and analyzer.warns.items.len > 0) {
-        var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.report_all(filename, analyzer.warns.items);
-        return;
-    }
-
-    // Analyzed Ast printer
-    if (config.print_analyzed_ast) {
-        var analyzed_ast_printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);
-        defer analyzed_ast_printer.deinit();
-
-        try analyzed_ast_printer.parse(source, analyzer.analyzed_stmts.items);
-        analyzed_ast_printer.display();
-    }
-
-    // Start of Vm for compilation
-    var vm: Vm = Vm.new(allocator);
-    try vm.init(false);
-    defer vm.deinit();
-
-    // Compiler
-    var compiler = CompilationManager.init(
-        &vm,
-        analyzer.type_manager.builtins.functions,
-        parser.stmts.items,
-        analyzer.analyzed_stmts.items,
-        config.print_bytecode,
-        analyzer.main.?,
-        false,
-    );
-    defer compiler.deinit();
-    const function = try compiler.compile();
-
-    // Run the program
-    try vm.run(function);
+    // if (config.static_analyzis and analyzer.warns.items.len > 0) {
+    //     var reporter = GenReporter(AnalyzerMsg).init(source);
+    //     try reporter.report_all(filename, analyzer.warns.items);
+    //     return;
+    // }
+    //
+    // // Analyzed Ast printer
+    // if (config.print_analyzed_ast) {
+    //     var analyzed_ast_printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);
+    //     defer analyzed_ast_printer.deinit();
+    //
+    //     try analyzed_ast_printer.parse(source, analyzer.analyzed_stmts.items);
+    //     analyzed_ast_printer.display();
+    // }
+    //
+    // // Start of Vm for compilation
+    // var vm: Vm = Vm.new(allocator);
+    // try vm.init(false);
+    // defer vm.deinit();
+    //
+    // // Compiler
+    // var compiler = CompilationManager.init(
+    //     &vm,
+    //     analyzer.type_manager.builtins.functions,
+    //     parser.stmts.items,
+    //     analyzer.analyzed_stmts.items,
+    //     config.print_bytecode,
+    //     analyzer.main.?,
+    //     false,
+    // );
+    // defer compiler.deinit();
+    // const function = try compiler.compile();
+    //
+    // // Run the program
+    // try vm.run(function);
 }
