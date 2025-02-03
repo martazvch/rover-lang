@@ -28,8 +28,8 @@
             .hash = "1220d57cc0b08eb183b11d513eec44c5518468dc5bb39c6fa8a53d1bb62defe6e1a1",
         },
         .tracy = .{
-            .url = "https://github.com/martinrov/zig-tracy/archive/252a0fb2f6e9d04638ae86130bfce79aff3352c1.tar.gz",
-            .hash = "1220ca4c62b5b568073dadb0532e5a2df49e22ce04c5fb5a19375908ea88eb8dc02b",
+            .url = "https://github.com/martinrov/zig-tracy/archive/916593dec80f63de83dd000ec52d69ad3e6467be.tar.gz",
+            .hash = "12204df258ca4cdcc5f37e96cb5044f52c7985948470d729228904e806794689d2c9",
         },
     },
     .paths = .{

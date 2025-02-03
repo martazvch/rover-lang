@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) !void {
     // options.addOption(bool, "log_analyzer", log_analyzer);
 
     // Tracy module or empty one
-    const tracy_dep = if (tracy_enabled) b.dependency("tracy", .{}) else undefined;
+    const tracy_dep = if (tracy_enabled) b.dependency("tracy", .{ .tracy_no_exit = true }) else undefined;
     const tracy_mod = if (tracy_enabled) tracy_dep.module("tracy") else b.createModule(.{
         .root_source_file = b.path("src/tracy_noop.zig"),
     });

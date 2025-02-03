@@ -1,5 +1,4 @@
 const std = @import("std");
-const tracy = @import("tracy");
 const Allocator = std.mem.Allocator;
 const GenReporter = @import("reporter.zig").GenReporter;
 const GenReport = @import("reporter.zig").GenReport;
@@ -155,15 +154,6 @@ pub const ReplPipeline = struct {
 
 /// Runs the pipeline
 pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [:0]const u8) !void {
-    tracy.setThreadName("Main");
-    defer tracy.message("Graceful main thread exit");
-
-    for (0..10000000) |_| {
-        const zone = tracy.initZone(@src(), .{ .name = "Important work" });
-        defer zone.deinit();
-        std.time.sleep(10000);
-    }
-
     // Lexer
     var lexer = Lexer.init(allocator);
     try lexer.lex(source);

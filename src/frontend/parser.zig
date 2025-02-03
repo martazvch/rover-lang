@@ -1,4 +1,5 @@
 const std = @import("std");
+const tracy = @import("tracy");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -61,6 +62,8 @@ pub const Parser = struct {
 
     /// Parses the token stream
     pub fn parse(self: *Self, source: [:0]const u8, tokens: []const Token) !void {
+        const zone = tracy.initZone(@src(), .{ .name = "Parsing" });
+        defer zone.deinit();
         self.source = source;
         self.tokens = tokens;
 
