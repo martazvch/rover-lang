@@ -102,7 +102,9 @@ pub const Parser = struct {
             };
 
             // try self.stmts.append(stmt);
-            try self.main_nodes.append(node);
+
+            // If NullNode is returned, it means it has already been added to main nodes
+            if (node != NullNode) try self.main_nodes.append(node);
 
             // If EOF, exit
             if (self.match(.Eof)) break;
@@ -169,9 +171,8 @@ pub const Parser = struct {
     }
 
     /// Sets a main nodes at the given index. Returns the index back
-    fn set_main(self: *Self, index: usize, node: Node.Index) Node.Index {
+    fn set_main(self: *Self, index: usize, node: Node.Index) void {
         self.main_nodes.items[index] = node;
-        return node;
     }
 
     fn skip_new_lines(self: *Self) void {
@@ -262,8 +263,7 @@ pub const Parser = struct {
 
     fn declaration(self: *Self) Error!Node.Index {
         if (self.match(.Fn)) {
-            // return self.fn_declaration();
-            return NullNode;
+            return self.fn_declaration();
         } else if (self.match(.Var)) {
             // return self.var_declaration(false);
             return self.var_declaration();
@@ -278,12 +278,15 @@ pub const Parser = struct {
 
     fn fn_declaration(self: *Self) Error!Node.Index {
         try self.expect(.Identifier, .ExpectFnName);
-        const ident = self.prev();
+        // const ident = self.prev();
+        const name = self.token_idx - 1;
 
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
 
+        const idx = try self.reserve_main();
+
         var arity: usize = 0;
-        var params: [256]Ast.Parameter = undefined;
+        // var params: [256]Ast.Parameter = undefined;
 
         self.skip_new_lines();
         while (!self.check(.RightParen)) {
@@ -296,9 +299,16 @@ pub const Parser = struct {
             );
 
             const var_infos = try self.var_name_and_type("parameter");
-            const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
+            // const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
 
-            params[arity] = .{ .name = var_infos.name, .type_ = type_ };
+            // params[arity] = .{ .name = var_infos.name, .type_ = type_ };
+
+            try self.main_nodes.append(try self.add_node(.{
+                .tag = .Parameter,
+                .root = var_infos.name,
+                .data = .{ .lhs = var_infos.type_, .rhs = undefined },
+            }));
+
             arity += 1;
 
             self.skip_new_lines();
@@ -308,24 +318,35 @@ pub const Parser = struct {
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-        const return_type: ?Type = if (self.match(.SmallArrow))
+        // const return_type: ?Type = if (self.match(.SmallArrow))
+        const return_type: Node.Index = if (self.match(.SmallArrow))
             try self.parse_type()
         else if (self.check(.Identifier))
             return self.error_at_current(.ExpectArrowBeforeFnType)
         else
-            null;
+            NullNode;
+
+        try self.main_nodes.append(return_type);
 
         self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
-        const body = try self.block();
+        _ = try self.block_expr();
 
-        return .{ .FnDecl = .{
-            .name = SourceSlice.from_token(ident, self.source),
-            .params = params,
-            .arity = @intCast(arity),
-            .body = body,
-            .return_type = return_type,
-        } };
+        self.set_main(idx, try self.add_node(.{
+            .tag = .FnDecl,
+            .root = name,
+            .data = .{ .lhs = arity, .rhs = undefined },
+        }));
+
+        return NullNode;
+
+        // return .{ .FnDecl = .{
+        //     .name = SourceSlice.from_token(ident, self.source),
+        //     .params = params,
+        //     .arity = @intCast(arity),
+        //     .body = body,
+        //     .return_type = return_type,
+        // } };
     }
 
     fn var_declaration(self: *Self) !Node.Index {
@@ -594,15 +615,12 @@ pub const Parser = struct {
             // Here, we can safely use it
             self.advance();
             const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
-            std.debug.print("RHS: {}\n", .{rhs});
 
             node = try self.add_node(.{
                 .tag = get_tag(self.token_tags[op]),
                 .root = start,
                 .data = .{ .lhs = node, .rhs = rhs },
             });
-
-            std.debug.print("BINOP: {any}\n", .{node});
 
             // const expr = try self.allocator.create(Expr);
             // expr.* = .{ .BinOp = .{
@@ -658,11 +676,13 @@ pub const Parser = struct {
 
         try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, openning_brace);
 
-        return self.set_main(idx, try self.add_node(.{
+        self.set_main(idx, try self.add_node(.{
             .tag = .Block,
             .root = openning_brace,
             .data = .{ .lhs = self.main_nodes.items.len - start, .rhs = undefined },
         }));
+
+        return NullNode;
 
         // span.end = self.prev().span.end;
         //

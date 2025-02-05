@@ -63,6 +63,11 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
     }
 
+    fn source_from_tk(self: *const Self, index: Ast.TokenIndex) []const u8 {
+        const span = self.token_spans[self.node_roots[index]];
+        return self.source[span.start..span.end];
+    }
+
     pub fn parse_ast(self: *Self) !void {
         while (self.node_idx < self.main_nodes.len) : (self.node_idx += 1) {
             try self.parse_node(self.main_nodes[self.node_idx]);
@@ -77,10 +82,12 @@ pub const AstPrinter = struct {
             .Bool => self.literal("Bool literal", index),
             .Discard => self.discard(index),
             .Float => self.literal("Float literal", index),
+            .FnDecl => self.fn_decl(index),
             .Grouping => self.grouping(index),
             .Identifier => self.literal("Identifier", index),
             .Int => self.literal("Int literal", index),
             .Null => self.null_(),
+            .Parameter => self.parameter(index),
             .Print => self.print_stmt(index),
             .Return => self.return_expr(index),
             .String => self.literal("String literal", index),
@@ -138,7 +145,6 @@ pub const AstPrinter = struct {
             self.node_idx += 1;
             try self.parse_node(self.main_nodes[self.node_idx]);
         }
-        // for (expr.stmts) |*s| try self.statement(s);
 
         self.indent_level -= 1;
     }
@@ -153,6 +159,54 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
+    fn fn_decl(self: *Self, index: Node.Index) !void {
+        try self.indent();
+        var writer = self.tree.writer();
+
+        const arity = self.node_data[index].lhs;
+        const return_type = self.get_type(self.main_nodes[self.node_idx + arity + 1]);
+
+        try writer.print(
+            "[Fn declaration {s}, type {s}, arity {}\n",
+            .{ self.source_from_tk(index), return_type, arity },
+        );
+
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("params:\n");
+        self.indent_level += 1;
+
+        for (0..arity) |_| {
+            self.node_idx += 1;
+            try self.parameter(self.main_nodes[self.node_idx]);
+        }
+
+        // Skips the return type
+        self.node_idx += 1;
+        self.indent_level -= 1;
+
+        try self.indent();
+        try self.tree.appendSlice("body:\n");
+        self.indent_level += 1;
+        self.node_idx += 1;
+        try self.block_expr(self.main_nodes[self.node_idx]);
+        self.indent_level -= 1;
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
+    fn parameter(self: *Self, index: Node.Index) Error!void {
+        try self.indent();
+        const writer = self.tree.writer();
+
+        try writer.print(
+            "{s}, type {s}\n",
+            .{ self.source_from_tk(index), self.get_type(self.node_data[index].lhs) },
+        );
+    }
+
     fn grouping(self: *Self, index: Node.Index) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Grouping]\n");
@@ -165,8 +219,7 @@ pub const AstPrinter = struct {
     fn literal(self: *Self, text: []const u8, index: Node.Index) Error!void {
         try self.indent();
         var writer = self.tree.writer();
-        const span = self.token_spans[self.node_roots[index]];
-        try writer.print("[{s} {s}]\n", .{ text, self.source[span.start..span.end] });
+        try writer.print("[{s} {s}]\n", .{ text, self.source_from_tk(index) });
     }
 
     fn null_(self: *Self) Error!void {
@@ -200,8 +253,7 @@ pub const AstPrinter = struct {
     fn unary_expr(self: *Self, index: Node.Index) Error!void {
         try self.indent();
         var writer = self.tree.writer();
-        const span = self.token_spans[self.node_roots[index]];
-        try writer.print("[Unary {s}]\n", .{self.source[span.start..span.end]});
+        try writer.print("[Unary {s}]\n", .{self.source_from_tk(index)});
 
         self.indent_level += 1;
         try self.parse_node(self.node_data[index].lhs);
@@ -213,13 +265,11 @@ pub const AstPrinter = struct {
         try self.indent();
         var writer = self.tree.writer();
 
-        const name_span = self.token_spans[self.node_roots[index]];
-
         try writer.print(
             "[Var declaration {s}, type {s}, value\n",
             .{
-                self.source[name_span.start..name_span.end],
-                self.print_type(node.lhs),
+                self.source_from_tk(index),
+                self.get_type(node.lhs),
             },
         );
 
@@ -258,13 +308,12 @@ pub const AstPrinter = struct {
         // try self.tree.appendSlice("]\n");
     }
 
-    fn print_type(self: *Self, index: Node.Index) []const u8 {
+    fn get_type(self: *Self, index: Node.Index) []const u8 {
         if (index == NullNode) return "void";
 
         return switch (self.node_tags[index]) {
             .Type => {
-                const span = self.token_spans[self.node_roots[index]];
-                return self.source[span.start..span.end];
+                return self.source_from_tk(index);
             },
             else => unreachable,
         };
@@ -278,8 +327,7 @@ pub const AstPrinter = struct {
         const data = self.node_data[index];
 
         for (data.lhs..data.rhs) |i| {
-            const ident = self.token_spans[self.node_roots[i]];
-            try writer.print("{s}", .{self.source[ident.start..ident.end]});
+            try writer.print("{s}", .{self.source_from_tk(index)});
 
             if (i < data.rhs - 1) {
                 try writer.print(" ", .{});
