@@ -1,7 +1,10 @@
 // true
 // false
+// 1
+// 45.67
+// "abcdef"
 // 
-// true + false
+// true + false + 5
 // 
 // 54 + 1.234 - null
 // (
@@ -13,21 +16,20 @@
 // 
 // return true
 // 
-// 
 // print "oui"
-// 
 // 
 // var a = 456
 // var b: str
-// 
-// _ = 45
-// 
-// use std.lib.time
-// 
+
 // {
 //     var a = 1
 //     print 1+4
 // }
+// 
+// _ = 45
+// 
+// use std.lib.time
+
 
 fn add(arg1: float, arg2: bool) -> int {
     print "oui"

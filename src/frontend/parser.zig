@@ -38,7 +38,8 @@ pub const Parser = struct {
     token_spans: []const Span,
     token_idx: usize,
     nodes: MultiArrayList(Node),
-    data: ArrayList(Node.Index),
+    flat_nodes: ArrayList(Node),
+    // data: ArrayList(Node.Index),
     main_nodes: ArrayList(usize),
     panic_mode: bool,
 
@@ -56,9 +57,10 @@ pub const Parser = struct {
         self.arena = ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
         self.nodes = MultiArrayList(Node){};
-        self.data = ArrayList(Node.Index).init(self.allocator);
+        // self.data = ArrayList(Node.Index).init(self.allocator);
         self.main_nodes = ArrayList(usize).init(self.allocator);
         self.errs = ArrayList(ParserReport).init(self.allocator);
+        self.flat_nodes = ArrayList(Node).init(self.allocator);
         self.token_idx = 0;
         self.panic_mode = false;
     }
@@ -74,8 +76,9 @@ pub const Parser = struct {
         token_tags: []const Token.Tag,
         token_spans: []const Span,
     ) !void {
-        const zone = tracy.initZone(@src(), .{ .name = "Parsing" });
-        defer zone.deinit();
+        // const zone = tracy.initZone(@src(), .{ .name = "Parsing" });
+        // defer zone.deinit();
+
         self.source = source;
         self.token_tags = token_tags;
         self.token_spans = token_spans;
@@ -124,14 +127,6 @@ pub const Parser = struct {
         }
     }
 
-    fn current(self: *const Self) Token.Tag {
-        return self.token_tags[self.token_idx];
-    }
-
-    fn prev(self: *const Self) Token.Tag {
-        return self.token_tags[self.token_idx - 1];
-    }
-
     fn advance(self: *Self) void {
         self.token_idx += 1;
     }
@@ -155,7 +150,7 @@ pub const Parser = struct {
 
     /// Checks if we currently are at a token
     fn check(self: *const Self, kind: Token.Tag) bool {
-        return self.current() == kind;
+        return self.token_tags[self.token_idx] == kind;
     }
 
     /// Adds a new node and returns its index
@@ -173,6 +168,15 @@ pub const Parser = struct {
     /// Sets a main nodes at the given index. Returns the index back
     fn set_main(self: *Self, index: usize, node: Node.Index) void {
         self.main_nodes.items[index] = node;
+    }
+
+    fn reserve_node(self: *Self) !Node.Index {
+        try self.flat_nodes.append(undefined);
+        return self.flat_nodes.items.len - 1;
+    }
+
+    fn set_node(self: *Self, index: usize, node: Node) void {
+        self.flat_nodes.items[index] = node;
     }
 
     fn skip_new_lines(self: *Self) void {
@@ -265,7 +269,6 @@ pub const Parser = struct {
         if (self.match(.Fn)) {
             return self.fn_declaration();
         } else if (self.match(.Var)) {
-            // return self.var_declaration(false);
             return self.var_declaration();
         } else if (self.match(.Underscore)) {
             return self.discard();
@@ -278,17 +281,18 @@ pub const Parser = struct {
 
     fn fn_declaration(self: *Self) Error!Node.Index {
         try self.expect(.Identifier, .ExpectFnName);
-        // const ident = self.prev();
-        const name = self.token_idx - 1;
+
+        const idx = try self.add_node(.{
+            .tag = .FnDecl,
+            .main = self.token_idx - 1,
+            .data = undefined,
+        });
 
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
-
-        const idx = try self.reserve_main();
+        self.skip_new_lines();
 
         var arity: usize = 0;
-        // var params: [256]Ast.Parameter = undefined;
 
-        self.skip_new_lines();
         while (!self.check(.RightParen)) {
             if (self.check(.Eof)) {
                 return self.error_at_prev(.ExpectParenAfterFnParams);
@@ -298,16 +302,16 @@ pub const Parser = struct {
                 .{ .TooManyFnArgs = .{ .what = "parameter" } },
             );
 
-            const var_infos = try self.var_name_and_type("parameter");
-            // const type_ = var_infos.type_ orelse return self.error_at_prev(.MissingFnParamType);
+            try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
 
-            // params[arity] = .{ .name = var_infos.name, .type_ = type_ };
-
-            try self.main_nodes.append(try self.add_node(.{
+            _ = try self.add_node(.{
                 .tag = .Parameter,
-                .root = var_infos.name,
-                .data = .{ .lhs = var_infos.type_, .rhs = undefined },
-            }));
+                .main = self.token_idx - 1,
+                .data = undefined,
+            });
+
+            try self.expect(.Colon, .MissingFnParamType);
+            _ = try self.extract_type();
 
             arity += 1;
 
@@ -318,27 +322,26 @@ pub const Parser = struct {
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-        // const return_type: ?Type = if (self.match(.SmallArrow))
-        const return_type: Node.Index = if (self.match(.SmallArrow))
-            try self.parse_type()
+        self.nodes.items(.data)[idx].lhs = arity;
+
+        _ = if (self.match(.SmallArrow))
+            try self.extract_type()
         else if (self.check(.Identifier))
             return self.error_at_current(.ExpectArrowBeforeFnType)
         else
-            NullNode;
-
-        try self.main_nodes.append(return_type);
+            try self.add_node(Node.Empty);
 
         self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
         _ = try self.block_expr();
 
-        self.set_main(idx, try self.add_node(.{
-            .tag = .FnDecl,
-            .root = name,
-            .data = .{ .lhs = arity, .rhs = undefined },
-        }));
+        // self.set_main(idx, try self.add_node(.{
+        //     .tag = .FnDecl,
+        //     .main = name,
+        //     .data = .{ .lhs = arity, .rhs = undefined },
+        // }));
 
-        return NullNode;
+        return idx;
 
         // return .{ .FnDecl = .{
         //     .name = SourceSlice.from_token(ident, self.source),
@@ -350,18 +353,30 @@ pub const Parser = struct {
     }
 
     fn var_declaration(self: *Self) !Node.Index {
-        const var_infos = try self.var_name_and_type("variable");
+        try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "variable" } });
+        // const ident = self.token_idx - 1;
 
-        const value: Node.Index = if (self.match(.Equal))
+        const idx = try self.add_node(.{
+            .tag = .VarDecl,
+            .main = self.token_idx - 1,
+            .data = undefined,
+        });
+        // const var_name = try self.var_name_and_type("variable");
+        try self.parse_type();
+
+        // self.nodes.items(.main)[idx] = var_name;
+
+        _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
         else
-            NullNode;
+            try self.add_node(Node.Empty);
 
-        return self.add_node(.{
-            .tag = .VarDecl,
-            .root = var_infos.name,
-            .data = .{ .lhs = var_infos.type_, .rhs = value },
-        });
+        return idx;
+        // return self.add_node(.{
+        //     .tag = .VarDecl,
+        //     .main = var_name,
+        //     .data = .{ .lhs = var_infos.type_, .rhs = value },
+        // });
         //
         // return .{
         //     .VarDecl = .{
@@ -373,22 +388,17 @@ pub const Parser = struct {
         // };
     }
 
-    fn var_name_and_type(self: *Self, var_kind: []const u8) !struct { name: TokenIndex, type_: Node.Index } {
-        try self.expect(.Identifier, .{ .ExpectName = .{ .kind = var_kind } });
-        const ident = self.token_idx - 1;
-
-        var type_: TokenIndex = NullNode;
-
-        if (self.match(.Colon)) {
-            type_ = try self.parse_type();
-        } else if (self.check(.Identifier)) {
-            return self.error_at_current(.ExpectColonBeforeType);
-        }
-
-        return .{ .name = ident, .type_ = type_ };
+    /// Expects and declare a type. If none, declare an empty one
+    fn parse_type(self: *Self) Error!void {
+        _ = if (self.match(.Colon))
+            try self.extract_type()
+        else if (self.check(.Identifier))
+            return self.error_at_current(.ExpectColonBeforeType)
+        else
+            try self.add_node(Node.Empty);
     }
 
-    fn parse_type(self: *Self) Error!Node.Index {
+    fn extract_type(self: *Self) Error!Node.Index {
         if (self.match(.FloatKw) or
             self.match(.IntKw) or
             self.match(.StrKw) or
@@ -396,7 +406,7 @@ pub const Parser = struct {
             self.match(.Identifier))
         {
             return self.add_node(
-                .{ .tag = .Type, .root = self.token_idx - 1, .data = undefined },
+                .{ .tag = .Type, .main = self.token_idx - 1, .data = undefined },
             );
             // } else if (self.match(.Fn)) {
             //     const start = self.prev().span.start;
@@ -440,15 +450,23 @@ pub const Parser = struct {
 
     fn discard(self: *Self) !Node.Index {
         try self.expect(.Equal, .InvalidDiscard);
-
-        return self.add_node(.{
+        const idx = self.add_node(.{
             .tag = .Discard,
-            .root = self.token_idx - 1,
-            .data = .{
-                .lhs = try self.parse_precedence_expr(0),
-                .rhs = NullNode,
-            },
+            .main = self.token_idx - 1,
+            .data = undefined,
         });
+        _ = try self.parse_precedence_expr(0);
+
+        return idx;
+
+        // return self.add_node(.{
+        //     .tag = .Discard,
+        //     .main = self.token_idx - 1,
+        //     .data = .{
+        //         .lhs = try self.parse_precedence_expr(0),
+        //         .rhs = NullNode,
+        //     },
+        // });
 
         // return .{
         //     .Discard = .{
@@ -458,31 +476,39 @@ pub const Parser = struct {
     }
 
     fn use(self: *Self) Error!Node.Index {
-        const use_kw = self.token_idx - 1;
-        const first = self.nodes.len;
-        // var list = ArrayList(SourceSlice).init(self.allocator);
+        const idx = try self.add_node(.{
+            .tag = .Use,
+            .main = self.token_idx - 1,
+            .data = undefined,
+        });
 
         if (!self.check(.Identifier)) {
             return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
         }
 
+        var count: usize = 0;
         while (self.match(.Identifier) and !self.check(.Eof)) {
-            // try list.append(SourceSlice.from_token(self.prev(), self.source));
             _ = try self.add_node(.{
                 .tag = .Identifier,
-                .root = self.token_idx - 1,
+                .main = self.token_idx - 1,
                 .data = undefined,
             });
+
+            count += 1;
 
             if (self.match(.Dot)) continue;
             break;
         }
 
-        return self.add_node(.{
-            .tag = .Use,
-            .root = use_kw,
-            .data = .{ .lhs = first, .rhs = self.nodes.len },
-        });
+        self.nodes.items(.data)[idx].lhs = count;
+
+        return idx;
+
+        // return self.add_node(.{
+        //     .tag = .Use,
+        //     .main = use_kw,
+        //     .data = .{ .lhs = first, .rhs = self.nodes.len },
+        // });
         // span.end = self.prev().span.end;
 
         // return .{ .Use = .{ .module = try list.toOwnedSlice(), .span = span } };
@@ -503,14 +529,23 @@ pub const Parser = struct {
     }
 
     fn print_stmt(self: *Self) Error!Node.Index {
-        return self.add_node(.{
+        const idx = try self.add_node(.{
             .tag = .Print,
-            .root = self.token_idx - 1,
-            .data = .{
-                .lhs = try self.parse_precedence_expr(0),
-                .rhs = undefined,
-            },
+            .main = self.token_idx - 1,
+            .data = undefined,
         });
+
+        _ = try self.parse_precedence_expr(0);
+        return idx;
+
+        // return self.add_node(.{
+        //     .tag = .Print,
+        //     .main = self.token_idx - 1,
+        //     .data = .{
+        //         .lhs = try self.parse_precedence_expr(0),
+        //         .rhs = undefined,
+        //     },
+        // });
         // return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
     }
 
@@ -527,7 +562,7 @@ pub const Parser = struct {
 
         return self.add_node(.{
             .tag = .While,
-            .root = while_kw,
+            .main = while_kw,
             .data = .{ .lhs = condition, .rhs = body },
         });
 
@@ -548,7 +583,7 @@ pub const Parser = struct {
     fn assignment(self: *Self, assigne: Node.Index) !Node.Index {
         return self.add_node(.{
             .tag = .Assignment,
-            .root = self.token_idx - 1,
+            .main = self.token_idx - 1,
             .data = .{
                 .lhs = assigne,
                 .rhs = try self.parse_precedence_expr(0),
@@ -595,6 +630,8 @@ pub const Parser = struct {
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!Node.Index {
         const start = self.token_idx;
+        // const idx = try self.reserve_main();
+        // const idx = try self.reserve_node();
 
         self.advance();
         var node = try self.parse_expr();
@@ -603,7 +640,7 @@ pub const Parser = struct {
 
         while (true) {
             // We check the current before consuming it
-            const next_rule = rules[@as(usize, @intFromEnum(self.current()))];
+            const next_rule = rules[@as(usize, @intFromEnum(self.token_tags[self.token_idx]))];
 
             if (next_rule.prec < prec_min) break;
 
@@ -611,16 +648,37 @@ pub const Parser = struct {
                 return self.error_at_current(.ChainingCmpOp);
             }
 
+            // try self.add_node(self.nodes.get(self.nodes.len - 1));
+
             const op = self.token_idx;
+
+            // If we are in a binop, we insert the node before the operand
+            // There is no data, we just use the two next nodes
+            try self.nodes.insert(self.allocator, self.nodes.len - 1, .{
+                .tag = get_tag(self.token_tags[op]),
+                .main = start,
+                .data = undefined,
+            });
+
+            // Index of binop node
+            node = self.nodes.len - 2;
+
             // Here, we can safely use it
             self.advance();
-            const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
+            // const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
+            _ = try self.parse_precedence_expr(next_rule.prec + 1);
 
-            node = try self.add_node(.{
-                .tag = get_tag(self.token_tags[op]),
-                .root = start,
-                .data = .{ .lhs = node, .rhs = rhs },
-            });
+            // node = try self.add_node(.{
+            //     .tag = get_tag(self.token_tags[op]),
+            //     .main = start,
+            //     .data = .{ .lhs = node, .rhs = rhs },
+            // });
+
+            // self.set_node(idx, .{
+            //     .tag = get_tag(self.token_tags[op]),
+            //     .main = start,
+            //     .data = .{ .lhs = node, .rhs = rhs },
+            // });
 
             // const expr = try self.allocator.create(Expr);
             // expr.* = .{ .BinOp = .{
@@ -636,12 +694,15 @@ pub const Parser = struct {
         }
 
         return node;
+        // self.set_main(idx, node);
+        // self.set_node(idx, node);
+        // return idx;
     }
 
     /// Parses expressions (prefix + sufix)
     fn parse_expr(self: *Self) Error!Node.Index {
         // Prefix part
-        const expr = try switch (self.prev()) {
+        const expr = try switch (self.token_tags[self.token_idx - 1]) {
             .LeftBrace => self.block_expr(),
             // .If => self.if_expr(),
             .Minus, .Not => self.unary_expr(),
@@ -665,24 +726,35 @@ pub const Parser = struct {
 
         // var stmts = ArrayList(Stmt).init(self.allocator);
 
-        const idx = try self.reserve_main();
+        // const idx = try self.reserve_main();
+        const idx = try self.add_node(
+            .{ .tag = .Block, .main = openning_brace, .data = undefined },
+        );
 
-        const start = self.main_nodes.items.len;
+        // const start = self.main_nodes.items.len;
+        var length: usize = 0;
+
         while (!self.check(.RightBrace) and !self.check(.Eof)) {
             // try stmts.append(try self.declaration());
-            try self.main_nodes.append(try self.declaration());
+            // try self.main_nodes.append(try self.declaration());
+            _ = try self.declaration();
             self.skip_new_lines();
+            length += 1;
         }
 
         try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, openning_brace);
 
-        self.set_main(idx, try self.add_node(.{
-            .tag = .Block,
-            .root = openning_brace,
-            .data = .{ .lhs = self.main_nodes.items.len - start, .rhs = undefined },
-        }));
+        // self.nodes.items(.data)[idx].lhs = self.nodes.len - start;
+        self.nodes.items(.data)[idx].lhs = length;
 
-        return NullNode;
+        // self.set_main(idx, try self.add_node(.{
+        //     .tag = .Block,
+        //     .main = openning_brace,
+        //     .data = .{ .lhs = self.main_nodes.items.len - start, .rhs = undefined },
+        // }));
+
+        return idx;
+        // return NullNode;
 
         // span.end = self.prev().span.end;
         //
@@ -759,11 +831,17 @@ pub const Parser = struct {
 
     fn unary_expr(self: *Self) Error!Node.Index {
         const op = self.token_idx - 1;
-        return self.add_node(.{
-            .tag = .Unary,
-            .root = op,
-            .data = .{ .lhs = try self.parse_precedence_expr(0), .rhs = undefined },
-        });
+        const idx = self.add_node(.{ .tag = .Unary, .main = op, .data = undefined });
+        _ = try self.parse_precedence_expr(0);
+
+        return idx;
+
+        // return self.add_node(.{
+        //     .tag = .Unary,
+        //     .main = op,
+        //     .data = undefined,
+        //     // .data = .{ .lhs = try self.parse_precedence_expr(0), .rhs = undefined },
+        // });
 
         // const expr = try self.allocator.create(Expr);
         //
@@ -785,18 +863,26 @@ pub const Parser = struct {
 
     fn return_expr(self: *Self) Error!Node.Index {
         const tk = self.token_idx - 1;
+        const idx = self.add_node(.{ .tag = .Return, .main = tk, .data = undefined });
 
-        return self.add_node(.{
-            .tag = .Return,
-            .root = tk,
-            .data = .{
-                .lhs = if (self.check(.NewLine) or self.check(.RightBrace))
-                    NullNode
-                else
-                    try self.parse_precedence_expr(0),
-                .rhs = NullNode,
-            },
-        });
+        _ = if (self.check(.NewLine) or self.check(.RightBrace))
+            try self.add_node(Node.Empty)
+        else
+            try self.parse_precedence_expr(0);
+
+        return idx;
+
+        // return self.add_node(.{
+        //     .tag = .Return,
+        //     .main = tk,
+        //     .data = .{
+        //         .lhs = if (self.check(.NewLine) or self.check(.RightBrace))
+        //             NullNode
+        //         else
+        //             try self.parse_precedence_expr(0),
+        //         .rhs = NullNode,
+        //     },
+        // });
 
         // const expr = try self.allocator.create(Expr);
         // const op = self.prev();
@@ -814,9 +900,7 @@ pub const Parser = struct {
     }
 
     fn parse_primary_expr(self: *Self) Error!Node.Index {
-        const tag = self.prev();
-
-        return switch (tag) {
+        return switch (self.token_tags[self.token_idx - 1]) {
             .False => self.bool_(),
             .Float => self.literal(.Float),
             .Identifier => self.literal(.Identifier),
@@ -840,21 +924,28 @@ pub const Parser = struct {
     fn grouping(self: *Self) Error!Node.Index {
         const opening = self.token_idx - 1;
         self.skip_new_lines();
-        const expr = try self.parse_precedence_expr(0);
+
+        const idx = try self.add_node(
+            .{ .tag = .Grouping, .main = opening, .data = undefined },
+        );
+
+        // const expr = try self.parse_precedence_expr(0);
+        _ = try self.parse_precedence_expr(0);
         self.skip_new_lines();
         try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, opening);
 
-        return self.add_node(.{
-            .tag = .Grouping,
-            .root = opening,
-            .data = .{ .lhs = expr, .rhs = undefined },
-        });
+        return idx;
+        //     return self.add_node(.{
+        //         .tag = .Grouping,
+        //         .main = opening,
+        //         .data = .{ .lhs = expr, .rhs = undefined },
+        //     });
     }
 
     fn bool_(self: *Self) Error!Node.Index {
         return self.add_node(.{
             .tag = .Bool,
-            .root = self.token_idx - 1,
+            .main = self.token_idx - 1,
             .data = undefined,
         });
     }
@@ -862,7 +953,7 @@ pub const Parser = struct {
     fn literal(self: *Self, tag: Node.Tag) Error!Node.Index {
         return self.add_node(.{
             .tag = tag,
-            .root = self.token_idx - 1,
+            .main = self.token_idx - 1,
             .data = undefined,
         });
     }

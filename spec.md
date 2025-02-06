@@ -102,6 +102,13 @@ struct Point { x, y: i64 }
 let p = Point(x, y)
 ```
 
+If multiple macro, declare as a tuple
+
+```rust
+#(constructor, default)
+struct Foo {}
+```
+
 ### List comprehension
 
 Language should support list comprehension because it's too powerfull
@@ -113,6 +120,10 @@ Union type allow to use any type of the language together
 ```rust
 type Animal = Dog | Cat
 ```
+
+> [!WARNING]
+> Not sure, if we can, it means that we could define traits on unions with
+> errors in it... strange
 
 It can be mixed with errors
 
@@ -126,27 +137,27 @@ fn fetch_pet(name: str) -> ShelterRes {}
 
 Error propagation is done with "!" and throw up the call stack the error
 For propagation, error types must match
-Error unions can be merged as any union type:
+Error unions can be merged as any union type with '&':
 
 ```rust
-error ShelterErr { NoPet } | HumanErr
+error ShelterErr { NoPet } & HumanErr
 ```
 
-Error can have a payload and implicitly derives #constructor
+Error can have a payload and **implicitly derives #constructor**
 
 ```rust
 error ParserErr {
      InvalidToken: Token // Token is a struct defined elsewhere: struct Token { start: int, end: int }
      SyntaxeErr // implicit "void" payload equivalent to no payload
      UnclosedQuote: (int, str) // Tuple payload with no argument name
-     InvalidType: { found: str, expect: str } // Anonymus struct payload for arg name
-} | ShelterErr
+     InvalidType: struct { found: str, expect: str } // Anonymus struct payload for arg name
+} & ShelterErr
 
 fn parse(source: str) -> int ! ParserErr {
     if source[0] == "%" {
         ParserErr.InvalidToken(Token(source[0])
     } else if source[0] == "{" and not source[1] == "}" {
-        ParserErr.InvalidType { found = "int", expect = "float"}
+        ParserErr.InvalidType({ found = "int", expect = "float"})
     } else {
         0
     }
@@ -352,10 +363,12 @@ Use of a uninit var is a runtime panic
 Support references and dereference for optimization purpose
 "&" for adressing
 Returning a reference to a local variable is forbidden
+Returning a reference to a member is allowed
+Reference of reference `&&` are forbidden
 
 ```rust
 struct Node {
-    next: *Node
+    next: &Node
 }
 
 var node = Node { next = uninit }

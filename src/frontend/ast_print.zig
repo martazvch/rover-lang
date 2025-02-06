@@ -14,10 +14,10 @@ pub const AstPrinter = struct {
     token_tags: []const Token.Tag,
     token_spans: []const Span,
     node_tags: []const Node.Tag,
-    node_roots: []const Ast.TokenIndex,
+    node_mains: []const Ast.TokenIndex,
     node_data: []const Node.Data,
     node_idx: usize,
-    main_nodes: []const usize,
+    // main_nodes: []const usize,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
 
@@ -33,19 +33,19 @@ pub const AstPrinter = struct {
         token_tags: []const Token.Tag,
         token_spans: []const Span,
         node_tags: []const Node.Tag,
-        node_roots: []const Ast.TokenIndex,
+        node_mains: []const Ast.TokenIndex,
         node_data: []const Node.Data,
-        main_nodes: []const usize,
+        // main_nodes: []const usize,
     ) Self {
         return .{
             .source = source,
             .token_tags = token_tags,
             .token_spans = token_spans,
             .node_tags = node_tags,
-            .node_roots = node_roots,
+            .node_mains = node_mains,
             .node_data = node_data,
-            .main_nodes = main_nodes,
-            .node_idx = 0,
+            // .main_nodes = main_nodes,
+            .node_idx = 1, // First slot is for NullNode
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
         };
@@ -64,37 +64,41 @@ pub const AstPrinter = struct {
     }
 
     fn source_from_tk(self: *const Self, index: Ast.TokenIndex) []const u8 {
-        const span = self.token_spans[self.node_roots[index]];
+        const span = self.token_spans[self.node_mains[index]];
         return self.source[span.start..span.end];
     }
 
     pub fn parse_ast(self: *Self) !void {
-        while (self.node_idx < self.main_nodes.len) : (self.node_idx += 1) {
-            try self.parse_node(self.main_nodes[self.node_idx]);
+        while (self.node_idx < self.node_data.len) {
+            try self.parse_node(self.node_idx);
         }
+        // while (self.node_idx < self.main_nodes.len) : (self.node_idx += 1) {
+        //     try self.parse_node(self.main_nodes[self.node_idx]);
+        // }
     }
 
     fn parse_node(self: *Self, index: Node.Index) !void {
         try switch (self.node_tags[index]) {
-            .Add, .Div, .Mul, .Sub => self.binop_expr(index),
+            .Add, .Div, .Mul, .Sub => self.binop_expr(),
             .Assignment => self.assignment(index),
-            .Block => self.block_expr(index),
-            .Bool => self.literal("Bool literal", index),
-            .Discard => self.discard(index),
-            .Float => self.literal("Float literal", index),
-            .FnDecl => self.fn_decl(index),
-            .Grouping => self.grouping(index),
-            .Identifier => self.literal("Identifier", index),
-            .Int => self.literal("Int literal", index),
+            .Block => self.block_expr(),
+            .Bool => self.literal("Bool literal"),
+            .Discard => self.discard(),
+            .Empty => unreachable,
+            .Float => self.literal("Float literal"),
+            .FnDecl => self.fn_decl(),
+            .Grouping => self.grouping(),
+            .Identifier => self.literal("Identifier"),
+            .Int => self.literal("Int literal"),
             .Null => self.null_(),
-            .Parameter => self.parameter(index),
-            .Print => self.print_stmt(index),
-            .Return => self.return_expr(index),
-            .String => self.literal("String literal", index),
+            .Parameter => self.parameter(),
+            .Print => self.print_stmt(),
+            .Return => self.return_expr(),
+            .String => self.literal("String literal"),
             .Type => unreachable,
-            .Unary => self.unary_expr(index),
-            .Use => self.use_stmt(index),
-            .VarDecl => self.var_decl(index),
+            .Unary => self.unary_expr(),
+            .Use => self.use_stmt(),
+            .VarDecl => self.var_decl(),
             .While => self.while_stmt(index),
         };
     }
@@ -115,11 +119,11 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
-    fn binop_expr(self: *Self, index: Node.Index) Error!void {
+    fn binop_expr(self: *Self) Error!void {
         try self.indent();
 
         var writer = self.tree.writer();
-        try writer.print("[Binop {s}]\n", .{switch (self.node_tags[index]) {
+        try writer.print("[Binop {s}]\n", .{switch (self.node_tags[self.node_idx]) {
             .Add => "+",
             .Div => "/",
             .Mul => "*",
@@ -127,48 +131,64 @@ pub const AstPrinter = struct {
             else => unreachable,
         }});
 
-        const data = self.node_data[index];
+        // const data = self.node_data[index];
 
         self.indent_level += 1;
-        try self.parse_node(data.lhs);
-        try self.parse_node(data.rhs);
+        // try self.parse_node(data.lhs);
+        // try self.parse_node(data.rhs);
+
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
+        try self.parse_node(self.node_idx);
+
         self.indent_level -= 1;
     }
 
-    fn block_expr(self: *Self, index: Node.Index) Error!void {
+    fn block_expr(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Block]\n");
 
         self.indent_level += 1;
 
-        for (0..self.node_data[index].lhs) |_| {
-            self.node_idx += 1;
-            try self.parse_node(self.main_nodes[self.node_idx]);
+        const count = self.node_data[self.node_idx].lhs;
+        self.node_idx += 1;
+
+        for (0..count) |_| {
+            try self.parse_node(self.node_idx);
+            // try self.parse_node(self.main_nodes[self.node_idx]);
         }
 
         self.indent_level -= 1;
     }
 
-    fn discard(self: *Self, index: Node.Index) Error!void {
+    fn discard(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Discard\n");
         self.indent_level += 1;
-        try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
     }
 
-    fn fn_decl(self: *Self, index: Node.Index) !void {
+    fn fn_decl(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
 
-        const arity = self.node_data[index].lhs;
-        const return_type = self.get_type(self.main_nodes[self.node_idx + arity + 1]);
+        const arity = self.node_data[self.node_idx].lhs;
+
+        self.node_idx += 1;
+        // x2 because each param is composed of 2 nodes: Param + Type
+        const return_idx = self.node_idx + arity * 2;
 
         try writer.print(
             "[Fn declaration {s}, type {s}, arity {}\n",
-            .{ self.source_from_tk(index), return_type, arity },
+            .{
+                self.source_from_tk(return_idx),
+                self.get_type(return_idx),
+                arity,
+            },
         );
 
         self.indent_level += 1;
@@ -177,8 +197,9 @@ pub const AstPrinter = struct {
         self.indent_level += 1;
 
         for (0..arity) |_| {
+            try self.parse_node(self.node_idx);
             self.node_idx += 1;
-            try self.parameter(self.main_nodes[self.node_idx]);
+            // try self.parameter(self.main_nodes[self.node_idx]);
         }
 
         // Skips the return type
@@ -188,8 +209,8 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("body:\n");
         self.indent_level += 1;
-        self.node_idx += 1;
-        try self.block_expr(self.main_nodes[self.node_idx]);
+        try self.parse_node(self.node_idx);
+        // try self.block_expr(self.main_nodes[self.node_idx]);
         self.indent_level -= 1;
 
         self.indent_level -= 1;
@@ -197,89 +218,108 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
-    fn parameter(self: *Self, index: Node.Index) Error!void {
+    fn parameter(self: *Self) Error!void {
         try self.indent();
         const writer = self.tree.writer();
 
-        try writer.print(
-            "{s}, type {s}\n",
-            .{ self.source_from_tk(index), self.get_type(self.node_data[index].lhs) },
-        );
+        try writer.print("{s}, ", .{self.source_from_tk(self.node_idx)});
+
+        self.node_idx += 1;
+        try writer.print("type {s}\n", .{self.get_type(self.node_idx)});
     }
 
-    fn grouping(self: *Self, index: Node.Index) Error!void {
+    fn grouping(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Grouping]\n");
 
         self.indent_level += 1;
-        try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         self.indent_level -= 1;
     }
 
-    fn literal(self: *Self, text: []const u8, index: Node.Index) Error!void {
+    fn literal(self: *Self, text: []const u8) Error!void {
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[{s} {s}]\n", .{ text, self.source_from_tk(index) });
+        try writer.print("[{s} {s}]\n", .{ text, self.source_from_tk(self.node_idx) });
+        self.node_idx += 1;
     }
 
     fn null_(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Null literal]\n");
+        self.node_idx += 1;
     }
 
-    fn print_stmt(self: *Self, index: Node.Index) Error!void {
+    fn print_stmt(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Print]\n");
         self.indent_level += 1;
-        try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         self.indent_level -= 1;
     }
 
-    fn return_expr(self: *Self, index: Node.Index) Error!void {
+    // fn return_expr(self: *Self, index: Node.Index) Error!void {
+    fn return_expr(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Return");
-        const expr_node = self.node_data[index].lhs;
 
-        if (expr_node != NullNode) {
+        self.node_idx += 1;
+
+        if (self.node_tags[self.node_idx] != .Empty) {
             try self.tree.appendSlice("\n");
             self.indent_level += 1;
-            try self.parse_node(expr_node);
+            try self.parse_node(self.node_idx);
             self.indent_level -= 1;
         }
+
+        // const expr_node = self.node_data[index].lhs;
+
+        // if (expr_node != NullNode) {
+        //     try self.tree.appendSlice("\n");
+        //     self.indent_level += 1;
+        //     try self.parse_node(expr_node);
+        //     self.indent_level -= 1;
+        // }
 
         try self.tree.appendSlice("]\n");
     }
 
-    fn unary_expr(self: *Self, index: Node.Index) Error!void {
+    fn unary_expr(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Unary {s}]\n", .{self.source_from_tk(index)});
+        try writer.print("[Unary {s}]\n", .{self.source_from_tk(self.node_idx)});
 
         self.indent_level += 1;
-        try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         self.indent_level -= 1;
     }
 
-    fn var_decl(self: *Self, index: Node.Index) Error!void {
-        const node = self.node_data[index];
+    fn var_decl(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
 
+        // Advance to type
+        self.node_idx += 1;
         try writer.print(
             "[Var declaration {s}, type {s}, value\n",
             .{
-                self.source_from_tk(index),
-                self.get_type(node.lhs),
+                self.source_from_tk(self.node_idx - 1),
+                self.get_type(self.node_idx),
             },
         );
 
         self.indent_level += 1;
 
-        if (node.rhs != NullNode) {
-            try self.parse_node(node.rhs);
+        self.node_idx += 1;
+        if (self.node_tags[self.node_idx] != .Empty) {
+            try self.parse_node(self.node_idx);
         } else {
             try self.indent();
             try self.tree.appendSlice("none\n");
+            self.node_idx += 1;
         }
 
         self.indent_level -= 1;
@@ -309,7 +349,7 @@ pub const AstPrinter = struct {
     }
 
     fn get_type(self: *Self, index: Node.Index) []const u8 {
-        if (index == NullNode) return "void";
+        if (self.node_tags[index] == .Empty) return "void";
 
         return switch (self.node_tags[index]) {
             .Type => {
@@ -319,20 +359,23 @@ pub const AstPrinter = struct {
         };
     }
 
-    fn use_stmt(self: *Self, index: Node.Index) !void {
+    fn use_stmt(self: *Self) !void {
         try self.indent();
         try self.tree.appendSlice("[Use ");
         var writer = self.tree.writer();
 
-        const data = self.node_data[index];
+        const count = self.node_data[self.node_idx].lhs;
 
-        for (data.lhs..data.rhs) |i| {
-            try writer.print("{s}", .{self.source_from_tk(index)});
+        for (0..count) |i| {
+            self.node_idx += 1;
+            try writer.print("{s}", .{self.source_from_tk(self.node_idx)});
 
-            if (i < data.rhs - 1) {
+            if (i < count - 1) {
                 try writer.print(" ", .{});
             }
         }
+
+        self.node_idx += 1;
         try writer.print("]\n", .{});
     }
 

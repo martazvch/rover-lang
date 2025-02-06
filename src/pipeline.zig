@@ -189,9 +189,9 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
             lexer.tokens.items(.tag),
             lexer.tokens.items(.span),
             parser.nodes.items(.tag),
-            parser.nodes.items(.root),
+            parser.nodes.items(.main),
             parser.nodes.items(.data),
-            parser.main_nodes.items,
+            // parser.main_nodes.items,
         );
         defer ast_printer.deinit();
 

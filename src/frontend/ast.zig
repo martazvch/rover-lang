@@ -110,14 +110,19 @@ pub const TokenIndex = usize;
 
 pub const NullNode = 0;
 
-// Behaves like a binary tree, tupple of (root, lhs, rhs)
+// Behaves like a binary tree, tupple of (main, lhs, rhs)
 pub const Node = struct {
     tag: Tag,
-    root: TokenIndex,
+    main: TokenIndex,
     data: Data,
 
     pub const Index = usize;
     pub const Data = struct { lhs: Index, rhs: Index };
+    pub const Empty: Node = .{
+        .tag = .Empty,
+        .main = undefined,
+        .data = undefined,
+    };
 
     pub const Tag = enum {
         // Block,
@@ -127,6 +132,7 @@ pub const Node = struct {
         Bool,
         Discard,
         Div,
+        Empty,
         Float,
         FnDecl,
         // FnCall,
