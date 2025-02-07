@@ -562,10 +562,12 @@ test "ident and strings" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i].tag);
-        try expect(tk.span.start == res[i].span.start);
-        try expect(tk.span.end == res[i].span.end);
+        const tag = lexer.tokens.items(.tag)[i];
+        const span = lexer.tokens.items(.span)[i];
+
+        try expect(tag == res[i].tag);
+        try expect(span.start == res[i].span.start);
+        try expect(span.end == res[i].span.end);
     }
 }
 
@@ -582,10 +584,12 @@ test "numbers" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i].tag);
-        try expect(tk.span.start == res[i].span.start);
-        try expect(tk.span.end == res[i].span.end);
+        const tag = lexer.tokens.items(.tag)[i];
+        const span = lexer.tokens.items(.span)[i];
+
+        try expect(tag == res[i].tag);
+        try expect(span.start == res[i].span.start);
+        try expect(span.end == res[i].span.end);
     }
 }
 
@@ -601,8 +605,8 @@ test "tokens" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i]);
+        const tag = lexer.tokens.items(.tag)[i];
+        try expect(tag == res[i]);
     }
 }
 
@@ -621,8 +625,8 @@ test "keywords" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i]);
+        const tag = lexer.tokens.items(.tag)[i];
+        try expect(tag == res[i]);
     }
 }
 
@@ -655,8 +659,8 @@ test "underscore" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i]);
+        const tag = lexer.tokens.items(.tag)[i];
+        try expect(tag == res[i]);
     }
 }
 
@@ -671,8 +675,8 @@ test "arrow" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i]);
+        const tag = lexer.tokens.items(.tag)[i];
+        try expect(tag == res[i]);
     }
 }
 
@@ -687,7 +691,7 @@ test "dot" {
     };
 
     for (0..res.len) |i| {
-        const tk = lexer.tokens.items[i];
-        try expect(tk.tag == res[i]);
+        const tag = lexer.tokens.items(.tag)[i];
+        try expect(tag == res[i]);
     }
 }

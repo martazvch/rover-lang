@@ -38,9 +38,6 @@ pub const Parser = struct {
     token_spans: []const Span,
     token_idx: usize,
     nodes: MultiArrayList(Node),
-    flat_nodes: ArrayList(Node),
-    // data: ArrayList(Node.Index),
-    main_nodes: ArrayList(usize),
     panic_mode: bool,
 
     const Self = @This();
@@ -57,10 +54,7 @@ pub const Parser = struct {
         self.arena = ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
         self.nodes = MultiArrayList(Node){};
-        // self.data = ArrayList(Node.Index).init(self.allocator);
-        self.main_nodes = ArrayList(usize).init(self.allocator);
         self.errs = ArrayList(ParserReport).init(self.allocator);
-        self.flat_nodes = ArrayList(Node).init(self.allocator);
         self.token_idx = 0;
         self.panic_mode = false;
     }
@@ -83,14 +77,12 @@ pub const Parser = struct {
         self.token_tags = token_tags;
         self.token_spans = token_spans;
 
-        // Saves slot 0 for null node
-        _ = try self.add_node(undefined);
-
         self.skip_new_lines();
 
         while (!self.match(.Eof)) {
             // const stmt = self.declaration() catch |e| switch (e) {
-            const node = self.declaration() catch |e| switch (e) {
+            // const node = self.declaration() catch |e| switch (e) {
+            _ = self.declaration() catch |e| switch (e) {
                 // If it's our own error, we continue on parsing
                 Error.err => {
                     // If last error was Eof, exit the parser
@@ -104,24 +96,25 @@ pub const Parser = struct {
                 else => return e,
             };
 
-            // try self.stmts.append(stmt);
-
-            // If NullNode is returned, it means it has already been added to main nodes
-            if (node != NullNode) try self.main_nodes.append(node);
-
             // If EOF, exit
             if (self.match(.Eof)) break;
 
             // After each statements we expect a new line
-            self.expect_or_err_at_tk(
-                .NewLine,
-                .ExpectNewLine,
-                self.token_idx - 1,
-            ) catch |e| switch (e) {
-                // If it's our own error, we just synchronize before resuming
-                error.err => self.synchronize(),
-                else => return e,
-            };
+            if (!self.check(.NewLine)) {
+                const start = self.token_spans[self.token_idx - 1].end;
+
+                self.error_at_span(
+                    .{ .start = start, .end = start + 1 },
+                    .ExpectNewLine,
+                ) catch {};
+
+                self.synchronize();
+                //     catch |e| switch (e) {
+                //     // If it's our own error, we just synchronize before resuming
+                //     error.err => self.synchronize(),
+                //     else => return e,
+                // };
+            }
 
             self.skip_new_lines();
         }
@@ -159,24 +152,9 @@ pub const Parser = struct {
         return self.nodes.len - 1;
     }
 
-    /// Reserves a slot in the main nodes
-    fn reserve_main(self: *Self) !Node.Index {
-        try self.main_nodes.append(undefined);
-        return self.main_nodes.items.len - 1;
-    }
-
-    /// Sets a main nodes at the given index. Returns the index back
-    fn set_main(self: *Self, index: usize, node: Node.Index) void {
-        self.main_nodes.items[index] = node;
-    }
-
-    fn reserve_node(self: *Self) !Node.Index {
-        try self.flat_nodes.append(undefined);
-        return self.flat_nodes.items.len - 1;
-    }
-
-    fn set_node(self: *Self, index: usize, node: Node) void {
-        self.flat_nodes.items[index] = node;
+    /// Adds a data node and returns its index
+    fn add_data(self: *Self) !Node.Index {
+        return self.add_node(.{ .tag = .Data, .main = 0 });
     }
 
     fn skip_new_lines(self: *Self) void {
@@ -209,17 +187,6 @@ pub const Parser = struct {
         return self.error_at(tk, error_kind);
     }
 
-    fn expect_or_err_at_span(
-        self: *Self,
-        kind: Token.Tag,
-        error_kind: ParserMsg,
-        span: Span,
-    ) !void {
-        if (self.match(kind)) return;
-
-        return self.error_at_span(error_kind, span);
-    }
-
     fn error_at_current(self: *Self, error_kind: ParserMsg) Error {
         return self.error_at(self.token_idx, error_kind);
     }
@@ -243,8 +210,12 @@ pub const Parser = struct {
         return error.err;
     }
 
-    fn error_at_span(self: *Self, error_kind: ParserMsg, span: Span) !void {
-        if (self.panic_mode) return;
+    /// If error already encountered and in the same statement parsing,
+    /// we exit, let synchronize and resume. It is likely that if we
+    /// are already in panic mode, the following errors are just
+    /// consequencies of actual bad statement
+    fn error_at_span(self: *Self, span: Span, error_kind: ParserMsg) Error {
+        if (self.panic_mode) return error.err;
 
         self.panic_mode = true;
 
@@ -285,8 +256,8 @@ pub const Parser = struct {
         const idx = try self.add_node(.{
             .tag = .FnDecl,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
+        const arity_idx = try self.add_data();
 
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
         self.skip_new_lines();
@@ -307,7 +278,6 @@ pub const Parser = struct {
             _ = try self.add_node(.{
                 .tag = .Parameter,
                 .main = self.token_idx - 1,
-                .data = undefined,
             });
 
             try self.expect(.Colon, .MissingFnParamType);
@@ -322,7 +292,7 @@ pub const Parser = struct {
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-        self.nodes.items(.data)[idx].lhs = arity;
+        self.nodes.items(.data)[arity_idx] = arity;
 
         _ = if (self.match(.SmallArrow))
             try self.extract_type()
@@ -335,36 +305,17 @@ pub const Parser = struct {
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
         _ = try self.block_expr();
 
-        // self.set_main(idx, try self.add_node(.{
-        //     .tag = .FnDecl,
-        //     .main = name,
-        //     .data = .{ .lhs = arity, .rhs = undefined },
-        // }));
-
         return idx;
-
-        // return .{ .FnDecl = .{
-        //     .name = SourceSlice.from_token(ident, self.source),
-        //     .params = params,
-        //     .arity = @intCast(arity),
-        //     .body = body,
-        //     .return_type = return_type,
-        // } };
     }
 
     fn var_declaration(self: *Self) !Node.Index {
         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "variable" } });
-        // const ident = self.token_idx - 1;
 
         const idx = try self.add_node(.{
             .tag = .VarDecl,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
-        // const var_name = try self.var_name_and_type("variable");
         try self.parse_type();
-
-        // self.nodes.items(.main)[idx] = var_name;
 
         _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
@@ -372,20 +323,6 @@ pub const Parser = struct {
             try self.add_node(Node.Empty);
 
         return idx;
-        // return self.add_node(.{
-        //     .tag = .VarDecl,
-        //     .main = var_name,
-        //     .data = .{ .lhs = var_infos.type_, .rhs = value },
-        // });
-        //
-        // return .{
-        //     .VarDecl = .{
-        //         .name = var_infos.name,
-        //         .is_const = is_const,
-        //         .type_ = var_infos.type_,
-        //         .value = value,
-        //     },
-        // };
     }
 
     /// Expects and declare a type. If none, declare an empty one
@@ -405,9 +342,7 @@ pub const Parser = struct {
             self.match(.Bool) or
             self.match(.Identifier))
         {
-            return self.add_node(
-                .{ .tag = .Type, .main = self.token_idx - 1, .data = undefined },
-            );
+            return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
             // } else if (self.match(.Fn)) {
             //     const start = self.prev().span.start;
             //     try self.expect(.LeftParen, .ExpectParenAfterFnName);
@@ -453,34 +388,18 @@ pub const Parser = struct {
         const idx = self.add_node(.{
             .tag = .Discard,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
         _ = try self.parse_precedence_expr(0);
 
         return idx;
-
-        // return self.add_node(.{
-        //     .tag = .Discard,
-        //     .main = self.token_idx - 1,
-        //     .data = .{
-        //         .lhs = try self.parse_precedence_expr(0),
-        //         .rhs = NullNode,
-        //     },
-        // });
-
-        // return .{
-        //     .Discard = .{
-        //         .expr = try self.parse_precedence_expr(0),
-        //     },
-        // };
     }
 
     fn use(self: *Self) Error!Node.Index {
         const idx = try self.add_node(.{
             .tag = .Use,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
+        const count_idx = try self.add_data();
 
         if (!self.check(.Identifier)) {
             return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
@@ -491,7 +410,6 @@ pub const Parser = struct {
             _ = try self.add_node(.{
                 .tag = .Identifier,
                 .main = self.token_idx - 1,
-                .data = undefined,
             });
 
             count += 1;
@@ -500,18 +418,9 @@ pub const Parser = struct {
             break;
         }
 
-        self.nodes.items(.data)[idx].lhs = count;
+        self.nodes.items(.data)[count_idx] = count;
 
         return idx;
-
-        // return self.add_node(.{
-        //     .tag = .Use,
-        //     .main = use_kw,
-        //     .data = .{ .lhs = first, .rhs = self.nodes.len },
-        // });
-        // span.end = self.prev().span.end;
-
-        // return .{ .Use = .{ .module = try list.toOwnedSlice(), .span = span } };
     }
 
     fn statement(self: *Self) !Node.Index {
@@ -523,7 +432,7 @@ pub const Parser = struct {
             const assigne = try self.parse_precedence_expr(0);
 
             if (self.match(.Equal)) {
-                return self.assignment(assigne);
+                return self.assignment();
             } else return assigne;
         }
     }
@@ -532,67 +441,40 @@ pub const Parser = struct {
         const idx = try self.add_node(.{
             .tag = .Print,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
 
         _ = try self.parse_precedence_expr(0);
         return idx;
-
-        // return self.add_node(.{
-        //     .tag = .Print,
-        //     .main = self.token_idx - 1,
-        //     .data = .{
-        //         .lhs = try self.parse_precedence_expr(0),
-        //         .rhs = undefined,
-        //     },
-        // });
-        // return .{ .Print = .{ .expr = try self.parse_precedence_expr(0) } };
     }
 
     fn while_stmt(self: *Self) !Node.Index {
-        const while_kw = self.token_idx - 1;
-        const condition = try self.parse_precedence_expr(0);
+        const idx = try self.add_node(.{
+            .tag = .While,
+            .main = self.token_idx - 1,
+        });
+        _ = try self.parse_precedence_expr(0);
 
-        const body = if (self.match_and_skip(.LeftBrace))
+        _ = if (self.match_and_skip(.LeftBrace))
             try self.block_expr()
         else if (self.match_and_skip(.Do))
             try self.declaration()
         else
             return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
 
-        return self.add_node(.{
-            .tag = .While,
-            .main = while_kw,
-            .data = .{ .lhs = condition, .rhs = body },
-        });
-
-        // const body = try self.allocator.create(Ast.Stmt);
-        // body.* = if (self.match_and_skip(.LeftBrace))
-        //     .{ .Expr = try self.block_expr() }
-        // else if (self.match_and_skip(.Do))
-        //     try self.declaration()
-        // else
-        //     return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
-
-        // return .{ .While = .{
-        //     .condition = condition,
-        //     .body = body,
-        // } };
+        return idx;
     }
 
-    fn assignment(self: *Self, assigne: Node.Index) !Node.Index {
-        return self.add_node(.{
+    fn assignment(self: *Self) !Node.Index {
+        // Converts the previous expression to an assignment
+        const idx = self.nodes.len - 1;
+        try self.nodes.insert(self.allocator, idx, .{
             .tag = .Assignment,
-            .main = self.token_idx - 1,
-            .data = .{
-                .lhs = assigne,
-                .rhs = try self.parse_precedence_expr(0),
-            },
+            .main = undefined,
         });
-        // return .{ .Assignment = .{
-        //     .assigne = assigne,
-        //     .value = try self.parse_precedence_expr(0),
-        // } };
+
+        _ = try self.parse_precedence_expr(0);
+
+        return idx;
     }
 
     const Assoc = enum { Left, None };
@@ -620,8 +502,10 @@ pub const Parser = struct {
 
     fn get_tag(token_tag: Token.Tag) Node.Tag {
         return switch (token_tag) {
-            .Plus => .Add,
+            .And => .And,
             .Minus => .Sub,
+            .Or => .Or,
+            .Plus => .Add,
             .Star => .Mul,
             .Slash => .Div,
             else => unreachable,
@@ -630,8 +514,6 @@ pub const Parser = struct {
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!Node.Index {
         const start = self.token_idx;
-        // const idx = try self.reserve_main();
-        // const idx = try self.reserve_node();
 
         self.advance();
         var node = try self.parse_expr();
@@ -648,16 +530,13 @@ pub const Parser = struct {
                 return self.error_at_current(.ChainingCmpOp);
             }
 
-            // try self.add_node(self.nodes.get(self.nodes.len - 1));
-
             const op = self.token_idx;
 
             // If we are in a binop, we insert the node before the operand
             // There is no data, we just use the two next nodes
-            try self.nodes.insert(self.allocator, self.nodes.len - 1, .{
+            try self.nodes.insert(self.allocator, start, .{
                 .tag = get_tag(self.token_tags[op]),
                 .main = start,
-                .data = undefined,
             });
 
             // Index of binop node
@@ -665,38 +544,12 @@ pub const Parser = struct {
 
             // Here, we can safely use it
             self.advance();
-            // const rhs = try self.parse_precedence_expr(next_rule.prec + 1);
             _ = try self.parse_precedence_expr(next_rule.prec + 1);
-
-            // node = try self.add_node(.{
-            //     .tag = get_tag(self.token_tags[op]),
-            //     .main = start,
-            //     .data = .{ .lhs = node, .rhs = rhs },
-            // });
-
-            // self.set_node(idx, .{
-            //     .tag = get_tag(self.token_tags[op]),
-            //     .main = start,
-            //     .data = .{ .lhs = node, .rhs = rhs },
-            // });
-
-            // const expr = try self.allocator.create(Expr);
-            // expr.* = .{ .BinOp = .{
-            //     .lhs = node,
-            //     .rhs = rhs,
-            //     .op = op,
-            //     .span = .{ .start = node.span().start, .end = rhs.span().end },
-            // } };
-            //
-            // node = expr;
 
             if (next_rule.assoc == .None) banned_prec = next_rule.prec;
         }
 
         return node;
-        // self.set_main(idx, node);
-        // self.set_node(idx, node);
-        // return idx;
     }
 
     /// Parses expressions (prefix + sufix)
@@ -704,7 +557,7 @@ pub const Parser = struct {
         // Prefix part
         const expr = try switch (self.token_tags[self.token_idx - 1]) {
             .LeftBrace => self.block_expr(),
-            // .If => self.if_expr(),
+            .If => self.if_expr(),
             .Minus, .Not => self.unary_expr(),
             .Return => self.return_expr(),
             else => self.parse_primary_expr(),
@@ -716,27 +569,16 @@ pub const Parser = struct {
     }
 
     fn block_expr(self: *Self) Error!Node.Index {
-        // const expr = try self.allocator.create(Expr);
-        // expr.* = .{ .Block = try self.block() };
-        // return expr;
         const openning_brace = self.token_idx - 1;
 
         self.skip_new_lines();
-        // var span: Span = .{ .start = openning_brace.span.start, .end = 0 };
+        const idx = try self.add_node(.{ .tag = .Block, .main = openning_brace });
+        // For block length
+        const length_idx = try self.add_node(.{ .tag = .Data, .main = 0 });
 
-        // var stmts = ArrayList(Stmt).init(self.allocator);
-
-        // const idx = try self.reserve_main();
-        const idx = try self.add_node(
-            .{ .tag = .Block, .main = openning_brace, .data = undefined },
-        );
-
-        // const start = self.main_nodes.items.len;
         var length: usize = 0;
 
         while (!self.check(.RightBrace) and !self.check(.Eof)) {
-            // try stmts.append(try self.declaration());
-            // try self.main_nodes.append(try self.declaration());
             _ = try self.declaration();
             self.skip_new_lines();
             length += 1;
@@ -744,126 +586,59 @@ pub const Parser = struct {
 
         try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, openning_brace);
 
-        // self.nodes.items(.data)[idx].lhs = self.nodes.len - start;
-        self.nodes.items(.data)[idx].lhs = length;
-
-        // self.set_main(idx, try self.add_node(.{
-        //     .tag = .Block,
-        //     .main = openning_brace,
-        //     .data = .{ .lhs = self.main_nodes.items.len - start, .rhs = undefined },
-        // }));
+        self.nodes.items(.data)[length_idx] = length;
 
         return idx;
-        // return NullNode;
-
-        // span.end = self.prev().span.end;
-        //
-        // return .{
-        //     .stmts = try stmts.toOwnedSlice(),
-        //     .span = span,
-        // };
-
     }
 
-    // fn block(self: *Self) Error!Ast.Block {
-    //     const openning_brace = self.prev();
-    //
-    //     self.skip_new_lines();
-    //     var span: Span = .{ .start = openning_brace.span.start, .end = 0 };
-    //
-    //     var stmts = ArrayList(Stmt).init(self.allocator);
-    //
-    //     while (!self.check(.RightBrace) and !self.check(.Eof)) {
-    //         try stmts.append(try self.declaration());
-    //         self.skip_new_lines();
-    //     }
-    //
-    //     try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, &openning_brace);
-    //
-    //     span.end = self.prev().span.end;
-    //
-    //     return .{
-    //         .stmts = try stmts.toOwnedSlice(),
-    //         .span = span,
-    //     };
-    // }
+    fn if_expr(self: *Self) Error!Node.Index {
+        const idx = try self.add_node(.{
+            .tag = .If,
+            .main = self.token_idx - 1,
+        });
 
-    // fn if_expr(self: *Self) Error!*Expr {
-    //     var span = self.prev().span;
-    //     const condition = try self.parse_precedence_expr(0);
-    //
-    //     self.skip_new_lines();
-    //
-    //     // TODO: Warning for unnecessary 'do' if there is a block after
-    //     const then_body: Ast.Stmt = if (self.match_and_skip(.LeftBrace))
-    //         .{ .Expr = try self.block_expr() }
-    //     else if (self.match_and_skip(.Do))
-    //         try self.declaration()
-    //     else
-    //         return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "if" } });
-    //
-    //     span.end = self.prev().span.end;
-    //     self.skip_new_lines();
-    //     var else_body: ?Stmt = null;
-    //
-    //     // If we dosen't match an else, we go back one token to be able
-    //     // to match the rule "after each statement there is a new line"
-    //     // tested in the main caller
-    //     if (self.match_and_skip(.Else)) {
-    //         if (self.match_and_skip(.LeftBrace)) {
-    //             else_body = .{ .Expr = try self.block_expr() };
-    //         } else else_body = try self.declaration();
-    //
-    //         span.end = self.prev().span.end;
-    //     } else self.token_idx -= 1;
-    //
-    //     const expr = try self.allocator.create(Expr);
-    //
-    //     expr.* = .{ .If = .{
-    //         .condition = condition,
-    //         .then_body = then_body,
-    //         .else_body = else_body,
-    //         .span = span,
-    //     } };
-    //
-    //     return expr;
-    // }
+        _ = try self.parse_precedence_expr(0);
+
+        self.skip_new_lines();
+
+        // TODO: Warning for unnecessary 'do' if there is a block after
+        _ = if (self.match_and_skip(.LeftBrace))
+            try self.block_expr()
+        else if (self.match_and_skip(.Do))
+            try self.declaration()
+        else
+            return self.error_at_prev(.{ .ExpectBraceOrDo = .{ .what = "if" } });
+
+        self.skip_new_lines();
+
+        // If we dosen't match an else, we go back one token to be able
+        // to match the rule "after each statement there is a new line"
+        // tested in the main caller
+        if (self.match_and_skip(.Else)) {
+            _ = if (self.match_and_skip(.LeftBrace))
+                try self.block_expr()
+            else
+                try self.declaration();
+        } else {
+            self.token_idx -= 1;
+            _ = try self.add_node(Node.Empty);
+        }
+
+        return idx;
+    }
 
     fn unary_expr(self: *Self) Error!Node.Index {
         const op = self.token_idx - 1;
-        const idx = self.add_node(.{ .tag = .Unary, .main = op, .data = undefined });
-        _ = try self.parse_precedence_expr(0);
+        const idx = self.add_node(.{ .tag = .Unary, .main = op });
+        self.advance();
+        _ = try self.parse_expr();
 
         return idx;
-
-        // return self.add_node(.{
-        //     .tag = .Unary,
-        //     .main = op,
-        //     .data = undefined,
-        //     // .data = .{ .lhs = try self.parse_precedence_expr(0), .rhs = undefined },
-        // });
-
-        // const expr = try self.allocator.create(Expr);
-        //
-        // const op = self.prev();
-        // self.advance();
-        //
-        // // Recursion appens here
-        // expr.* = .{ .Unary = .{
-        //     .op = op.kind,
-        //     .rhs = try self.parse_expr(),
-        //     .span = .{
-        //         .start = op.span.start,
-        //         .end = self.current().span.start,
-        //     },
-        // } };
-        //
-        // return expr;
     }
 
     fn return_expr(self: *Self) Error!Node.Index {
         const tk = self.token_idx - 1;
-        const idx = self.add_node(.{ .tag = .Return, .main = tk, .data = undefined });
+        const idx = self.add_node(.{ .tag = .Return, .main = tk });
 
         _ = if (self.check(.NewLine) or self.check(.RightBrace))
             try self.add_node(Node.Empty)
@@ -871,32 +646,6 @@ pub const Parser = struct {
             try self.parse_precedence_expr(0);
 
         return idx;
-
-        // return self.add_node(.{
-        //     .tag = .Return,
-        //     .main = tk,
-        //     .data = .{
-        //         .lhs = if (self.check(.NewLine) or self.check(.RightBrace))
-        //             NullNode
-        //         else
-        //             try self.parse_precedence_expr(0),
-        //         .rhs = NullNode,
-        //     },
-        // });
-
-        // const expr = try self.allocator.create(Expr);
-        // const op = self.prev();
-        //
-        // // Checks cases like: fn add() { return }
-        // expr.* = .{ .Return = .{
-        //     .expr = if (self.check(.NewLine) or self.check(.RightBrace))
-        //         null
-        //     else
-        //         try self.parse_precedence_expr(0),
-        //     .span = .{ .start = op.span.start, .end = self.prev().span.end },
-        // } };
-        //
-        // return expr;
     }
 
     fn parse_primary_expr(self: *Self) Error!Node.Index {
@@ -925,28 +674,19 @@ pub const Parser = struct {
         const opening = self.token_idx - 1;
         self.skip_new_lines();
 
-        const idx = try self.add_node(
-            .{ .tag = .Grouping, .main = opening, .data = undefined },
-        );
+        const idx = try self.add_node(.{ .tag = .Grouping, .main = opening });
 
-        // const expr = try self.parse_precedence_expr(0);
         _ = try self.parse_precedence_expr(0);
         self.skip_new_lines();
         try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, opening);
 
         return idx;
-        //     return self.add_node(.{
-        //         .tag = .Grouping,
-        //         .main = opening,
-        //         .data = .{ .lhs = expr, .rhs = undefined },
-        //     });
     }
 
     fn bool_(self: *Self) Error!Node.Index {
         return self.add_node(.{
             .tag = .Bool,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
     }
 
@@ -954,7 +694,6 @@ pub const Parser = struct {
         return self.add_node(.{
             .tag = tag,
             .main = self.token_idx - 1,
-            .data = undefined,
         });
     }
 

@@ -196,6 +196,8 @@ pub fn GenericTester(
                 } else if (std.mem.startsWith(u8, line, "==")) {
                     try code.append(0);
 
+                    std.debug.print("Running test {s}...\n", .{file_path});
+
                     run_test(
                         code.items[0 .. code.items.len - 1 :0],
                         expects.items,

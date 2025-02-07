@@ -21,17 +21,31 @@ pub fn get_test_data(
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
-    try parser.parse(source, lexer.tokens.items);
 
-    var ast_printer = AstPrinter.init(allocator);
+    var errs = ArrayList(ParserMsg).init(allocator);
+
+    try parser.parse(
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+    );
+
+    var ast_printer = AstPrinter.init(
+        allocator,
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+        parser.nodes.items(.tag),
+        parser.nodes.items(.main),
+        parser.nodes.items(.data),
+    );
     defer ast_printer.deinit();
-    try ast_printer.parse_ast(source, parser.stmts.items);
 
-    var msgs = ArrayList(ParserMsg).init(allocator);
+    if (parser.errs.items.len > 0) {
+        for (parser.errs.items) |err| {
+            try errs.append(err.report);
+        }
+    } else try ast_printer.parse_ast();
 
-    for (parser.errs.items) |err| {
-        try msgs.append(err.report);
-    }
-
-    return .{ .expect = try ast_printer.tree.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
+    return .{ .expect = try ast_printer.tree.toOwnedSlice(), .reports = try errs.toOwnedSlice() };
 }

@@ -35,7 +35,7 @@ expect:
     then body:
     [Block]
         [Print]
-            [String literal ok]
+            [String literal "ok"]
     else body:
     none
 ]
@@ -45,7 +45,7 @@ expect:
     then body:
     [Block]
         [Print]
-            [String literal ok]
+            [String literal "ok"]
     else body:
     none
 ]
@@ -56,10 +56,10 @@ expect:
     then body:
     [Block]
         [Print]
-            [String literal ok]
+            [String literal "ok"]
     else body:
     [Print]
-        [String literal ko]
+        [String literal "ko"]
 ]
 
 [If
@@ -68,11 +68,11 @@ expect:
     then body:
     [Block]
         [Print]
-            [String literal ok]
+            [String literal "ok"]
     else body:
     [Block]
         [Print]
-            [String literal ko]
+            [String literal "ko"]
 ]
 
 ================
@@ -92,12 +92,12 @@ expect:
     condition:
     [Block]
         [Print]
-            [String literal in cond]
+            [String literal "in cond"]
         [Bool literal false]
     then body:
     [Block]
         [Print]
-            [String literal ok]
+            [String literal "ok"]
     else body:
     none
 ]
@@ -121,7 +121,7 @@ expect:
     [Bool literal true]
     then body:
     [Print]
-        [String literal ok]
+        [String literal "ok"]
     else body:
     none
 ]
@@ -131,10 +131,10 @@ expect:
     [Bool literal true]
     then body:
     [Print]
-        [String literal ok]
+        [String literal "ok"]
     else body:
     [Print]
-        [String literal ko]
+        [String literal "ko"]
 ]
 
 [If
@@ -142,11 +142,11 @@ expect:
     [Bool literal true]
     then body:
     [Print]
-        [String literal ok]
+        [String literal "ok"]
     else body:
     [Block]
         [Print]
-            [String literal ko]
+            [String literal "ko"]
 ]
 
 ================
@@ -164,17 +164,17 @@ expect:
     [Bool literal true]
     then body:
     [Print]
-        [String literal ok]
+        [String literal "ok"]
     else body:
     [If
         condition:
         [Bool literal true]
         then body:
         [Print]
-            [String literal elseif]
+            [String literal "elseif"]
         else body:
         [Print]
-            [String literal ko]
+            [String literal "ko"]
     ]
 ]
 

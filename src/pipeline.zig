@@ -181,6 +181,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         try reporter.report_all(filename, parser.errs.items);
         return;
     }
+
     // Printer
     if (config.print_ast) {
         var ast_printer = AstPrinter.init(
@@ -191,7 +192,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
             parser.nodes.items(.tag),
             parser.nodes.items(.main),
             parser.nodes.items(.data),
-            // parser.main_nodes.items,
         );
         defer ast_printer.deinit();
 

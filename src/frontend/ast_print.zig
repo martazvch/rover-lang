@@ -15,9 +15,8 @@ pub const AstPrinter = struct {
     token_spans: []const Span,
     node_tags: []const Node.Tag,
     node_mains: []const Ast.TokenIndex,
-    node_data: []const Node.Data,
+    node_data: []const usize,
     node_idx: usize,
-    // main_nodes: []const usize,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
 
@@ -34,8 +33,7 @@ pub const AstPrinter = struct {
         token_spans: []const Span,
         node_tags: []const Node.Tag,
         node_mains: []const Ast.TokenIndex,
-        node_data: []const Node.Data,
-        // main_nodes: []const usize,
+        node_data: []const usize,
     ) Self {
         return .{
             .source = source,
@@ -44,8 +42,7 @@ pub const AstPrinter = struct {
             .node_tags = node_tags,
             .node_mains = node_mains,
             .node_data = node_data,
-            // .main_nodes = main_nodes,
-            .node_idx = 1, // First slot is for NullNode
+            .node_idx = 0,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
         };
@@ -72,23 +69,22 @@ pub const AstPrinter = struct {
         while (self.node_idx < self.node_data.len) {
             try self.parse_node(self.node_idx);
         }
-        // while (self.node_idx < self.main_nodes.len) : (self.node_idx += 1) {
-        //     try self.parse_node(self.main_nodes[self.node_idx]);
-        // }
     }
 
     fn parse_node(self: *Self, index: Node.Index) !void {
         try switch (self.node_tags[index]) {
-            .Add, .Div, .Mul, .Sub => self.binop_expr(),
-            .Assignment => self.assignment(index),
+            .Add, .And, .Div, .Mul, .Or, .Sub => self.binop_expr(),
+            .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
+            .Data => unreachable,
             .Discard => self.discard(),
             .Empty => unreachable,
             .Float => self.literal("Float literal"),
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
+            .If => self.if_expr(),
             .Int => self.literal("Int literal"),
             .Null => self.null_(),
             .Parameter => self.parameter(),
@@ -99,20 +95,21 @@ pub const AstPrinter = struct {
             .Unary => self.unary_expr(),
             .Use => self.use_stmt(),
             .VarDecl => self.var_decl(),
-            .While => self.while_stmt(index),
+            .While => self.while_stmt(),
         };
     }
 
-    fn assignment(self: *Self, index: Node.Index) Error!void {
+    fn assignment(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Assignment\n");
         self.indent_level += 1;
         try self.indent();
         try self.tree.appendSlice("assigne:\n");
-        try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         try self.indent();
         try self.tree.appendSlice("value:\n");
-        try self.parse_node(self.node_data[index].rhs);
+        try self.parse_node(self.node_idx);
 
         self.indent_level -= 1;
         try self.indent();
@@ -125,18 +122,15 @@ pub const AstPrinter = struct {
         var writer = self.tree.writer();
         try writer.print("[Binop {s}]\n", .{switch (self.node_tags[self.node_idx]) {
             .Add => "+",
+            .And => "and",
             .Div => "/",
             .Mul => "*",
+            .Or => "or",
             .Sub => "-",
             else => unreachable,
         }});
 
-        // const data = self.node_data[index];
-
         self.indent_level += 1;
-        // try self.parse_node(data.lhs);
-        // try self.parse_node(data.rhs);
-
         self.node_idx += 1;
         try self.parse_node(self.node_idx);
         try self.parse_node(self.node_idx);
@@ -150,12 +144,12 @@ pub const AstPrinter = struct {
 
         self.indent_level += 1;
 
-        const count = self.node_data[self.node_idx].lhs;
+        self.node_idx += 1;
+        const count = self.node_data[self.node_idx];
         self.node_idx += 1;
 
         for (0..count) |_| {
             try self.parse_node(self.node_idx);
-            // try self.parse_node(self.main_nodes[self.node_idx]);
         }
 
         self.indent_level -= 1;
@@ -176,7 +170,8 @@ pub const AstPrinter = struct {
         try self.indent();
         var writer = self.tree.writer();
 
-        const arity = self.node_data[self.node_idx].lhs;
+        self.node_idx += 1;
+        const arity = self.node_data[self.node_idx];
 
         self.node_idx += 1;
         // x2 because each param is composed of 2 nodes: Param + Type
@@ -199,7 +194,6 @@ pub const AstPrinter = struct {
         for (0..arity) |_| {
             try self.parse_node(self.node_idx);
             self.node_idx += 1;
-            // try self.parameter(self.main_nodes[self.node_idx]);
         }
 
         // Skips the return type
@@ -210,7 +204,6 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("body:\n");
         self.indent_level += 1;
         try self.parse_node(self.node_idx);
-        // try self.block_expr(self.main_nodes[self.node_idx]);
         self.indent_level -= 1;
 
         self.indent_level -= 1;
@@ -238,6 +231,37 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
+    fn if_expr(self: *Self) Error!void {
+        try self.indent();
+
+        try self.tree.appendSlice("[If\n");
+        self.indent_level += 1;
+        try self.indent();
+
+        try self.tree.appendSlice("condition:\n");
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
+
+        try self.indent();
+        try self.tree.appendSlice("then body:\n");
+        try self.parse_node(self.node_idx);
+
+        try self.indent();
+        try self.tree.appendSlice("else body:\n");
+
+        if (self.node_tags[self.node_idx] != .Empty) {
+            try self.parse_node(self.node_idx);
+        } else {
+            self.node_idx += 1;
+            try self.indent();
+            try self.tree.appendSlice("none\n");
+        }
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
     fn literal(self: *Self, text: []const u8) Error!void {
         try self.indent();
         var writer = self.tree.writer();
@@ -260,7 +284,6 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
-    // fn return_expr(self: *Self, index: Node.Index) Error!void {
     fn return_expr(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[Return");
@@ -273,15 +296,6 @@ pub const AstPrinter = struct {
             try self.parse_node(self.node_idx);
             self.indent_level -= 1;
         }
-
-        // const expr_node = self.node_data[index].lhs;
-
-        // if (expr_node != NullNode) {
-        //     try self.tree.appendSlice("\n");
-        //     self.indent_level += 1;
-        //     try self.parse_node(expr_node);
-        //     self.indent_level -= 1;
-        // }
 
         try self.tree.appendSlice("]\n");
     }
@@ -364,7 +378,8 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("[Use ");
         var writer = self.tree.writer();
 
-        const count = self.node_data[self.node_idx].lhs;
+        self.node_idx += 1;
+        const count = self.node_data[self.node_idx];
 
         for (0..count) |i| {
             self.node_idx += 1;
@@ -379,17 +394,20 @@ pub const AstPrinter = struct {
         try writer.print("]\n", .{});
     }
 
-    fn while_stmt(self: *Self, index: Node.Index) Error!void {
+    fn while_stmt(self: *Self) Error!void {
         try self.indent();
         try self.tree.appendSlice("[While\n");
         self.indent_level += 1;
         try self.indent();
         try self.tree.appendSlice("condition:\n");
         // try self.expression(stmt.condition);
-        try self.parse_node(self.node_data[index].lhs);
+        // try self.parse_node(self.node_data[index].lhs);
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
         try self.indent();
         try self.tree.appendSlice("body:\n");
-        try self.parse_node(self.node_data[index].rhs);
+        try self.parse_node(self.node_idx);
+        // try self.parse_node(self.node_data[index].rhs);
         // try self.statement(stmt.body);
 
         self.indent_level -= 1;

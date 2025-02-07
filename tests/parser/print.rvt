@@ -16,7 +16,7 @@ expect:
 [Print]
     [Binop /]
         [Int literal 65]
-        [Float literal 4]
+        [Float literal 4.]
 
 ================
 
