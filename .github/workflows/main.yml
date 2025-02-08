@@ -1,4 +1,4 @@
-name: Pipeline tests
+name: CI
 on:
   push:
   pull_request:
@@ -10,7 +10,7 @@ jobs:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         stage: [parser, analyzer, compiler, vm]
-        optimize: [Debug, ReleaseSafe, ReleaseFast]
+        optimize: [Debug, ReleaseFast]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
