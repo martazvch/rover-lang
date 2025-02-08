@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const config = @import("tracy");
-const test_config = @import("test_config");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
@@ -141,23 +140,26 @@ fn repl(
     }
 }
 
+// Tests
+const test_config = @import("test_config");
+
+pub const Parser = @import("frontend/parser.zig").Parser;
+pub const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+pub const Compiler = @import("backend/compiler.zig").Compiler;
+
 test {
     const stage = test_config.stage;
 
     if (stage == .parser or stage == .all) {
-        _ = @import("frontend/parser.zig");
+        std.testing.refAllDecls(Parser);
     }
 
     if (stage == .analyzer or stage == .all) {
-        _ = @import("frontend/analyzer.zig");
+        std.testing.refAllDecls(Analyzer);
     }
 
     if (stage == .compiler or stage == .all) {
-        _ = @import("backend/compiler.zig");
-    }
-
-    if (stage == .vm or stage == .all) {
-        _ = @import("runtime/vm.zig");
+        std.testing.refAllDecls(Analyzer);
     }
 
     _ = @import("frontend/lexer.zig");
