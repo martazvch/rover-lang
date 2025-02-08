@@ -1,0 +1,19 @@
+name: Pipeline tests
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        stage: [parser, analyzer, compiler, vm]
+        optimize: [Debug, ReleaseSafe, ReleaseFast]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: master
+      - run: zig build -Doptimize=${{ matrix.optimize }} test -Dstage=${{ matrix.stage }}
