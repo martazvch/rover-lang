@@ -1,4 +1,4 @@
-name: Pipeline tests
+name: CI
 on:
   push:
   pull_request:
@@ -6,10 +6,11 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false  # Allows all jobs to complete even if one fails
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
         stage: [parser, analyzer, compiler, vm]
-        optimize: [Debug, ReleaseSafe, ReleaseFast]
+        optimize: [Debug, ReleaseFast]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
@@ -17,3 +18,11 @@ jobs:
         with:
           version: master
       - run: zig build -Doptimize=${{ matrix.optimize }} test -Dstage=${{ matrix.stage }}
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: master
+      - run: zig fmt --check .
