@@ -7,27 +7,11 @@ const MultiArrayList = std.MultiArrayList;
 const Ast = @import("ast.zig");
 const Node = Ast.Node;
 const NullNode = Ast.NullNode;
-const Type = Ast.Type;
 const TokenIndex = Ast.TokenIndex;
 const GenReport = @import("../reporter.zig").GenReport;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
-const SourceSlice = Ast.SourceSlice;
-
-const Precedence = enum {
-    None,
-    Assignment, // =
-    Or, // or
-    And, // and
-    Equality, // == !=
-    Comparison, // < > <= >=
-    Term, // + -
-    Factor, // * /
-    Unary, // ! -
-    Call, // . ()
-    Primary,
-};
 
 pub const Parser = struct {
     source: []const u8,
@@ -70,9 +54,6 @@ pub const Parser = struct {
         token_tags: []const Token.Tag,
         token_spans: []const Span,
     ) !void {
-        // const zone = tracy.initZone(@src(), .{ .name = "Parsing" });
-        // defer zone.deinit();
-
         self.source = source;
         self.token_tags = token_tags;
         self.token_spans = token_spans;
@@ -80,8 +61,6 @@ pub const Parser = struct {
         self.skip_new_lines();
 
         while (!self.match(.Eof)) {
-            // const stmt = self.declaration() catch |e| switch (e) {
-            // const node = self.declaration() catch |e| switch (e) {
             _ = self.declaration() catch |e| switch (e) {
                 // If it's our own error, we continue on parsing
                 Error.err => {
@@ -725,40 +704,6 @@ pub const Parser = struct {
 
         self.nodes.items(.data)[node] = arity;
     }
-
-    // / Takes the callee expression as input and output the full function call expression
-    // fn finish_call(self: *Self, expr: *Expr) Error!*Expr {
-    //     const call_expr = try self.allocator.create(Expr);
-    //
-    //     var arity: usize = 0;
-    //     var args: [256]*const Expr = undefined;
-    //
-    //     // All the skip_lines cover the different syntaxes
-    //     while (!self.check(.RightParen)) {
-    //         self.skip_new_lines();
-    //         if (self.check(.Eof)) return self.error_at_prev(.ExpectParenAfterFnArgs);
-    //
-    //         if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "argument" } });
-    //
-    //         args[arity] = try self.parse_precedence_expr(0);
-    //         arity += 1;
-    //
-    //         self.skip_new_lines();
-    //         if (!self.match(.Comma)) break;
-    //         self.skip_new_lines();
-    //     }
-    //
-    //     try self.expect(.RightParen, .ExpectParenAfterFnArgs);
-    //
-    //     call_expr.* = .{ .FnCall = .{
-    //         .callee = expr,
-    //         .args = args,
-    //         .arity = arity,
-    //         .span = .{ .start = expr.span().start, .end = self.prev().span.end },
-    //     } };
-    //
-    //     return call_expr;
-    // }
 };
 
 // Tests
