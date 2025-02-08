@@ -46,7 +46,7 @@ code:
     0.33
 
 expect:
-[Float literal .33]
+[Float literal 0.33]
 
 ================
 
@@ -84,7 +84,7 @@ code:
   "no way"
 
 expect:
-[String literal no way]
+[String literal "no way"]
 
 ================
 

@@ -27,7 +27,7 @@ expect:
 [Var declaration home, type void, value
     [Binop +]
         [Int literal 12]
-        [Float literal 4]
+        [Float literal 4.]
 ]
 
 ================
@@ -39,7 +39,7 @@ expect:
 [Var declaration home, type House, value
     [Binop +]
         [Int literal 12]
-        [Float literal 4]
+        [Float literal 4.]
 ]
 
 ================

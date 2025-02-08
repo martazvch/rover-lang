@@ -77,10 +77,10 @@ pub const AstPrinter = struct {
             .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
-            .Data => unreachable,
             .Discard => self.discard(),
             .Empty => unreachable,
             .Float => self.literal("Float literal"),
+            .FnCall => self.fn_call(),
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
@@ -144,7 +144,6 @@ pub const AstPrinter = struct {
 
         self.indent_level += 1;
 
-        self.node_idx += 1;
         const count = self.node_data[self.node_idx];
         self.node_idx += 1;
 
@@ -166,11 +165,33 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("]\n");
     }
 
+    fn fn_call(self: *Self) Error!void {
+        try self.indent();
+        try self.tree.appendSlice("[Fn call\n");
+        const arity = self.node_data[self.node_idx];
+
+        self.indent_level += 1;
+        try self.indent();
+        try self.tree.appendSlice("callee:\n");
+        self.node_idx += 1;
+        try self.parse_node(self.node_idx);
+        try self.indent();
+        try self.tree.appendSlice("args:\n");
+
+        for (0..arity) |_| {
+            try self.parse_node(self.node_idx);
+        }
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
     fn fn_decl(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
 
-        self.node_idx += 1;
+        const name = self.node_idx;
         const arity = self.node_data[self.node_idx];
 
         self.node_idx += 1;
@@ -180,7 +201,7 @@ pub const AstPrinter = struct {
         try writer.print(
             "[Fn declaration {s}, type {s}, arity {}\n",
             .{
-                self.source_from_tk(return_idx),
+                self.source_from_tk(name),
                 self.get_type(return_idx),
                 arity,
             },
@@ -193,6 +214,8 @@ pub const AstPrinter = struct {
 
         for (0..arity) |_| {
             try self.parse_node(self.node_idx);
+            // We manually increment because the type parsing
+            // doesn't do it
             self.node_idx += 1;
         }
 
@@ -378,7 +401,6 @@ pub const AstPrinter = struct {
         try self.tree.appendSlice("[Use ");
         var writer = self.tree.writer();
 
-        self.node_idx += 1;
         const count = self.node_data[self.node_idx];
 
         for (0..count) |i| {

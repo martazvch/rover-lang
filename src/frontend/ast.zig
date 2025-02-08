@@ -112,13 +112,12 @@ pub const NullNode = 0;
 
 pub const Node = struct {
     tag: Tag,
-    main: TokenIndex,
+    main: TokenIndex = 0,
     data: usize = 0,
 
     pub const Index = usize;
     pub const Empty: Node = .{
         .tag = .Empty,
-        .main = 0,
     };
 
     pub const Tag = enum {
@@ -128,13 +127,12 @@ pub const Node = struct {
         Assignment,
         Block,
         Bool,
-        Data,
         Discard,
         Div,
         Empty,
         Float,
         FnDecl,
-        // FnCall,
+        FnCall,
         Grouping,
         Identifier,
         If,

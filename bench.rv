@@ -95,4 +95,126 @@ fn main() {
     if true do print "do"
     if true do print "do"
     if true do print "do"
+
+    {
+        while true {
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+            _ = func1(1, 2., "3")
+
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+            if true do print "do"
+        }
+    }
+
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
+    func1()()()()()()()()()()()()()()
+    if true do {} else if true do {} else {}
 }

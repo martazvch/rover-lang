@@ -62,9 +62,9 @@ expect:
         condition:
         [Bool literal true]
         then body:
-        [String literal yes]
+        [String literal "yes"]
         else body:
-        [String literal no]
+        [String literal "no"]
     ]
  
 ================

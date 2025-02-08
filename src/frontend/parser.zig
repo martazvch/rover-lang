@@ -152,11 +152,6 @@ pub const Parser = struct {
         return self.nodes.len - 1;
     }
 
-    /// Adds a data node and returns its index
-    fn add_data(self: *Self) !Node.Index {
-        return self.add_node(.{ .tag = .Data, .main = 0 });
-    }
-
     fn skip_new_lines(self: *Self) void {
         while (self.check(.NewLine)) {
             self.advance();
@@ -257,7 +252,6 @@ pub const Parser = struct {
             .tag = .FnDecl,
             .main = self.token_idx - 1,
         });
-        const arity_idx = try self.add_data();
 
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
         self.skip_new_lines();
@@ -292,7 +286,7 @@ pub const Parser = struct {
 
         try self.expect(.RightParen, .ExpectParenAfterFnParams);
 
-        self.nodes.items(.data)[arity_idx] = arity;
+        self.nodes.items(.data)[idx] = arity;
 
         _ = if (self.match(.SmallArrow))
             try self.extract_type()
@@ -399,7 +393,6 @@ pub const Parser = struct {
             .tag = .Use,
             .main = self.token_idx - 1,
         });
-        const count_idx = try self.add_data();
 
         if (!self.check(.Identifier)) {
             return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
@@ -418,7 +411,7 @@ pub const Parser = struct {
             break;
         }
 
-        self.nodes.items(.data)[count_idx] = count;
+        self.nodes.items(.data)[idx] = count;
 
         return idx;
     }
@@ -467,10 +460,7 @@ pub const Parser = struct {
     fn assignment(self: *Self) !Node.Index {
         // Converts the previous expression to an assignment
         const idx = self.nodes.len - 1;
-        try self.nodes.insert(self.allocator, idx, .{
-            .tag = .Assignment,
-            .main = undefined,
-        });
+        try self.nodes.insert(self.allocator, idx, .{ .tag = .Assignment });
 
         _ = try self.parse_precedence_expr(0);
 
@@ -513,7 +503,8 @@ pub const Parser = struct {
     }
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!Node.Index {
-        const start = self.token_idx;
+        const start_tk = self.token_idx;
+        const start_node = self.nodes.len;
 
         self.advance();
         var node = try self.parse_expr();
@@ -534,9 +525,9 @@ pub const Parser = struct {
 
             // If we are in a binop, we insert the node before the operand
             // There is no data, we just use the two next nodes
-            try self.nodes.insert(self.allocator, start, .{
+            try self.nodes.insert(self.allocator, start_node, .{
                 .tag = get_tag(self.token_tags[op]),
-                .main = start,
+                .main = start_tk,
             });
 
             // Index of binop node
@@ -554,18 +545,19 @@ pub const Parser = struct {
 
     /// Parses expressions (prefix + sufix)
     fn parse_expr(self: *Self) Error!Node.Index {
+        const start = self.nodes.len;
+
         // Prefix part
-        const expr = try switch (self.token_tags[self.token_idx - 1]) {
+        _ = try switch (self.token_tags[self.token_idx - 1]) {
             .LeftBrace => self.block_expr(),
             .If => self.if_expr(),
             .Minus, .Not => self.unary_expr(),
             .Return => self.return_expr(),
             else => self.parse_primary_expr(),
         };
-        return expr;
 
         // Apply postfix on the prefix expression
-        // return self.parse_postfix_expr(expr);
+        return self.parse_postfix_expr(start);
     }
 
     fn block_expr(self: *Self) Error!Node.Index {
@@ -573,9 +565,6 @@ pub const Parser = struct {
 
         self.skip_new_lines();
         const idx = try self.add_node(.{ .tag = .Block, .main = openning_brace });
-        // For block length
-        const length_idx = try self.add_node(.{ .tag = .Data, .main = 0 });
-
         var length: usize = 0;
 
         while (!self.check(.RightBrace) and !self.check(.Eof)) {
@@ -586,7 +575,7 @@ pub const Parser = struct {
 
         try self.expect_or_err_at_tk(.RightBrace, .UnclosedBrace, openning_brace);
 
-        self.nodes.items(.data)[length_idx] = length;
+        self.nodes.items(.data)[idx] = length;
 
         return idx;
     }
@@ -697,21 +686,45 @@ pub const Parser = struct {
         });
     }
 
-    // / Parses postfix expressions: calls, member access
-    // fn parse_postfix_expr(self: *Self, prefix_expr: *Expr) Error!*Expr {
-    //     var expr: *Expr = prefix_expr;
-    //
-    //     while (true) {
-    //         if (self.match(.LeftParen)) {
-    //             expr = try self.finish_call(expr);
-    //         } else if (self.match(.Dot)) {
-    //             // Member access
-    //             unreachable;
-    //         } else break;
-    //     }
-    //
-    //     return expr;
-    // }
+    // Parses postfix expressions: calls, member access
+    fn parse_postfix_expr(self: *Self, node: Node.Index) Error!Node.Index {
+        while (true) {
+            if (self.match(.LeftParen)) {
+                try self.finish_call(node);
+            } else if (self.match(.Dot)) {
+                // Member access
+                unreachable;
+            } else break;
+        }
+
+        return node;
+    }
+
+    // Takes the callee expression as input and output the full function call expression
+    fn finish_call(self: *Self, node: Node.Index) Error!void {
+        try self.nodes.insert(self.allocator, node, .{ .tag = .FnCall });
+
+        var arity: usize = 0;
+
+        // All the skip_lines cover the different syntaxes
+        while (!self.check(.RightParen)) {
+            self.skip_new_lines();
+            if (self.check(.Eof)) return self.error_at_prev(.ExpectParenAfterFnArgs);
+
+            if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "argument" } });
+
+            _ = try self.parse_precedence_expr(0);
+            arity += 1;
+
+            self.skip_new_lines();
+            if (!self.match(.Comma)) break;
+            self.skip_new_lines();
+        }
+
+        try self.expect(.RightParen, .ExpectParenAfterFnArgs);
+
+        self.nodes.items(.data)[node] = arity;
+    }
 
     // / Takes the callee expression as input and output the full function call expression
     // fn finish_call(self: *Self, expr: *Expr) Error!*Expr {
