@@ -18,3 +18,11 @@ jobs:
         with:
           version: master
       - run: zig build -Doptimize=${{ matrix.optimize }} test -Dstage=${{ matrix.stage }}
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: mlugg/setup-zig@v1
+        with:
+          version: master
+      - run: zig fmt --check .
