@@ -199,13 +199,13 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         ast_printer.display();
     }
 
-    // // Analyzer
-    // // TODO: init analyzer extra info with exact number of element per array list
-    // // for optimal memory allocation
-    // var analyzer: Analyzer = undefined;
-    // try analyzer.init(allocator, false);
-    // defer analyzer.deinit();
-    //
+    // Analyzer
+    // TODO: init analyzer extra info with exact number of element per array list
+    // for optimal memory allocation
+    var analyzer: Analyzer = undefined;
+    try analyzer.init(allocator, false);
+    defer analyzer.deinit();
+
     // try analyzer.analyze(parser.stmts.items, source);
     //
     // // Analyzer errors

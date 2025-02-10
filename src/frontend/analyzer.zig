@@ -2,21 +2,29 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const MultiArrayList = std.MultiArrayList;
 const StringHashMap = std.StringHashMap;
-const activeTag = std.meta.activeTag;
+const Interner = @import("../interner.zig").Interner;
+// const Stmt = Ast.Stmt;
+// const Expr = Ast.Expr;
+// const Span = Ast.Span;
+// const AstType = Ast.Type;
+// const AnalyzedAst = @import("analyzed_ast.zig");
+// const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
+// const Scope = AnalyzedAst.Scope;
+// const ReturnKind = AnalyzedAst.ReturnKind;
 const Ast = @import("ast.zig");
-const Stmt = Ast.Stmt;
-const Expr = Ast.Expr;
-const Span = Ast.Span;
-const AstType = Ast.Type;
-const AnalyzedAst = @import("analyzed_ast.zig");
-const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
-const Scope = AnalyzedAst.Scope;
-const ReturnKind = AnalyzedAst.ReturnKind;
+const Token = @import("lexer.zig").Token;
+const Span = @import("lexer.zig").Span;
+const Node = @import("ast.zig").Node;
+const Rir = @import("rir.zig");
+const Scope = Rir.Scope;
+const ReturnKind = Rir.ReturnKind;
+const Instruction = Rir.Instruction;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
-const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
+// const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const GenReport = @import("../reporter.zig").GenReport;
 const BA = @import("builtins_analyzer.zig");
@@ -123,20 +131,32 @@ pub const TypeManager = struct {
 
 pub const Analyzer = struct {
     source: []const u8,
-    errs: ArrayList(AnalyzerReport),
+    token_tags: []const Token.Tag,
+    token_spans: []const Span,
+    node_tags: []const Node.Tag,
+    node_mains: []const Ast.TokenIndex,
+    node_data: []const usize,
+    node_idx: usize,
+
+    // analyzed_stmts: ArrayList(AnalyzedStmt),
+    instructions: ArrayList(Instruction),
     warns: ArrayList(AnalyzerReport),
+    errs: ArrayList(AnalyzerReport),
+
     globals: ArrayList(Variable),
     locals: ArrayList(Variable),
     scope_depth: usize,
-    analyzed_stmts: ArrayList(AnalyzedStmt),
-    type_manager: TypeManager,
-    repl: bool,
-    main: ?*const Ast.FnDecl,
-    states: ArrayList(State),
-    arena: std.heap.ArenaAllocator,
-    allocator: Allocator,
+    // main: ?*const Ast.FnDecl,
     /// Offset updated at each fn call, emulate the frame pointer at runtime
     local_offset: usize,
+    main: ?Node.Index,
+    states: ArrayList(State),
+    type_manager: TypeManager,
+    interner: Interner,
+
+    arena: std.heap.ArenaAllocator,
+    allocator: Allocator,
+    repl: bool,
 
     const Self = @This();
     const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
@@ -169,51 +189,68 @@ pub const Analyzer = struct {
         self.arena = std.heap.ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
 
-        self.errs = ArrayList(AnalyzerReport).init(self.allocator);
+        self.instructions = ArrayList(Instruction).init(self.allocator);
         self.warns = ArrayList(AnalyzerReport).init(self.allocator);
+        self.errs = ArrayList(AnalyzerReport).init(self.allocator);
         self.globals = ArrayList(Variable).init(self.allocator);
         self.locals = ArrayList(Variable).init(self.allocator);
         self.scope_depth = 0;
-        self.analyzed_stmts = ArrayList(AnalyzedStmt).init(self.allocator);
+        // self.analyzed_stmts = ArrayList(AnalyzedStmt).init(self.allocator);
         self.type_manager = TypeManager.init(self.allocator);
         try self.type_manager.init_builtins();
-        self.repl = repl;
+        self.interner = Interner.init(self.allocator);
         self.main = null;
         self.states = ArrayList(State).init(self.allocator);
         self.local_offset = 0;
+        self.repl = repl;
     }
 
     pub fn deinit(self: *Self) void {
         self.arena.deinit();
     }
 
-    pub fn analyze(self: *Self, stmts: []const Stmt, source: []const u8) !void {
+    pub fn analyze(
+        self: *Self,
+        source: []const u8,
+        tokens: MultiArrayList(Token),
+        nodes: MultiArrayList(Node),
+    ) !void {
         self.source = source;
+        self.token_tags = tokens.items(.tag);
+        self.token_spans = tokens.items(.span);
+        self.node_tags = nodes.items(.tag);
+        self.node_mains = nodes.items(.main);
+        self.node_data = nodes.items(.data);
+
         // HACK: to protect an -1 access
         try self.states.append(.{});
 
-        for (stmts) |*stmt| {
-            const stmt_type = self.statement(stmt) catch |e| {
-                switch (e) {
-                    // If it's our own error, we continue
-                    error.Err => continue,
-                    error.TooManyTypes => return self.err(.TooManyTypes, stmt.span()),
-                    else => return e,
-                }
-            };
-
-            // If at this stage we have a type, it means that nobody
-            // consumed it. It might be a standalone expression like:
-            // 3+4
-            if (stmt_type != Void) {
-                self.err(.UnusedValue, stmt.Expr.span()) catch {};
-            }
+        while (self.node_idx < self.node_data.len) {
+            try self.analyze_node(self.node_idx);
         }
 
-        // In REPL mode, no need for main function
-        if (self.repl) return;
+        // for (stmts) |*stmt| {
+        //     const stmt_type = self.statement(stmt) catch |e| {
+        //         switch (e) {
+        //             // If it's our own error, we continue
+        //             error.Err => continue,
+        //             error.TooManyTypes => return self.err(.TooManyTypes, stmt.span()),
+        //             else => return e,
+        //         }
+        //     };
+        //
+        //     // If at this stage we have a type, it means that nobody
+        //     // consumed it. It might be a standalone expression like:
+        //     // 3+4
+        //     if (stmt_type != Void) {
+        //         self.err(.UnusedValue, stmt.Expr.span()) catch {};
+        //     }
+        // }
 
-        if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+        // In REPL mode, no need for main function
+        if (self.repl)
+            return
+        else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
     fn is_numeric(t: Type) bool {
@@ -297,86 +334,172 @@ pub const Analyzer = struct {
 
     /// Checks if an identifier already exists in current scope and if it's type exists
     /// Returns the type of the variable, void if none provided
-    fn check_ident_and_type(self: *Self, ident: SourceSlice, type_: ?AstType) !Type {
-        // Name check
-        if (self.ident_in_scope(ident.text)) {
-            return self.err(
-                .{ .AlreadyDeclared = .{ .name = ident.text } },
-                Span.from_source_slice(ident),
-            );
-        }
-
-        return if (type_) |t| switch (t) {
-            .Entity => |entity| self.type_manager.declared.get(entity.text) orelse
-                return self.err(
-                .{ .UndeclaredType = .{ .found = entity.text } },
-                Span.from_source_slice(entity),
-            ),
-            .Function => Void,
-        } else Void;
-    }
+    // fn check_ident_and_type(self: *Self, ident: SourceSlice, type_: ?AstType) !Type {
+    //     // Name check
+    //     if (self.ident_in_scope(ident.text)) {
+    //         return self.err(
+    //             .{ .AlreadyDeclared = .{ .name = ident.text } },
+    //             Span.from_source_slice(ident),
+    //         );
+    //     }
+    //
+    //     return if (type_) |t| switch (t) {
+    //         .Entity => |entity| self.type_manager.declared.get(entity.text) orelse
+    //             return self.err(
+    //             .{ .UndeclaredType = .{ .found = entity.text } },
+    //             Span.from_source_slice(entity),
+    //         ),
+    //         .Function => Void,
+    //     } else Void;
+    // }
 
     /// Declares a variable either in globals or in locals based on current scope depth
-    fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
-        var variable: Variable = .{
-            .name = name,
-            .type_ = type_,
-            .depth = self.scope_depth,
-            .initialized = initialized,
-        };
+    // fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
+    //     var variable: Variable = .{
+    //         .name = name,
+    //         .type_ = type_,
+    //         .depth = self.scope_depth,
+    //         .initialized = initialized,
+    //     };
+    //
+    //     // Add the variable to the correct data structure
+    //     if (self.scope_depth == 0) {
+    //         const index = self.globals.items.len;
+    //         variable.index = index;
+    //
+    //         try self.globals.append(variable);
+    //         return .{ .index = index, .scope = .Global };
+    //     } else {
+    //         const index = self.locals.items.len - self.local_offset;
+    //         variable.index = index;
+    //
+    //         try self.locals.append(variable);
+    //         return .{ .index = index, .scope = .Local };
+    //     }
+    // }
 
-        // Add the variable to the correct data structure
-        if (self.scope_depth == 0) {
-            const index = self.globals.items.len;
-            variable.index = index;
-
-            try self.globals.append(variable);
-            return .{ .index = index, .scope = .Global };
-        } else {
-            const index = self.locals.items.len - self.local_offset;
-            variable.index = index;
-
-            try self.locals.append(variable);
-            return .{ .index = index, .scope = .Local };
-        }
-    }
-
-    fn is_pure(expr: *const Expr) bool {
+    fn is_pure(self: *const Self, node: Node.Index) bool {
         // TODO: manage those
         // Block: Block,
         // FnCall: FnCall,
         // Identifier: Identifier,
         // If: If,
-        return switch (expr.*) {
-            .BoolLit,
-            .FloatLit,
-            .IntLit,
-            .NullLit,
-            .StringLit,
+        return switch (self.node_tags[node]) {
+            .Bool,
+            .Float,
+            .Int,
+            .Null,
+            .String,
             => true,
-            .BinOp => |e| is_pure(e.lhs) and is_pure(e.rhs),
-            .Grouping => |e| is_pure(e.expr),
-            .Unary => |e| is_pure(e.rhs),
+            .BinOp => self.is_pure(self.node_idx + 1) and self.is_pure(self.node_idx + 2),
+            .Grouping => self.is_pure(self.node_idx + 1),
+            .Unary => self.is_pure(self.node_idx + 1),
             else => false,
         };
     }
 
-    fn statement(self: *Self, stmt: *const Stmt) !Type {
+    // fn is_pure(expr: *const Expr) bool {
+    //     // TODO: manage those
+    //     // Block: Block,
+    //     // FnCall: FnCall,
+    //     // Identifier: Identifier,
+    //     // If: If,
+    //     return switch (expr.*) {
+    //         .BoolLit,
+    //         .FloatLit,
+    //         .IntLit,
+    //         .NullLit,
+    //         .StringLit,
+    //         => true,
+    //         .BinOp => |e| is_pure(e.lhs) and is_pure(e.rhs),
+    //         .Grouping => |e| is_pure(e.expr),
+    //         .Unary => |e| is_pure(e.rhs),
+    //         else => false,
+    //     };
+    // }
+
+    fn analyze_node(self: *Self, node: Node.Index) !Type {
         var final: Type = Void;
 
-        switch (stmt.*) {
-            .Assignment => |*s| try self.assignment(s),
-            .Discard => |*s| try self.discard(s),
-            .FnDecl => |*s| try self.fn_declaration(s),
-            .Print => |*s| _ = try self.expression(s.expr),
-            .Use => |*s| try self.use_stmt(s),
-            .VarDecl => |*s| try self.var_declaration(s),
-            .While => |*s| try self.while_stmt(s),
-            .Expr => |e| final = try self.expression(e),
+        switch (self.node_tags[node]) {
+            // .Assignment => |*s| try self.assignment(s),
+            // .Discard => |*s| try self.discard(s),
+            // .FnDecl => |*s| try self.fn_declaration(s),
+            // .Print => |*s| _ = try self.expression(s.expr),
+            // .Use => |*s| try self.use_stmt(s),
+            // .VarDecl => |*s| try self.var_declaration(s),
+            // .While => |*s| try self.while_stmt(s),
+            // .Expr => |e| final = try self.expression(e),
+            // .Block => |*e| self.block(e),
+            .Bool => final = try self.bool_lit(node),
+            // .BinOp => |*e| self.binop(e),
+            .Float => final = Float,
+            // .FnCall => |*e| self.fn_call(e),
+            // .Grouping => |*e| self.grouping(e),
+            // .Identifier => |*e| {
+            //     const res = try self.identifier(e, true);
+            //     return res.type_;
+            // },
+            // .If => |*e| self.if_expr(e),
+            .Int => final = Int,
+            .Null => final = Null,
+            // .Return => |*e| self.return_expr(e),
+            .String => final = Str,
+            // .Unary => |*e| self.unary(e),
+            else => unreachable,
         }
 
         return final;
     }
+
+    fn bool_lit(self: *Self, node: Node.Index) !Type {
+        try self.instructions.append(.{
+            .Bool = if (self.token_tags[self.node_mains[node]] == .True) true else false,
+        });
+
+        return Bool;
+    }
+
+    fn float_lit(self: *Self, node: Node.Index) !Type {
+        const value = std.fmt.parseFloat(f64, self.token_spans[self.node_mains[node]]) catch {
+            // TODO: error handling, only one possible it's invalid char
+        };
+        try self.instructions.append(.{ .Float = value });
+
+        return Float;
+    }
+
+    fn int_lit(self: *Self, node: Node.Index) !Type {
+        const value = std.fmt.parseInt(isize, self.token_spans[self.node_mains[node]]) catch {
+            // TODO: error handling, only one possible it's invalid char
+        };
+        try self.instructions.append(.{ .Int = value });
+
+        return Float;
+    }
+
+    fn null_lit(self: *Self) !Type {
+        try self.instructions.append(.{.Null});
+
+        return Null;
+    }
+
+    // fn statement(self: *Self, stmt: *const Stmt) !Type {
+    //     var final: Type = Void;
+    //
+    //     switch (stmt.*) {
+    //         .Assignment => |*s| try self.assignment(s),
+    //         .Discard => |*s| try self.discard(s),
+    //         .FnDecl => |*s| try self.fn_declaration(s),
+    //         .Print => |*s| _ = try self.expression(s.expr),
+    //         .Use => |*s| try self.use_stmt(s),
+    //         .VarDecl => |*s| try self.var_declaration(s),
+    //         .While => |*s| try self.while_stmt(s),
+    //         .Expr => |e| final = try self.expression(e),
+    //     }
+    //
+    //     return final;
+    // }
 
     fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
         const state = self.last_state();
@@ -574,100 +697,100 @@ pub const Analyzer = struct {
         };
     }
 
-    fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
-        var idx_unknown: usize = 0;
+    // fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
+    //     var idx_unknown: usize = 0;
+    //
+    //     // For now, can only import std modules
+    //     if (std.mem.eql(u8, stmt.module[0].text, "std")) {
+    //         if (try self.type_manager.import_builtins(stmt.module[1].text)) |module| {
+    //             const all_fn_names = module.keys();
+    //
+    //             var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
+    //             var all_var = try ArrayList(AnalyzedAst.Variable).initCapacity(self.allocator, all_fn_names.len);
+    //
+    //             for (all_fn_names) |fn_name| {
+    //                 const func = module.get(fn_name).?;
+    //
+    //                 const info: TypeInfo = .{ .Fn = .{
+    //                     .arity = func.arity,
+    //                     .params = func.params,
+    //                     .return_type = func.return_type,
+    //                     .builtin = true,
+    //                 } };
+    //
+    //                 // Declare the type and additional informations
+    //                 const type_ = try self.type_manager.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
+    //                 // Declare the variable
+    //                 const variable = try self.declare_variable(fn_name, type_, true);
+    //
+    //                 // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
+    //                 all_ptr.appendAssumeCapacity(@intCast(func.index));
+    //                 all_var.appendAssumeCapacity(variable);
+    //             }
+    //
+    //             try self.analyzed_stmts.append(.{ .Use = .{
+    //                 .indices = all_ptr,
+    //                 .variables = all_var,
+    //             } });
+    //
+    //             return;
+    //         } else idx_unknown = 1;
+    //     }
+    //
+    //     return self.err(
+    //         .{ .UnknownModule = .{ .name = stmt.module[idx_unknown].text } },
+    //         Span.from_source_slice(
+    //             stmt.module[idx_unknown],
+    //         ),
+    //     );
+    // }
 
-        // For now, can only import std modules
-        if (std.mem.eql(u8, stmt.module[0].text, "std")) {
-            if (try self.type_manager.import_builtins(stmt.module[1].text)) |module| {
-                const all_fn_names = module.keys();
-
-                var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
-                var all_var = try ArrayList(AnalyzedAst.Variable).initCapacity(self.allocator, all_fn_names.len);
-
-                for (all_fn_names) |fn_name| {
-                    const func = module.get(fn_name).?;
-
-                    const info: TypeInfo = .{ .Fn = .{
-                        .arity = func.arity,
-                        .params = func.params,
-                        .return_type = func.return_type,
-                        .builtin = true,
-                    } };
-
-                    // Declare the type and additional informations
-                    const type_ = try self.type_manager.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
-                    // Declare the variable
-                    const variable = try self.declare_variable(fn_name, type_, true);
-
-                    // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
-                    all_ptr.appendAssumeCapacity(@intCast(func.index));
-                    all_var.appendAssumeCapacity(variable);
-                }
-
-                try self.analyzed_stmts.append(.{ .Use = .{
-                    .indices = all_ptr,
-                    .variables = all_var,
-                } });
-
-                return;
-            } else idx_unknown = 1;
-        }
-
-        return self.err(
-            .{ .UnknownModule = .{ .name = stmt.module[idx_unknown].text } },
-            Span.from_source_slice(
-                stmt.module[idx_unknown],
-            ),
-        );
-    }
-
-    fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
-        var checked_type = try self.check_ident_and_type(stmt.name, stmt.type_);
-
-        var initialized = false;
-
-        if (stmt.value) |v| {
-            const state = self.last_state();
-            const last = state.allow_partial;
-            state.allow_partial = false;
-
-            const value_type = try self.expression(v);
-            state.allow_partial = last;
-
-            // Void assignment check
-            if (value_type == Void) {
-                return self.err(.VoidAssignment, v.span());
-            }
-
-            var assign_extra: AnalyzedAst.Assignment = .{};
-
-            // If no type declared, we infer the value type
-            if (checked_type == Void) {
-                checked_type = value_type;
-                // Else, we check for coherence
-            } else if (checked_type != value_type) {
-                // One case in wich we can coerce; int -> float
-                if (checked_type == Float and value_type == Int) {
-                    assign_extra.cast = .Yes;
-                } else {
-                    return self.err(
-                        .{ .InvalidAssignType = .{
-                            .expect = self.type_manager.str(checked_type),
-                            .found = self.type_manager.str(value_type),
-                        } },
-                        v.span(),
-                    );
-                }
-            }
-
-            initialized = true;
-            try self.analyzed_stmts.append(.{ .Assignment = assign_extra });
-        }
-
-        const extra = try self.declare_variable(stmt.name.text, checked_type, initialized);
-        try self.analyzed_stmts.append(.{ .Variable = extra });
-    }
+    // fn var_declaration(self: *Self, stmt: *const Ast.VarDecl) !void {
+    //     var checked_type = try self.check_ident_and_type(stmt.name, stmt.type_);
+    //
+    //     var initialized = false;
+    //
+    //     if (stmt.value) |v| {
+    //         const state = self.last_state();
+    //         const last = state.allow_partial;
+    //         state.allow_partial = false;
+    //
+    //         const value_type = try self.expression(v);
+    //         state.allow_partial = last;
+    //
+    //         // Void assignment check
+    //         if (value_type == Void) {
+    //             return self.err(.VoidAssignment, v.span());
+    //         }
+    //
+    //         var assign_extra: AnalyzedAst.Assignment = .{};
+    //
+    //         // If no type declared, we infer the value type
+    //         if (checked_type == Void) {
+    //             checked_type = value_type;
+    //             // Else, we check for coherence
+    //         } else if (checked_type != value_type) {
+    //             // One case in wich we can coerce; int -> float
+    //             if (checked_type == Float and value_type == Int) {
+    //                 assign_extra.cast = .Yes;
+    //             } else {
+    //                 return self.err(
+    //                     .{ .InvalidAssignType = .{
+    //                         .expect = self.type_manager.str(checked_type),
+    //                         .found = self.type_manager.str(value_type),
+    //                     } },
+    //                     v.span(),
+    //                 );
+    //             }
+    //         }
+    //
+    //         initialized = true;
+    //         try self.analyzed_stmts.append(.{ .Assignment = assign_extra });
+    //     }
+    //
+    //     const extra = try self.declare_variable(stmt.name.text, checked_type, initialized);
+    //     try self.analyzed_stmts.append(.{ .Variable = extra });
+    // }
 
     fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
         const cond_type = try self.expression(stmt.condition);
@@ -690,30 +813,30 @@ pub const Analyzer = struct {
         );
     }
 
-    fn expression(self: *Self, expr: *const Expr) !Type {
-        if (self.scope_depth == 0 and !self.repl and !is_pure(expr)) {
-            return self.err(.UnpureInGlobal, expr.span());
-        }
-
-        return switch (expr.*) {
-            .Block => |*e| self.block(e),
-            .BoolLit => Bool,
-            .BinOp => |*e| self.binop(e),
-            .FloatLit => Float,
-            .FnCall => |*e| self.fn_call(e),
-            .Grouping => |*e| self.grouping(e),
-            .Identifier => |*e| {
-                const res = try self.identifier(e, true);
-                return res.type_;
-            },
-            .If => |*e| self.if_expr(e),
-            .IntLit => Int,
-            .NullLit => Null,
-            .Return => |*e| self.return_expr(e),
-            .StringLit => Str,
-            .Unary => |*e| self.unary(e),
-        };
-    }
+    // fn expression(self: *Self, expr: *const Expr) !Type {
+    //     if (self.scope_depth == 0 and !self.repl and !is_pure(expr)) {
+    //         return self.err(.UnpureInGlobal, expr.span());
+    //     }
+    //
+    //     return switch (expr.*) {
+    //         .Block => |*e| self.block(e),
+    //         .BoolLit => Bool,
+    //         .BinOp => |*e| self.binop(e),
+    //         .FloatLit => Float,
+    //         .FnCall => |*e| self.fn_call(e),
+    //         .Grouping => |*e| self.grouping(e),
+    //         .Identifier => |*e| {
+    //             const res = try self.identifier(e, true);
+    //             return res.type_;
+    //         },
+    //         .If => |*e| self.if_expr(e),
+    //         .IntLit => Int,
+    //         .NullLit => Null,
+    //         .Return => |*e| self.return_expr(e),
+    //         .StringLit => Str,
+    //         .Unary => |*e| self.unary(e),
+    //     };
+    // }
 
     fn block(self: *Self, expr: *const Ast.Block) Error!Type {
         const idx = try self.reserve_slot();
@@ -739,20 +862,20 @@ pub const Analyzer = struct {
     }
 
     /// Checks if an expression if of a certain type kind and returns the associated value or error
-    fn expect_type_kind(self: *Self, expr: *const Expr, kind: TypeSys.Kind) !TypeSys.Value {
-        const expr_type = try self.expression(expr);
-
-        return if (TypeSys.is(expr_type, kind))
-            TypeSys.get_value(expr_type)
-        else
-            self.err(
-                .{ .TypeMismatch = .{
-                    .expect = TypeSys.str_kind(kind),
-                    .found = TypeSys.str_kind(TypeSys.get_kind(expr_type)),
-                } },
-                expr.span(),
-            );
-    }
+    // fn expect_type_kind(self: *Self, expr: *const Expr, kind: TypeSys.Kind) !TypeSys.Value {
+    //     const expr_type = try self.expression(expr);
+    //
+    //     return if (TypeSys.is(expr_type, kind))
+    //         TypeSys.get_value(expr_type)
+    //     else
+    //         self.err(
+    //             .{ .TypeMismatch = .{
+    //                 .expect = TypeSys.str_kind(kind),
+    //                 .found = TypeSys.str_kind(TypeSys.get_kind(expr_type)),
+    //             } },
+    //             expr.span(),
+    //         );
+    // }
 
     fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         // Resolve the callee
@@ -843,92 +966,92 @@ pub const Analyzer = struct {
         );
     }
 
-    fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
-        // We reserve the slot because of recursion
-        const idx = try self.reserve_slot();
-        var extra: AnalyzedAst.If = .{};
-
-        const cond_type = try self.expression(expr.condition);
-        if (cond_type != Bool) return self.err(
-            .{ .NonBoolCond = .{
-                .what = "if",
-                .found = self.type_manager.str(cond_type),
-            } },
-            expr.condition.span(),
-        );
-
-        var then_return: bool = false;
-        var else_return: bool = false;
-
-        const then_type = try self.statement(&expr.then_body);
-        var final_type = then_type;
-
-        // State managment
-        const state = self.last_state();
-
-        // If we hit a return, we transfert it first to the then branch
-        if (state.returns) {
-            // Reset return  for else branch
-            state.returns = false;
-            then_return = true;
-            // As we exit scope, we don't return any type (checked in return_expr)
-            final_type = Void;
-        }
-
-        var else_type: Type = Void;
-        if (expr.else_body) |*body| {
-            else_type = try self.statement(body);
-
-            // If it returns
-            if (state.returns) {
-                else_return = true;
-                // If not then, unmark as globally returning from scope
-                if (!then_return) state.returns = false;
-            } else if (then_return) {
-                // If else only then branch returns, final_type becomes else branch
-                final_type = else_type;
-            }
-
-            // Type coherence. If branches don't exit scope and branches have
-            // diffrent types
-            if (!then_return and !else_return and then_type != else_type) {
-                if (then_type == Int and else_type == Float) {
-                    extra.cast = .Then;
-
-                    try self.warn(
-                        AnalyzerMsg.implicit_cast("then branch", "float"),
-                        expr.then_body.span(),
-                    );
-                } else if (then_type == Float and else_type == Int) {
-                    extra.cast = .Else;
-
-                    // Safe unsafe access, if there is a non void type
-                    // there is an else body
-                    try self.warn(
-                        AnalyzerMsg.implicit_cast("else branch", "float"),
-                        expr.else_body.?.span(),
-                    );
-                } else {
-                    return self.err(
-                        .{ .IncompatibleIfType = .{
-                            .found1 = self.type_manager.str(then_type),
-                            .found2 = self.type_manager.str(else_type),
-                        } },
-                        expr.span,
-                    );
-                }
-            }
-        } else if (then_type != Void and !state.allow_partial) {
-            return self.err(
-                .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
-                expr.span,
-            );
-        }
-
-        self.analyzed_stmts.items[idx] = .{ .If = extra };
-
-        return final_type;
-    }
+    // fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
+    //     // We reserve the slot because of recursion
+    //     const idx = try self.reserve_slot();
+    //     var extra: AnalyzedAst.If = .{};
+    //
+    //     const cond_type = try self.expression(expr.condition);
+    //     if (cond_type != Bool) return self.err(
+    //         .{ .NonBoolCond = .{
+    //             .what = "if",
+    //             .found = self.type_manager.str(cond_type),
+    //         } },
+    //         expr.condition.span(),
+    //     );
+    //
+    //     var then_return: bool = false;
+    //     var else_return: bool = false;
+    //
+    //     const then_type = try self.statement(&expr.then_body);
+    //     var final_type = then_type;
+    //
+    //     // State managment
+    //     const state = self.last_state();
+    //
+    //     // If we hit a return, we transfert it first to the then branch
+    //     if (state.returns) {
+    //         // Reset return  for else branch
+    //         state.returns = false;
+    //         then_return = true;
+    //         // As we exit scope, we don't return any type (checked in return_expr)
+    //         final_type = Void;
+    //     }
+    //
+    //     var else_type: Type = Void;
+    //     if (expr.else_body) |*body| {
+    //         else_type = try self.statement(body);
+    //
+    //         // If it returns
+    //         if (state.returns) {
+    //             else_return = true;
+    //             // If not then, unmark as globally returning from scope
+    //             if (!then_return) state.returns = false;
+    //         } else if (then_return) {
+    //             // If else only then branch returns, final_type becomes else branch
+    //             final_type = else_type;
+    //         }
+    //
+    //         // Type coherence. If branches don't exit scope and branches have
+    //         // diffrent types
+    //         if (!then_return and !else_return and then_type != else_type) {
+    //             if (then_type == Int and else_type == Float) {
+    //                 extra.cast = .Then;
+    //
+    //                 try self.warn(
+    //                     AnalyzerMsg.implicit_cast("then branch", "float"),
+    //                     expr.then_body.span(),
+    //                 );
+    //             } else if (then_type == Float and else_type == Int) {
+    //                 extra.cast = .Else;
+    //
+    //                 // Safe unsafe access, if there is a non void type
+    //                 // there is an else body
+    //                 try self.warn(
+    //                     AnalyzerMsg.implicit_cast("else branch", "float"),
+    //                     expr.else_body.?.span(),
+    //                 );
+    //             } else {
+    //                 return self.err(
+    //                     .{ .IncompatibleIfType = .{
+    //                         .found1 = self.type_manager.str(then_type),
+    //                         .found2 = self.type_manager.str(else_type),
+    //                     } },
+    //                     expr.span,
+    //                 );
+    //             }
+    //         }
+    //     } else if (then_type != Void and !state.allow_partial) {
+    //         return self.err(
+    //             .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
+    //             expr.span,
+    //         );
+    //     }
+    //
+    //     self.analyzed_stmts.items[idx] = .{ .If = extra };
+    //
+    //     return final_type;
+    // }
 
     fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
         const return_type = if (expr.expr) |val| try self.expression(val) else Void;
@@ -948,200 +1071,200 @@ pub const Analyzer = struct {
         return return_type;
     }
 
-    fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
-        const idx = try self.reserve_slot();
-        var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
+    // fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
+    //     const idx = try self.reserve_slot();
+    //     var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
+    //
+    //     const rhs = try self.expression(expr.rhs);
+    //
+    //     if (expr.op == .Not and rhs != Bool) {
+    //         return self.err(
+    //             .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
+    //             expr.rhs.span(),
+    //         );
+    //     } else if (expr.op == .Minus and rhs != Int and rhs != Float) {
+    //         return self.err(
+    //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+    //             expr.rhs.span(),
+    //         );
+    //     }
+    //
+    //     unary_extra.type_ = rhs;
+    //
+    //     self.analyzed_stmts.items[idx] = .{ .Unary = unary_extra };
+    //     return rhs;
+    // }
 
-        const rhs = try self.expression(expr.rhs);
-
-        if (expr.op == .Not and rhs != Bool) {
-            return self.err(
-                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
-                expr.rhs.span(),
-            );
-        } else if (expr.op == .Minus and rhs != Int and rhs != Float) {
-            return self.err(
-                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
-                expr.rhs.span(),
-            );
-        }
-
-        unary_extra.type_ = rhs;
-
-        self.analyzed_stmts.items[idx] = .{ .Unary = unary_extra };
-        return rhs;
-    }
-
-    fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
-        // We reserve the slot because of recursion
-        const idx = try self.reserve_slot();
-        var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
-
-        const lhs = try self.expression(expr.lhs);
-        const rhs = try self.expression(expr.rhs);
-
-        binop_extra.type_ = lhs;
-        var res = lhs;
-
-        // String operations
-        if (expr.op == .Plus and lhs == Str and rhs == Str) {
-            self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
-            return Str;
-        } else if (expr.op == .Star) {
-            if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
-                binop_extra.type_ = Str;
-
-                // For string concatenation, we use the cast information to tell
-                // on wich side is the integer (for the compiler)
-                binop_extra.cast = if (rhs == Int) .Rhs else .Lhs;
-                self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
-                return Str;
-            }
-        }
-
-        switch (expr.op) {
-            // Arithmetic binop
-            .Plus, .Minus, .Star, .Slash => {
-                if (!Analyzer.is_numeric(lhs)) {
-                    return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
-                        expr.lhs.span(),
-                    );
-                }
-
-                if (!Analyzer.is_numeric(rhs)) {
-                    return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
-                        expr.rhs.span(),
-                    );
-                }
-
-                switch (lhs) {
-                    Float => {
-                        switch (rhs) {
-                            Float => {},
-                            Int => {
-                                try self.warn(
-                                    AnalyzerMsg.implicit_cast("right hand side", self.type_manager.str(lhs)),
-                                    expr.rhs.span(),
-                                );
-
-                                binop_extra.cast = .Rhs;
-                            },
-                            else => unreachable,
-                        }
-                    },
-                    Int => {
-                        switch (rhs) {
-                            Float => {
-                                try self.warn(
-                                    AnalyzerMsg.implicit_cast("left hand side", self.type_manager.str(rhs)),
-                                    expr.lhs.span(),
-                                );
-
-                                binop_extra.type_ = Float;
-                                binop_extra.cast = .Lhs;
-                                res = Float;
-                            },
-                            Int => {},
-                            else => unreachable,
-                        }
-                    },
-                    else => unreachable,
-                }
-            },
-            .EqualEqual, .BangEqual => {
-                // If different value types
-                if (lhs != rhs) {
-                    // Check for implicit casts
-                    if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
-                        if (lhs == Int) {
-                            binop_extra.cast = .Lhs;
-
-                            try self.warn(.FloatEqualCast, expr.lhs.span());
-                        } else {
-                            binop_extra.cast = .Rhs;
-
-                            try self.warn(.FloatEqualCast, expr.rhs.span());
-                        }
-
-                        binop_extra.type_ = Float;
-                    } else {
-                        return self.err(
-                            AnalyzerMsg.invalid_cmp(
-                                self.type_manager.str(lhs),
-                                self.type_manager.str(rhs),
-                            ),
-                            expr.span,
-                        );
-                    }
-                } else {
-                    // Check for unsafe float comparisons
-                    if (lhs == Float) {
-                        try self.warn(.FloatEqual, expr.span);
-                    }
-                }
-
-                res = Bool;
-            },
-
-            .Greater, .GreaterEqual, .Less, .LessEqual => {
-                if (!Analyzer.is_numeric(lhs)) {
-                    return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
-                        expr.lhs.span(),
-                    );
-                }
-
-                if (!Analyzer.is_numeric(rhs)) {
-                    return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
-                        expr.rhs.span(),
-                    );
-                }
-
-                switch (lhs) {
-                    Float => switch (rhs) {
-                        Float => try self.warn(.FloatEqual, expr.span),
-                        Int => {
-                            try self.warn(.FloatEqualCast, expr.rhs.span());
-
-                            binop_extra.cast = .Rhs;
-                        },
-                        else => unreachable,
-                    },
-                    Int => switch (rhs) {
-                        Float => {
-                            try self.warn(.FloatEqualCast, expr.lhs.span());
-
-                            binop_extra.cast = .Lhs;
-                            binop_extra.type_ = Float;
-                        },
-                        Int => {},
-                        else => unreachable,
-                    },
-                    else => unreachable,
-                }
-
-                res = Bool;
-            },
-
-            // Logical binop
-            .And, .Or => {
-                if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
-                    .found = self.type_manager.str(lhs),
-                } }, expr.lhs.span());
-
-                if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
-                    .found = self.type_manager.str(rhs),
-                } }, expr.rhs.span());
-            },
-            else => unreachable,
-        }
-
-        self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
-        return res;
-    }
+    // fn binop(self: *Self, expr: *const Ast.BinOp) Error!Type {
+    //     // We reserve the slot because of recursion
+    //     const idx = try self.reserve_slot();
+    //     var binop_extra: AnalyzedAst.BinOp = .{ .type_ = Null };
+    //
+    //     const lhs = try self.expression(expr.lhs);
+    //     const rhs = try self.expression(expr.rhs);
+    //
+    //     binop_extra.type_ = lhs;
+    //     var res = lhs;
+    //
+    //     // String operations
+    //     if (expr.op == .Plus and lhs == Str and rhs == Str) {
+    //         self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
+    //         return Str;
+    //     } else if (expr.op == .Star) {
+    //         if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
+    //             binop_extra.type_ = Str;
+    //
+    //             // For string concatenation, we use the cast information to tell
+    //             // on wich side is the integer (for the compiler)
+    //             binop_extra.cast = if (rhs == Int) .Rhs else .Lhs;
+    //             self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
+    //             return Str;
+    //         }
+    //     }
+    //
+    //     switch (expr.op) {
+    //         // Arithmetic binop
+    //         .Plus, .Minus, .Star, .Slash => {
+    //             if (!Analyzer.is_numeric(lhs)) {
+    //                 return self.err(
+    //                     AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
+    //                     expr.lhs.span(),
+    //     );
+    // }
+    //
+    // if (!Analyzer.is_numeric(rhs)) {
+    //     return self.err(
+    //         AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+    //         expr.rhs.span(),
+    //     );
+    // }
+    //
+    // switch (lhs) {
+    //     Float => {
+    //         switch (rhs) {
+    //             Float => {},
+    //             Int => {
+    //                 try self.warn(
+    //                     AnalyzerMsg.implicit_cast("right hand side", self.type_manager.str(lhs)),
+    //                     expr.rhs.span(),
+    //                 );
+    //
+    //                 binop_extra.cast = .Rhs;
+    //             },
+    //             else => unreachable,
+    //         }
+    //     },
+    //     Int => {
+    //         switch (rhs) {
+    //             Float => {
+    //                 try self.warn(
+    //                     AnalyzerMsg.implicit_cast("left hand side", self.type_manager.str(rhs)),
+    //                     expr.lhs.span(),
+    //                 );
+    //
+    //                 binop_extra.type_ = Float;
+    //                     binop_extra.cast = .Lhs;
+    //                     res = Float;
+    //                 },
+    //                 Int => {},
+    //                 else => unreachable,
+    //             }
+    //         },
+    //         else => unreachable,
+    //     }
+    // },
+    // .EqualEqual, .BangEqual => {
+    //     // If different value types
+    //     if (lhs != rhs) {
+    //         // Check for implicit casts
+    //         if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
+    //             if (lhs == Int) {
+    //                 binop_extra.cast = .Lhs;
+    //
+    //                 try self.warn(.FloatEqualCast, expr.lhs.span());
+    //             } else {
+    //                 binop_extra.cast = .Rhs;
+    //
+    //                 try self.warn(.FloatEqualCast, expr.rhs.span());
+    //             }
+    //
+    //             binop_extra.type_ = Float;
+    //         } else {
+    //             return self.err(
+    //                 AnalyzerMsg.invalid_cmp(
+    //                     self.type_manager.str(lhs),
+    //                     self.type_manager.str(rhs),
+    //                 ),
+    //                 expr.span,
+    //             );
+    //         }
+    //     } else {
+    //         // Check for unsafe float comparisons
+    //         if (lhs == Float) {
+    //             try self.warn(.FloatEqual, expr.span);
+    //         }
+    //     }
+    //
+    //     res = Bool;
+    // },
+    //
+    // .Greater, .GreaterEqual, .Less, .LessEqual => {
+    //     if (!Analyzer.is_numeric(lhs)) {
+    //         return self.err(
+    //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
+    //             expr.lhs.span(),
+    //         );
+    //     }
+    //
+    //     if (!Analyzer.is_numeric(rhs)) {
+    //         return self.err(
+    //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+    //             expr.rhs.span(),
+    //         );
+    //     }
+    //
+    //     switch (lhs) {
+    //         Float => switch (rhs) {
+    //             Float => try self.warn(.FloatEqual, expr.span),
+    //             Int => {
+    //                 try self.warn(.FloatEqualCast, expr.rhs.span());
+    //
+    //                 binop_extra.cast = .Rhs;
+    //             },
+    //                     else => unreachable,
+    //                 },
+    //                 Int => switch (rhs) {
+    //                     Float => {
+    //                         try self.warn(.FloatEqualCast, expr.lhs.span());
+    //
+    //                         binop_extra.cast = .Lhs;
+    //                         binop_extra.type_ = Float;
+    //                     },
+    //                     Int => {},
+    //                     else => unreachable,
+    //                 },
+    //                 else => unreachable,
+    //             }
+    //
+    //             res = Bool;
+    //         },
+    //
+    //         // Logical binop
+    //         .And, .Or => {
+    //             if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
+    //                 .found = self.type_manager.str(lhs),
+    //             } }, expr.lhs.span());
+    //
+    //             if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
+    //                 .found = self.type_manager.str(rhs),
+    //             } }, expr.rhs.span());
+    //         },
+    //         else => unreachable,
+    //     }
+    //
+    //     self.analyzed_stmts.items[idx] = .{ .Binop = binop_extra };
+    //     return res;
+    // }
 };
 
 // Test
