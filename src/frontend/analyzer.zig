@@ -83,7 +83,7 @@ pub const TypeManager = struct {
     }
 
     /// Set type information at a specific index in list (index gave by *reserve_info* method)
-    pub inline fn set_info(self: *Self, index: usize, info: TypeInfo) void {
+    pub fn set_info(self: *Self, index: usize, info: TypeInfo) void {
         self.type_infos.items[index] = info;
     }
 
@@ -212,8 +212,8 @@ pub const Analyzer = struct {
     pub fn analyze(
         self: *Self,
         source: []const u8,
-        tokens: MultiArrayList(Token),
-        nodes: MultiArrayList(Node),
+        tokens: *const MultiArrayList(Token),
+        nodes: *const MultiArrayList(Node),
     ) !void {
         self.source = source;
         self.token_tags = tokens.items(.tag);
@@ -226,7 +226,18 @@ pub const Analyzer = struct {
         try self.states.append(.{});
 
         while (self.node_idx < self.node_data.len) {
-            try self.analyze_node(self.node_idx);
+            const node_type = self.analyze_node(self.node_idx) catch |e| {
+                switch (e) {
+                    // If it's our own error, we continue
+                    error.Err => continue,
+                    error.TooManyTypes => return self.err(.TooManyTypes, self.to_span(self.node_idx)),
+                    else => return e,
+                }
+            };
+
+            if (node_type != Void) {
+                self.err(.UnusedValue, self.to_span(self.node_idx)) catch {};
+            }
         }
 
         // for (stmts) |*stmt| {
@@ -249,8 +260,66 @@ pub const Analyzer = struct {
 
         // In REPL mode, no need for main function
         if (self.repl)
-            return
-        else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+            return;
+        // else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+    }
+
+    fn to_span(self: *const Self, node: Node.Index) Span {
+        return switch (self.node_tags[node]) {
+            .Add, .And, .Div, .Mul, .Or, .Sub => .{
+                .start = self.token_spans[self.node_mains[node + 1]].start,
+                .end = self.token_spans[self.node_mains[node + 2]].end,
+            },
+            .Assignment => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Block => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[node + self.node_data[node]].end,
+            },
+            .Bool, .Float, .Identifier, .Int, .Null, .String => self.token_spans[self.node_mains[node]],
+            .Discard => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Empty => unreachable,
+            .FnDecl, .FnCall => self.token_spans[self.node_mains[node]],
+            .Grouping => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 2]].end,
+            },
+            .If => self.token_spans[self.node_mains[node]],
+            .Parameter => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Print => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Return => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Type => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Unary => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
+            .Use => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
+            },
+            .VarDecl => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
+            },
+            .While => self.token_spans[self.node_mains[node]],
+        };
     }
 
     fn is_numeric(t: Type) bool {
@@ -266,7 +335,8 @@ pub const Analyzer = struct {
         try self.warns.append(AnalyzerReport.warn(kind, span));
     }
 
-    fn span_to_source(self: *const Self, span: Span) []const u8 {
+    fn source_from_node(self: *const Self, node: Node.Index) []const u8 {
+        const span = self.token_spans[self.node_mains[node]];
         return self.source[span.start..span.end];
     }
 
@@ -418,7 +488,7 @@ pub const Analyzer = struct {
     //     };
     // }
 
-    fn analyze_node(self: *Self, node: Node.Index) !Type {
+    fn analyze_node(self: *Self, node: Node.Index) Error!Type {
         var final: Type = Void;
 
         switch (self.node_tags[node]) {
@@ -433,7 +503,7 @@ pub const Analyzer = struct {
             // .Block => |*e| self.block(e),
             .Bool => final = try self.bool_lit(node),
             // .BinOp => |*e| self.binop(e),
-            .Float => final = Float,
+            .Float => final = try self.float_lit(node),
             // .FnCall => |*e| self.fn_call(e),
             // .Grouping => |*e| self.grouping(e),
             // .Identifier => |*e| {
@@ -441,10 +511,10 @@ pub const Analyzer = struct {
             //     return res.type_;
             // },
             // .If => |*e| self.if_expr(e),
-            .Int => final = Int,
-            .Null => final = Null,
+            .Int => final = try self.int_lit(node),
+            .Null => final = try self.null_lit(),
             // .Return => |*e| self.return_expr(e),
-            .String => final = Str,
+            .String => final = try self.string(node),
             // .Unary => |*e| self.unary(e),
             else => unreachable,
         }
@@ -461,8 +531,10 @@ pub const Analyzer = struct {
     }
 
     fn float_lit(self: *Self, node: Node.Index) !Type {
-        const value = std.fmt.parseFloat(f64, self.token_spans[self.node_mains[node]]) catch {
+        const value = std.fmt.parseFloat(f64, self.source_from_node(node)) catch blk: {
             // TODO: error handling, only one possible it's invalid char
+            std.debug.print("Error parsing float\n", .{});
+            break :blk 0.0;
         };
         try self.instructions.append(.{ .Float = value });
 
@@ -470,8 +542,10 @@ pub const Analyzer = struct {
     }
 
     fn int_lit(self: *Self, node: Node.Index) !Type {
-        const value = std.fmt.parseInt(isize, self.token_spans[self.node_mains[node]]) catch {
+        const value = std.fmt.parseInt(isize, self.source_from_node(node), 10) catch blk: {
             // TODO: error handling, only one possible it's invalid char
+            std.debug.print("Error parsing integer\n", .{});
+            break :blk 0;
         };
         try self.instructions.append(.{ .Int = value });
 
@@ -479,9 +553,16 @@ pub const Analyzer = struct {
     }
 
     fn null_lit(self: *Self) !Type {
-        try self.instructions.append(.{.Null});
+        try self.instructions.append(.Null);
 
         return Null;
+    }
+
+    fn string(self: *Self, node: Node.Index) !Type {
+        const value = try self.interner.intern(self.source_from_node(node));
+        try self.instructions.append(.{ .String = value });
+
+        return Str;
     }
 
     // fn statement(self: *Self, stmt: *const Stmt) !Type {

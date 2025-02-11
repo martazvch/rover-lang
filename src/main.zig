@@ -22,7 +22,7 @@ pub fn main() !void {
         \\-s, --static-analyzis  Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
-        \\--print-analyzed-ast   Prints the extra infos on AST
+        \\--print-ir   Prints the extra infos on AST
     );
 
     const parsers = comptime .{
@@ -48,12 +48,12 @@ pub fn main() !void {
     const print_ast = if (res.args.@"print-ast" == 1) true else false;
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
     const static_analyzis = if (res.args.@"static-analyzis" == 1) true else false;
-    const print_analyzed_ast = if (res.args.@"print-analyzed-ast" == 1) true else false;
+    const print_ir = if (res.args.@"print-ir" == 1) true else false;
 
     if (res.args.file) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir);
     } else {
-        // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_analyzed_ast);
+        // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
     }
 }
 
@@ -63,7 +63,7 @@ fn run_file(
     print_ast: bool,
     print_bytecode: bool,
     static_analyzis: bool,
-    print_analyzed_ast: bool,
+    print_ir: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -88,7 +88,7 @@ fn run_file(
             .print_ast = print_ast,
             .print_bytecode = print_bytecode,
             .static_analyzis = static_analyzis,
-            .print_analyzed_ast = print_analyzed_ast,
+            .print_ir = print_ir,
         },
         filename,
         zt,
@@ -100,7 +100,7 @@ fn repl(
     print_ast: bool,
     print_bytecode: bool,
     static_analyzis: bool,
-    print_analyzed_ast: bool,
+    print_ir: bool,
 ) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
@@ -116,7 +116,7 @@ fn repl(
         .print_ast = print_ast,
         .print_bytecode = print_bytecode,
         .static_analyzis = static_analyzis,
-        .print_analyzed_ast = print_analyzed_ast,
+        .print_ir = print_ir,
     });
     try pipeline.init();
     defer pipeline.deinit();

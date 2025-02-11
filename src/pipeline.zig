@@ -15,13 +15,14 @@ const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Chunk = @import("backend/chunk.zig").Chunk;
 const Vm = @import("runtime/vm.zig").Vm;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
-const AnalyzedAstPrinter = @import("frontend/analyzed_ast_print.zig").AnalyzedAstPrinter;
+// const AnalyzedAstPrinter = @import("frontend/analyzed_ast_print.zig").AnalyzedAstPrinter;
+const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 
 pub const Config = struct {
     print_ast: bool,
     print_bytecode: bool,
     static_analyzis: bool,
-    print_analyzed_ast: bool,
+    print_ir: bool,
 };
 
 pub const ReplPipeline = struct {
@@ -121,13 +122,13 @@ pub const ReplPipeline = struct {
         }
 
         // Analyzed Ast printer
-        if (self.config.print_analyzed_ast) {
-            var analyzed_ast_printer = AnalyzedAstPrinter.init(self.allocator, &self.analyzer.type_manager);
-            defer analyzed_ast_printer.deinit();
-
-            try analyzed_ast_printer.parse(source, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
-            analyzed_ast_printer.display();
-        }
+        // if (self.config.print_analyzed_ast) {
+        //     var analyzed_ast_printer = AnalyzedAstPrinter.init(self.allocator, &self.analyzer.type_manager);
+        //     defer analyzed_ast_printer.deinit();
+        //
+        //     try analyzed_ast_printer.parse(source, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
+        //     analyzed_ast_printer.display();
+        // }
 
         // Vm run
         // try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
@@ -206,28 +207,42 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try analyzer.init(allocator, false);
     defer analyzer.deinit();
 
-    // try analyzer.analyze(parser.stmts.items, source);
-    //
-    // // Analyzer errors
-    // if (analyzer.errs.items.len > 0) {
-    //     var reporter = GenReporter(AnalyzerMsg).init(source);
-    //     try reporter.report_all(filename, analyzer.errs.items);
-    //
-    //     if (analyzer.warns.items.len > 0) {
-    //         reporter = GenReporter(AnalyzerMsg).init(source);
-    //         try reporter.report_all(filename, analyzer.warns.items);
-    //     }
-    //
-    //     return;
-    // }
+    try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
+
+    // Analyzer errors
+    if (analyzer.errs.items.len > 0) {
+        var reporter = GenReporter(AnalyzerMsg).init(source);
+        try reporter.report_all(filename, analyzer.errs.items);
+
+        if (analyzer.warns.items.len > 0) {
+            reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, analyzer.warns.items);
+        }
+
+        return;
+    }
 
     // Analyzer warnings
-    // if (config.static_analyzis and analyzer.warns.items.len > 0) {
-    //     var reporter = GenReporter(AnalyzerMsg).init(source);
-    //     try reporter.report_all(filename, analyzer.warns.items);
-    //     return;
-    // }
-    //
+    if (config.static_analyzis and analyzer.warns.items.len > 0) {
+        var reporter = GenReporter(AnalyzerMsg).init(source);
+        try reporter.report_all(filename, analyzer.warns.items);
+        return;
+    }
+
+    // Analyzed Ast printer
+    if (config.print_ir) {
+        var rir_renderer = RirRenderer.init(
+            allocator,
+            source,
+            analyzer.instructions.items,
+            &analyzer.interner,
+        );
+        defer rir_renderer.deinit();
+
+        try rir_renderer.parse_ir();
+        rir_renderer.display();
+    }
+
     // // Analyzed Ast printer
     // if (config.print_analyzed_ast) {
     //     var analyzed_ast_printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);

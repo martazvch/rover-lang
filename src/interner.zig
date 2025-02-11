@@ -13,6 +13,10 @@ pub const Interner = struct {
         };
     }
 
+    pub fn deinit(self: *Self) void {
+        self.map.deinit();
+    }
+
     pub fn intern(self: *Self, str: []const u8) !usize {
         const entry = try self.map.getOrPut(str);
 
@@ -23,8 +27,14 @@ pub const Interner = struct {
         return entry.value_ptr.*;
     }
 
-    pub fn deinit(self: *Self) void {
-        self.map.deinit();
+    pub fn get_key(self: *const Self, index: usize) ?[]const u8 {
+        var it = self.map.iterator();
+
+        while (it.next()) |entry| {
+            if (entry.value_ptr.* == index) return entry.key_ptr.*;
+        }
+
+        return null;
     }
 };
 
