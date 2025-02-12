@@ -44,48 +44,75 @@ pub const RirRenderer = struct {
         print("\n--- IR ---\n{s}", .{self.tree.items});
     }
 
-    fn indent(self: *Self) !void {
-        try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
-    }
-
     pub fn parse_ir(self: *Self) !void {
         for (self.instructions) |instr| {
             try switch (instr) {
+                .Binop => |i| self.binop(i),
                 .Bool => |i| self.bool_instr(i),
+                .Discard => self.discard(),
                 .Float => |i| self.float_instr(i),
                 .Int => |i| self.int_instr(i),
                 .Null => self.null_instr(),
+                .Print => self.print_instr(),
+                .StrConcat => self.string_concat(),
                 .String => |i| self.string_instr(i),
+                .StrMul => |i| self.string_mul(i),
+                .Unary => |i| self.unary(i),
             };
         }
     }
 
+    fn binop(self: *Self, data: Instruction.BinopData) Error!void {
+        var writer = self.tree.writer();
+        try writer.print(
+            "[Binop type: {s}, cast: {s}]\n",
+            .{ @tagName(data.result_type), @tagName(data.cast) },
+        );
+    }
+
     fn bool_instr(self: *Self, value: bool) Error!void {
-        try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Bool {s}]\n", .{if (value) "true" else "false"});
     }
 
+    fn discard(self: *Self) Error!void {
+        try self.tree.appendSlice("[Discard]\n");
+    }
+
     fn float_instr(self: *Self, value: f64) Error!void {
-        try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Float {}]\n", .{value});
     }
 
     fn int_instr(self: *Self, value: i64) Error!void {
-        try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Int {}]\n", .{value});
     }
 
     fn null_instr(self: *Self) Error!void {
-        try self.indent();
         try self.tree.appendSlice("[Null]\n");
     }
 
+    fn print_instr(self: *Self) Error!void {
+        try self.tree.appendSlice("[Print]\n");
+    }
+
+    fn string_concat(self: *Self) Error!void {
+        try self.tree.appendSlice("[String concat]\n");
+    }
+
     fn string_instr(self: *Self, index: usize) Error!void {
-        try self.indent();
         var writer = self.tree.writer();
         try writer.print("[String {s}]\n", .{self.interner.get_key(index).?});
+    }
+
+    fn string_mul(self: *Self, side: Instruction.Side) Error!void {
+        var writer = self.tree.writer();
+        try writer.print("[String mul {s}]\n", .{@tagName(side)});
+    }
+
+    fn unary(self: *Self, tag: Instruction.UnaryTag) Error!void {
+        var writer = self.tree.writer();
+        try writer.print("[Unary {s}]\n", .{@tagName(tag)});
     }
 };

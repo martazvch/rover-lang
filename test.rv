@@ -1,6 +1,11 @@
-fn main() {
-    1
-    56
-    true
-    "tre"
-}
+//fn main() {
+    _ = 56
+    _ = true
+    _ = "tre"
+    (5)
+    print "oui"
+    -5
+    1+1
+    true or false
+    1+1
+//}

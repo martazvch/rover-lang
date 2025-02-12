@@ -194,14 +194,16 @@ pub const Analyzer = struct {
         self.errs = ArrayList(AnalyzerReport).init(self.allocator);
         self.globals = ArrayList(Variable).init(self.allocator);
         self.locals = ArrayList(Variable).init(self.allocator);
+        self.node_idx = 0;
         self.scope_depth = 0;
+
+        self.states = ArrayList(State).init(self.allocator);
+        self.main = null;
+        self.local_offset = 0;
         // self.analyzed_stmts = ArrayList(AnalyzedStmt).init(self.allocator);
         self.type_manager = TypeManager.init(self.allocator);
         try self.type_manager.init_builtins();
         self.interner = Interner.init(self.allocator);
-        self.main = null;
-        self.states = ArrayList(State).init(self.allocator);
-        self.local_offset = 0;
         self.repl = repl;
     }
 
@@ -236,7 +238,7 @@ pub const Analyzer = struct {
             };
 
             if (node_type != Void) {
-                self.err(.UnusedValue, self.to_span(self.node_idx)) catch {};
+                // self.err(.UnusedValue, self.to_span(self.node_idx - 1)) catch {};
             }
         }
 
@@ -493,19 +495,22 @@ pub const Analyzer = struct {
 
         switch (self.node_tags[node]) {
             // .Assignment => |*s| try self.assignment(s),
-            // .Discard => |*s| try self.discard(s),
+            .Add, .Mul, .Sub, .Div => final = try self.binop(node),
+            .Bool => final = try self.bool_lit(node),
+            .Discard => try self.discard(node),
             // .FnDecl => |*s| try self.fn_declaration(s),
-            // .Print => |*s| _ = try self.expression(s.expr),
             // .Use => |*s| try self.use_stmt(s),
             // .VarDecl => |*s| try self.var_declaration(s),
             // .While => |*s| try self.while_stmt(s),
             // .Expr => |e| final = try self.expression(e),
             // .Block => |*e| self.block(e),
-            .Bool => final = try self.bool_lit(node),
             // .BinOp => |*e| self.binop(e),
             .Float => final = try self.float_lit(node),
             // .FnCall => |*e| self.fn_call(e),
-            // .Grouping => |*e| self.grouping(e),
+            .Grouping => {
+                self.node_idx += 1;
+                final = try self.analyze_node(self.node_idx);
+            },
             // .Identifier => |*e| {
             //     const res = try self.identifier(e, true);
             //     return res.type_;
@@ -513,19 +518,193 @@ pub const Analyzer = struct {
             // .If => |*e| self.if_expr(e),
             .Int => final = try self.int_lit(node),
             .Null => final = try self.null_lit(),
+            .Print => try self.print(),
             // .Return => |*e| self.return_expr(e),
             .String => final = try self.string(node),
-            // .Unary => |*e| self.unary(e),
+            .Unary => final = try self.unary(node),
             else => unreachable,
         }
 
         return final;
     }
 
+    fn binop(self: *Self, node: Node.Index) Error!Type {
+        const op = self.node_tags[node];
+
+        self.node_idx += 1;
+        const lhs_index = self.node_idx;
+        const lhs = try self.analyze_node(lhs_index);
+
+        const rhs_index = self.node_idx;
+        const rhs = try self.analyze_node(rhs_index);
+
+        var res = lhs;
+
+        // String operations
+        if (op == .Add and lhs == Str and rhs == Str) {
+            try self.instructions.append(.StrConcat);
+            return Str;
+        } else if (op == .Mul) {
+            if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
+                try self.instructions.append(.{ .StrMul = if (rhs == Int) .Right else .Left });
+                return Str;
+            }
+        }
+
+        var data: Instruction.BinopData = .{
+            .result_type = if (lhs == Int) .Int else if (lhs == Float) .Float else if (lhs == Str) .Str else .Other,
+            .cast = .None,
+        };
+
+        switch (op) {
+            // Arithmetic binop
+            .Add, .Sub, .Mul, .Div => {
+                if (!Analyzer.is_numeric(lhs)) {
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
+                        self.to_span(lhs_index),
+                    );
+                }
+
+                if (!Analyzer.is_numeric(rhs)) {
+                    return self.err(
+                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+                        self.to_span(rhs_index),
+                    );
+                }
+
+                switch (lhs) {
+                    Float => {
+                        switch (rhs) {
+                            Float => {},
+                            Int => {
+                                try self.warn(
+                                    AnalyzerMsg.implicit_cast("right hand side", self.type_manager.str(lhs)),
+                                    self.to_span(rhs_index),
+                                );
+
+                                data.cast = .Rhs;
+                            },
+                            else => unreachable,
+                        }
+                    },
+                    Int => {
+                        switch (rhs) {
+                            Float => {
+                                try self.warn(
+                                    AnalyzerMsg.implicit_cast("left hand side", self.type_manager.str(rhs)),
+                                    self.to_span(lhs_index),
+                                );
+
+                                data.result_type = .Float;
+                                data.cast = .Lhs;
+                                res = Float;
+                            },
+                            Int => {},
+                            else => unreachable,
+                        }
+                    },
+                    else => unreachable,
+                }
+            },
+
+            // .EqualEqual, .BangEqual => {
+            //     // If different value types
+            //     if (lhs != rhs) {
+            //         // Check for implicit casts
+            //         if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
+            //             if (lhs == Int) {
+            //                 data.cast = .Lhs;
+            //                 data.result_type = .Float;
+            //
+            //                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
+            //             } else {
+            //                 data.cast = .Rhs;
+            //
+            //                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
+            //             }
+            //         } else {
+            //             return self.err(
+            //                 AnalyzerMsg.invalid_cmp(
+            //                     self.type_manager.str(lhs),
+            //                     self.type_manager.str(rhs),
+            //                 ),
+            //                 self.to_span(node),
+            //             );
+            //         }
+            //     } else {
+            //         // Check for unsafe float comparisons
+            //         if (lhs == Float) {
+            //             try self.warn(.FloatEqual, self.to_span(node));
+            //         }
+            //     }
+            //
+            //     res = Bool;
+            // },
+
+            // .Greater, .GreaterEqual, .Less, .LessEqual => {
+            //     if (!Analyzer.is_numeric(lhs)) {
+            //         return self.err(
+            //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
+            //             self.to_span(lhs_index),
+            //         );
+            //     }
+            //
+            //     if (!Analyzer.is_numeric(rhs)) {
+            //         return self.err(
+            //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+            //             self.to_span(rhs_index),
+            //         );
+            //     }
+            //
+            //     switch (lhs) {
+            //         Float => switch (rhs) {
+            //             Float => try self.warn(.FloatEqual, self.to_span(node)),
+            //             Int => {
+            //                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
+            //
+            //                 data.cast = .Rhs;
+            //             },
+            //             else => unreachable,
+            //         },
+            //         Int => switch (rhs) {
+            //             Float => {
+            //                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
+            //
+            //                 data.cast = .Lhs;
+            //                 data.result_type = .Float;
+            //             },
+            //             Int => {},
+            //             else => unreachable,
+            //         },
+            //         else => unreachable,
+            //     }
+            //
+            //     res = Bool;
+            // },
+
+            // Logical binop
+            .And, .Or => {
+                if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
+                    .found = self.type_manager.str(lhs),
+                } }, self.to_span(lhs_index));
+
+                if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
+                    .found = self.type_manager.str(rhs),
+                } }, self.to_span(rhs_index));
+            },
+            else => unreachable,
+        }
+
+        try self.instructions.append(.{ .Binop = data });
+        return res;
+    }
+
     fn bool_lit(self: *Self, node: Node.Index) !Type {
         try self.instructions.append(.{
             .Bool = if (self.token_tags[self.node_mains[node]] == .True) true else false,
         });
+        self.node_idx += 1;
 
         return Bool;
     }
@@ -537,6 +716,7 @@ pub const Analyzer = struct {
             break :blk 0.0;
         };
         try self.instructions.append(.{ .Float = value });
+        self.node_idx += 1;
 
         return Float;
     }
@@ -548,21 +728,52 @@ pub const Analyzer = struct {
             break :blk 0;
         };
         try self.instructions.append(.{ .Int = value });
+        self.node_idx += 1;
 
-        return Float;
+        return Int;
     }
 
     fn null_lit(self: *Self) !Type {
         try self.instructions.append(.Null);
+        self.node_idx += 1;
 
         return Null;
+    }
+
+    fn print(self: *Self) !void {
+        self.node_idx += 1;
+        _ = try self.analyze_node(self.node_idx);
+        try self.instructions.append(.Print);
     }
 
     fn string(self: *Self, node: Node.Index) !Type {
         const value = try self.interner.intern(self.source_from_node(node));
         try self.instructions.append(.{ .String = value });
+        self.node_idx += 1;
 
         return Str;
+    }
+
+    fn unary(self: *Self, node: Node.Index) Error!Type {
+        const op = self.token_tags[self.node_mains[node]];
+        self.node_idx += 1;
+        const rhs = try self.analyze_node(self.node_idx);
+
+        if (op == .Not and rhs != Bool) {
+            return self.err(
+                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
+                self.to_span(node),
+            );
+        } else if (op == .Minus and rhs != Int and rhs != Float) {
+            return self.err(
+                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+                self.to_span(node),
+            );
+        }
+
+        try self.instructions.append(.{ .Unary = if (op == .Bang) .Bang else .Minus });
+
+        return rhs;
     }
 
     // fn statement(self: *Self, stmt: *const Stmt) !Type {
@@ -627,10 +838,12 @@ pub const Analyzer = struct {
         }
     }
 
-    fn discard(self: *Self, stmt: *const Ast.Discard) !void {
-        const discarded = try self.expression(stmt.expr);
+    fn discard(self: *Self, node: Node.Index) !void {
+        self.node_idx += 1;
+        const discarded = try self.analyze_node(self.node_idx);
+        try self.instructions.append(.Discard);
 
-        if (discarded == Void) return self.err(.VoidDiscard, stmt.expr.span());
+        if (discarded == Void) return self.err(.VoidDiscard, self.to_span(node));
     }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) Error!void {
@@ -996,9 +1209,9 @@ pub const Analyzer = struct {
         return type_info.return_type;
     }
 
-    fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
-        return self.expression(expr.expr);
-    }
+    // fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
+    //     return self.expression(expr.expr);
+    // }
 
     fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
         // We first check in locals
