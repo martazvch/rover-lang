@@ -253,7 +253,12 @@ pub const AstPrinter = struct {
 
         self.indent_level += 1;
         self.node_idx += 1;
-        try self.parse_node(self.node_idx);
+
+        if (self.node_tags[self.node_idx] != .Empty)
+            try self.parse_node(self.node_idx)
+        else
+            self.node_idx += 1;
+
         self.indent_level -= 1;
     }
 

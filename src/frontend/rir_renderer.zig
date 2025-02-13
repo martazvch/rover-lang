@@ -47,58 +47,67 @@ pub const RirRenderer = struct {
     pub fn parse_ir(self: *Self) !void {
         for (self.instructions) |instr| {
             try switch (instr) {
+                .Assignment => |i| self.assignment(i),
                 .Binop => |i| self.binop(i),
+                .Block => |i| self.block(i),
                 .Bool => |i| self.bool_instr(i),
-                .Discard => self.discard(),
+                .CastToFloat => try self.tree.appendSlice("[Cast to float]\n"),
+                .Discard => try self.tree.appendSlice("[Discard]\n"),
                 .Float => |i| self.float_instr(i),
+                .Identifier => |i| self.identifier(i),
                 .Int => |i| self.int_instr(i),
-                .Null => self.null_instr(),
-                .Print => self.print_instr(),
-                .StrConcat => self.string_concat(),
+                .Null => try self.tree.appendSlice("[Null]\n"),
+                .Print => try self.tree.appendSlice("[Print]\n"),
                 .String => |i| self.string_instr(i),
-                .StrMul => |i| self.string_mul(i),
                 .Unary => |i| self.unary(i),
+                .VarDecl => |i| self.var_decl(i),
             };
         }
+    }
+
+    fn assignment(self: *Self, variable: Instruction.Variable) Error!void {
+        var writer = self.tree.writer();
+        try writer.print("[Assignment variable index: {}, scope: {s}]\n", .{
+            variable.index, @tagName(variable.scope),
+        });
     }
 
     fn binop(self: *Self, data: Instruction.BinopData) Error!void {
         var writer = self.tree.writer();
         try writer.print(
             "[Binop type: {s}, cast: {s}]\n",
-            .{ @tagName(data.result_type), @tagName(data.cast) },
+            .{ @tagName(data.tag), @tagName(data.cast) },
+        );
+    }
+
+    fn block(self: *Self, data: Instruction.BlockData) Error!void {
+        var writer = self.tree.writer();
+        try writer.print(
+            "[Block pop count: {}, is_expr: {}]\n",
+            .{ data.pop_count, data.is_expr },
         );
     }
 
     fn bool_instr(self: *Self, value: bool) Error!void {
         var writer = self.tree.writer();
-        try writer.print("[Bool {s}]\n", .{if (value) "true" else "false"});
-    }
-
-    fn discard(self: *Self) Error!void {
-        try self.tree.appendSlice("[Discard]\n");
+        try writer.print("[Bool {}]\n", .{value});
     }
 
     fn float_instr(self: *Self, value: f64) Error!void {
         var writer = self.tree.writer();
-        try writer.print("[Float {}]\n", .{value});
+        try writer.print("[Float {d}]\n", .{value});
+    }
+
+    fn identifier(self: *Self, variable: Instruction.Variable) Error!void {
+        var writer = self.tree.writer();
+        try writer.print("[Variable index: {}, scope: {s}]\n", .{
+            variable.index, @tagName(variable.scope),
+        });
     }
 
     fn int_instr(self: *Self, value: i64) Error!void {
         var writer = self.tree.writer();
         try writer.print("[Int {}]\n", .{value});
-    }
-
-    fn null_instr(self: *Self) Error!void {
-        try self.tree.appendSlice("[Null]\n");
-    }
-
-    fn print_instr(self: *Self) Error!void {
-        try self.tree.appendSlice("[Print]\n");
-    }
-
-    fn string_concat(self: *Self) Error!void {
-        try self.tree.appendSlice("[String concat]\n");
     }
 
     fn string_instr(self: *Self, index: usize) Error!void {
@@ -114,5 +123,12 @@ pub const RirRenderer = struct {
     fn unary(self: *Self, tag: Instruction.UnaryTag) Error!void {
         var writer = self.tree.writer();
         try writer.print("[Unary {s}]\n", .{@tagName(tag)});
+    }
+
+    fn var_decl(self: *Self, variable: Instruction.Variable) Error!void {
+        var writer = self.tree.writer();
+        try writer.print("[Declare variable index: {}, scope: {s}]\n", .{
+            variable.index, @tagName(variable.scope),
+        });
     }
 };

@@ -630,9 +630,15 @@ pub const Parser = struct {
 
         const idx = try self.add_node(.{ .tag = .Grouping, .main = opening });
 
-        _ = try self.parse_precedence_expr(0);
-        self.skip_new_lines();
+        if (!self.check(.RightParen)) {
+            _ = try self.parse_precedence_expr(0);
+            self.skip_new_lines();
+        } else _ = try self.add_node(.{ .tag = .Empty });
+
         try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, opening);
+
+        // Closing parenthesis for error reporting
+        self.nodes.items(.data)[idx] = self.token_idx - 1;
 
         return idx;
     }

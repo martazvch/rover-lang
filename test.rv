@@ -1,10 +1,37 @@
 //fn main() {
-    _ = 56
-    _ = true
-    _ = "tre"
-    (5)
-    print "oui"
-    -5
-    1+1
-    true or false
+    // _ = 56
+    // _ = true
+    // _ = "tre"
+    // _ = (5)
+    // print "oui"
+    // _ = -5
+    // _ = 1+1
+    // _ = true or false
+    // _ = 1 > 4
+    // _ = 5 >= 56
+    // _ = true == not false
+    // _ = 1 == 2.
+    // _ = "str" + "other"
+    // _ = 3 * "oui"
+    // _ = "non" * 5
+
+    // var a
+    // var b: int
+    // var c = 1
+    // var d:float = 1 * 5.
+
+    // {}
+    // {
+    //     _ = 5 + 4
+    // }
+    // { var tmp = 5 }
+    // var from_block = {5}
+
+    {
+        var a = 4
+        var b: float = a
+        // print "coucou"
+        var c
+        c = b
+    }
 //}

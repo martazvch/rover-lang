@@ -169,7 +169,7 @@ pub const Analyzer = struct {
         index: usize = 0,
         type_: Type = Void,
         depth: usize,
-        name: []const u8 = "",
+        name: usize,
         initialized: bool = false,
     };
 
@@ -228,6 +228,8 @@ pub const Analyzer = struct {
         try self.states.append(.{});
 
         while (self.node_idx < self.node_data.len) {
+            const start = self.node_idx;
+
             const node_type = self.analyze_node(self.node_idx) catch |e| {
                 switch (e) {
                     // If it's our own error, we continue
@@ -238,7 +240,7 @@ pub const Analyzer = struct {
             };
 
             if (node_type != Void) {
-                // self.err(.UnusedValue, self.to_span(self.node_idx - 1)) catch {};
+                self.err(.UnusedValue, self.to_span(start)) catch {};
             }
         }
 
@@ -268,9 +270,9 @@ pub const Analyzer = struct {
 
     fn to_span(self: *const Self, node: Node.Index) Span {
         return switch (self.node_tags[node]) {
-            .Add, .And, .Div, .Mul, .Or, .Sub => .{
+            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
                 .start = self.token_spans[self.node_mains[node + 1]].start,
-                .end = self.token_spans[self.node_mains[node + 2]].end,
+                .end = self.to_span(node + 2).end,
             },
             .Assignment => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -278,7 +280,7 @@ pub const Analyzer = struct {
             },
             .Block => .{
                 .start = self.token_spans[self.node_mains[node]].start,
-                .end = self.token_spans[node + self.node_data[node]].end,
+                .end = self.to_span(node + self.node_data[node]).end,
             },
             .Bool, .Float, .Identifier, .Int, .Null, .String => self.token_spans[self.node_mains[node]],
             .Discard => .{
@@ -289,7 +291,7 @@ pub const Analyzer = struct {
             .FnDecl, .FnCall => self.token_spans[self.node_mains[node]],
             .Grouping => .{
                 .start = self.token_spans[self.node_mains[node]].start,
-                .end = self.token_spans[self.node_mains[node + 2]].end,
+                .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
             .Parameter => .{
@@ -298,7 +300,7 @@ pub const Analyzer = struct {
             },
             .Print => .{
                 .start = self.token_spans[self.node_mains[node]].start,
-                .end = self.token_spans[self.node_mains[node + 1]].end,
+                .end = self.to_span(node + 1).end,
             },
             .Return => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -374,7 +376,7 @@ pub const Analyzer = struct {
     }
 
     /// Checks if the variable name is in local or global scope
-    fn ident_in_scope(self: *const Self, name: []const u8) bool {
+    fn ident_in_scope(self: *const Self, name: usize) bool {
         if (self.scope_depth > 0) {
             if (self.locals.items.len == 0) return false;
 
@@ -386,22 +388,44 @@ pub const Analyzer = struct {
                 if (local.depth < self.scope_depth) break;
 
                 // First condition might fail first avoiding string comparison
-                if (local.name.len == name.len and std.mem.eql(u8, local.name, name)) {
-                    return true;
-                }
+                if (name == local.name) return true;
             }
         } else {
             if (self.globals.items.len == 0) return false;
 
             // TODO: reverse order, user tend to used recently declared variables
             for (self.globals.items) |*glob| {
-                if (glob.name.len == name.len and std.mem.eql(u8, glob.name, name)) {
-                    return true;
-                }
+                if (name == glob.name) return true;
             }
         }
 
         return false;
+    }
+
+    /// Checks if an identifier already exists in current scope and if it's type exists
+    /// Returns the type of the variable, void if none provided
+    fn check_name_and_type(
+        self: *Self,
+        name: usize,
+        name_idx: Node.Index,
+        type_idx: Node.Index,
+    ) !Type {
+        // Name check
+        if (self.ident_in_scope(name)) {
+            return self.err(
+                .{ .AlreadyDeclared = .{ .name = self.interner.get_key(name).? } },
+                self.to_span(name_idx),
+            );
+        }
+
+        return if (self.node_tags[type_idx] != .Empty)
+            self.type_manager.declared.get(self.source_from_node(type_idx)) orelse
+                return self.err(
+                .{ .UndeclaredType = .{ .found = self.interner.get_key(type_idx).? } },
+                self.to_span(type_idx),
+            )
+        else
+            Void;
     }
 
     /// Checks if an identifier already exists in current scope and if it's type exists
@@ -424,6 +448,32 @@ pub const Analyzer = struct {
     //         .Function => Void,
     //     } else Void;
     // }
+
+    /// Declares a variable either in globals or in locals based on current scope depth
+    fn declare_variable(self: *Self, name: usize, type_: Type, initialized: bool) !Instruction.Variable {
+        var variable: Variable = .{
+            .name = name,
+            .type_ = type_,
+            .depth = self.scope_depth,
+            .initialized = initialized,
+        };
+
+        // Add the variable to the correct data structure
+        if (self.scope_depth == 0) {
+            const index = self.globals.items.len;
+            variable.index = index;
+
+            try self.globals.append(variable);
+            return .{ .index = index, .scope = .Global };
+        } else {
+            // Take function's frame into account
+            const index = self.locals.items.len - self.local_offset;
+            variable.index = index;
+
+            try self.locals.append(variable);
+            return .{ .index = index, .scope = .Local };
+        }
+    }
 
     /// Declares a variable either in globals or in locals based on current scope depth
     // fn declare_variable(self: *Self, name: []const u8, type_: Type, initialized: bool) !AnalyzedAst.Variable {
@@ -457,12 +507,7 @@ pub const Analyzer = struct {
         // Identifier: Identifier,
         // If: If,
         return switch (self.node_tags[node]) {
-            .Bool,
-            .Float,
-            .Int,
-            .Null,
-            .String,
-            => true,
+            .Bool, .Float, .Int, .Null, .String => true,
             .BinOp => self.is_pure(self.node_idx + 1) and self.is_pure(self.node_idx + 2),
             .Grouping => self.is_pure(self.node_idx + 1),
             .Unary => self.is_pure(self.node_idx + 1),
@@ -470,51 +515,26 @@ pub const Analyzer = struct {
         };
     }
 
-    // fn is_pure(expr: *const Expr) bool {
-    //     // TODO: manage those
-    //     // Block: Block,
-    //     // FnCall: FnCall,
-    //     // Identifier: Identifier,
-    //     // If: If,
-    //     return switch (expr.*) {
-    //         .BoolLit,
-    //         .FloatLit,
-    //         .IntLit,
-    //         .NullLit,
-    //         .StringLit,
-    //         => true,
-    //         .BinOp => |e| is_pure(e.lhs) and is_pure(e.rhs),
-    //         .Grouping => |e| is_pure(e.expr),
-    //         .Unary => |e| is_pure(e.rhs),
-    //         else => false,
-    //     };
-    // }
-
     fn analyze_node(self: *Self, node: Node.Index) Error!Type {
         var final: Type = Void;
 
         switch (self.node_tags[node]) {
-            // .Assignment => |*s| try self.assignment(s),
-            .Add, .And, .Div, .Mul, .Or, .Sub => final = try self.binop(node),
+            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => final = try self.binop(node),
+            .Assignment => try self.assignment(node),
+            .Block => final = try self.block(node),
             .Bool => final = try self.bool_lit(node),
             .Discard => try self.discard(node),
             // .FnDecl => |*s| try self.fn_declaration(s),
             // .Use => |*s| try self.use_stmt(s),
-            // .VarDecl => |*s| try self.var_declaration(s),
             // .While => |*s| try self.while_stmt(s),
-            // .Expr => |e| final = try self.expression(e),
-            // .Block => |*e| self.block(e),
-            // .BinOp => |*e| self.binop(e),
+            .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
             // .FnCall => |*e| self.fn_call(e),
             .Grouping => {
                 self.node_idx += 1;
                 final = try self.analyze_node(self.node_idx);
             },
-            // .Identifier => |*e| {
-            //     const res = try self.identifier(e, true);
-            //     return res.type_;
-            // },
+            .Identifier => final = (try self.identifier(node, true)).type_,
             // .If => |*e| self.if_expr(e),
             .Int => final = try self.int_lit(node),
             .Null => final = try self.null_lit(),
@@ -522,10 +542,63 @@ pub const Analyzer = struct {
             // .Return => |*e| self.return_expr(e),
             .String => final = try self.string(node),
             .Unary => final = try self.unary(node),
+            .VarDecl => try self.var_declaration(node),
             else => unreachable,
         }
 
         return final;
+    }
+
+    fn assignment(self: *Self, _: Node.Index) !void {
+        const state = self.last_state();
+        const last = state.allow_partial;
+        state.allow_partial = false;
+        errdefer state.allow_partial = last;
+
+        self.node_idx += 2;
+        const assigne_idx = self.node_idx - 1;
+        const value_idx = self.node_idx;
+
+        switch (self.node_tags[assigne_idx]) {
+            .Identifier => {
+                const assigne = try self.resolve_identifier(assigne_idx, false);
+
+                const value_type = try self.analyze_node(value_idx);
+                // Restore state
+                state.allow_partial = last;
+
+                if (value_type == Void) {
+                    return self.err(.VoidAssignment, self.to_span(value_idx));
+                }
+
+                // If type is unknown, we update it
+                if (assigne.type_ == Void) {
+                    assigne.type_ = value_type;
+                } else if (assigne.type_ != value_type) {
+                    // One case in wich we can coerce; int -> float
+                    if (assigne.type_ == Float and value_type == Int) {
+                        try self.instructions.append(.CastToFloat);
+                    } else {
+                        return self.err(
+                            .{ .InvalidAssignType = .{
+                                .expect = self.type_manager.str(assigne.type_),
+                                .found = self.type_manager.str(value_type),
+                            } },
+                            self.to_span(assigne_idx),
+                        );
+                    }
+                }
+
+                if (!assigne.initialized) assigne.initialized = true;
+
+                try self.instructions.append(.{ .Assignment = .{
+                    .index = assigne.index,
+                    .scope = if (assigne.depth > 0) .Local else .Global,
+                } });
+            },
+            // Later, manage member, pointer, ...
+            else => return self.err(.InvalidAssignTarget, self.to_span(self.node_idx)),
+        }
     }
 
     fn binop(self: *Self, node: Node.Index) Error!Type {
@@ -542,23 +615,21 @@ pub const Analyzer = struct {
 
         // String operations
         if (op == .Add and lhs == Str and rhs == Str) {
-            try self.instructions.append(.StrConcat);
+            try self.instructions.append(.{ .Binop = .{ .tag = .AddStr } });
             return Str;
         } else if (op == .Mul) {
             if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
-                try self.instructions.append(.{ .StrMul = if (rhs == Int) .Right else .Left });
+                try self.instructions.append(.{ .Binop = .{
+                    .cast = if (rhs == Int) .Rhs else .Lhs,
+                    .tag = .MulStr,
+                } });
                 return Str;
             }
         }
 
-        var data: Instruction.BinopData = .{
-            .result_type = if (lhs == Int) .Int else if (lhs == Float) .Float else if (lhs == Str) .Str else .Other,
-            .cast = .None,
-        };
-
+        // Error check
         switch (op) {
-            // Arithmetic binop
-            .Add, .Sub, .Mul, .Div => {
+            .Add, .Div, .Mul, .Sub, .Ge, .Gt, .Le, .Lt => {
                 if (!Analyzer.is_numeric(lhs)) {
                     return self.err(
                         AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
@@ -572,7 +643,15 @@ pub const Analyzer = struct {
                         self.to_span(rhs_index),
                     );
                 }
+            },
+            else => {},
+        }
 
+        var data: Instruction.BinopData = .{ .cast = .None, .tag = undefined };
+
+        switch (op) {
+            // Arithmetic binop
+            .Add, .Div, .Mul, .Sub => {
                 switch (lhs) {
                     Float => {
                         switch (rhs) {
@@ -587,6 +666,14 @@ pub const Analyzer = struct {
                             },
                             else => unreachable,
                         }
+
+                        switch (op) {
+                            .Add => data.tag = .AddFloat,
+                            .Div => data.tag = .DivFloat,
+                            .Mul => data.tag = .MulFloat,
+                            .Sub => data.tag = .SubFloat,
+                            else => unreachable,
+                        }
                     },
                     Int => {
                         switch (rhs) {
@@ -596,11 +683,18 @@ pub const Analyzer = struct {
                                     self.to_span(lhs_index),
                                 );
 
-                                data.result_type = .Float;
                                 data.cast = .Lhs;
                                 res = Float;
                             },
                             Int => {},
+                            else => unreachable,
+                        }
+
+                        switch (op) {
+                            .Add => data.tag = .AddInt,
+                            .Div => data.tag = .DivInt,
+                            .Mul => data.tag = .MulInt,
+                            .Sub => data.tag = .SubInt,
                             else => unreachable,
                         }
                     },
@@ -608,80 +702,99 @@ pub const Analyzer = struct {
                 }
             },
 
-            // .EqualEqual, .BangEqual => {
-            //     // If different value types
-            //     if (lhs != rhs) {
-            //         // Check for implicit casts
-            //         if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
-            //             if (lhs == Int) {
-            //                 data.cast = .Lhs;
-            //                 data.result_type = .Float;
-            //
-            //                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
-            //             } else {
-            //                 data.cast = .Rhs;
-            //
-            //                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
-            //             }
-            //         } else {
-            //             return self.err(
-            //                 AnalyzerMsg.invalid_cmp(
-            //                     self.type_manager.str(lhs),
-            //                     self.type_manager.str(rhs),
-            //                 ),
-            //                 self.to_span(node),
-            //             );
-            //         }
-            //     } else {
-            //         // Check for unsafe float comparisons
-            //         if (lhs == Float) {
-            //             try self.warn(.FloatEqual, self.to_span(node));
-            //         }
-            //     }
-            //
-            //     res = Bool;
-            // },
+            .Eq, .Ne => {
+                // If different value types
+                if (lhs != rhs) {
+                    // Check for implicit casts
+                    if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
+                        if (lhs == Int) {
+                            data.cast = .Lhs;
 
-            // .Greater, .GreaterEqual, .Less, .LessEqual => {
-            //     if (!Analyzer.is_numeric(lhs)) {
-            //         return self.err(
-            //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
-            //             self.to_span(lhs_index),
-            //         );
-            //     }
-            //
-            //     if (!Analyzer.is_numeric(rhs)) {
-            //         return self.err(
-            //             AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
-            //             self.to_span(rhs_index),
-            //         );
-            //     }
-            //
-            //     switch (lhs) {
-            //         Float => switch (rhs) {
-            //             Float => try self.warn(.FloatEqual, self.to_span(node)),
-            //             Int => {
-            //                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
-            //
-            //                 data.cast = .Rhs;
-            //             },
-            //             else => unreachable,
-            //         },
-            //         Int => switch (rhs) {
-            //             Float => {
-            //                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
-            //
-            //                 data.cast = .Lhs;
-            //                 data.result_type = .Float;
-            //             },
-            //             Int => {},
-            //             else => unreachable,
-            //         },
-            //         else => unreachable,
-            //     }
-            //
-            //     res = Bool;
-            // },
+                            try self.warn(.FloatEqualCast, self.to_span(lhs_index));
+                        } else {
+                            data.cast = .Rhs;
+
+                            try self.warn(.FloatEqualCast, self.to_span(rhs_index));
+                        }
+
+                        switch (op) {
+                            .Eq => data.tag = .EqFloat,
+                            .Ne => data.tag = .NeFloat,
+                            else => unreachable,
+                        }
+                    } else {
+                        return self.err(
+                            AnalyzerMsg.invalid_cmp(
+                                self.type_manager.str(lhs),
+                                self.type_manager.str(rhs),
+                            ),
+                            self.to_span(node),
+                        );
+                    }
+                } else {
+                    // Check for unsafe float comparisons
+                    if (lhs == Float) {
+                        try self.warn(.FloatEqual, self.to_span(node));
+
+                        switch (op) {
+                            .Eq => data.tag = .EqFloat,
+                            .Ne => data.tag = .NeFloat,
+                            else => unreachable,
+                        }
+                    } else switch (op) {
+                        .Eq => data.tag = .EqInt,
+                        .Ne => data.tag = .NeInt,
+                        else => unreachable,
+                    }
+                }
+
+                res = Bool;
+            },
+
+            .Ge, .Gt, .Le, .Lt => {
+                switch (lhs) {
+                    Float => {
+                        switch (rhs) {
+                            Float => try self.warn(.FloatEqual, self.to_span(node)),
+                            Int => {
+                                try self.warn(.FloatEqualCast, self.to_span(rhs_index));
+
+                                data.cast = .Rhs;
+                            },
+                            else => unreachable,
+                        }
+                        switch (op) {
+                            .Ge => data.tag = .GeFloat,
+                            .Gt => data.tag = .GtFloat,
+                            .Le => data.tag = .LeFloat,
+                            .Lt => data.tag = .LtFloat,
+                            else => unreachable,
+                        }
+                    },
+                    Int => {
+                        switch (rhs) {
+                            Float => {
+                                try self.warn(.FloatEqualCast, self.to_span(lhs_index));
+
+                                data.cast = .Lhs;
+                            },
+                            Int => {},
+                            else => unreachable,
+                        }
+
+                        switch (op) {
+                            .Ge => data.tag = .GeInt,
+                            .Gt => data.tag = .GtInt,
+                            .Le => data.tag = .LeInt,
+                            .Lt => data.tag = .LtInt,
+                            else => unreachable,
+                        }
+                    },
+                    else => unreachable,
+                }
+
+                res = Bool;
+            },
 
             // Logical binop
             .And, .Or => {
@@ -692,12 +805,47 @@ pub const Analyzer = struct {
                 if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
                     .found = self.type_manager.str(rhs),
                 } }, self.to_span(rhs_index));
+
+                switch (op) {
+                    .And => data.tag = .And,
+                    .Or => data.tag = .Or,
+                    else => unreachable,
+                }
             },
             else => unreachable,
         }
 
         try self.instructions.append(.{ .Binop = data });
         return res;
+    }
+
+    fn block(self: *Self, node: Node.Index) Error!Type {
+        // const start = node;
+        const length = self.node_data[node];
+
+        errdefer {
+            // self.node_idx = start + length;
+            self.scope_depth -= 1;
+        }
+
+        self.scope_depth += 1;
+        var final: Type = Void;
+        self.node_idx += 1;
+
+        for (0..length) |i| {
+            final = try self.analyze_node(self.node_idx);
+
+            if (final != Void and i != length - 1) {
+                return self.err(.UnusedValue, self.to_span(self.node_idx));
+            }
+        }
+
+        try self.instructions.append(.{ .Block = .{
+            .pop_count = try self.end_scope(),
+            .is_expr = if (final != Void) true else false,
+        } });
+
+        return final;
     }
 
     fn bool_lit(self: *Self, node: Node.Index) !Type {
@@ -707,6 +855,14 @@ pub const Analyzer = struct {
         self.node_idx += 1;
 
         return Bool;
+    }
+
+    fn discard(self: *Self, node: Node.Index) !void {
+        self.node_idx += 1;
+        const discarded = try self.analyze_node(self.node_idx);
+        try self.instructions.append(.Discard);
+
+        if (discarded == Void) return self.err(.VoidDiscard, self.to_span(node));
     }
 
     fn float_lit(self: *Self, node: Node.Index) !Type {
@@ -719,6 +875,68 @@ pub const Analyzer = struct {
         self.node_idx += 1;
 
         return Float;
+    }
+
+    fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
+        const variable = try self.resolve_identifier(node, initialized);
+
+        try self.instructions.append(.{
+            .Identifier = .{
+                .scope = if (variable.depth > 0) .Local else .Global,
+                .index = variable.index,
+            },
+        });
+
+        return variable;
+    }
+
+    fn resolve_identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
+        self.node_idx += 1;
+        const name = self.source_from_node(node);
+        const name_idx = try self.interner.intern(name);
+
+        // We first check in locals
+        if (self.locals.items.len > 0) {
+            var idx = self.locals.items.len;
+
+            // while (idx > 0) : (idx -= 1) {
+            // NOTE: for now, can't see outside function's frame
+            while (idx > self.local_offset) : (idx -= 1) {
+                const local = &self.locals.items[idx - 1];
+
+                if (name_idx == local.name) {
+                    // Checks the initialization if asked
+                    if (initialized and !local.initialized) {
+                        return self.err(
+                            .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+                            self.to_span(node),
+                        );
+                    }
+
+                    return local;
+                }
+            }
+        }
+
+        // TODO: in reverse? People tend to use latest declared variables
+        for (self.globals.items) |*glob| {
+            if (name_idx == glob.name) {
+                if (initialized and !glob.initialized) {
+                    return self.err(
+                        .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+                        self.to_span(node),
+                    );
+                }
+
+                return glob;
+            }
+        }
+
+        // Else, it's undeclared
+        return self.err(
+            .{ .UndeclaredVar = .{ .name = self.interner.get_key(name_idx).? } },
+            self.to_span(node),
+        );
     }
 
     fn int_lit(self: *Self, node: Node.Index) !Type {
@@ -776,6 +994,59 @@ pub const Analyzer = struct {
         return rhs;
     }
 
+    fn var_declaration(self: *Self, node: Node.Index) !void {
+        // In case we propagate an error, we advance the counter to avoid
+        // infinite loop
+        // TODO: do as in block?
+        self.node_idx += 1;
+        const type_idx = self.node_idx;
+        self.node_idx += 1;
+        const value_idx = self.node_idx;
+
+        const name = try self.interner.intern(self.source_from_node(node));
+        var checked_type = try self.check_name_and_type(name, node, type_idx);
+
+        var initialized = false;
+
+        if (self.node_tags[value_idx] != .Empty) {
+            const state = self.last_state();
+            const last = state.allow_partial;
+            state.allow_partial = false;
+
+            const value_type = try self.analyze_node(value_idx);
+            state.allow_partial = last;
+
+            // Void assignment check
+            if (value_type == Void) {
+                return self.err(.VoidAssignment, self.to_span(value_idx));
+            }
+
+            // If no type declared, we infer the value type
+            if (checked_type == Void) {
+                checked_type = value_type;
+                // Else, we check for coherence
+            } else if (checked_type != value_type) {
+                // One case in wich we can coerce; int -> float
+                if (checked_type == Float and value_type == Int) {
+                    try self.instructions.append(.CastToFloat);
+                } else {
+                    return self.err(
+                        .{ .InvalidAssignType = .{
+                            .expect = self.type_manager.str(checked_type),
+                            .found = self.type_manager.str(value_type),
+                        } },
+                        self.to_span(value_idx),
+                    );
+                }
+            }
+
+            initialized = true;
+        } else self.node_idx += 1;
+
+        const variable = try self.declare_variable(name, checked_type, initialized);
+        try self.instructions.append(.{ .VarDecl = variable });
+    }
+
     // fn statement(self: *Self, stmt: *const Stmt) !Type {
     //     var final: Type = Void;
     //
@@ -793,58 +1064,50 @@ pub const Analyzer = struct {
     //     return final;
     // }
 
-    fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
-        const state = self.last_state();
-        const last = state.allow_partial;
-        state.allow_partial = false;
-
-        const value_type = try self.expression(stmt.value);
-        state.allow_partial = last;
-
-        if (value_type == Void) {
-            return self.err(.VoidAssignment, stmt.value.span());
-        }
-
-        switch (stmt.assigne.*) {
-            .Identifier => |*ident| {
-                // Forward declaration to preserve order
-                const idx = self.analyzed_stmts.items.len;
-                try self.analyzed_stmts.append(.{ .Assignment = .{} });
-
-                const assigne = try self.identifier(ident, false);
-
-                // If type is unknown, we update it
-                if (assigne.type_ == Void) {
-                    assigne.type_ = value_type;
-                } else if (assigne.type_ != value_type) {
-                    // One case in wich we can coerce; int -> float
-                    if (assigne.type_ == Float and value_type == Int) {
-                        self.analyzed_stmts.items[idx].Assignment.cast = .Yes;
-                    } else {
-                        return self.err(
-                            .{ .InvalidAssignType = .{
-                                .expect = self.type_manager.str(assigne.type_),
-                                .found = self.type_manager.str(value_type),
-                            } },
-                            ident.span,
-                        );
-                    }
-                }
-
-                assigne.initialized = true;
-            },
-            // Later, manage member, pointer, ...
-            else => |*expr| return self.err(.InvalidAssignTarget, expr.span()),
-        }
-    }
-
-    fn discard(self: *Self, node: Node.Index) !void {
-        self.node_idx += 1;
-        const discarded = try self.analyze_node(self.node_idx);
-        try self.instructions.append(.Discard);
-
-        if (discarded == Void) return self.err(.VoidDiscard, self.to_span(node));
-    }
+    // fn assignment(self: *Self, stmt: *const Ast.Assignment) !void {
+    //     const state = self.last_state();
+    //     const last = state.allow_partial;
+    //     state.allow_partial = false;
+    //
+    //     const value_type = try self.expression(stmt.value);
+    //     state.allow_partial = last;
+    //
+    //     if (value_type == Void) {
+    //         return self.err(.VoidAssignment, stmt.value.span());
+    //     }
+    //
+    //     switch (stmt.assigne.*) {
+    //         .Identifier => |*ident| {
+    //             // Forward declaration to preserve order
+    //             const idx = self.analyzed_stmts.items.len;
+    //             try self.analyzed_stmts.append(.{ .Assignment = .{} });
+    //
+    //             const assigne = try self.identifier(ident, false);
+    //
+    //             // If type is unknown, we update it
+    //             if (assigne.type_ == Void) {
+    //                 assigne.type_ = value_type;
+    //             } else if (assigne.type_ != value_type) {
+    //                 // One case in wich we can coerce; int -> float
+    //                 if (assigne.type_ == Float and value_type == Int) {
+    //                     self.analyzed_stmts.items[idx].Assignment.cast = .Yes;
+    //                 } else {
+    //                     return self.err(
+    //                         .{ .InvalidAssignType = .{
+    //                             .expect = self.type_manager.str(assigne.type_),
+    //                             .found = self.type_manager.str(value_type),
+    //                         } },
+    //                         ident.span,
+    //                     );
+    //                 }
+    //             }
+    //
+    //             assigne.initialized = true;
+    //         },
+    //         // Later, manage member, pointer, ...
+    //         else => |*expr| return self.err(.InvalidAssignTarget, expr.span()),
+    //     }
+    // }
 
     fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) Error!void {
         // If we find a main function in global scope, we save it to analyze last
@@ -1132,28 +1395,28 @@ pub const Analyzer = struct {
     //     };
     // }
 
-    fn block(self: *Self, expr: *const Ast.Block) Error!Type {
-        const idx = try self.reserve_slot();
-
-        self.scope_depth += 1;
-
-        var final: Type = Void;
-
-        for (expr.stmts, 0..) |*s, i| {
-            final = try self.statement(s);
-
-            if (final != Void and i != expr.stmts.len - 1) {
-                return self.err(.UnusedValue, s.span());
-            }
-        }
-
-        self.analyzed_stmts.items[idx] = .{ .Block = .{
-            .pop_count = try self.end_scope(),
-            .is_expr = if (final != Void) true else false,
-        } };
-
-        return final;
-    }
+    // fn block(self: *Self, expr: *const Ast.Block) Error!Type {
+    //     const idx = try self.reserve_slot();
+    //
+    //     self.scope_depth += 1;
+    //
+    //     var final: Type = Void;
+    //
+    //     for (expr.stmts, 0..) |*s, i| {
+    //         final = try self.statement(s);
+    //
+    //         if (final != Void and i != expr.stmts.len - 1) {
+    //             return self.err(.UnusedValue, s.span());
+    //         }
+    //     }
+    //
+    //     self.analyzed_stmts.items[idx] = .{ .Block = .{
+    //         .pop_count = try self.end_scope(),
+    //         .is_expr = if (final != Void) true else false,
+    //     } };
+    //
+    //     return final;
+    // }
 
     /// Checks if an expression if of a certain type kind and returns the associated value or error
     // fn expect_type_kind(self: *Self, expr: *const Expr, kind: TypeSys.Kind) !TypeSys.Value {
@@ -1213,52 +1476,52 @@ pub const Analyzer = struct {
     //     return self.expression(expr.expr);
     // }
 
-    fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
-        // We first check in locals
-        if (self.locals.items.len > 0) {
-            var idx = self.locals.items.len;
-
-            // while (idx > 0) : (idx -= 1) {
-            // NOTE: for now, can't see outside function's frame
-            while (idx > self.local_offset) : (idx -= 1) {
-                const local = &self.locals.items[idx - 1];
-
-                if (std.mem.eql(u8, local.name, expr.name)) {
-                    // Checks the initialization if asked
-                    if (initialized and !local.initialized) {
-                        return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
-                    }
-
-                    try self.analyzed_stmts.append(.{
-                        .Variable = .{ .scope = .Local, .index = local.index },
-                    });
-
-                    return local;
-                }
-            }
-        }
-
-        // TODO: in reverse? People tend to use latest declared variables
-        for (self.globals.items) |*glob| {
-            if (std.mem.eql(u8, glob.name, expr.name)) {
-                if (initialized and !glob.initialized) {
-                    return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
-                }
-
-                try self.analyzed_stmts.append(.{
-                    .Variable = .{ .scope = .Global, .index = glob.index },
-                });
-
-                return glob;
-            }
-        }
-
-        // Else, it's undeclared
-        return self.err(
-            .{ .UndeclaredVar = .{ .name = expr.name } },
-            expr.span,
-        );
-    }
+    // fn identifier(self: *Self, expr: *const Ast.Identifier, initialized: bool) Error!*Variable {
+    //     // We first check in locals
+    //     if (self.locals.items.len > 0) {
+    //         var idx = self.locals.items.len;
+    //
+    //         // while (idx > 0) : (idx -= 1) {
+    //         // NOTE: for now, can't see outside function's frame
+    //         while (idx > self.local_offset) : (idx -= 1) {
+    //             const local = &self.locals.items[idx - 1];
+    //
+    //             if (std.mem.eql(u8, local.name, expr.name)) {
+    //                 // Checks the initialization if asked
+    //                 if (initialized and !local.initialized) {
+    //                     return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+    //                 }
+    //
+    //                 try self.analyzed_stmts.append(.{
+    //                     .Variable = .{ .scope = .Local, .index = local.index },
+    //                 });
+    //
+    //                 return local;
+    //             }
+    //         }
+    //     }
+    //
+    //     // TODO: in reverse? People tend to use latest declared variables
+    //     for (self.globals.items) |*glob| {
+    //         if (std.mem.eql(u8, glob.name, expr.name)) {
+    //             if (initialized and !glob.initialized) {
+    //                 return self.err(.{ .UseUninitVar = .{ .name = expr.name } }, expr.span);
+    //             }
+    //
+    //             try self.analyzed_stmts.append(.{
+    //                 .Variable = .{ .scope = .Global, .index = glob.index },
+    //             });
+    //
+    //             return glob;
+    //         }
+    //     }
+    //
+    //     // Else, it's undeclared
+    //     return self.err(
+    //         .{ .UndeclaredVar = .{ .name = expr.name } },
+    //         expr.span,
+    //     );
+    // }
 
     // fn if_expr(self: *Self, expr: *const Ast.If) Error!Type {
     //     // We reserve the slot because of recursion
