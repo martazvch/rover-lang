@@ -448,38 +448,26 @@ pub const Parser = struct {
 
     const Assoc = enum { Left, None };
 
-    const Rule = struct { prec: i8, assoc: Assoc = .Left };
+    const Rule = struct { prec: i8, assoc: Assoc = .Left, tag: Node.Tag = .Empty };
 
     const rules = std.enums.directEnumArrayDefault(Token.Tag, Rule, .{ .prec = -1 }, 0, .{
-        .And = .{ .prec = 20 },
-        .Or = .{ .prec = 20 },
+        .And = .{ .prec = 20, .tag = .And },
+        .Or = .{ .prec = 20, .tag = .Or },
 
-        .EqualEqual = .{ .prec = 30, .assoc = .None },
-        .BangEqual = .{ .prec = 30, .assoc = .None },
+        .EqualEqual = .{ .prec = 30, .assoc = .None, .tag = .Eq },
+        .BangEqual = .{ .prec = 30, .assoc = .None, .tag = .Ne },
 
-        .Greater = .{ .prec = 40, .assoc = .None },
-        .GreaterEqual = .{ .prec = 40, .assoc = .None },
-        .Less = .{ .prec = 40, .assoc = .None },
-        .LessEqual = .{ .prec = 40, .assoc = .None },
+        .Greater = .{ .prec = 40, .assoc = .None, .tag = .Gt },
+        .GreaterEqual = .{ .prec = 40, .assoc = .None, .tag = .Ge },
+        .Less = .{ .prec = 40, .assoc = .None, .tag = .Lt },
+        .LessEqual = .{ .prec = 40, .assoc = .None, .tag = .Le },
 
-        .Minus = .{ .prec = 60 },
-        .Plus = .{ .prec = 60 },
+        .Minus = .{ .prec = 60, .tag = .Sub },
+        .Plus = .{ .prec = 60, .tag = .Add },
 
-        .Slash = .{ .prec = 70 },
-        .Star = .{ .prec = 70 },
+        .Slash = .{ .prec = 70, .tag = .Div },
+        .Star = .{ .prec = 70, .tag = .Mul },
     });
-
-    fn get_tag(token_tag: Token.Tag) Node.Tag {
-        return switch (token_tag) {
-            .And => .And,
-            .Minus => .Sub,
-            .Or => .Or,
-            .Plus => .Add,
-            .Star => .Mul,
-            .Slash => .Div,
-            else => unreachable,
-        };
-    }
 
     fn parse_precedence_expr(self: *Self, prec_min: i8) Error!Node.Index {
         const start_tk = self.token_idx;
@@ -500,12 +488,10 @@ pub const Parser = struct {
                 return self.error_at_current(.ChainingCmpOp);
             }
 
-            const op = self.token_idx;
-
             // If we are in a binop, we insert the node before the operand
             // There is no data, we just use the two next nodes
             try self.nodes.insert(self.allocator, start_node, .{
-                .tag = get_tag(self.token_tags[op]),
+                .tag = next_rule.tag,
                 .main = start_tk,
             });
 

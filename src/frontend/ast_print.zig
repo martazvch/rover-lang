@@ -70,7 +70,7 @@ pub const AstPrinter = struct {
 
     fn parse_node(self: *Self, index: Node.Index) !void {
         try switch (self.node_tags[index]) {
-            .Add, .And, .Div, .Mul, .Or, .Sub => self.binop_expr(),
+            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => self.binop_expr(),
             .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
@@ -121,7 +121,13 @@ pub const AstPrinter = struct {
             .Add => "+",
             .And => "and",
             .Div => "/",
+            .Eq => "==",
+            .Ge => ">=",
+            .Gt => ">",
+            .Le => "<=",
+            .Lt => "<",
             .Mul => "*",
+            .Ne => "!=",
             .Or => "or",
             .Sub => "-",
             else => unreachable,

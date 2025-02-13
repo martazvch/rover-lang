@@ -37,7 +37,37 @@ expect:
             [Unary -]
                 [Int literal 5]
 
-================
+=============
+
+code:
+1 < 5
+5 <= 6
+6 > 9
+8 >= 10
+1 == 2
+1 != 2
+
+expect:
+[Binop <]
+    [Int literal 1]
+    [Int literal 5]
+[Binop <=]
+    [Int literal 5]
+    [Int literal 6]
+[Binop >]
+    [Int literal 6]
+    [Int literal 9]
+[Binop >=]
+    [Int literal 8]
+    [Int literal 10]
+[Binop ==]
+    [Int literal 1]
+    [Int literal 2]
+[Binop !=]
+    [Int literal 1]
+    [Int literal 2]
+
+===================
 
 code:
 1 + + 1

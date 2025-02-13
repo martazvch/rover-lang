@@ -495,7 +495,7 @@ pub const Analyzer = struct {
 
         switch (self.node_tags[node]) {
             // .Assignment => |*s| try self.assignment(s),
-            .Add, .Mul, .Sub, .Div => final = try self.binop(node),
+            .Add, .And, .Div, .Mul, .Or, .Sub => final = try self.binop(node),
             .Bool => final = try self.bool_lit(node),
             .Discard => try self.discard(node),
             // .FnDecl => |*s| try self.fn_declaration(s),
