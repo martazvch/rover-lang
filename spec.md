@@ -396,6 +396,25 @@ fn main() {
     const tk: Token = .init()
 }
 ```
+### Bundles deconstruction
+
+You can deconstruct structs and tuples, ... via syntax like:
+
+```rust
+struct Node {
+    lhs, rhs: int
+}
+
+var node = Node {lhs=0, rhs=0}
+match node {
+    Node {lhs = 1, _} :: n => print(n)
+}
+
+// Assignemnt
+let Node {lhs :: l, rhs :: r} = node
+// Use l and r as local variables
+
+```
 
 ### Still to figure out
 
@@ -448,3 +467,157 @@ Solution:
 
 That means that we generate two binaries, one is the interpreter without those debug hooks
 and the other contains those, meaning that it will check them unconditionaly
+
+
+## Thoughts
+The idea is to bring back old operators working with errors (!) and nullable (?) and 
+rework how we work with errors
+
+### Functions
+
+So, we keep "!" in function's prototype to separate "ok" channel from "err" channel
+
+```rust
+fn add() -> int ! ArithmeticErr {}
+```
+
+Returning into the error channel is done with "return!". Ok return are normal return
+
+```rust
+fn add(a: int) -> int ! ArithmeticErr {
+    if a < 0 do return! ArithmeticErr.NegativeNb(a)
+
+    return a + 2 // useless keyword here btw
+}
+```
+
+If a function returns only an error, no need to use return!, there is only one channel
+
+### Propagation
+
+To propagate error, simply use "!" right after a function call
+
+```rust
+fn add(a: int) -> int ! ArithmeticErr { }
+
+fn calculate(a, b: int) -> int ! ArithmeticErr {
+    let res = add(a)!
+    res
+}
+```
+
+It can be chained by design
+
+```rust
+fn add(a: int) -> int ! ArithmeticErr { }
+
+fn calculate(a, b: int) -> int ! ArithmeticErr {
+    let res = add(a)!.add(a)!
+    res
+}
+```
+
+### Collapse
+
+We should have a mechanism to collapse the error into a non-error (unwrap) resulting in a panic
+at runtime if it was an error. Maybe `variable.!` that would match the same syntaxe to unwrap
+a nullable `variable.?`
+
+```rust
+fn add(a: int) -> int ! ArithmeticErr { }
+
+fn main() {
+    let val = get().!
+}
+```
+
+My only concern is the lack of readability between error propagation and error unwrapping
+
+```rust
+fn add(a: int) -> int ! ArithmeticErr { }
+
+fn calculate(a: int) int ! Error {
+    let val = get().! // unwraps
+    let val = get()! // propagates
+
+    let val = get()!.get().! // is it readable?
+}
+```
+
+### Specialized else
+
+To work with nullable and error, we introduce `else?` and `else!`. It allow to define a fallback value
+
+```rust
+fn get() -> ?int {}
+fn get2() -> int ! Err {}
+
+fn main() {
+    let val = get() else? 5
+    let val2 = get2() else! 5
+}
+```
+### Specialized if
+
+To work with nullable and error, we introduce `if?` and `if!`. It allow to use control flow
+to extract the value in case of non-null or non-error value. Also, `if!` provides an 
+`else` branch that can alias the error to use it
+
+```rust
+fn get() -> ?int {}
+fn get2() -> int ! Err {}
+
+fn main() {
+    let val: ?int = get()
+    let val2: int ! Err = get2()
+
+    // Explicit aliasing
+    if? val @v {
+        print(v)
+    }
+
+    // Do we allow implicit aliasing?
+    if? val {
+        // Here use `val` as a non-null value
+        print(val)
+    }
+    
+    // Same question about implicit aliasing
+    if! val2 {
+        // Here, val2 is a non-error
+    } else {
+        // Here val2 is an error
+    }
+
+    if! val2 {
+        // Here, val2 is a non-error
+    } else err { // No need for aliasing? Just a variable available here?
+        // Here err is an error
+    }
+}
+```
+
+### Different aliasing
+
+I was also wondering about `@` for aliasing. It reads quite naturally as `@` is often "at"
+but I find the symbol noisy. I really like the `::` symbol and it's not used anywhere
+in current grammer. Maybe it's the right spot? If not, I'd like to find a spot for it
+
+```rust
+fn get() -> ?int {}
+fn get2() -> int ! Err {}
+
+fn main() {
+    let val: ?int = get()
+    let val2: int ! Err = get2()
+
+    // Explicit aliasing
+    if? val::v {
+        print(v)
+    }
+
+    if? val :: v { // Better with spaces?
+        print(v)
+    }
+}
+```
