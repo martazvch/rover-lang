@@ -16,6 +16,7 @@ pub const Instruction = union(enum) {
     String: usize,
     Unary: UnaryTag,
     VarDecl: Variable,
+    While,
 
     pub const BinopData = struct {
         cast: Cast = .None,

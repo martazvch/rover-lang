@@ -27,11 +27,19 @@
     // { var tmp = 5 }
     // var from_block = {5}
 
-    {
+    // {
+    //     var a = 4
+    //     var b: float = a
+    //     // print "coucou"
+    //     var c
+    //     c = b
+    // }
+
+    while true or false {
         var a = 4
-        var b: float = a
-        // print "coucou"
-        var c
-        c = b
+        print a
+        while true {
+            var c = "str"
+        }
     }
 //}

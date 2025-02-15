@@ -345,10 +345,10 @@ pub const Analyzer = struct {
     }
 
     /// Reserve a slot in analyzed statements and returns the index
-    fn reserve_slot(self: *Self) !usize {
-        try self.analyzed_stmts.append(undefined);
-        return self.analyzed_stmts.items.len - 1;
-    }
+    // fn reserve_slot(self: *Self) !usize {
+    //     try self.analyzed_stmts.append(undefined);
+    //     return self.analyzed_stmts.items.len - 1;
+    // }
 
     fn last_state(self: *Self) *State {
         return &self.states.items[self.states.items.len - 1];
@@ -526,7 +526,7 @@ pub const Analyzer = struct {
             .Discard => try self.discard(node),
             // .FnDecl => |*s| try self.fn_declaration(s),
             // .Use => |*s| try self.use_stmt(s),
-            // .While => |*s| try self.while_stmt(s),
+            .While => try self.while_stmt(),
             .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
             // .FnCall => |*e| self.fn_call(e),
@@ -858,9 +858,10 @@ pub const Analyzer = struct {
     }
 
     fn discard(self: *Self, node: Node.Index) !void {
+        try self.instructions.append(.Discard);
+
         self.node_idx += 1;
         const discarded = try self.analyze_node(self.node_idx);
-        try self.instructions.append(.Discard);
 
         if (discarded == Void) return self.err(.VoidDiscard, self.to_span(node));
     }
@@ -974,6 +975,8 @@ pub const Analyzer = struct {
 
     fn unary(self: *Self, node: Node.Index) Error!Type {
         const op = self.token_tags[self.node_mains[node]];
+        try self.instructions.append(.{ .Unary = if (op == .Bang) .Bang else .Minus });
+
         self.node_idx += 1;
         const rhs = try self.analyze_node(self.node_idx);
 
@@ -988,8 +991,6 @@ pub const Analyzer = struct {
                 self.to_span(node),
             );
         }
-
-        try self.instructions.append(.{ .Unary = if (op == .Bang) .Bang else .Minus });
 
         return rhs;
     }
@@ -1045,6 +1046,31 @@ pub const Analyzer = struct {
 
         const variable = try self.declare_variable(name, checked_type, initialized);
         try self.instructions.append(.{ .VarDecl = variable });
+    }
+
+    fn while_stmt(self: *Self) Error!void {
+        self.node_idx += 1;
+        const cond_idx = self.node_idx;
+        try self.instructions.append(.While);
+        const cond_type = try self.analyze_node(cond_idx);
+
+        if (cond_type != Bool) return self.err(
+            .{ .NonBoolCond = .{
+                .what = "while",
+                .found = self.type_manager.str(cond_type),
+            } },
+            self.to_span(cond_idx),
+        );
+
+        const body_idx = self.node_idx;
+        const body_type = try self.analyze_node(body_idx);
+
+        if (body_type != Void) return self.err(
+            .{ .NonVoidWhile = .{
+                .found = self.type_manager.str(body_type),
+            } },
+            self.to_span(body_idx),
+        );
     }
 
     // fn statement(self: *Self, stmt: *const Stmt) !Type {
@@ -1349,26 +1375,26 @@ pub const Analyzer = struct {
     //     try self.analyzed_stmts.append(.{ .Variable = extra });
     // }
 
-    fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
-        const cond_type = try self.expression(stmt.condition);
-
-        if (cond_type != Bool) return self.err(
-            .{ .NonBoolCond = .{
-                .what = "while",
-                .found = self.type_manager.str(cond_type),
-            } },
-            stmt.condition.span(),
-        );
-
-        const body_type = try self.statement(stmt.body);
-
-        if (body_type != Void) return self.err(
-            .{ .NonVoidWhile = .{
-                .found = self.type_manager.str(body_type),
-            } },
-            stmt.body.span(),
-        );
-    }
+    // fn while_stmt(self: *Self, stmt: *const Ast.While) Error!void {
+    //     const cond_type = try self.expression(stmt.condition);
+    //
+    //     if (cond_type != Bool) return self.err(
+    //         .{ .NonBoolCond = .{
+    //             .what = "while",
+    //             .found = self.type_manager.str(cond_type),
+    //         } },
+    //         stmt.condition.span(),
+    //     );
+    //
+    //     const body_type = try self.statement(stmt.body);
+    //
+    //     if (body_type != Void) return self.err(
+    //         .{ .NonVoidWhile = .{
+    //             .found = self.type_manager.str(body_type),
+    //         } },
+    //         stmt.body.span(),
+    //     );
+    // }
 
     // fn expression(self: *Self, expr: *const Expr) !Type {
     //     if (self.scope_depth == 0 and !self.repl and !is_pure(expr)) {
