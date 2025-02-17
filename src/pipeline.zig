@@ -234,7 +234,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         var rir_renderer = RirRenderer.init(
             allocator,
             source,
-            analyzer.instructions.items,
+            analyzer.instructions.items(.tag),
+            analyzer.instructions.items(.data),
             &analyzer.interner,
         );
         defer rir_renderer.deinit();

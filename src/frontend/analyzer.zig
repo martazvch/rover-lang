@@ -138,8 +138,7 @@ pub const Analyzer = struct {
     node_data: []const usize,
     node_idx: usize,
 
-    // analyzed_stmts: ArrayList(AnalyzedStmt),
-    instructions: ArrayList(Instruction),
+    instructions: MultiArrayList(Instruction),
     warns: ArrayList(AnalyzerReport),
     errs: ArrayList(AnalyzerReport),
 
@@ -189,7 +188,7 @@ pub const Analyzer = struct {
         self.arena = std.heap.ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
 
-        self.instructions = ArrayList(Instruction).init(self.allocator);
+        self.instructions = MultiArrayList(Instruction){};
         self.warns = ArrayList(AnalyzerReport).init(self.allocator);
         self.errs = ArrayList(AnalyzerReport).init(self.allocator);
         self.globals = ArrayList(Variable).init(self.allocator);
@@ -200,10 +199,12 @@ pub const Analyzer = struct {
         self.states = ArrayList(State).init(self.allocator);
         self.main = null;
         self.local_offset = 0;
-        // self.analyzed_stmts = ArrayList(AnalyzedStmt).init(self.allocator);
         self.type_manager = TypeManager.init(self.allocator);
         try self.type_manager.init_builtins();
         self.interner = Interner.init(self.allocator);
+
+        // We reserve slot 0 for 'main'
+        _ = try self.interner.intern("main");
         self.repl = repl;
     }
 
@@ -326,6 +327,12 @@ pub const Analyzer = struct {
         };
     }
 
+    /// Adds a new node and returns its index
+    fn add_instr(self: *Self, instr: Instruction) !Node.Index {
+        try self.instructions.append(self.allocator, instr);
+        return self.instructions.len - 1;
+    }
+
     fn is_numeric(t: Type) bool {
         return t == Int or t == Float;
     }
@@ -343,12 +350,6 @@ pub const Analyzer = struct {
         const span = self.token_spans[self.node_mains[node]];
         return self.source[span.start..span.end];
     }
-
-    /// Reserve a slot in analyzed statements and returns the index
-    // fn reserve_slot(self: *Self) !usize {
-    //     try self.analyzed_stmts.append(undefined);
-    //     return self.analyzed_stmts.items.len - 1;
-    // }
 
     fn last_state(self: *Self) *State {
         return &self.states.items[self.states.items.len - 1];
@@ -464,14 +465,14 @@ pub const Analyzer = struct {
             variable.index = index;
 
             try self.globals.append(variable);
-            return .{ .index = index, .scope = .Global };
+            return .{ .index = @intCast(index), .scope = .Global };
         } else {
             // Take function's frame into account
             const index = self.locals.items.len - self.local_offset;
             variable.index = index;
 
             try self.locals.append(variable);
-            return .{ .index = index, .scope = .Local };
+            return .{ .index = @intCast(index), .scope = .Local };
         }
     }
 
@@ -524,7 +525,7 @@ pub const Analyzer = struct {
             .Block => final = try self.block(node),
             .Bool => final = try self.bool_lit(node),
             .Discard => try self.discard(node),
-            // .FnDecl => |*s| try self.fn_declaration(s),
+            .FnDecl => try self.fn_declaration(node),
             // .Use => |*s| try self.use_stmt(s),
             .While => try self.while_stmt(),
             .Empty => self.node_idx += 1,
@@ -559,6 +560,8 @@ pub const Analyzer = struct {
         const assigne_idx = self.node_idx - 1;
         const value_idx = self.node_idx;
 
+        const idx = try self.add_instr(.{ .tag = .Assignment, .data = undefined });
+
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
                 const assigne = try self.resolve_identifier(assigne_idx, false);
@@ -577,7 +580,7 @@ pub const Analyzer = struct {
                 } else if (assigne.type_ != value_type) {
                     // One case in wich we can coerce; int -> float
                     if (assigne.type_ == Float and value_type == Int) {
-                        try self.instructions.append(.CastToFloat);
+                        _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
                     } else {
                         return self.err(
                             .{ .InvalidAssignType = .{
@@ -591,10 +594,10 @@ pub const Analyzer = struct {
 
                 if (!assigne.initialized) assigne.initialized = true;
 
-                try self.instructions.append(.{ .Assignment = .{
-                    .index = assigne.index,
+                self.instructions.items(.data)[idx] = .{ .Variable = .{
+                    .index = @intCast(assigne.index),
                     .scope = if (assigne.depth > 0) .Local else .Global,
-                } });
+                } };
             },
             // Later, manage member, pointer, ...
             else => return self.err(.InvalidAssignTarget, self.to_span(self.node_idx)),
@@ -603,6 +606,7 @@ pub const Analyzer = struct {
 
     fn binop(self: *Self, node: Node.Index) Error!Type {
         const op = self.node_tags[node];
+        const idx = try self.add_instr(.{ .tag = .Binop });
 
         self.node_idx += 1;
         const lhs_index = self.node_idx;
@@ -615,14 +619,15 @@ pub const Analyzer = struct {
 
         // String operations
         if (op == .Add and lhs == Str and rhs == Str) {
-            try self.instructions.append(.{ .Binop = .{ .tag = .AddStr } });
+            self.instructions.items(.data)[idx] = .{ .Binop = .{ .op = .AddStr } };
             return Str;
         } else if (op == .Mul) {
             if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
-                try self.instructions.append(.{ .Binop = .{
+                self.instructions.items(.data)[idx] = .{ .Binop = .{
                     .cast = if (rhs == Int) .Rhs else .Lhs,
-                    .tag = .MulStr,
-                } });
+                    .op = .MulStr,
+                } };
+
                 return Str;
             }
         }
@@ -647,7 +652,7 @@ pub const Analyzer = struct {
             else => {},
         }
 
-        var data: Instruction.BinopData = .{ .cast = .None, .tag = undefined };
+        var data: Instruction.Binop = .{ .op = undefined };
 
         switch (op) {
             // Arithmetic binop
@@ -668,10 +673,10 @@ pub const Analyzer = struct {
                         }
 
                         switch (op) {
-                            .Add => data.tag = .AddFloat,
-                            .Div => data.tag = .DivFloat,
-                            .Mul => data.tag = .MulFloat,
-                            .Sub => data.tag = .SubFloat,
+                            .Add => data.op = .AddFloat,
+                            .Div => data.op = .DivFloat,
+                            .Mul => data.op = .MulFloat,
+                            .Sub => data.op = .SubFloat,
                             else => unreachable,
                         }
                     },
@@ -691,10 +696,10 @@ pub const Analyzer = struct {
                         }
 
                         switch (op) {
-                            .Add => data.tag = .AddInt,
-                            .Div => data.tag = .DivInt,
-                            .Mul => data.tag = .MulInt,
-                            .Sub => data.tag = .SubInt,
+                            .Add => data.op = .AddInt,
+                            .Div => data.op = .DivInt,
+                            .Mul => data.op = .MulInt,
+                            .Sub => data.op = .SubInt,
                             else => unreachable,
                         }
                     },
@@ -718,8 +723,8 @@ pub const Analyzer = struct {
                         }
 
                         switch (op) {
-                            .Eq => data.tag = .EqFloat,
-                            .Ne => data.tag = .NeFloat,
+                            .Eq => data.op = .EqFloat,
+                            .Ne => data.op = .NeFloat,
                             else => unreachable,
                         }
                     } else {
@@ -737,13 +742,13 @@ pub const Analyzer = struct {
                         try self.warn(.FloatEqual, self.to_span(node));
 
                         switch (op) {
-                            .Eq => data.tag = .EqFloat,
-                            .Ne => data.tag = .NeFloat,
+                            .Eq => data.op = .EqFloat,
+                            .Ne => data.op = .NeFloat,
                             else => unreachable,
                         }
                     } else switch (op) {
-                        .Eq => data.tag = .EqInt,
-                        .Ne => data.tag = .NeInt,
+                        .Eq => data.op = .EqInt,
+                        .Ne => data.op = .NeInt,
                         else => unreachable,
                     }
                 }
@@ -764,10 +769,10 @@ pub const Analyzer = struct {
                             else => unreachable,
                         }
                         switch (op) {
-                            .Ge => data.tag = .GeFloat,
-                            .Gt => data.tag = .GtFloat,
-                            .Le => data.tag = .LeFloat,
-                            .Lt => data.tag = .LtFloat,
+                            .Ge => data.op = .GeFloat,
+                            .Gt => data.op = .GtFloat,
+                            .Le => data.op = .LeFloat,
+                            .Lt => data.op = .LtFloat,
                             else => unreachable,
                         }
                     },
@@ -783,10 +788,10 @@ pub const Analyzer = struct {
                         }
 
                         switch (op) {
-                            .Ge => data.tag = .GeInt,
-                            .Gt => data.tag = .GtInt,
-                            .Le => data.tag = .LeInt,
-                            .Lt => data.tag = .LtInt,
+                            .Ge => data.op = .GeInt,
+                            .Gt => data.op = .GtInt,
+                            .Le => data.op = .LeInt,
+                            .Lt => data.op = .LtInt,
                             else => unreachable,
                         }
                     },
@@ -807,28 +812,27 @@ pub const Analyzer = struct {
                 } }, self.to_span(rhs_index));
 
                 switch (op) {
-                    .And => data.tag = .And,
-                    .Or => data.tag = .Or,
+                    .And => data.op = .And,
+                    .Or => data.op = .Or,
                     else => unreachable,
                 }
             },
             else => unreachable,
         }
 
-        try self.instructions.append(.{ .Binop = data });
+        self.instructions.items(.data)[idx] = .{ .Binop = data };
+
         return res;
     }
 
     fn block(self: *Self, node: Node.Index) Error!Type {
-        // const start = node;
         const length = self.node_data[node];
 
-        errdefer {
-            // self.node_idx = start + length;
-            self.scope_depth -= 1;
-        }
-
         self.scope_depth += 1;
+        errdefer self.scope_depth -= 1;
+
+        const idx = try self.add_instr(.{ .tag = .Block, .data = undefined });
+
         var final: Type = Void;
         self.node_idx += 1;
 
@@ -840,25 +844,29 @@ pub const Analyzer = struct {
             }
         }
 
-        try self.instructions.append(.{ .Block = .{
-            .pop_count = try self.end_scope(),
+        // Sentinel instruction to know where the block ends
+        _ = try self.add_instr(.{ .tag = .Sentinel });
+
+        self.instructions.items(.data)[idx] = .{ .Block = .{
+            .pop_count = @intCast(try self.end_scope()),
             .is_expr = if (final != Void) true else false,
-        } });
+        } };
 
         return final;
     }
 
     fn bool_lit(self: *Self, node: Node.Index) !Type {
-        try self.instructions.append(.{
+        _ = try self.add_instr(.{ .tag = .Bool, .data = .{
             .Bool = if (self.token_tags[self.node_mains[node]] == .True) true else false,
-        });
+        } });
+
         self.node_idx += 1;
 
         return Bool;
     }
 
     fn discard(self: *Self, node: Node.Index) !void {
-        try self.instructions.append(.Discard);
+        _ = try self.add_instr(.{ .tag = .Discard, .data = undefined });
 
         self.node_idx += 1;
         const discarded = try self.analyze_node(self.node_idx);
@@ -872,21 +880,178 @@ pub const Analyzer = struct {
             std.debug.print("Error parsing float\n", .{});
             break :blk 0.0;
         };
-        try self.instructions.append(.{ .Float = value });
+
+        _ = try self.add_instr(.{ .tag = .Float, .data = .{ .Float = value } });
         self.node_idx += 1;
 
         return Float;
     }
 
+    fn fn_declaration(self: *Self, node: Node.Index) Error!void {
+        // If we find a main function in global scope, we save it to analyze last
+        // If there is another global scoped main function, it's going to be analyzed
+        // and when we analyze the first one there will be an error anyway
+        // NOTE: string comparison is slow, add a field in Ast node?
+        const name_idx = try self.interner.intern(self.source_from_node(node));
+
+        if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
+            self.main = node;
+        }
+
+        // const idx = try self.reserve_slot();
+
+        // Check in current scope
+        const arity = self.node_data[node];
+        const return_type = try self.check_name_and_type(name_idx, node, node + arity);
+        // const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
+
+        // We declare before body for recursion. We need to correct type to check those recursions
+        const type_idx = try self.type_manager.reserve_info();
+        const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
+        const fn_var = try self.declare_variable(name_idx, fn_type, true);
+
+        self.scope_depth += 1;
+        errdefer self.scope_depth -= 1;
+
+        // Stores the previous offset
+        const local_offset_save = self.local_offset;
+        self.local_offset = self.locals.items.len;
+
+        // Switch back to locals before function call
+        errdefer self.local_offset = local_offset_save;
+
+        // We add a empty variable to anticipate the function it self on the stack
+        // it's the returned address for the function
+        try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx });
+
+        // Skips function's node
+        self.node_idx += 1;
+        var params_type: [256]Type = undefined;
+
+        for (0..arity) |i| {
+            // Check on parameter
+            const param_idx = try self.interner.intern(self.source_from_node(self.node_idx));
+
+            // Skips param's name
+            self.node_idx += 1;
+
+            const param_type = self.check_name_and_type(
+                param_idx,
+                self.node_idx - 1,
+                self.node_idx,
+            ) catch |e| switch (e) {
+                error.Err => {
+                    // We replace the error with a more explicit one for parameters
+                    if (self.errs.items[self.errs.items.len - 1].report == .AlreadyDeclared) {
+                        self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
+                            .{ .DuplicateParam = .{ .name = self.source_from_node(self.node_idx - 1) } },
+                            self.to_span(self.node_idx - 1),
+                        );
+                    }
+
+                    return e;
+                },
+                else => return e,
+            };
+
+            if (param_type == Void) {
+                return self.err(.VoidParam, self.to_span(self.node_idx - 1));
+            }
+
+            _ = try self.declare_variable(param_idx, param_type, true);
+            params_type[i] = param_type;
+        }
+
+        // Set all the informations now that we have every thing
+        self.type_manager.set_info(type_idx, .{ .Fn = .{
+            .arity = arity,
+            .params = params_type,
+            .return_type = return_type,
+        } });
+
+        // ------
+        //  Body
+        // ------
+        try self.states.append(.{ .fn_type = return_type });
+        const prev_state = self.last_state();
+
+        var body_type: Type = Void;
+        self.scope_depth += 1;
+        errdefer self.scope_depth -= 1;
+
+        const length = self.node_data[node];
+
+        // We don't use block because we don't want to emit extra data from the block
+        for (0..length) |i| {
+            // If previous statement returned, it's only dead code now
+            if (prev_state.returns) {
+                try self.warn(.DeadCode, self.to_span(self.node_idx - 1));
+            }
+
+            // If last statement, we don't allow partial anymore (for return)
+            // Usefull for 'if' for example, in this case we want all the branches
+            // to return something
+            if (i == length - 1) {
+                prev_state.allow_partial = false;
+            }
+
+            // We try to analyze the whole body
+            body_type = self.analyze_node(self.node_idx) catch |e| switch (e) {
+                error.Err => continue,
+                else => return e,
+            };
+
+            // If last expression produced a value and that it wasn't the last one and it
+            // wasn't a return, error
+            if (body_type != Void and i != length - 1 and !prev_state.returns) {
+                self.err(.UnusedValue, self.to_span(self.node_idx)) catch {};
+            }
+        }
+
+        if (body_type != return_type) {
+            return self.err(
+                .{ .IncompatibleFnType = .{
+                    .expect = self.type_manager.str(return_type),
+                    .found = self.type_manager.str(body_type),
+                } },
+                self.to_span(self.node_idx),
+            );
+        }
+
+        // Two levels: 1 for function's name + params and another one for body
+        _ = try self.end_scope();
+        _ = try self.end_scope();
+
+        // Switch back to locals before function call
+        self.local_offset = local_offset_save;
+
+        const state = self.states.pop();
+
+        const return_kind: ReturnKind = if (state.returns)
+            .Explicit
+        else if (body_type == Void)
+            .ImplicitVoid
+        else
+            .ImplicitValue;
+
+        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } });
+        _ = try self.add_instr(.{ .tag = .FnDecl, .data = .{ .FnDecl = return_kind } });
+
+        // self.analyzed_stmts.items[idx] = .{
+        //     .FnDecl = .{
+        //         .variable = fn_var,
+        //         .return_kind = return_kind,
+        //     },
+        // };
+    }
+
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         const variable = try self.resolve_identifier(node, initialized);
 
-        try self.instructions.append(.{
-            .Identifier = .{
-                .scope = if (variable.depth > 0) .Local else .Global,
-                .index = variable.index,
-            },
-        });
+        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = .{
+            .scope = if (variable.depth > 0) .Local else .Global,
+            .index = @intCast(variable.index),
+        } } });
 
         return variable;
     }
@@ -946,28 +1111,29 @@ pub const Analyzer = struct {
             std.debug.print("Error parsing integer\n", .{});
             break :blk 0;
         };
-        try self.instructions.append(.{ .Int = value });
+
+        _ = try self.add_instr(.{ .tag = .Int, .data = .{ .Int = value } });
         self.node_idx += 1;
 
         return Int;
     }
 
     fn null_lit(self: *Self) !Type {
-        try self.instructions.append(.Null);
+        _ = try self.add_instr(.{ .tag = .Null, .data = undefined });
         self.node_idx += 1;
 
         return Null;
     }
 
     fn print(self: *Self) !void {
+        _ = try self.add_instr(.{ .tag = .Print, .data = undefined });
         self.node_idx += 1;
         _ = try self.analyze_node(self.node_idx);
-        try self.instructions.append(.Print);
     }
 
     fn string(self: *Self, node: Node.Index) !Type {
         const value = try self.interner.intern(self.source_from_node(node));
-        try self.instructions.append(.{ .String = value });
+        _ = try self.add_instr(.{ .tag = .String, .data = .{ .Id = value } });
         self.node_idx += 1;
 
         return Str;
@@ -975,7 +1141,10 @@ pub const Analyzer = struct {
 
     fn unary(self: *Self, node: Node.Index) Error!Type {
         const op = self.token_tags[self.node_mains[node]];
-        try self.instructions.append(.{ .Unary = if (op == .Bang) .Bang else .Minus });
+        _ = try self.add_instr(.{
+            .tag = .Unary,
+            .data = .{ .Unary = if (op == .Bang) .Bang else .Minus },
+        });
 
         self.node_idx += 1;
         const rhs = try self.analyze_node(self.node_idx);
@@ -1004,6 +1173,8 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const value_idx = self.node_idx;
 
+        const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined });
+
         const name = try self.interner.intern(self.source_from_node(node));
         var checked_type = try self.check_name_and_type(name, node, type_idx);
 
@@ -1029,7 +1200,7 @@ pub const Analyzer = struct {
             } else if (checked_type != value_type) {
                 // One case in wich we can coerce; int -> float
                 if (checked_type == Float and value_type == Int) {
-                    try self.instructions.append(.CastToFloat);
+                    _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
                 } else {
                     return self.err(
                         .{ .InvalidAssignType = .{
@@ -1042,16 +1213,19 @@ pub const Analyzer = struct {
             }
 
             initialized = true;
-        } else self.node_idx += 1;
+        } else {
+            _ = try self.add_instr(.{ .tag = .Null });
+            self.node_idx += 1;
+        }
 
         const variable = try self.declare_variable(name, checked_type, initialized);
-        try self.instructions.append(.{ .VarDecl = variable });
+        self.instructions.items(.data)[idx] = .{ .Variable = variable };
     }
 
     fn while_stmt(self: *Self) Error!void {
         self.node_idx += 1;
         const cond_idx = self.node_idx;
-        try self.instructions.append(.While);
+        _ = try self.add_instr(.{ .tag = .While });
         const cond_type = try self.analyze_node(cond_idx);
 
         if (cond_type != Bool) return self.err(
@@ -1135,150 +1309,150 @@ pub const Analyzer = struct {
     //     }
     // }
 
-    fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) Error!void {
-        // If we find a main function in global scope, we save it to analyze last
-        // If there is another global scoped main function, it's going to be analyzed
-        // and when we analyze the first one there will be an error anyway
-        // NOTE: string comparison is slow, add a field in Ast node?
-        if (self.main == null and self.scope_depth == 0 and std.mem.eql(u8, stmt.name.text, "main")) {
-            self.main = stmt;
-        }
-
-        const idx = try self.reserve_slot();
-
-        // Check in current scope
-        const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
-
-        // We declare before body for recursion. We need to correct type to check those recursions
-        const type_idx = try self.type_manager.reserve_info();
-        const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
-        const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
-
-        self.scope_depth += 1;
-        errdefer self.scope_depth -= 1;
-
-        // Stores the previous offset
-        const local_offset_save = self.local_offset;
-        self.local_offset = self.locals.items.len;
-
-        // Switch back to locals before function call
-        errdefer self.local_offset = local_offset_save;
-
-        // We add a empty variable to anticipate the function it self on the stack. Here,
-        // it's declared in the outter scope to allow create a new function with the same name
-        // in function's body but in real life the function itself is at the very beginning of
-        // its stack window because it's the returned address for the function
-        try self.locals.append(.{ .depth = self.scope_depth });
-
-        var params_type: [256]Type = undefined;
-
-        for (0..stmt.arity) |i| {
-            // Check on parameter
-            const param_type = self.check_ident_and_type(
-                stmt.params[i].name,
-                stmt.params[i].type_,
-            ) catch |e| switch (e) {
-                error.Err => {
-                    // We replace the error with a more explicit one for parameters
-                    if (self.errs.items[self.errs.items.len - 1].report == .AlreadyDeclared) {
-                        const name = stmt.params[i].name;
-
-                        self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
-                            .{ .DuplicateParam = .{ .name = name.text } },
-                            Span.from_source_slice(name),
-                        );
-                    }
-
-                    return e;
-                },
-                else => return e,
-            };
-
-            if (param_type == Void) {
-                return self.err(.VoidParam, Span.from_source_slice(stmt.params[i].name));
-            }
-
-            _ = try self.declare_variable(stmt.params[i].name.text, param_type, true);
-            params_type[i] = param_type;
-        }
-
-        // Set all the informations now that we have every thing
-        self.type_manager.set_info(type_idx, .{ .Fn = .{
-            .arity = stmt.arity,
-            .params = params_type,
-            .return_type = return_type,
-        } });
-
-        // ------
-        //  Body
-        // ------
-        try self.states.append(.{ .fn_type = return_type });
-        const prev_state = self.last_state();
-
-        var body_type: Type = Void;
-        self.scope_depth += 1;
-        errdefer self.scope_depth -= 1;
-
-        // We don't use block because we don't want to emit extra data from the block
-        for (stmt.body.stmts, 0..) |*s, i| {
-            // If previous statement returned, it's only dead code now
-            if (prev_state.returns) {
-                try self.warn(.DeadCode, stmt.body.stmts[i - 1].span());
-            }
-
-            // If last statement, we don't allow partial anymore (for return)
-            if (i == stmt.body.stmts.len - 1) {
-                prev_state.allow_partial = false;
-            }
-
-            // We try to analyze the whole body
-            body_type = self.statement(s) catch |e| switch (e) {
-                error.Err => continue,
-                else => return e,
-            };
-
-            // If last expression produced a value and that it wasn't the last one and it
-            // wasn't a return, error
-            if (body_type != Void and i != stmt.body.stmts.len - 1 and !prev_state.returns) {
-                self.err(.UnusedValue, s.span()) catch {};
-            }
-        }
-
-        // We check before ending scopes otherwise the errdefer triggers when
-        // we exited the 2 scopes
-        if (body_type != return_type) {
-            return self.err(
-                .{ .IncompatibleFnType = .{
-                    .expect = self.type_manager.str(return_type),
-                    .found = self.type_manager.str(body_type),
-                } },
-                stmt.body.span,
-            );
-        }
-
-        // Two levels: 1 for function's name + params and another one for body
-        _ = try self.end_scope();
-        _ = try self.end_scope();
-
-        // Switch back to locals before function call
-        self.local_offset = local_offset_save;
-
-        const state = self.states.pop();
-
-        const return_kind: ReturnKind = if (state.returns)
-            .Explicit
-        else if (body_type == Void)
-            .ImplicitVoid
-        else
-            .ImplicitValue;
-
-        self.analyzed_stmts.items[idx] = .{
-            .FnDecl = .{
-                .variable = fn_extra,
-                .return_kind = return_kind,
-            },
-        };
-    }
+    // fn fn_declaration(self: *Self, stmt: *const Ast.FnDecl) Error!void {
+    //     // If we find a main function in global scope, we save it to analyze last
+    //     // If there is another global scoped main function, it's going to be analyzed
+    //     // and when we analyze the first one there will be an error anyway
+    //     // NOTE: string comparison is slow, add a field in Ast node?
+    //     if (self.main == null and self.scope_depth == 0 and std.mem.eql(u8, stmt.name.text, "main")) {
+    //         self.main = stmt;
+    //     }
+    //
+    //     const idx = try self.reserve_slot();
+    //
+    //     // Check in current scope
+    //     const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
+    //
+    //     // We declare before body for recursion. We need to correct type to check those recursions
+    //     const type_idx = try self.type_manager.reserve_info();
+    //     const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
+    //     const fn_extra = try self.declare_variable(stmt.name.text, fn_type, true);
+    //
+    //     self.scope_depth += 1;
+    //     errdefer self.scope_depth -= 1;
+    //
+    //     // Stores the previous offset
+    //     const local_offset_save = self.local_offset;
+    //     self.local_offset = self.locals.items.len;
+    //
+    //     // Switch back to locals before function call
+    //     errdefer self.local_offset = local_offset_save;
+    //
+    //     // We add a empty variable to anticipate the function it self on the stack. Here,
+    //     // it's declared in the outter scope to allow create a new function with the same name
+    //     // in function's body but in real life the function itself is at the very beginning of
+    //     // its stack window because it's the returned address for the function
+    //     try self.locals.append(.{ .depth = self.scope_depth });
+    //
+    //     var params_type: [256]Type = undefined;
+    //
+    //     for (0..stmt.arity) |i| {
+    //         // Check on parameter
+    //         const param_type = self.check_ident_and_type(
+    //             stmt.params[i].name,
+    //             stmt.params[i].type_,
+    //         ) catch |e| switch (e) {
+    //             error.Err => {
+    //                 // We replace the error with a more explicit one for parameters
+    //                 if (self.errs.items[self.errs.items.len - 1].report == .AlreadyDeclared) {
+    //                     const name = stmt.params[i].name;
+    //
+    //                     self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
+    //                         .{ .DuplicateParam = .{ .name = name.text } },
+    //                         Span.from_source_slice(name),
+    //                     );
+    //                 }
+    //
+    //                 return e;
+    //             },
+    //             else => return e,
+    //         };
+    //
+    //         if (param_type == Void) {
+    //             return self.err(.VoidParam, Span.from_source_slice(stmt.params[i].name));
+    //         }
+    //
+    //         _ = try self.declare_variable(stmt.params[i].name.text, param_type, true);
+    //         params_type[i] = param_type;
+    //     }
+    //
+    //     // Set all the informations now that we have every thing
+    //     self.type_manager.set_info(type_idx, .{ .Fn = .{
+    //         .arity = stmt.arity,
+    //         .params = params_type,
+    //         .return_type = return_type,
+    //     } });
+    //
+    //     // ------
+    //     //  Body
+    //     // ------
+    //     try self.states.append(.{ .fn_type = return_type });
+    //     const prev_state = self.last_state();
+    //
+    //     var body_type: Type = Void;
+    //     self.scope_depth += 1;
+    //     errdefer self.scope_depth -= 1;
+    //
+    //     // We don't use block because we don't want to emit extra data from the block
+    //     for (stmt.body.stmts, 0..) |*s, i| {
+    //         // If previous statement returned, it's only dead code now
+    //         if (prev_state.returns) {
+    //             try self.warn(.DeadCode, stmt.body.stmts[i - 1].span());
+    //         }
+    //
+    //         // If last statement, we don't allow partial anymore (for return)
+    //         if (i == stmt.body.stmts.len - 1) {
+    //             prev_state.allow_partial = false;
+    //         }
+    //
+    //         // We try to analyze the whole body
+    //         body_type = self.statement(s) catch |e| switch (e) {
+    //             error.Err => continue,
+    //             else => return e,
+    //         };
+    //
+    //         // If last expression produced a value and that it wasn't the last one and it
+    //         // wasn't a return, error
+    //         if (body_type != Void and i != stmt.body.stmts.len - 1 and !prev_state.returns) {
+    //             self.err(.UnusedValue, s.span()) catch {};
+    //         }
+    //     }
+    //
+    //     // We check before ending scopes otherwise the errdefer triggers when
+    //     // we exited the 2 scopes
+    //     if (body_type != return_type) {
+    //         return self.err(
+    //             .{ .IncompatibleFnType = .{
+    //                 .expect = self.type_manager.str(return_type),
+    //                 .found = self.type_manager.str(body_type),
+    //             } },
+    //             stmt.body.span,
+    //         );
+    //     }
+    //
+    //     // Two levels: 1 for function's name + params and another one for body
+    //     _ = try self.end_scope();
+    //     _ = try self.end_scope();
+    //
+    //     // Switch back to locals before function call
+    //     self.local_offset = local_offset_save;
+    //
+    //     const state = self.states.pop();
+    //
+    //     const return_kind: ReturnKind = if (state.returns)
+    //         .Explicit
+    //     else if (body_type == Void)
+    //         .ImplicitVoid
+    //     else
+    //         .ImplicitValue;
+    //
+    //     self.analyzed_stmts.items[idx] = .{
+    //         .FnDecl = .{
+    //             .variable = fn_extra,
+    //             .return_kind = return_kind,
+    //         },
+    //     };
+    // }
 
     // fn use_stmt(self: *Self, stmt: *const Ast.Use) !void {
     //     var idx_unknown: usize = 0;

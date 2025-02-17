@@ -13,7 +13,9 @@ const Labels = struct { depth: usize, msg: []const u8 };
 
 pub const RirRenderer = struct {
     source: []const u8,
-    instructions: []const Instruction,
+    // instructions: []const Instruction,
+    instr_tags: []const Instruction.Tag,
+    instr_data: []const Instruction.Data,
     interner: *const Interner,
     indent_level: u8 = 0,
     tree: ArrayList(u8),
@@ -28,12 +30,16 @@ pub const RirRenderer = struct {
     pub fn init(
         allocator: Allocator,
         source: []const u8,
-        instructions: []const Instruction,
+        // instructions: []const Instruction,
+        instr_tags: []const Instruction.Tag,
+        instr_data: []const Instruction.Data,
         interner: *const Interner,
     ) Self {
         return .{
             .source = source,
-            .instructions = instructions,
+            // .instructions = instructions,
+            .instr_tags = instr_tags,
+            .instr_data = instr_data,
             .interner = interner,
             .indent_level = 0,
             .tree = ArrayList(u8).init(allocator),
@@ -53,63 +59,131 @@ pub const RirRenderer = struct {
         try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
     }
 
-    fn add_label(self: *Self, msg: []const u8) Error!void {
-        try self.labels.append(.{ .depth = self.depth, .msg = msg });
-    }
-
     pub fn parse_ir(self: *Self) !void {
-        while (self.instr_idx < self.instructions.len) {
+        while (self.instr_idx < self.instr_tags.len) {
             try self.parse_instr(self.instr_idx);
         }
     }
 
     fn parse_instr(self: *Self, index: usize) !void {
-        try switch (self.instructions[index]) {
-            .Assignment => |i| self.assignment(i),
-            .Binop => |i| self.binop(i),
-            .Block => |i| self.block(i),
-            .Bool => |i| self.bool_instr(i),
-            .CastToFloat => try self.tree.appendSlice("[Cast to float]\n"),
+        // try switch (self.instructions[index]) {
+        try switch (self.instr_tags[index]) {
+            .Assignment => self.assignment(index),
+            .Binop => self.binop(index),
+            .Block => self.block(index),
+            .Bool => self.bool_instr(index),
+            .Cast => self.cast(index),
             .Discard => try self.discard(),
-            .Float => |i| self.float_instr(i),
-            .Identifier => |i| self.identifier(i),
-            .Int => |i| self.int_instr(i),
-            .Null => try self.tree.appendSlice("[Null]\n"),
-            .Print => try self.tree.appendSlice("[Print]\n"),
-            .String => |i| self.string_instr(i),
-            .Unary => |i| self.unary(i),
-            .VarDecl => |i| self.var_decl(i),
+            .Float => self.float_instr(index),
+            .FnDecl => self.fn_declaration(index),
+            .Identifier => self.identifier(index),
+            .Int => self.int_instr(index),
+            .Null => {
+                try self.indent();
+                try self.tree.appendSlice("[Null]\n");
+                self.instr_idx += 1;
+            },
+            .Print => {
+                try self.indent();
+                try self.tree.appendSlice("[Print]\n");
+                self.instr_idx += 1;
+                self.indent_level += 1;
+                try self.parse_instr(self.instr_idx);
+                self.indent_level -= 1;
+            },
+            .Sentinel => unreachable,
+            .String => self.string_instr(index),
+            .Unary => self.unary(index),
+            .VarDecl => self.var_decl(index),
             .While => self.while_instr(),
+            // .Assignment => |i| self.assignment(i),
+            // .Binop => |i| self.binop(i),
+            // .Block => |i| self.block(i),
+            // .Bool => |i| self.bool_instr(i),
+            // .CastToFloat => try self.tree.appendSlice("[Cast to float]\n"),
+            // .Discard => try self.discard(),
+            // .Float => |i| self.float_instr(i),
+            // .Identifier => |i| self.identifier(i),
+            // .Int => |i| self.int_instr(i),
+            // .Null => try self.tree.appendSlice("[Null]\n"),
+            // .Print => try self.tree.appendSlice("[Print]\n"),
+            // .String => |i| self.string_instr(i),
+            // .Unary => |i| self.unary(i),
+            // .VarDecl => |i| self.var_decl(i),
+            // .While => self.while_instr(),
         };
     }
 
-    fn assignment(self: *Self, variable: Instruction.Variable) Error!void {
+    fn assignment(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Variable;
+
         var writer = self.tree.writer();
+        try self.indent();
         try writer.print("[Assignment variable index: {}, scope: {s}]\n", .{
-            variable.index, @tagName(variable.scope),
+            data.index, @tagName(data.scope),
         });
+
+        self.instr_idx += 1;
+        self.indent_level += 1;
+        try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
     }
 
-    fn binop(self: *Self, data: Instruction.BinopData) Error!void {
+    fn binop(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Binop;
         var writer = self.tree.writer();
+
+        try self.indent();
         try writer.print(
             "[Binop type: {s}, cast: {s}]\n",
-            .{ @tagName(data.tag), @tagName(data.cast) },
+            .{ @tagName(data.op), @tagName(data.cast) },
         );
+
+        self.instr_idx += 1;
+        self.indent_level += 1;
+        try self.parse_instr(self.instr_idx);
+        try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
     }
 
-    fn block(self: *Self, data: Instruction.BlockData) Error!void {
+    fn block(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Block;
+
         var writer = self.tree.writer();
+        try self.indent();
         try writer.print(
             "[Block pop count: {}, is_expr: {}]\n",
             .{ data.pop_count, data.is_expr },
         );
+
+        self.instr_idx += 1;
+        self.indent_level += 1;
+
+        while (self.instr_tags[self.instr_idx] != .Sentinel) {
+            try self.parse_instr(self.instr_idx);
+        }
+
+        // Skips the sentinel
+        self.instr_idx += 1;
+
+        self.indent_level -= 1;
     }
 
-    fn bool_instr(self: *Self, value: bool) Error!void {
+    fn bool_instr(self: *Self, instr: usize) Error!void {
+        const value = self.instr_data[instr].Bool;
+
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Bool {}]\n", .{value});
+        self.instr_idx += 1;
+    }
+
+    fn cast(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].CastTo;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Cast to {s}]\n", .{@tagName(data)});
         self.instr_idx += 1;
     }
 
@@ -122,51 +196,73 @@ pub const RirRenderer = struct {
         self.indent_level -= 1;
     }
 
-    fn float_instr(self: *Self, value: f64) Error!void {
+    fn float_instr(self: *Self, instr: usize) Error!void {
+        const value = self.instr_data[instr].Float;
+
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Float {d}]\n", .{value});
         self.instr_idx += 1;
     }
 
-    fn identifier(self: *Self, variable: Instruction.Variable) Error!void {
+    fn fn_declaration(self: *Self, intr: usize) Error!void {
+
+    }
+
+    fn identifier(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Variable;
+
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Variable index: {}, scope: {s}]\n", .{
-            variable.index, @tagName(variable.scope),
+            data.index, @tagName(data.scope),
         });
         self.instr_idx += 1;
     }
 
-    fn int_instr(self: *Self, value: i64) Error!void {
+    fn int_instr(self: *Self, instr: usize) Error!void {
+        const value = self.instr_data[instr].Int;
+
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Int {}]\n", .{value});
         self.instr_idx += 1;
     }
 
-    fn string_instr(self: *Self, index: usize) Error!void {
-        try self.indent();
+    fn string_instr(self: *Self, instr: usize) Error!void {
+        const index = self.instr_data[instr].Id;
         var writer = self.tree.writer();
+
+        try self.indent();
         try writer.print("[String {s}]\n", .{self.interner.get_key(index).?});
         self.instr_idx += 1;
     }
 
-    fn unary(self: *Self, tag: Instruction.UnaryTag) Error!void {
-        try self.indent();
+    fn unary(self: *Self, instr: usize) Error!void {
+        const op = self.instr_data[instr].Unary;
         var writer = self.tree.writer();
+
+        try self.indent();
         self.instr_idx += 1;
-        try writer.print("[Unary {s}]\n", .{@tagName(tag)});
+        try writer.print("[Unary {s}]\n", .{@tagName(op)});
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 
-    fn var_decl(self: *Self, variable: Instruction.Variable) Error!void {
+    fn var_decl(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Variable;
         var writer = self.tree.writer();
+
+        try self.indent();
         try writer.print("[Declare variable index: {}, scope: {s}]\n", .{
-            variable.index, @tagName(variable.scope),
+            data.index, @tagName(data.scope),
         });
+
+        self.indent_level += 1;
+        self.instr_idx += 1;
+        try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
     }
 
     fn while_instr(self: *Self) Error!void {
@@ -174,12 +270,12 @@ pub const RirRenderer = struct {
         try self.tree.appendSlice("[While]\n");
         self.instr_idx += 1;
         try self.indent();
-        try self.tree.appendSlice("condition\n");
+        try self.tree.appendSlice("condition:\n");
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
         try self.indent();
-        try self.tree.appendSlice("body\n");
+        try self.tree.appendSlice("body:\n");
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
