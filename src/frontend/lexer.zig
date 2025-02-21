@@ -1,5 +1,4 @@
 const std = @import("std");
-std.zig.AstGen
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;

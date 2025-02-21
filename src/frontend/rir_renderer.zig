@@ -73,10 +73,12 @@ pub const RirRenderer = struct {
             .Block => self.block(index),
             .Bool => self.bool_instr(index),
             .Cast => self.cast(index),
-            .Discard => try self.discard(),
+            .Discard => self.discard(),
             .Float => self.float_instr(index),
+            .FnCall => self.fn_call(index),
             .FnDecl => self.fn_declaration(index),
             .Identifier => self.identifier(index),
+            .If => self.if_instr(index),
             .Int => self.int_instr(index),
             .Null => {
                 try self.indent();
@@ -91,6 +93,7 @@ pub const RirRenderer = struct {
                 try self.parse_instr(self.instr_idx);
                 self.indent_level -= 1;
             },
+            .Return => self.return_instr(index),
             .Sentinel => unreachable,
             .String => self.string_instr(index),
             .Unary => self.unary(index),
@@ -205,8 +208,50 @@ pub const RirRenderer = struct {
         self.instr_idx += 1;
     }
 
-    fn fn_declaration(self: *Self, intr: usize) Error!void {
+    fn fn_call(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].FnCall;
+        self.instr_idx += 1;
 
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Fn call arity: {}, builtin: {}]\n", .{
+            data.arity, data.builtin,
+        });
+
+        if (data.arity > 0) {
+            try self.indent();
+            try self.tree.appendSlice("- args:\n");
+            self.indent_level += 1;
+
+            for (0..data.arity) |_| {
+                try self.parse_instr(self.instr_idx);
+            }
+
+            self.indent_level -= 1;
+        }
+    }
+
+    fn fn_declaration(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].FnDecl;
+        self.instr_idx += 1;
+
+        const fn_var = self.instr_data[self.instr_idx].Variable;
+        self.instr_idx += 1;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Fn declaration index: {}, scope: {s}, return kind: {s}]\n", .{
+            fn_var.index, @tagName(fn_var.scope), @tagName(data.return_kind),
+        });
+
+        try self.indent();
+        try self.tree.appendSlice("- body:\n");
+        self.indent_level += 1;
+
+        for (0..data.body_len) |_| {
+            try self.parse_instr(self.instr_idx);
+        }
+        self.indent_level -= 1;
     }
 
     fn identifier(self: *Self, instr: usize) Error!void {
@@ -220,6 +265,38 @@ pub const RirRenderer = struct {
         self.instr_idx += 1;
     }
 
+    fn if_instr(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].If;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[If cast: {s}, has else: {}]\n", .{
+            @tagName(data.cast),
+            data.has_else,
+        });
+        self.instr_idx += 1;
+
+        try self.indent();
+        try self.tree.appendSlice("- condition:\n");
+        self.indent_level += 1;
+        try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
+
+        try self.indent();
+        try self.tree.appendSlice("- then:\n");
+        self.indent_level += 1;
+        try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
+
+        if (data.has_else) {
+            try self.indent();
+            try self.tree.appendSlice("- else:\n");
+            self.indent_level += 1;
+            try self.parse_instr(self.instr_idx);
+            self.indent_level -= 1;
+        }
+    }
+
     fn int_instr(self: *Self, instr: usize) Error!void {
         const value = self.instr_data[instr].Int;
 
@@ -227,6 +304,21 @@ pub const RirRenderer = struct {
         var writer = self.tree.writer();
         try writer.print("[Int {}]\n", .{value});
         self.instr_idx += 1;
+    }
+
+    fn return_instr(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].Return;
+        self.instr_idx += 1;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Return expr: {}]\n", .{data});
+
+        if (data) {
+            self.indent_level += 1;
+            try self.parse_instr(self.instr_idx);
+            self.indent_level -= 1;
+        }
     }
 
     fn string_instr(self: *Self, instr: usize) Error!void {
@@ -270,12 +362,12 @@ pub const RirRenderer = struct {
         try self.tree.appendSlice("[While]\n");
         self.instr_idx += 1;
         try self.indent();
-        try self.tree.appendSlice("condition:\n");
+        try self.tree.appendSlice("- condition:\n");
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
         try self.indent();
-        try self.tree.appendSlice("body:\n");
+        try self.tree.appendSlice("- body:\n");
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;

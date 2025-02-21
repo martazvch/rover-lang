@@ -19,7 +19,7 @@ pub const AnalyzerMsg = union(enum) {
     NonBoolCond: struct { what: []const u8, found: []const u8 },
     NonVoidWhile: struct { found: []const u8 },
     NoMain,
-    // ReturnOutsideFn,
+    ReturnOutsideFn,
     TooManyTypes,
     TypeMismatch: struct { expect: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
@@ -61,7 +61,7 @@ pub const AnalyzerMsg = union(enum) {
             .NonVoidWhile => writer.print("'while' statements can't return a value", .{}),
             .NoMain => writer.print("no main function found", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
-            // .ReturnOutsideFn => writer.print("return outside of a function", .{}),
+            .ReturnOutsideFn => writer.print("return outside of a function", .{}),
             .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
             .TypeMismatch => |e| writer.print(
                 "type mismatch, expect a '{s}' but found '{s}' ",
@@ -103,7 +103,7 @@ pub const AnalyzerMsg = union(enum) {
             .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
             .NoMain => writer.print("in this file", .{}),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
-            // .ReturnOutsideFn => writer.print("here", .{}),
+            .ReturnOutsideFn => writer.print("here", .{}),
             .TooManyTypes => writer.print("this is the exceding one", .{}),
             .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
@@ -160,11 +160,11 @@ pub const AnalyzerMsg = union(enum) {
             .NonBoolCond => |e| writer.print("'{s}' conditions can only be boolean type", .{e.what}),
             .NonVoidWhile => writer.print("use '_' to ignore the value or modify the body", .{}),
             .NoMain => writer.print("add a 'main' function that will be called automatically at execution", .{}),
-            // .ReturnOutsideFn => writer.print(
-            //     "return statements are only allow to exit a function's body." ++
-            //         "If in loops, use 'break' otherwise remove the return",
-            //     .{},
-            // ),
+            .ReturnOutsideFn => writer.print(
+                "return statements are only allow to exit a function's body." ++
+                    "If in loops, use 'break' otherwise remove the return",
+                .{},
+            ),
             .TooManyTypes => writer.print(
                 "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",
                 .{},

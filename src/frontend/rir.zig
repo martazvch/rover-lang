@@ -1,5 +1,5 @@
 pub const Scope = enum(u2) { Builtin, Global, Local };
-pub const ReturnKind = enum { Explicit, ImplicitValue, ImplicitVoid };
+pub const ReturnKind = enum(u2) { Explicit, ImplicitValue, ImplicitVoid };
 
 // pub const Instruction = union(enum) {
 //     Assignment: Variable,
@@ -73,11 +73,14 @@ pub const Instruction = struct {
         Cast,
         Discard,
         Float,
+        FnCall,
         FnDecl,
         Identifier,
+        If,
         Int,
         Null,
         Print,
+        Return,
         Sentinel,
         String,
         Unary,
@@ -91,9 +94,12 @@ pub const Instruction = struct {
         Bool: bool,
         CastTo: CastTo,
         Float: f64,
-        FnDecl: ReturnKind,
+        FnCall: FnCall,
+        FnDecl: FnDecl,
         Id: usize,
+        If: If,
         Int: i64,
+        Return: bool,
         Unary: Unary,
         Variable: Variable,
     };
@@ -133,6 +139,14 @@ pub const Instruction = struct {
 
     pub const Block = packed struct { pop_count: u61, is_expr: bool };
     pub const CastTo = enum(u1) { Float };
+    pub const If = struct {
+        cast: Cast,
+        has_else: bool,
+
+        pub const Cast = enum(u2) { Then, Else, None };
+    };
+    pub const FnCall = struct { arity: u8, builtin: bool };
+    pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const Unary = enum(u1) { Minus, Bang };
     pub const Variable = packed struct { index: u62, scope: Scope };
 };
@@ -144,4 +158,5 @@ comptime {
     // @compileLog(@sizeOf(Instruction.Tag));
     // @compileLog(@sizeOf(Instruction.Binop));
     // @compileLog(@sizeOf(Instruction.Unary));
+    // @compileLog(@sizeOf(Instruction.If));
 }

@@ -326,8 +326,9 @@ pub const AstPrinter = struct {
             self.indent_level += 1;
             try self.parse_node(self.node_idx);
             self.indent_level -= 1;
-        }
+        } else self.node_idx += 1;
 
+        try self.indent();
         try self.tree.appendSlice("]\n");
     }
 

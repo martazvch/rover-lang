@@ -1,45 +1,60 @@
 //fn main() {
-    _ = 56
-    _ = true
-    _ = "tre"
-    _ = (5)
-    print "oui"
-    _ = -5
-    _ = 1+1
-    _ = true or false
-    _ = 1 > 4
-    _ = 5 >= 56
-    _ = true == not false
-    _ = 1 == 2.
-    _ = "str" + "other"
-    _ = 3 * "oui"
-    _ = "non" * 5
+    // _ = 56
+    // _ = true
+    // _ = "tre"
+    // _ = (5)
+    // print "oui"
+    // _ = -5
+    // _ = 1+1
+    // _ = true or false
+    // _ = 1 > 4
+    // _ = 5 >= 56
+    // _ = true == not false
+    // _ = 1 == 2.
+    // _ = "str" + "other"
+    // _ = 3 * "oui"
+    // _ = "non" * 5
+// 
+    // var a
+    // var b: int
+    // var c = 1
+    // var d:float = 1 * 5.
+// 
+    // {}
+    // {
+    //     _ = 5 + 4
+    // }
+    // { var tmp = 5 }
+    // var from_block = {5}
+// 
+    // {
+    //     var a = 4
+    //     var b: float = a
+    //     // print "coucou"
+    //     // var c
+    //     // c = b
+    // }
+// 
+    // while true or false {
+    //     var a = 4
+    //     print a
+    //     while true {
+    //         var c = "str"
+    //     }
+    // }
 
-    var a
-    var b: int
-    var c = 1
-    var d:float = 1 * 5.
-
-    {}
-    {
-        _ = 5 + 4
+    //fn add() {}
+    fn sub(a: float) -> float {
+        var tmp = 5
+        return 67. + 5
     }
-    { var tmp = 5 }
-    var from_block = {5}
 
-    {
-        var a = 4
-        var b: float = a
-        // print "coucou"
-        // var c
-        // c = b
+    if true and false {
+        var abc = "st"
+        print 4
+    } else {
+        var abc = 4
     }
 
-    while true or false {
-        var a = 4
-        print a
-        while true {
-            var c = "str"
-        }
-    }
+    _ = sub(sub(2))
 //}

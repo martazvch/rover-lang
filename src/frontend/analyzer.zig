@@ -281,7 +281,7 @@ pub const Analyzer = struct {
             },
             .Block => .{
                 .start = self.token_spans[self.node_mains[node]].start,
-                .end = self.to_span(node + self.node_data[node]).end,
+                .end = self.token_spans[self.node_mains[node]].start + 1,
             },
             .Bool, .Float, .Identifier, .Int, .Null, .String => self.token_spans[self.node_mains[node]],
             .Discard => .{
@@ -289,7 +289,9 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
             .Empty => unreachable,
-            .FnDecl, .FnCall => self.token_spans[self.node_mains[node]],
+            // TODO: real spans, here we underline only the function's name
+            .FnDecl => self.token_spans[self.node_mains[node]],
+            .FnCall => self.token_spans[self.node_mains[node + 1]],
             .Grouping => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_data[node]].end,
@@ -303,10 +305,8 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.to_span(node + 1).end,
             },
-            .Return => .{
-                .start = self.token_spans[self.node_mains[node]].start,
-                .end = self.token_spans[self.node_mains[node + 1]].end,
-            },
+            //TODO: real span with return's expression
+            .Return => self.token_spans[self.node_mains[node]],
             .Type => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -530,17 +530,17 @@ pub const Analyzer = struct {
             .While => try self.while_stmt(),
             .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
-            // .FnCall => |*e| self.fn_call(e),
+            .FnCall => final = try self.fn_call(node),
             .Grouping => {
                 self.node_idx += 1;
                 final = try self.analyze_node(self.node_idx);
             },
             .Identifier => final = (try self.identifier(node, true)).type_,
-            // .If => |*e| self.if_expr(e),
+            .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(),
-            // .Return => |*e| self.return_expr(e),
+            .Return => final = try self.return_expr(node),
             .String => final = try self.string(node),
             .Unary => final = try self.unary(node),
             .VarDecl => try self.var_declaration(node),
@@ -887,28 +887,66 @@ pub const Analyzer = struct {
         return Float;
     }
 
+    fn fn_call(self: *Self, node: Node.Index) Error!Type {
+        const arity = self.node_data[node];
+        self.node_idx += 1;
+
+        // Resolve the callee
+        const type_value = try self.expect_type_kind(self.node_idx, TypeSys.Fn);
+        const type_info = self.type_manager.type_infos.items[type_value].Fn;
+
+        if (type_info.arity != arity) {
+            return self.err(
+                try AnalyzerMsg.wrong_args_count(type_info.arity, arity),
+                self.to_span(self.node_idx),
+            );
+        }
+
+        _ = try self.add_instr(.{ .tag = .FnCall, .data = .{ .FnCall = .{
+            .arity = @intCast(arity),
+            .builtin = type_info.builtin,
+        } } });
+
+        for (0..arity) |i| {
+            const arg_idx = self.node_idx;
+            const arg_type = try self.analyze_node(arg_idx);
+
+            if (arg_type != type_info.params[i]) {
+                // If it's an implicit cast between int and float, save the
+                // argument indices for compiler. Otherwise, error
+                if (type_info.params[i] == Float and arg_type == Int) {
+                    _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
+                } else return self.err(
+                    .{ .TypeMismatch = .{
+                        .expect = self.type_manager.str(type_info.params[i]),
+                        .found = self.type_manager.str(arg_type),
+                    } },
+                    self.to_span(arg_idx),
+                );
+            }
+        }
+
+        return type_info.return_type;
+    }
+
     fn fn_declaration(self: *Self, node: Node.Index) Error!void {
-        // If we find a main function in global scope, we save it to analyze last
-        // If there is another global scoped main function, it's going to be analyzed
-        // and when we analyze the first one there will be an error anyway
-        // NOTE: string comparison is slow, add a field in Ast node?
         const name_idx = try self.interner.intern(self.source_from_node(node));
 
         if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
             self.main = node;
         }
 
-        // const idx = try self.reserve_slot();
-
         // Check in current scope
         const arity = self.node_data[node];
-        const return_type = try self.check_name_and_type(name_idx, node, node + arity);
-        // const return_type = try self.check_ident_and_type(stmt.name, stmt.return_type);
+        const return_type = try self.check_name_and_type(name_idx, node, node + 1 + arity * 2);
+        const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined });
 
         // We declare before body for recursion. We need to correct type to check those recursions
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
         const fn_var = try self.declare_variable(name_idx, fn_type, true);
+
+        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } });
 
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
@@ -960,6 +998,9 @@ pub const Analyzer = struct {
 
             _ = try self.declare_variable(param_idx, param_type, true);
             params_type[i] = param_type;
+
+            // Skips param's type
+            self.node_idx += 1;
         }
 
         // Set all the informations now that we have every thing
@@ -968,6 +1009,9 @@ pub const Analyzer = struct {
             .params = params_type,
             .return_type = return_type,
         } });
+
+        // We skip the return type, it has already been analyzed
+        self.node_idx += 1;
 
         // ------
         //  Body
@@ -979,9 +1023,12 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
 
-        const length = self.node_data[node];
+        const block_idx = self.node_idx;
+        const length = self.node_data[block_idx];
 
         // We don't use block because we don't want to emit extra data from the block
+        self.node_idx += 1;
+
         for (0..length) |i| {
             // If previous statement returned, it's only dead code now
             if (prev_state.returns) {
@@ -1014,7 +1061,7 @@ pub const Analyzer = struct {
                     .expect = self.type_manager.str(return_type),
                     .found = self.type_manager.str(body_type),
                 } },
-                self.to_span(self.node_idx),
+                self.to_span(block_idx),
             );
         }
 
@@ -1034,15 +1081,10 @@ pub const Analyzer = struct {
         else
             .ImplicitValue;
 
-        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } });
-        _ = try self.add_instr(.{ .tag = .FnDecl, .data = .{ .FnDecl = return_kind } });
-
-        // self.analyzed_stmts.items[idx] = .{
-        //     .FnDecl = .{
-        //         .variable = fn_var,
-        //         .return_kind = return_kind,
-        //     },
-        // };
+        self.instructions.items(.data)[fn_idx] = .{ .FnDecl = .{
+            .body_len = length,
+            .return_kind = return_kind,
+        } };
     }
 
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
@@ -1105,6 +1147,99 @@ pub const Analyzer = struct {
         );
     }
 
+    fn if_expr(self: *Self, node: Node.Index) Error!Type {
+        const idx = try self.add_instr(.{ .tag = .If, .data = undefined });
+        self.node_idx += 1;
+        var data: Instruction.If = .{ .cast = .None, .has_else = false };
+
+        const cond_type = try self.analyze_node(self.node_idx);
+
+        if (cond_type != Bool) return self.err(
+            .{ .NonBoolCond = .{
+                .what = "if",
+                .found = self.type_manager.str(cond_type),
+            } },
+            self.to_span(node),
+        );
+
+        var then_return: bool = false;
+        var else_return: bool = false;
+
+        const then_idx = self.node_idx;
+        const then_type = try self.analyze_node(self.node_idx);
+        var final_type = then_type;
+
+        // State managment
+        const state = self.last_state();
+
+        // If we hit a return, we transfert it first to the then branch
+        if (state.returns) {
+            // Reset return  for else branch
+            state.returns = false;
+            then_return = true;
+            // As we exit scope, we don't return any type
+            final_type = Void;
+        }
+
+        var else_type: Type = Void;
+        const else_idx = self.node_idx;
+
+        if (self.node_tags[else_idx] != .Empty) {
+            data.has_else = true;
+
+            else_type = try self.analyze_node(else_idx);
+
+            // If it returns
+            if (state.returns) {
+                else_return = true;
+                // If not then, unmark as globally returning from scope
+                if (!then_return) state.returns = false;
+            } else if (then_return) {
+                // If else only then branch returns, final_type becomes else branch
+                final_type = else_type;
+            }
+
+            // Type coherence. If branches don't exit scope and branches have
+            // diffrent types
+            if (!then_return and !else_return and then_type != else_type) {
+                if (then_type == Int and else_type == Float) {
+                    data.cast = .Then;
+
+                    try self.warn(
+                        AnalyzerMsg.implicit_cast("then branch", "float"),
+                        self.to_span(then_idx),
+                    );
+                } else if (then_type == Float and else_type == Int) {
+                    data.cast = .Else;
+
+                    // Safe unsafe access, if there is a non void type
+                    // there is an else body
+                    try self.warn(
+                        AnalyzerMsg.implicit_cast("else branch", "float"),
+                        self.to_span(else_idx),
+                    );
+                } else {
+                    return self.err(
+                        .{ .IncompatibleIfType = .{
+                            .found1 = self.type_manager.str(then_type),
+                            .found2 = self.type_manager.str(else_type),
+                        } },
+                        self.to_span(node),
+                    );
+                }
+            }
+        } else if (then_type != Void and !state.allow_partial) {
+            return self.err(
+                .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
+                self.to_span(node),
+            );
+        }
+
+        self.instructions.items(.data)[idx] = .{ .If = data };
+
+        return final_type;
+    }
+
     fn int_lit(self: *Self, node: Node.Index) !Type {
         const value = std.fmt.parseInt(isize, self.source_from_node(node), 10) catch blk: {
             // TODO: error handling, only one possible it's invalid char
@@ -1129,6 +1264,35 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .Print, .data = undefined });
         self.node_idx += 1;
         _ = try self.analyze_node(self.node_idx);
+    }
+
+    fn return_expr(self: *Self, node: Node.Index) Error!Type {
+        self.node_idx += 1;
+        var state = self.last_state();
+
+        if (state.fn_type == Void) {
+            return self.err(.ReturnOutsideFn, self.to_span(node));
+        }
+
+        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = false } });
+
+        const return_type = if (self.node_tags[self.node_idx] != .Empty) blk: {
+            self.instructions.items(.data)[idx].Return = true;
+            break :blk try self.analyze_node(self.node_idx);
+        } else Void;
+
+        if (state.fn_type != return_type) {
+            return self.err(
+                .{ .IncompatibleFnType = .{
+                    .expect = self.type_manager.str(state.fn_type),
+                    .found = self.type_manager.str(return_type),
+                } },
+                self.to_span(node),
+            );
+        }
+
+        state.returns = true;
+        return return_type;
     }
 
     fn string(self: *Self, node: Node.Index) !Type {
@@ -1619,6 +1783,21 @@ pub const Analyzer = struct {
     // }
 
     /// Checks if an expression if of a certain type kind and returns the associated value or error
+    fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.Value {
+        const expr_type = try self.analyze_node(node);
+
+        return if (TypeSys.is(expr_type, kind))
+            TypeSys.get_value(expr_type)
+        else
+            self.err(
+                .{ .TypeMismatch = .{
+                    .expect = TypeSys.str_kind(kind),
+                    .found = TypeSys.str_kind(TypeSys.get_kind(expr_type)),
+                } },
+                self.to_span(node),
+            );
+    }
+
     // fn expect_type_kind(self: *Self, expr: *const Expr, kind: TypeSys.Kind) !TypeSys.Value {
     //     const expr_type = try self.expression(expr);
     //
@@ -1634,43 +1813,43 @@ pub const Analyzer = struct {
     //         );
     // }
 
-    fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
-        // Resolve the callee
-        const type_value = try self.expect_type_kind(expr.callee, TypeSys.Fn);
-        const type_info = self.type_manager.type_infos.items[type_value].Fn;
-
-        if (type_info.arity != expr.arity) {
-            return self.err(
-                try AnalyzerMsg.wrong_args_count(type_info.arity, expr.arity),
-                expr.span,
-            );
-        }
-
-        const idx = try self.reserve_slot();
-        var casts = try std.BoundedArray(usize, 256).init(0);
-
-        for (0..expr.arity) |i| {
-            const arg_type = try self.expression(expr.args[i]);
-
-            if (arg_type != type_info.params[i]) {
-                // If it's an implicit cast between int and float, save the
-                // argument indices for compiler. Otherwise, error
-                if (type_info.params[i] == Float and arg_type == Int) {
-                    casts.appendAssumeCapacity(i);
-                } else return self.err(
-                    .{ .TypeMismatch = .{
-                        .expect = self.type_manager.str(type_info.params[i]),
-                        .found = self.type_manager.str(arg_type),
-                    } },
-                    expr.args[i].span(),
-                );
-            }
-        }
-
-        self.analyzed_stmts.items[idx] = .{ .FnCall = .{ .casts = casts, .builtin = type_info.builtin } };
-
-        return type_info.return_type;
-    }
+    // fn fn_call(self: *Self, expr: *const Ast.FnCall) Error!Type {
+    //     // Resolve the callee
+    //     const type_value = try self.expect_type_kind(expr.callee, TypeSys.Fn);
+    //     const type_info = self.type_manager.type_infos.items[type_value].Fn;
+    //
+    //     if (type_info.arity != expr.arity) {
+    //         return self.err(
+    //             try AnalyzerMsg.wrong_args_count(type_info.arity, expr.arity),
+    //             expr.span,
+    //         );
+    //     }
+    //
+    //     const idx = try self.reserve_slot();
+    //     var casts = try std.BoundedArray(usize, 256).init(0);
+    //
+    //     for (0..expr.arity) |i| {
+    //         const arg_type = try self.expression(expr.args[i]);
+    //
+    //         if (arg_type != type_info.params[i]) {
+    //             // If it's an implicit cast between int and float, save the
+    //             // argument indices for compiler. Otherwise, error
+    //             if (type_info.params[i] == Float and arg_type == Int) {
+    //                 casts.appendAssumeCapacity(i);
+    //             } else return self.err(
+    //                 .{ .TypeMismatch = .{
+    //                     .expect = self.type_manager.str(type_info.params[i]),
+    //                     .found = self.type_manager.str(arg_type),
+    //                 } },
+    //                 expr.args[i].span(),
+    //             );
+    //         }
+    //     }
+    //
+    //     self.analyzed_stmts.items[idx] = .{ .FnCall = .{ .casts = casts, .builtin = type_info.builtin } };
+    //
+    //     return type_info.return_type;
+    // }
 
     // fn grouping(self: *Self, expr: *const Ast.Grouping) Error!Type {
     //     return self.expression(expr.expr);
@@ -1810,24 +1989,24 @@ pub const Analyzer = struct {
     //     return final_type;
     // }
 
-    fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
-        const return_type = if (expr.expr) |val| try self.expression(val) else Void;
-        var state = self.last_state();
-
-        if (state.fn_type != return_type) {
-            return self.err(
-                .{ .IncompatibleFnType = .{
-                    .expect = self.type_manager.str(state.fn_type),
-                    .found = self.type_manager.str(return_type),
-                } },
-                expr.span,
-            );
-        }
-
-        state.returns = true;
-        return return_type;
-    }
-
+    // fn return_expr(self: *Self, expr: *const Ast.Return) Error!Type {
+    //     const return_type = if (expr.expr) |val| try self.expression(val) else Void;
+    //     var state = self.last_state();
+    //
+    //     if (state.fn_type != return_type) {
+    //         return self.err(
+    //             .{ .IncompatibleFnType = .{
+    //                 .expect = self.type_manager.str(state.fn_type),
+    //                 .found = self.type_manager.str(return_type),
+    //             } },
+    //             expr.span,
+    //         );
+    //     }
+    //
+    //     state.returns = true;
+    //     return return_type;
+    // }
+    //
     // fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
     //     const idx = try self.reserve_slot();
     //     var unary_extra: AnalyzedAst.Unary = .{ .type_ = Null };
