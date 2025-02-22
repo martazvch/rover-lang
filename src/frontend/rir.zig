@@ -1,4 +1,5 @@
 pub const Scope = enum(u2) { Builtin, Global, Local };
+pub const Type = enum(u2) { Float, Int };
 pub const ReturnKind = enum(u2) { Explicit, ImplicitValue, ImplicitVoid };
 
 // pub const Instruction = union(enum) {
@@ -64,6 +65,7 @@ pub const ReturnKind = enum(u2) { Explicit, ImplicitValue, ImplicitVoid };
 pub const Instruction = struct {
     tag: Tag,
     data: Data = undefined,
+    start: usize = 0,
 
     pub const Tag = enum(u8) {
         Assignment,
@@ -75,6 +77,7 @@ pub const Instruction = struct {
         Float,
         FnCall,
         FnDecl,
+        FnName,
         Identifier,
         If,
         Imported,
@@ -82,7 +85,6 @@ pub const Instruction = struct {
         Null,
         Print,
         Return,
-        Sentinel,
         String,
         Unary,
         Use,
@@ -91,10 +93,11 @@ pub const Instruction = struct {
     };
 
     pub const Data = union {
+        Assignment: Assignment,
         Binop: Binop,
         Block: Block,
         Bool: bool,
-        CastTo: CastTo,
+        CastTo: Type,
         Float: f64,
         FnCall: FnCall,
         FnDecl: FnDecl,
@@ -105,6 +108,7 @@ pub const Instruction = struct {
         Return: bool,
         Unary: Unary,
         Use: u64,
+        VarDecl: VarDecl,
         Variable: Variable,
     };
 
@@ -120,8 +124,10 @@ pub const Instruction = struct {
             And,
             DivFloat,
             DivInt,
+            EqBool,
             EqFloat,
             EqInt,
+            EqStr,
             GeFloat,
             GeInt,
             GtFloat,
@@ -133,37 +139,48 @@ pub const Instruction = struct {
             MulFloat,
             MulInt,
             MulStr,
+            NeBool,
             NeFloat,
             NeInt,
+            NeStr,
             Or,
             SubFloat,
             SubInt,
         };
     };
 
-    pub const Block = packed struct { pop_count: u61, is_expr: bool };
-    pub const CastTo = enum(u1) { Float };
+    pub const Assignment = struct { variable: Variable, cast: bool };
+    pub const Block = packed struct { length: usize, pop_count: u63, is_expr: bool };
+    pub const FnCall = struct { arity: u8, builtin: bool };
+    pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
         cast: Cast,
         has_else: bool,
 
         pub const Cast = enum(u2) { Then, Else, None };
     };
-    pub const FnCall = struct { arity: u8, builtin: bool };
-    pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
-    pub const Unary = enum(u1) { Minus, Bang };
     pub const Imported = struct { index: u64, variable: Variable };
+    pub const Unary = packed struct {
+        op: Op,
+        type_: Type,
+
+        pub const Op = enum(u1) { Minus, Bang };
+    };
+    pub const VarDecl = struct { variable: Variable, cast: bool };
     pub const Variable = packed struct { index: u62, scope: Scope };
 };
 
 comptime {
     // @compileLog(@sizeOf(Instruction));
     // @compileLog(@sizeOf(Instruction.Data));
-    // @compileLog(@sizeOf(Instruction.Block));
     // @compileLog(@sizeOf(Instruction.Tag));
     // @compileLog(@sizeOf(Instruction.Binop));
-    // @compileLog(@sizeOf(Instruction.Unary));
+    // @compileLog(@sizeOf(Instruction.Block));
+    // @compileLog(@sizeOf(Instruction.FnCall));
+    // @compileLog(@sizeOf(Instruction.FnDecl));
     // @compileLog(@sizeOf(Instruction.If));
     // @compileLog(@sizeOf(Instruction.Imported));
-    // @compileLog(@sizeOf(Instruction.FnCall));
+    // @compileLog(@sizeOf(Instruction.Unary));
+    // @compileLog(@sizeOf(Instruction.Variable));
+    // @compileLog(@sizeOf(Instruction.VarDecl));
 }

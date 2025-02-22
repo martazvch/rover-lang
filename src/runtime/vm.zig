@@ -229,24 +229,23 @@ pub const Vm = struct {
                 },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
                 .Constant => self.stack.push(frame.read_constant()),
-                .DifferentInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
-                .DifferentFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
                 .DefineGlobal => {
                     const idx = frame.read_byte();
                     self.globals[idx] = self.stack.pop();
                 },
-                .DivideFloat => {
+                .DivFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float /= rhs;
                 },
-                .DivideInt => {
+                .DivInt => {
                     const rhs = self.stack.pop().Int;
                     const lhs = self.stack.pop().Int;
                     self.stack.push(Value.int(@divTrunc(lhs, rhs)));
                 },
-                .EqualInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
-                .EqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
-                .EqualStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
+                .EqBool => self.stack.push(Value.bool_(self.stack.pop().Bool == self.stack.pop().Bool)),
+                .EqFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
+                .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
+                .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
                 .False => self.stack.push(Value.bool_(false)),
                 .FnCall => {
                     const args_count = frame.read_byte();
@@ -259,10 +258,10 @@ pub const Vm = struct {
                 // Compiler bug: https://github.com/ziglang/zig/issues/13938
                 .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
                 .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
-                .GreaterInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
-                .GreaterFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
-                .GreaterEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
-                .GreaterEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
+                .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
+                .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
+                .GeFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
+                .GeInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
                 .Jump => {
                     const jump = frame.read_short();
                     frame.ip += jump;
@@ -275,19 +274,19 @@ pub const Vm = struct {
                     const jump = frame.read_short();
                     if (self.stack.peek(0).Bool) frame.ip += jump;
                 },
-                .LessInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
-                .LessFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
-                .LessEqualInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
-                .LessEqualFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
+                .LtFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
+                .LtInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
+                .LeFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
+                .LeInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
                 .Loop => {
                     const jump = frame.read_short();
                     frame.ip -= jump;
                 },
-                .MultiplyFloat => {
+                .MulFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float *= rhs;
                 },
-                .MultiplyInt => {
+                .MulInt => {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int *= rhs;
                 },
@@ -299,6 +298,10 @@ pub const Vm = struct {
                     self.stack.top -= args_count + 1;
                     self.stack.push(result);
                 },
+                .NeBool => self.stack.push(Value.bool_(self.stack.pop().Bool != self.stack.pop().Bool)),
+                .NeInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
+                .NeFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
+                .NeStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) != self.stack.pop().Obj.as(ObjString))),
                 .NegateFloat => self.stack.peek_ref(0).Float *= -1,
                 .NegateInt => self.stack.peek_ref(0).Int *= -1,
                 .Not => self.stack.peek_ref(0).not(),
@@ -351,11 +354,11 @@ pub const Vm = struct {
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),
                 .StrMulR => try self.str_mul(self.stack.peek_ref(1).Obj.as(ObjString), self.stack.peek_ref(0).Int),
-                .SubtractFloat => {
+                .SubFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float -= rhs;
                 },
-                .SubtractInt => {
+                .SubInt => {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int -= rhs;
                 },

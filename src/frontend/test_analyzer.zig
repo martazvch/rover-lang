@@ -8,7 +8,7 @@ const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const Tester = @import("../tester.zig");
 const GenTestData = Tester.GenTestData;
 const Config = Tester.Config;
-const AnalyzedAstPrinter = @import("analyzed_ast_print.zig").AnalyzedAstPrinter;
+const RirRenderer = @import("rir_renderer.zig").RirRenderer;
 
 pub fn get_test_data(
     source: [:0]const u8,
@@ -22,14 +22,18 @@ pub fn get_test_data(
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
-    try parser.parse(source, lexer.tokens.items);
+
+    try parser.parse(
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+    );
 
     var analyzer: Analyzer = undefined;
     try analyzer.init(allocator, false);
     defer analyzer.deinit();
 
-    try analyzer.analyze(parser.stmts.items, source);
-
+    try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
     var msgs = ArrayList(AnalyzerMsg).init(allocator);
 
     for (analyzer.errs.items) |err| {
@@ -48,9 +52,16 @@ pub fn get_test_data(
         }
     }
 
-    var printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);
-    defer printer.deinit();
-    try printer.parse(source, analyzer.analyzed_stmts.items);
+    var rir_renderer = RirRenderer.init(
+        allocator,
+        source,
+        analyzer.instructions.items(.tag),
+        analyzer.instructions.items(.data),
+        &analyzer.interner,
+    );
+    defer rir_renderer.deinit();
 
-    return .{ .expect = try printer.tree.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
+    try rir_renderer.parse_ir();
+
+    return .{ .expect = try rir_renderer.tree.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
 }

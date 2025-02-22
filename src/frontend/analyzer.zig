@@ -338,9 +338,13 @@ pub const Analyzer = struct {
         return self.interner.get_key(idx).?;
     }
 
-    /// Adds a new node and returns its index
-    fn add_instr(self: *Self, instr: Instruction) !Node.Index {
-        try self.instructions.append(self.allocator, instr);
+    /// Adds a new instruction and add it's `start` field and returns its index.
+    fn add_instr(self: *Self, instr: Instruction, main: usize) !Node.Index {
+        try self.instructions.append(self.allocator, .{
+            .tag = instr.tag,
+            .data = instr.data,
+            .start = self.token_spans[self.node_mains[main]].start,
+        });
         return self.instructions.len - 1;
     }
 
@@ -543,8 +547,6 @@ pub const Analyzer = struct {
             .Bool => final = try self.bool_lit(node),
             .Discard => try self.discard(node),
             .FnDecl => try self.fn_declaration(node),
-            .Use => try self.use_stmt(node),
-            .While => try self.while_stmt(),
             .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
             .FnCall => final = try self.fn_call(node),
@@ -560,7 +562,9 @@ pub const Analyzer = struct {
             .Return => final = try self.return_expr(node),
             .String => final = try self.string(node),
             .Unary => final = try self.unary(node),
-            .VarDecl => try self.var_declaration(node),
+            .Use => try self.use(node),
+            .VarDecl => try self.var_decl(node),
+            .While => try self.while_stmt(),
             else => unreachable,
         }
 
@@ -573,16 +577,17 @@ pub const Analyzer = struct {
         state.allow_partial = false;
         errdefer state.allow_partial = last;
 
-        self.node_idx += 2;
-        const assigne_idx = self.node_idx - 1;
-        const value_idx = self.node_idx;
+        self.node_idx += 1;
+        var cast = false;
 
-        const idx = try self.add_instr(.{ .tag = .Assignment, .data = undefined });
+        const assigne_idx = self.node_idx;
+        const idx = try self.add_instr(.{ .tag = .Assignment, .data = undefined }, assigne_idx);
 
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
                 const assigne = try self.resolve_identifier(assigne_idx, false);
 
+                const value_idx = self.node_idx;
                 const value_type = try self.analyze_node(value_idx);
                 // Restore state
                 state.allow_partial = last;
@@ -597,7 +602,11 @@ pub const Analyzer = struct {
                 } else if (assigne.type_ != value_type) {
                     // One case in wich we can coerce; int -> float
                     if (assigne.type_ == Float and value_type == Int) {
-                        _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
+                        cast = true;
+                        _ = try self.add_instr(
+                            .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
+                            assigne_idx,
+                        );
                     } else {
                         return self.err(
                             .{ .InvalidAssignType = .{
@@ -611,9 +620,12 @@ pub const Analyzer = struct {
 
                 if (!assigne.initialized) assigne.initialized = true;
 
-                self.instructions.items(.data)[idx] = .{ .Variable = .{
-                    .index = @intCast(assigne.index),
-                    .scope = if (assigne.depth > 0) .Local else .Global,
+                self.instructions.items(.data)[idx] = .{ .Assignment = .{
+                    .variable = .{
+                        .index = @intCast(assigne.index),
+                        .scope = if (assigne.depth > 0) .Local else .Global,
+                    },
+                    .cast = cast,
                 } };
             },
             // Later, manage member, pointer, ...
@@ -623,7 +635,7 @@ pub const Analyzer = struct {
 
     fn binop(self: *Self, node: Node.Index) Error!Type {
         const op = self.node_tags[node];
-        const idx = try self.add_instr(.{ .tag = .Binop });
+        const idx = try self.add_instr(.{ .tag = .Binop }, node);
 
         self.node_idx += 1;
         const lhs_index = self.node_idx;
@@ -674,6 +686,14 @@ pub const Analyzer = struct {
         switch (op) {
             // Arithmetic binop
             .Add, .Div, .Mul, .Sub => {
+                switch (op) {
+                    .Add => data.op = .AddFloat,
+                    .Div => data.op = .DivFloat,
+                    .Mul => data.op = .MulFloat,
+                    .Sub => data.op = .SubFloat,
+                    else => unreachable,
+                }
+
                 switch (lhs) {
                     Float => {
                         switch (rhs) {
@@ -688,14 +708,6 @@ pub const Analyzer = struct {
                             },
                             else => unreachable,
                         }
-
-                        switch (op) {
-                            .Add => data.op = .AddFloat,
-                            .Div => data.op = .DivFloat,
-                            .Mul => data.op = .MulFloat,
-                            .Sub => data.op = .SubFloat,
-                            else => unreachable,
-                        }
                     },
                     Int => {
                         switch (rhs) {
@@ -708,22 +720,19 @@ pub const Analyzer = struct {
                                 data.cast = .Lhs;
                                 res = Float;
                             },
-                            Int => {},
-                            else => unreachable,
-                        }
-
-                        switch (op) {
-                            .Add => data.op = .AddInt,
-                            .Div => data.op = .DivInt,
-                            .Mul => data.op = .MulInt,
-                            .Sub => data.op = .SubInt,
+                            Int => switch (op) {
+                                .Add => data.op = .AddInt,
+                                .Div => data.op = .DivInt,
+                                .Mul => data.op = .MulInt,
+                                .Sub => data.op = .SubInt,
+                                else => unreachable,
+                            },
                             else => unreachable,
                         }
                     },
                     else => unreachable,
                 }
             },
-
             .Eq, .Ne => {
                 // If different value types
                 if (lhs != rhs) {
@@ -738,12 +747,6 @@ pub const Analyzer = struct {
 
                             try self.warn(.FloatEqualCast, self.to_span(rhs_index));
                         }
-
-                        switch (op) {
-                            .Eq => data.op = .EqFloat,
-                            .Ne => data.op = .NeFloat,
-                            else => unreachable,
-                        }
                     } else {
                         return self.err(
                             AnalyzerMsg.invalid_cmp(
@@ -754,26 +757,39 @@ pub const Analyzer = struct {
                         );
                     }
                 } else {
-                    // Check for unsafe float comparisons
+                    // Check for unsafe float comparisons or int comparison
                     if (lhs == Float) {
                         try self.warn(.FloatEqual, self.to_span(node));
-
-                        switch (op) {
-                            .Eq => data.op = .EqFloat,
-                            .Ne => data.op = .NeFloat,
-                            else => unreachable,
-                        }
-                    } else switch (op) {
-                        .Eq => data.op = .EqInt,
-                        .Ne => data.op = .NeInt,
-                        else => unreachable,
                     }
                 }
 
+                // TODO: Error handling for non int, float and str
+                switch (op) {
+                    .Eq => data.op = switch (lhs) {
+                        Bool => .EqBool,
+                        Float => .EqFloat,
+                        Int => .EqInt,
+                        else => .EqStr,
+                    },
+                    .Ne => data.op = switch (lhs) {
+                        Bool => .NeBool,
+                        Float => .NeFloat,
+                        Int => .NeInt,
+                        else => .NeStr,
+                    },
+                    else => unreachable,
+                }
                 res = Bool;
             },
-
             .Ge, .Gt, .Le, .Lt => {
+                switch (op) {
+                    .Ge => data.op = .GeFloat,
+                    .Gt => data.op = .GtFloat,
+                    .Le => data.op = .LeFloat,
+                    .Lt => data.op = .LtFloat,
+                    else => unreachable,
+                }
+
                 switch (lhs) {
                     Float => {
                         switch (rhs) {
@@ -785,13 +801,6 @@ pub const Analyzer = struct {
                             },
                             else => unreachable,
                         }
-                        switch (op) {
-                            .Ge => data.op = .GeFloat,
-                            .Gt => data.op = .GtFloat,
-                            .Le => data.op = .LeFloat,
-                            .Lt => data.op = .LtFloat,
-                            else => unreachable,
-                        }
                     },
                     Int => {
                         switch (rhs) {
@@ -800,15 +809,13 @@ pub const Analyzer = struct {
 
                                 data.cast = .Lhs;
                             },
-                            Int => {},
-                            else => unreachable,
-                        }
-
-                        switch (op) {
-                            .Ge => data.op = .GeInt,
-                            .Gt => data.op = .GtInt,
-                            .Le => data.op = .LeInt,
-                            .Lt => data.op = .LtInt,
+                            Int => switch (op) {
+                                .Ge => data.op = .GeInt,
+                                .Gt => data.op = .GtInt,
+                                .Le => data.op = .LeInt,
+                                .Lt => data.op = .LtInt,
+                                else => unreachable,
+                            },
                             else => unreachable,
                         }
                     },
@@ -817,7 +824,6 @@ pub const Analyzer = struct {
 
                 res = Bool;
             },
-
             // Logical binop
             .And, .Or => {
                 if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
@@ -848,7 +854,7 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
 
-        const idx = try self.add_instr(.{ .tag = .Block, .data = undefined });
+        const idx = try self.add_instr(.{ .tag = .Block, .data = undefined }, node);
 
         var final: Type = Void;
         self.node_idx += 1;
@@ -861,10 +867,8 @@ pub const Analyzer = struct {
             }
         }
 
-        // Sentinel instruction to know where the block ends
-        _ = try self.add_instr(.{ .tag = .Sentinel });
-
         self.instructions.items(.data)[idx] = .{ .Block = .{
+            .length = length,
             .pop_count = @intCast(try self.end_scope()),
             .is_expr = if (final != Void) true else false,
         } };
@@ -875,7 +879,7 @@ pub const Analyzer = struct {
     fn bool_lit(self: *Self, node: Node.Index) !Type {
         _ = try self.add_instr(.{ .tag = .Bool, .data = .{
             .Bool = if (self.token_tags[self.node_mains[node]] == .True) true else false,
-        } });
+        } }, node);
 
         self.node_idx += 1;
 
@@ -883,7 +887,7 @@ pub const Analyzer = struct {
     }
 
     fn discard(self: *Self, node: Node.Index) !void {
-        _ = try self.add_instr(.{ .tag = .Discard, .data = undefined });
+        _ = try self.add_instr(.{ .tag = .Discard, .data = undefined }, node);
 
         self.node_idx += 1;
         const discarded = try self.analyze_node(self.node_idx);
@@ -898,7 +902,10 @@ pub const Analyzer = struct {
             break :blk 0.0;
         };
 
-        _ = try self.add_instr(.{ .tag = .Float, .data = .{ .Float = value } });
+        _ = try self.add_instr(
+            .{ .tag = .Float, .data = .{ .Float = value } },
+            node,
+        );
         self.node_idx += 1;
 
         return Float;
@@ -907,6 +914,11 @@ pub const Analyzer = struct {
     fn fn_call(self: *Self, node: Node.Index) Error!Type {
         const arity = self.node_data[node];
         self.node_idx += 1;
+
+        const idx = try self.add_instr(.{ .tag = .FnCall, .data = .{ .FnCall = .{
+            .arity = @intCast(arity),
+            .builtin = undefined,
+        } } }, node);
 
         // Resolve the callee
         const type_value = try self.expect_type_kind(self.node_idx, TypeSys.Fn);
@@ -919,10 +931,7 @@ pub const Analyzer = struct {
             );
         }
 
-        _ = try self.add_instr(.{ .tag = .FnCall, .data = .{ .FnCall = .{
-            .arity = @intCast(arity),
-            .builtin = type_info.builtin,
-        } } });
+        self.instructions.items(.data)[idx].FnCall.builtin = type_info.builtin;
 
         for (0..arity) |i| {
             const arg_idx = self.node_idx;
@@ -932,7 +941,10 @@ pub const Analyzer = struct {
                 // If it's an implicit cast between int and float, save the
                 // argument indices for compiler. Otherwise, error
                 if (type_info.params[i] == Float and arg_type == Int) {
-                    _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
+                    _ = try self.add_instr(
+                        .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
+                        arg_idx,
+                    );
                 } else return self.err(
                     .{ .TypeMismatch = .{
                         .expect = self.get_type_name(type_info.params[i]),
@@ -950,20 +962,23 @@ pub const Analyzer = struct {
         const name_idx = try self.interner.intern(self.source_from_node(node));
 
         if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
-            self.main = node;
+            self.main = self.instructions.len;
         }
 
         // Check in current scope
         const arity = self.node_data[node];
         const return_type = try self.check_name_and_type(name_idx, node, node + 1 + arity * 2);
-        const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined });
+        const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined }, node);
+
+        // We add function's name for runtime access
+        _ = try self.add_instr(.{ .tag = .FnName, .data = .{ .Id = name_idx } }, node);
 
         // We declare before body for recursion. We need to correct type to check those recursions
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
         const fn_var = try self.declare_variable(name_idx, fn_type, true);
 
-        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } });
+        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } }, node);
 
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
@@ -1110,7 +1125,7 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = .{
             .scope = if (variable.depth > 0) .Local else .Global,
             .index = @intCast(variable.index),
-        } } });
+        } } }, node);
 
         return variable;
     }
@@ -1165,7 +1180,7 @@ pub const Analyzer = struct {
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
-        const idx = try self.add_instr(.{ .tag = .If, .data = undefined });
+        const idx = try self.add_instr(.{ .tag = .If, .data = undefined }, node);
         self.node_idx += 1;
         var data: Instruction.If = .{ .cast = .None, .has_else = false };
 
@@ -1264,21 +1279,21 @@ pub const Analyzer = struct {
             break :blk 0;
         };
 
-        _ = try self.add_instr(.{ .tag = .Int, .data = .{ .Int = value } });
+        _ = try self.add_instr(.{ .tag = .Int, .data = .{ .Int = value } }, node);
         self.node_idx += 1;
 
         return Int;
     }
 
     fn null_lit(self: *Self) !Type {
-        _ = try self.add_instr(.{ .tag = .Null, .data = undefined });
+        _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, self.node_idx);
         self.node_idx += 1;
 
         return Null;
     }
 
     fn print(self: *Self) !void {
-        _ = try self.add_instr(.{ .tag = .Print, .data = undefined });
+        _ = try self.add_instr(.{ .tag = .Print, .data = undefined }, self.node_idx);
         self.node_idx += 1;
         _ = try self.analyze_node(self.node_idx);
     }
@@ -1291,7 +1306,7 @@ pub const Analyzer = struct {
             return self.err(.ReturnOutsideFn, self.to_span(node));
         }
 
-        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = false } });
+        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = false } }, node);
 
         const return_type = if (self.node_tags[self.node_idx] != .Empty) blk: {
             self.instructions.items(.data)[idx].Return = true;
@@ -1313,8 +1328,10 @@ pub const Analyzer = struct {
     }
 
     fn string(self: *Self, node: Node.Index) !Type {
-        const value = try self.interner.intern(self.source_from_node(node));
-        _ = try self.add_instr(.{ .tag = .String, .data = .{ .Id = value } });
+        const source = self.source_from_node(node);
+        // Removes the quotes
+        const value = try self.interner.intern(source[1 .. source.len - 1]);
+        _ = try self.add_instr(.{ .tag = .String, .data = .{ .Id = value } }, node);
         self.node_idx += 1;
 
         return Str;
@@ -1322,10 +1339,13 @@ pub const Analyzer = struct {
 
     fn unary(self: *Self, node: Node.Index) Error!Type {
         const op = self.token_tags[self.node_mains[node]];
-        _ = try self.add_instr(.{
+        const idx = try self.add_instr(.{
             .tag = .Unary,
-            .data = .{ .Unary = if (op == .Bang) .Bang else .Minus },
-        });
+            .data = .{ .Unary = .{
+                .op = if (op == .Not) .Bang else .Minus,
+                .type_ = .Float,
+            } },
+        }, node);
 
         self.node_idx += 1;
         const rhs = try self.analyze_node(self.node_idx);
@@ -1342,11 +1362,13 @@ pub const Analyzer = struct {
             );
         }
 
+        if (rhs == Int) self.instructions.items(.data)[idx].Unary.type_ = .Int;
+
         return rhs;
     }
 
-    fn use_stmt(self: *Self, node: Node.Index) !void {
-        const idx = try self.add_instr(.{ .tag = .Use, .data = undefined });
+    fn use(self: *Self, node: Node.Index) !void {
+        const idx = try self.add_instr(.{ .tag = .Use, .data = undefined }, node);
         self.node_idx += 1;
 
         var count: usize = 0;
@@ -1358,19 +1380,17 @@ pub const Analyzer = struct {
         if (name == 1) {
             self.node_idx += 1;
 
+            // TODO: For now, il allows to keep synchronized the different arrays of
+            // nodes/instructions
+            _ = try self.add_instr(.{ .tag = .Null, .data = undefined, .start = 0 }, 0);
+
             // TODO: support real imports
             if (self.node_data[node] > 2) @panic("Use statements can't import more than std + one module");
 
             // 1 less because we parsed "std"
             for (0..self.node_data[node] - 1) |_| {
-                // const sub_name = try self.interner.intern(self.source_from_node(self.node_idx));
-
-                // if (try self.type_manager.import_builtins(sub_name)) |module| {
                 if (try self.type_manager.import_builtins(self.source_from_node(self.node_idx))) |module| {
                     const all_fn_names = module.keys();
-
-                    // var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
-                    // var all_var = try ArrayList(Instruction.Variable).initCapacity(self.allocator, all_fn_names.len);
 
                     for (all_fn_names) |fn_name| {
                         const name_idx = try self.interner.intern(fn_name);
@@ -1393,19 +1413,10 @@ pub const Analyzer = struct {
                         _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
                             .index = func.index,
                             .variable = variable,
-                        } } });
-
-                        // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
-                        // all_ptr.appendAssumeCapacity(@intCast(func.index));
-                        // all_var.appendAssumeCapacity(variable);
+                        } } }, node);
 
                         count += 1;
                     }
-
-                    // try self.analyzed_stmts.append(.{ .Use = .{
-                    //     .indices = all_ptr,
-                    //     .variables = all_var,
-                    // } });
 
                     self.instructions.items(.data)[idx] = .{ .Use = count };
                     self.node_idx += 1;
@@ -1419,53 +1430,9 @@ pub const Analyzer = struct {
             .{ .UnknownModule = .{ .name = self.source_from_node(node + idx_unknown) } },
             self.to_span(node + idx_unknown),
         );
-
-        // For now, can only import std modules
-        // if (std.mem.eql(u8, stmt.module[0].text, "std")) {
-        //     if (try self.type_manager.import_builtins(stmt.module[1].text)) |module| {
-        //         const all_fn_names = module.keys();
-        //
-        //         var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
-        //         var all_var = try ArrayList(AnalyzedAst.Variable).initCapacity(self.allocator, all_fn_names.len);
-        //
-        //         for (all_fn_names) |fn_name| {
-        //             const func = module.get(fn_name).?;
-        //
-        //             const info: TypeInfo = .{ .Fn = .{
-        //                 .arity = func.arity,
-        //                 .params = func.params,
-        //                 .return_type = func.return_type,
-        //                 .builtin = true,
-        //             } };
-        //
-        //             // Declare the type and additional informations
-        //             const type_ = try self.type_manager.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
-        //             // Declare the variable
-        //             const variable = try self.declare_variable(fn_name, type_, true);
-        //
-        //             // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
-        //             all_ptr.appendAssumeCapacity(@intCast(func.index));
-        //             all_var.appendAssumeCapacity(variable);
-        //         }
-        //
-        //         try self.analyzed_stmts.append(.{ .Use = .{
-        //             .indices = all_ptr,
-        //             .variables = all_var,
-        //         } });
-        //
-        //         return;
-        //     } else idx_unknown = 1;
-        // }
-        //
-        // return self.err(
-        //     .{ .UnknownModule = .{ .name = stmt.module[idx_unknown].text } },
-        //     Span.from_source_slice(
-        //         stmt.module[idx_unknown],
-        //     ),
-        // );
     }
 
-    fn var_declaration(self: *Self, node: Node.Index) !void {
+    fn var_decl(self: *Self, node: Node.Index) !void {
         // In case we propagate an error, we advance the counter to avoid
         // infinite loop
         // TODO: do as in block?
@@ -1474,12 +1441,13 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const value_idx = self.node_idx;
 
-        const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined });
+        const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined }, node);
 
         const name = try self.interner.intern(self.source_from_node(node));
         var checked_type = try self.check_name_and_type(name, node, type_idx);
 
         var initialized = false;
+        var cast = false;
 
         if (self.node_tags[value_idx] != .Empty) {
             const state = self.last_state();
@@ -1499,9 +1467,10 @@ pub const Analyzer = struct {
                 checked_type = value_type;
                 // Else, we check for coherence
             } else if (checked_type != value_type) {
-                // One case in wich we can coerce; int -> float
+                // One case in wich we can coerce, int -> float
                 if (checked_type == Float and value_type == Int) {
-                    _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
+                    cast = true;
+                    _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, type_idx);
                 } else {
                     return self.err(
                         .{ .InvalidAssignType = .{
@@ -1515,18 +1484,18 @@ pub const Analyzer = struct {
 
             initialized = true;
         } else {
-            _ = try self.add_instr(.{ .tag = .Null });
+            _ = try self.add_instr(.{ .tag = .Null }, node);
             self.node_idx += 1;
         }
 
         const variable = try self.declare_variable(name, checked_type, initialized);
-        self.instructions.items(.data)[idx] = .{ .Variable = variable };
+        self.instructions.items(.data)[idx] = .{ .VarDecl = .{ .variable = variable, .cast = cast } };
     }
 
     fn while_stmt(self: *Self) Error!void {
         self.node_idx += 1;
         const cond_idx = self.node_idx;
-        _ = try self.add_instr(.{ .tag = .While });
+        _ = try self.add_instr(.{ .tag = .While }, cond_idx);
         const cond_type = try self.analyze_node(cond_idx);
 
         if (cond_type != Bool) return self.err(
@@ -1556,8 +1525,8 @@ pub const Analyzer = struct {
     //         .Discard => |*s| try self.discard(s),
     //         .FnDecl => |*s| try self.fn_declaration(s),
     //         .Print => |*s| _ = try self.expression(s.expr),
-    //         .Use => |*s| try self.use_stmt(s),
-    //         .VarDecl => |*s| try self.var_declaration(s),
+    //         .Use => |*s| try self.use(s),
+    //         .VarDecl => |*s| try self.var_decl(s),
     //         .While => |*s| try self.while_stmt(s),
     //         .Expr => |e| final = try self.expression(e),
     //     }

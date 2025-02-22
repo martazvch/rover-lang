@@ -244,33 +244,26 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         rir_renderer.display();
     }
 
-    // // Analyzed Ast printer
-    // if (config.print_analyzed_ast) {
-    //     var analyzed_ast_printer = AnalyzedAstPrinter.init(allocator, &analyzer.type_manager);
-    //     defer analyzed_ast_printer.deinit();
-    //
-    //     try analyzed_ast_printer.parse(source, analyzer.analyzed_stmts.items);
-    //     analyzed_ast_printer.display();
-    // }
-    //
-    // // Start of Vm for compilation
-    // var vm: Vm = Vm.new(allocator);
-    // try vm.init(false);
-    // defer vm.deinit();
-    //
-    // // Compiler
-    // var compiler = CompilationManager.init(
-    //     &vm,
-    //     analyzer.type_manager.builtins.functions,
-    //     parser.stmts.items,
-    //     analyzer.analyzed_stmts.items,
-    //     config.print_bytecode,
-    //     analyzer.main.?,
-    //     false,
-    // );
-    // defer compiler.deinit();
-    // const function = try compiler.compile();
-    //
-    // // Run the program
-    // try vm.run(function);
+    // Start of Vm for compilation
+    var vm: Vm = Vm.new(allocator);
+    defer vm.deinit();
+    try vm.init(false);
+
+    // Compiler
+    var compiler = CompilationManager.init(
+        &vm,
+        analyzer.type_manager.builtins.functions,
+        &analyzer.interner,
+        analyzer.instructions.items(.tag),
+        analyzer.instructions.items(.data),
+        analyzer.instructions.items(.start),
+        config.print_bytecode,
+        analyzer.main.?,
+        false,
+    );
+    defer compiler.deinit();
+    const function = try compiler.compile();
+
+    // Run the program
+    try vm.run(function);
 }

@@ -145,7 +145,7 @@ const test_config = @import("test_config");
 
 pub const Parser = @import("frontend/parser.zig").Parser;
 pub const Analyzer = @import("frontend/analyzer.zig").Analyzer;
-pub const Compiler = @import("backend/compiler.zig").Compiler;
+pub const Compiler = @import("backend/compiler.zig");
 
 test {
     const stage = test_config.stage;
@@ -159,7 +159,7 @@ test {
     }
 
     if (stage == .compiler or stage == .all) {
-        std.testing.refAllDecls(Analyzer);
+        std.testing.refAllDecls(Compiler);
     }
 
     _ = @import("frontend/lexer.zig");

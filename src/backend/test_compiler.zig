@@ -24,12 +24,18 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
     var parser: Parser = undefined;
     parser.init(allocator);
     defer parser.deinit();
-    try parser.parse(source, lexer.tokens.items);
+
+    try parser.parse(
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+    );
 
     var analyzer: Analyzer = undefined;
     try analyzer.init(allocator, false);
     defer analyzer.deinit();
-    try analyzer.analyze(parser.stmts.items, source);
+
+    try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
 
     var vm = Vm.new(allocator);
     defer vm.deinit();
@@ -38,8 +44,10 @@ pub fn get_test_data(source: [:0]const u8, allocator: Allocator, config: ?Config
     var compiler = CompilationManager.init(
         &vm,
         analyzer.type_manager.builtins.functions,
-        parser.stmts.items,
-        analyzer.analyzed_stmts.items,
+        &analyzer.interner,
+        analyzer.instructions.items(.tag),
+        analyzer.instructions.items(.data),
+        analyzer.instructions.items(.start),
         false,
         analyzer.main.?,
         false,

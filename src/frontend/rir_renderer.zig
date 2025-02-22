@@ -77,6 +77,7 @@ pub const RirRenderer = struct {
             .Float => self.float_instr(index),
             .FnCall => self.fn_call(index),
             .FnDecl => self.fn_declaration(index),
+            .FnName => unreachable,
             .Identifier => self.identifier(index),
             .If => self.if_instr(index),
             .Imported => unreachable,
@@ -95,7 +96,6 @@ pub const RirRenderer = struct {
                 self.indent_level -= 1;
             },
             .Return => self.return_instr(index),
-            .Sentinel => unreachable,
             .String => self.string_instr(index),
             .Unary => self.unary(index),
             .Use => self.use(index),
@@ -120,17 +120,19 @@ pub const RirRenderer = struct {
     }
 
     fn assignment(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].Variable;
+        const data = self.instr_data[instr].Assignment;
 
         var writer = self.tree.writer();
         try self.indent();
         try writer.print("[Assignment variable index: {}, scope: {s}]\n", .{
-            data.index, @tagName(data.scope),
+            data.variable.index, @tagName(data.variable.scope),
         });
 
         self.instr_idx += 1;
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
+
+        if (data.cast) try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 
@@ -164,12 +166,9 @@ pub const RirRenderer = struct {
         self.instr_idx += 1;
         self.indent_level += 1;
 
-        while (self.instr_tags[self.instr_idx] != .Sentinel) {
+        for (0..data.length) |_| {
             try self.parse_instr(self.instr_idx);
         }
-
-        // Skips the sentinel
-        self.instr_idx += 1;
 
         self.indent_level -= 1;
     }
@@ -237,14 +236,17 @@ pub const RirRenderer = struct {
         const data = self.instr_data[instr].FnDecl;
         self.instr_idx += 1;
 
+        const fn_name = self.interner.get_key(self.instr_data[self.instr_idx].Id).?;
+        self.instr_idx += 1;
         const fn_var = self.instr_data[self.instr_idx].Variable;
         self.instr_idx += 1;
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Fn declaration index: {}, scope: {s}, return kind: {s}]\n", .{
-            fn_var.index, @tagName(fn_var.scope), @tagName(data.return_kind),
-        });
+        try writer.print(
+            "[Fn declaration {s}, index: {}, scope: {s}, return kind: {s}]\n",
+            .{ fn_name, fn_var.index, @tagName(fn_var.scope), @tagName(data.return_kind) },
+        );
 
         try self.indent();
         try self.tree.appendSlice("- body:\n");
@@ -333,12 +335,12 @@ pub const RirRenderer = struct {
     }
 
     fn unary(self: *Self, instr: usize) Error!void {
-        const op = self.instr_data[instr].Unary;
+        const data = self.instr_data[instr].Unary;
         var writer = self.tree.writer();
 
         try self.indent();
         self.instr_idx += 1;
-        try writer.print("[Unary {s}]\n", .{@tagName(op)});
+        try writer.print("[Unary {s}]\n", .{@tagName(data.op)});
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
@@ -347,6 +349,10 @@ pub const RirRenderer = struct {
     fn use(self: *Self, instr: usize) Error!void {
         const count = self.instr_data[instr].Use;
         var writer = self.tree.writer();
+
+        // NOTE: For now, skips the first 'Null' placed by the analyzer
+        // Needs a rework
+        self.instr_idx += 1;
 
         try self.indent();
         try writer.print("[Use count: {}]\n", .{count});
@@ -358,17 +364,19 @@ pub const RirRenderer = struct {
     }
 
     fn var_decl(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].Variable;
+        const data = self.instr_data[instr].VarDecl;
         var writer = self.tree.writer();
 
         try self.indent();
         try writer.print("[Declare variable index: {}, scope: {s}]\n", .{
-            data.index, @tagName(data.scope),
+            data.variable.index, @tagName(data.variable.scope),
         });
 
         self.indent_level += 1;
         self.instr_idx += 1;
         try self.parse_instr(self.instr_idx);
+
+        if (data.cast) try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 
