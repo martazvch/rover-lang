@@ -77,6 +77,7 @@ pub const Instruction = struct {
         FnDecl,
         Identifier,
         If,
+        Imported,
         Int,
         Null,
         Print,
@@ -84,6 +85,7 @@ pub const Instruction = struct {
         Sentinel,
         String,
         Unary,
+        Use,
         VarDecl,
         While,
     };
@@ -98,9 +100,11 @@ pub const Instruction = struct {
         FnDecl: FnDecl,
         Id: usize,
         If: If,
+        Imported: Imported,
         Int: i64,
         Return: bool,
         Unary: Unary,
+        Use: u64,
         Variable: Variable,
     };
 
@@ -148,6 +152,7 @@ pub const Instruction = struct {
     pub const FnCall = struct { arity: u8, builtin: bool };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const Unary = enum(u1) { Minus, Bang };
+    pub const Imported = struct { index: u64, variable: Variable };
     pub const Variable = packed struct { index: u62, scope: Scope };
 };
 
@@ -159,4 +164,6 @@ comptime {
     // @compileLog(@sizeOf(Instruction.Binop));
     // @compileLog(@sizeOf(Instruction.Unary));
     // @compileLog(@sizeOf(Instruction.If));
+    // @compileLog(@sizeOf(Instruction.Imported));
+    // @compileLog(@sizeOf(Instruction.FnCall));
 }

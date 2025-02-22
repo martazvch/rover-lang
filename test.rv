@@ -1,4 +1,6 @@
-//fn main() {
+use std.time
+
+fn main() {
     // _ = 56
     // _ = true
     // _ = "tre"
@@ -57,4 +59,4 @@
     }
 
     _ = sub(sub(2))
-//}
+}

@@ -79,6 +79,7 @@ pub const RirRenderer = struct {
             .FnDecl => self.fn_declaration(index),
             .Identifier => self.identifier(index),
             .If => self.if_instr(index),
+            .Imported => unreachable,
             .Int => self.int_instr(index),
             .Null => {
                 try self.indent();
@@ -97,6 +98,7 @@ pub const RirRenderer = struct {
             .Sentinel => unreachable,
             .String => self.string_instr(index),
             .Unary => self.unary(index),
+            .Use => self.use(index),
             .VarDecl => self.var_decl(index),
             .While => self.while_instr(),
             // .Assignment => |i| self.assignment(i),
@@ -340,6 +342,19 @@ pub const RirRenderer = struct {
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
+    }
+
+    fn use(self: *Self, instr: usize) Error!void {
+        const count = self.instr_data[instr].Use;
+        var writer = self.tree.writer();
+
+        try self.indent();
+        try writer.print("[Use count: {}]\n", .{count});
+        self.instr_idx += 1;
+
+        for (0..count) |_| {
+            self.instr_idx += 1;
+        }
     }
 
     fn var_decl(self: *Self, instr: usize) Error!void {

@@ -3,7 +3,7 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
-const StringHashMap = std.StringHashMap;
+const AutoHashMap = std.AutoHashMap;
 const Interner = @import("../interner.zig").Interner;
 // const Stmt = Ast.Stmt;
 // const Expr = Ast.Expr;
@@ -41,7 +41,7 @@ const Bool = TypeSys.Bool;
 const Str = TypeSys.Str;
 
 pub const TypeManager = struct {
-    declared: StringHashMap(Type),
+    declared: std.AutoHashMap(usize, Type),
     type_infos: ArrayList(TypeInfo),
     builtins: BuiltinAnalyzer = builtin_init(),
 
@@ -50,18 +50,23 @@ pub const TypeManager = struct {
 
     pub fn init(allocator: Allocator) Self {
         return .{
-            .declared = StringHashMap(Type).init(allocator),
+            .declared = AutoHashMap(usize, Type).init(allocator),
             .type_infos = ArrayList(TypeInfo).init(allocator),
         };
     }
 
-    pub fn init_builtins(self: *Self) !void {
-        try self.declared.put("void", Void);
-        try self.declared.put("null", Null);
-        try self.declared.put("bool", Bool);
-        try self.declared.put("float", Float);
-        try self.declared.put("int", Int);
-        try self.declared.put("str", Str);
+    pub fn init_builtins(self: *Self, interner: *Interner) !void {
+        try self.declared.put(try interner.intern("void"), Void);
+        try self.declared.put(try interner.intern("null"), Null);
+        try self.declared.put(try interner.intern("bool"), Bool);
+        try self.declared.put(try interner.intern("float"), Float);
+        try self.declared.put(try interner.intern("int"), Int);
+        try self.declared.put(try interner.intern("str"), Str);
+        // try self.declared.put("null", Null);
+        // try self.declared.put("bool", Bool);
+        // try self.declared.put("float", Float);
+        // try self.declared.put("int", Int);
+        // try self.declared.put("str", Str);
     }
 
     pub fn deinit(self: *Self) void {
@@ -90,7 +95,7 @@ pub const TypeManager = struct {
     /// Declares a new type built with `kind` and `extra` parameters and add the informations
     pub fn declare(
         self: *Self,
-        name: []const u8,
+        name: usize,
         kind: TypeSys.Kind,
         extra: TypeSys.Extra,
         info: TypeInfo,
@@ -118,7 +123,7 @@ pub const TypeManager = struct {
     // Used only in error mode, no need for performance. If used in
     // performance path, maybe use a ArrayHashMap to retreive with
     // index (as type == index) but every thing else is slow?
-    pub fn str(self: *const Self, type_: Type) []const u8 {
+    pub fn idx(self: *const Self, type_: Type) usize {
         var iter = self.declared.iterator();
         while (iter.next()) |entry| {
             if (entry.value_ptr.* == type_) {
@@ -175,9 +180,8 @@ pub const Analyzer = struct {
     const State = struct {
         /// in a context that allow partially returning a value
         allow_partial: bool = true,
-        // in_fn: bool = false,
         /// Current function's type
-        fn_type: Type = 0,
+        fn_type: Type = Void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
     };
@@ -200,11 +204,13 @@ pub const Analyzer = struct {
         self.main = null;
         self.local_offset = 0;
         self.type_manager = TypeManager.init(self.allocator);
-        try self.type_manager.init_builtins();
         self.interner = Interner.init(self.allocator);
 
         // We reserve slot 0 for 'main'
         _ = try self.interner.intern("main");
+        // Slot 1 for std
+        _ = try self.interner.intern("std");
+        try self.type_manager.init_builtins(&self.interner);
         self.repl = repl;
     }
 
@@ -265,8 +271,8 @@ pub const Analyzer = struct {
 
         // In REPL mode, no need for main function
         if (self.repl)
-            return;
-        // else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+            return
+        else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
     fn to_span(self: *const Self, node: Node.Index) Span {
@@ -325,6 +331,11 @@ pub const Analyzer = struct {
             },
             .While => self.token_spans[self.node_mains[node]],
         };
+    }
+
+    fn get_type_name(self: *const Self, type_: Type) []const u8 {
+        const idx = self.type_manager.idx(type_);
+        return self.interner.get_key(idx).?;
     }
 
     /// Adds a new node and returns its index
@@ -420,7 +431,9 @@ pub const Analyzer = struct {
         }
 
         return if (self.node_tags[type_idx] != .Empty)
-            self.type_manager.declared.get(self.source_from_node(type_idx)) orelse
+            self.type_manager.declared.get(
+                try self.interner.intern(self.source_from_node(type_idx)),
+            ) orelse
                 return self.err(
                 .{ .UndeclaredType = .{ .found = self.interner.get_key(type_idx).? } },
                 self.to_span(type_idx),
@@ -509,14 +522,18 @@ pub const Analyzer = struct {
         // If: If,
         return switch (self.node_tags[node]) {
             .Bool, .Float, .Int, .Null, .String => true,
-            .BinOp => self.is_pure(self.node_idx + 1) and self.is_pure(self.node_idx + 2),
-            .Grouping => self.is_pure(self.node_idx + 1),
-            .Unary => self.is_pure(self.node_idx + 1),
+            .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => self.is_pure(node + 1) and self.is_pure(node + 2),
+            .Grouping => self.is_pure(node + 1),
+            .Unary => self.is_pure(node + 1),
             else => false,
         };
     }
 
     fn analyze_node(self: *Self, node: Node.Index) Error!Type {
+        // if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
+        //     return self.err(.UnpureInGlobal, self.to_span(node));
+        // }
+
         var final: Type = Void;
 
         switch (self.node_tags[node]) {
@@ -526,7 +543,7 @@ pub const Analyzer = struct {
             .Bool => final = try self.bool_lit(node),
             .Discard => try self.discard(node),
             .FnDecl => try self.fn_declaration(node),
-            // .Use => |*s| try self.use_stmt(s),
+            .Use => try self.use_stmt(node),
             .While => try self.while_stmt(),
             .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
@@ -584,8 +601,8 @@ pub const Analyzer = struct {
                     } else {
                         return self.err(
                             .{ .InvalidAssignType = .{
-                                .expect = self.type_manager.str(assigne.type_),
-                                .found = self.type_manager.str(value_type),
+                                .expect = self.get_type_name(assigne.type_),
+                                .found = self.get_type_name(value_type),
                             } },
                             self.to_span(assigne_idx),
                         );
@@ -637,14 +654,14 @@ pub const Analyzer = struct {
             .Add, .Div, .Mul, .Sub, .Ge, .Gt, .Le, .Lt => {
                 if (!Analyzer.is_numeric(lhs)) {
                     return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(lhs)),
+                        AnalyzerMsg.invalid_arithmetic(self.get_type_name(lhs)),
                         self.to_span(lhs_index),
                     );
                 }
 
                 if (!Analyzer.is_numeric(rhs)) {
                     return self.err(
-                        AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+                        AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
                         self.to_span(rhs_index),
                     );
                 }
@@ -663,7 +680,7 @@ pub const Analyzer = struct {
                             Float => {},
                             Int => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast("right hand side", self.type_manager.str(lhs)),
+                                    AnalyzerMsg.implicit_cast("right hand side", self.get_type_name(lhs)),
                                     self.to_span(rhs_index),
                                 );
 
@@ -684,7 +701,7 @@ pub const Analyzer = struct {
                         switch (rhs) {
                             Float => {
                                 try self.warn(
-                                    AnalyzerMsg.implicit_cast("left hand side", self.type_manager.str(rhs)),
+                                    AnalyzerMsg.implicit_cast("left hand side", self.get_type_name(rhs)),
                                     self.to_span(lhs_index),
                                 );
 
@@ -730,8 +747,8 @@ pub const Analyzer = struct {
                     } else {
                         return self.err(
                             AnalyzerMsg.invalid_cmp(
-                                self.type_manager.str(lhs),
-                                self.type_manager.str(rhs),
+                                self.get_type_name(lhs),
+                                self.get_type_name(rhs),
                             ),
                             self.to_span(node),
                         );
@@ -804,11 +821,11 @@ pub const Analyzer = struct {
             // Logical binop
             .And, .Or => {
                 if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
-                    .found = self.type_manager.str(lhs),
+                    .found = self.get_type_name(lhs),
                 } }, self.to_span(lhs_index));
 
                 if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
-                    .found = self.type_manager.str(rhs),
+                    .found = self.get_type_name(rhs),
                 } }, self.to_span(rhs_index));
 
                 switch (op) {
@@ -918,8 +935,8 @@ pub const Analyzer = struct {
                     _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } });
                 } else return self.err(
                     .{ .TypeMismatch = .{
-                        .expect = self.type_manager.str(type_info.params[i]),
-                        .found = self.type_manager.str(arg_type),
+                        .expect = self.get_type_name(type_info.params[i]),
+                        .found = self.get_type_name(arg_type),
                     } },
                     self.to_span(arg_idx),
                 );
@@ -1058,8 +1075,8 @@ pub const Analyzer = struct {
         if (body_type != return_type) {
             return self.err(
                 .{ .IncompatibleFnType = .{
-                    .expect = self.type_manager.str(return_type),
-                    .found = self.type_manager.str(body_type),
+                    .expect = self.get_type_name(return_type),
+                    .found = self.get_type_name(body_type),
                 } },
                 self.to_span(block_idx),
             );
@@ -1157,7 +1174,7 @@ pub const Analyzer = struct {
         if (cond_type != Bool) return self.err(
             .{ .NonBoolCond = .{
                 .what = "if",
-                .found = self.type_manager.str(cond_type),
+                .found = self.get_type_name(cond_type),
             } },
             self.to_span(node),
         );
@@ -1221,8 +1238,8 @@ pub const Analyzer = struct {
                 } else {
                     return self.err(
                         .{ .IncompatibleIfType = .{
-                            .found1 = self.type_manager.str(then_type),
-                            .found2 = self.type_manager.str(else_type),
+                            .found1 = self.get_type_name(then_type),
+                            .found2 = self.get_type_name(else_type),
                         } },
                         self.to_span(node),
                     );
@@ -1230,7 +1247,7 @@ pub const Analyzer = struct {
             }
         } else if (then_type != Void and !state.allow_partial) {
             return self.err(
-                .{ .MissingElseClause = .{ .if_type = self.type_manager.str(then_type) } },
+                .{ .MissingElseClause = .{ .if_type = self.get_type_name(then_type) } },
                 self.to_span(node),
             );
         }
@@ -1284,8 +1301,8 @@ pub const Analyzer = struct {
         if (state.fn_type != return_type) {
             return self.err(
                 .{ .IncompatibleFnType = .{
-                    .expect = self.type_manager.str(state.fn_type),
-                    .found = self.type_manager.str(return_type),
+                    .expect = self.get_type_name(state.fn_type),
+                    .found = self.get_type_name(return_type),
                 } },
                 self.to_span(node),
             );
@@ -1315,17 +1332,137 @@ pub const Analyzer = struct {
 
         if (op == .Not and rhs != Bool) {
             return self.err(
-                .{ .InvalidUnary = .{ .found = self.type_manager.str(rhs) } },
+                .{ .InvalidUnary = .{ .found = self.get_type_name(rhs) } },
                 self.to_span(node),
             );
         } else if (op == .Minus and rhs != Int and rhs != Float) {
             return self.err(
-                AnalyzerMsg.invalid_arithmetic(self.type_manager.str(rhs)),
+                AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
                 self.to_span(node),
             );
         }
 
         return rhs;
+    }
+
+    fn use_stmt(self: *Self, node: Node.Index) !void {
+        const idx = try self.add_instr(.{ .tag = .Use, .data = undefined });
+        self.node_idx += 1;
+
+        var count: usize = 0;
+        var idx_unknown: usize = 0;
+
+        const name = try self.interner.intern(self.source_from_node(self.node_idx));
+
+        // For now, "std" is interned at initialization in slot 1
+        if (name == 1) {
+            self.node_idx += 1;
+
+            // TODO: support real imports
+            if (self.node_data[node] > 2) @panic("Use statements can't import more than std + one module");
+
+            // 1 less because we parsed "std"
+            for (0..self.node_data[node] - 1) |_| {
+                // const sub_name = try self.interner.intern(self.source_from_node(self.node_idx));
+
+                // if (try self.type_manager.import_builtins(sub_name)) |module| {
+                if (try self.type_manager.import_builtins(self.source_from_node(self.node_idx))) |module| {
+                    const all_fn_names = module.keys();
+
+                    // var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
+                    // var all_var = try ArrayList(Instruction.Variable).initCapacity(self.allocator, all_fn_names.len);
+
+                    for (all_fn_names) |fn_name| {
+                        const name_idx = try self.interner.intern(fn_name);
+
+                        // TODO: Error handling
+                        const func = module.get(fn_name).?;
+
+                        const info: TypeInfo = .{ .Fn = .{
+                            .arity = func.arity,
+                            .params = func.params,
+                            .return_type = func.return_type,
+                            .builtin = true,
+                        } };
+
+                        // Declare the type and additional informations
+                        const type_ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
+                        // Declare the variable
+                        const variable = try self.declare_variable(name_idx, type_, true);
+
+                        _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
+                            .index = func.index,
+                            .variable = variable,
+                        } } });
+
+                        // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
+                        // all_ptr.appendAssumeCapacity(@intCast(func.index));
+                        // all_var.appendAssumeCapacity(variable);
+
+                        count += 1;
+                    }
+
+                    // try self.analyzed_stmts.append(.{ .Use = .{
+                    //     .indices = all_ptr,
+                    //     .variables = all_var,
+                    // } });
+
+                    self.instructions.items(.data)[idx] = .{ .Use = count };
+                    self.node_idx += 1;
+
+                    return;
+                } else idx_unknown = 1;
+            }
+        }
+
+        return self.err(
+            .{ .UnknownModule = .{ .name = self.source_from_node(node + idx_unknown) } },
+            self.to_span(node + idx_unknown),
+        );
+
+        // For now, can only import std modules
+        // if (std.mem.eql(u8, stmt.module[0].text, "std")) {
+        //     if (try self.type_manager.import_builtins(stmt.module[1].text)) |module| {
+        //         const all_fn_names = module.keys();
+        //
+        //         var all_ptr = try ArrayList(u8).initCapacity(self.allocator, all_fn_names.len);
+        //         var all_var = try ArrayList(AnalyzedAst.Variable).initCapacity(self.allocator, all_fn_names.len);
+        //
+        //         for (all_fn_names) |fn_name| {
+        //             const func = module.get(fn_name).?;
+        //
+        //             const info: TypeInfo = .{ .Fn = .{
+        //                 .arity = func.arity,
+        //                 .params = func.params,
+        //                 .return_type = func.return_type,
+        //                 .builtin = true,
+        //             } };
+        //
+        //             // Declare the type and additional informations
+        //             const type_ = try self.type_manager.declare(fn_name, TypeSys.Fn, TypeSys.Builtin, info);
+        //             // Declare the variable
+        //             const variable = try self.declare_variable(fn_name, type_, true);
+        //
+        //             // Save extra information for compiler (index of pointer to wrap in ObjNativeFn)
+        //             all_ptr.appendAssumeCapacity(@intCast(func.index));
+        //             all_var.appendAssumeCapacity(variable);
+        //         }
+        //
+        //         try self.analyzed_stmts.append(.{ .Use = .{
+        //             .indices = all_ptr,
+        //             .variables = all_var,
+        //         } });
+        //
+        //         return;
+        //     } else idx_unknown = 1;
+        // }
+        //
+        // return self.err(
+        //     .{ .UnknownModule = .{ .name = stmt.module[idx_unknown].text } },
+        //     Span.from_source_slice(
+        //         stmt.module[idx_unknown],
+        //     ),
+        // );
     }
 
     fn var_declaration(self: *Self, node: Node.Index) !void {
@@ -1368,8 +1505,8 @@ pub const Analyzer = struct {
                 } else {
                     return self.err(
                         .{ .InvalidAssignType = .{
-                            .expect = self.type_manager.str(checked_type),
-                            .found = self.type_manager.str(value_type),
+                            .expect = self.get_type_name(checked_type),
+                            .found = self.get_type_name(value_type),
                         } },
                         self.to_span(value_idx),
                     );
@@ -1395,7 +1532,7 @@ pub const Analyzer = struct {
         if (cond_type != Bool) return self.err(
             .{ .NonBoolCond = .{
                 .what = "while",
-                .found = self.type_manager.str(cond_type),
+                .found = self.get_type_name(cond_type),
             } },
             self.to_span(cond_idx),
         );
@@ -1405,7 +1542,7 @@ pub const Analyzer = struct {
 
         if (body_type != Void) return self.err(
             .{ .NonVoidWhile = .{
-                .found = self.type_manager.str(body_type),
+                .found = self.get_type_name(body_type),
             } },
             self.to_span(body_idx),
         );
