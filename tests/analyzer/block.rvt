@@ -58,20 +58,17 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Block pop count 2]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-
-[Binop cast None, type int]
-[Variable scope Local, index 1]
-
-// Assign to "c"
-[Variable scope Local, index 2]
-// Return "nb"
-[Variable scope Local, index 1]
-
-// Assign to "a"
-[Variable scope Local, index 1]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [Block pop count: 2, is_expr: true]
+            [Variable declaration index: 1, scope: Local]
+                [Int 7]
+            [Variable declaration index: 2, scope: Local]
+                [Int 56]
+            [Assignment index: 2, scope: Local]
+                [Binop type: SubInt, cast: None]
+                    [Variable index: 1, scope: Local]
+                    [Int 5]
+            [Variable index: 1, scope: Local]
 
 ================

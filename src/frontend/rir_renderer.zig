@@ -124,7 +124,7 @@ pub const RirRenderer = struct {
 
         var writer = self.tree.writer();
         try self.indent();
-        try writer.print("[Assignment variable index: {}, scope: {s}]\n", .{
+        try writer.print("[Assignment index: {}, scope: {s}]\n", .{
             data.variable.index, @tagName(data.variable.scope),
         });
 
@@ -218,18 +218,24 @@ pub const RirRenderer = struct {
         try writer.print("[Fn call arity: {}, builtin: {}]\n", .{
             data.arity, data.builtin,
         });
+        self.indent_level += 1;
+
+        // Variable
+        try self.parse_instr(self.instr_idx);
 
         if (data.arity > 0) {
             try self.indent();
             try self.tree.appendSlice("- args:\n");
-            self.indent_level += 1;
 
             for (0..data.arity) |_| {
                 try self.parse_instr(self.instr_idx);
-            }
 
-            self.indent_level -= 1;
+                if (self.instr_idx < self.instr_tags.len and self.instr_tags[self.instr_idx] == .Cast)
+                    try self.parse_instr(self.instr_idx);
+            }
         }
+
+        self.indent_level -= 1;
     }
 
     fn fn_declaration(self: *Self, instr: usize) Error!void {
@@ -248,10 +254,7 @@ pub const RirRenderer = struct {
             .{ fn_name, fn_var.index, @tagName(fn_var.scope), @tagName(data.return_kind) },
         );
 
-        try self.indent();
-        try self.tree.appendSlice("- body:\n");
         self.indent_level += 1;
-
         for (0..data.body_len) |_| {
             try self.parse_instr(self.instr_idx);
         }
@@ -368,7 +371,7 @@ pub const RirRenderer = struct {
         var writer = self.tree.writer();
 
         try self.indent();
-        try writer.print("[Declare variable index: {}, scope: {s}]\n", .{
+        try writer.print("[Variable declaration index: {}, scope: {s}]\n", .{
             data.variable.index, @tagName(data.variable.scope),
         });
 

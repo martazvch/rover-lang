@@ -49,10 +49,13 @@ var c = 56.7
 fn main() {}
 
 expect:
-[Variable scope Global, index 0]
-[Variable scope Global, index 1]
-[Variable scope Global, index 2]
-[Fn declaration, scope Global, index 3, return ImplicitVoid]
+[Variable declaration index: 0, scope: Global]
+    [Int 0]
+[Variable declaration index: 1, scope: Global]
+    [Bool true]
+[Variable declaration index: 2, scope: Global]
+    [Float 56.7]
+[Fn declaration main, index: 3, scope: Global, return kind: ImplicitVoid]
 
 ================
 
@@ -63,9 +66,11 @@ var a = 12 / 34
 fn main() {}
 
 expect:
-[Binop cast None, type int]
-[Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
+[Variable declaration index: 0, scope: Global]
+    [Binop type: DivInt, cast: None]
+        [Int 12]
+        [Int 34]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
 
 ================
 
@@ -77,13 +82,16 @@ var b: float = 4. / 3
 fn main() {}
 
 expect:
-[Binop cast None, type int]
-[Assignment cast to float]
-[Variable scope Global, index 0]
-
-[Binop cast Rhs, type float]
-[Variable scope Global, index 1]
-[Fn declaration, scope Global, index 2, return ImplicitVoid]
+[Variable declaration index: 0, scope: Global]
+    [Binop type: DivInt, cast: None]
+        [Int 12]
+        [Int 34]
+    [Cast to Float]
+[Variable declaration index: 1, scope: Global]
+    [Binop type: DivFloat, cast: Rhs]
+        [Float 4]
+        [Int 3]
+[Fn declaration main, index: 2, scope: Global, return kind: ImplicitVoid]
 
 ================
 

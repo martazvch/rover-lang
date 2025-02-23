@@ -1,6 +1,4 @@
 // Tests imports
-config:
-ignore main-call
 
 // Global use
 
@@ -16,19 +14,21 @@ fn main() {
 }
 
 expect:
-[Use
-    [Variable scope Global, index 0, builtin index 0]
-    [Variable scope Global, index 1, builtin index 1]
-]
-
-// Main function
-[Fn declaration, scope Global, index 2, return ImplicitVoid]
-[Variable scope Global, index 0]
-[Fn call, casts: [], builtin]
-
-[Block pop count 0]
-[Variable scope Global, index 1]
-[Fn call, casts: [1], builtin]
+[Use count: 2]
+[Fn declaration main, index: 2, scope: Global, return kind: ImplicitVoid]
+    [Print]
+        [Fn call arity: 1, builtin: true]
+            [Variable index: 0, scope: Global]
+            - args:
+            [Int 12]
+    [Block pop count: 0, is_expr: false]
+        [Print]
+            [Fn call arity: 2, builtin: true]
+                [Variable index: 1, scope: Global]
+                - args:
+                [Bool true]
+                [Int 5]
+                [Cast to Float]
 
 ================
 
@@ -46,7 +46,7 @@ fn main() {
         print _cast_i2f(56)
     }
 
-    // Reimport locally
+    // reimport locally
     use std._test1
     {
         use std._test1
@@ -54,44 +54,27 @@ fn main() {
 }
 
 expect:
-// Main function
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-
-// 2 pops for the 2 imported functions in time
-[Block pop count 2]
-[Use
-    [Variable scope Local, index 1, builtin index 0]
-    [Variable scope Local, index 2, builtin index 1]
-]
-
-// Get the first one and call it
-[Variable scope Local, index 2]
-[Fn call, casts: [], builtin]
-
-// Second scope: same but to see if "tmp" is taken into account
-[Block pop count 3]
-[Variable scope Local, index 1]
-[Use
-    [Variable scope Local, index 2, builtin index 0]
-    [Variable scope Local, index 3, builtin index 1]
-]
-
-// Get the first one and call it
-[Variable scope Local, index 2]
-[Fn call, casts: [], builtin]
-
-// Declare in main
-[Use
-    [Variable scope Local, index 1, builtin index 0]
-    [Variable scope Local, index 2, builtin index 1]
-]
-
-// Redeclare in subscope
-[Block pop count 2]
-[Use
-    [Variable scope Local, index 3, builtin index 0]
-    [Variable scope Local, index 4, builtin index 1]
-]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 2, is_expr: false]
+        [Use count: 2]
+        [Print]
+            [Fn call arity: 2, builtin: true]
+                [Variable index: 2, scope: Local]
+                - args:
+                [Bool false]
+                [Float 3]
+    [Block pop count: 3, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [Int 1]
+        [Use count: 2]
+        [Print]
+            [Fn call arity: 1, builtin: true]
+                [Variable index: 2, scope: Local]
+                - args:
+                [Int 56]
+    [Use count: 2]
+    [Block pop count: 2, is_expr: false]
+        [Use count: 2]
 
 ================
 
@@ -103,7 +86,7 @@ use std._test1
 fn main() {
     {
         use std._test2
-        print _gt_f2i(false, "empty", 3.)
+        print _gt_f2i(1, "empty", 3.)
 
         // From _test1
         print _cast_f2i(false, 3.)
@@ -128,55 +111,47 @@ fn main() {
 }
 
 expect:
-// Global scope
-[Use
-    [Variable scope Global, index 0, builtin index 0]
-    [Variable scope Global, index 1, builtin index 1]
-]
-
-// Main function
-[Fn declaration, scope Global, index 2, return ImplicitVoid]
-
-// First block
-[Block pop count 2]
-[Use
-    [Variable scope Local, index 1, builtin index 2]
-    [Variable scope Local, index 2, builtin index 3]
-]
-[Variable scope Local, index 1]
-[Fn call, casts: [], builtin]
-[Variable scope Global, index 1]
-[Fn call, casts: [], builtin]
-
-// Second block
-[Block pop count 3]
-[Variable scope Local, index 1]
-[Use
-    [Variable scope Local, index 2, builtin index 0]
-    [Variable scope Local, index 3, builtin index 1]
-]
-[Variable scope Local, index 2]
-[Fn call, casts: [], builtin]
-
-[Use
-    [Variable scope Local, index 1, builtin index 2]
-    [Variable scope Local, index 2, builtin index 3]
-]
-
-// Third block
-[Block pop count 4]
-[Use
-    [Variable scope Local, index 3, builtin index 2]
-    [Variable scope Local, index 4, builtin index 3]
-]
-[Use
-    [Variable scope Local, index 5, builtin index 0]
-    [Variable scope Local, index 6, builtin index 1]
-]
-[Variable scope Local, index 5]
-[Fn call, casts: [], builtin]
-[Variable scope Local, index 4]
-[Fn call, casts: [], builtin]
+[Use count: 2]
+[Fn declaration main, index: 2, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 2, is_expr: false]
+        [Use count: 2]
+        [Print]
+            [Fn call arity: 3, builtin: true]
+                [Variable index: 1, scope: Local]
+                - args:
+                [Int 1]
+                [String empty]
+                [Float 3]
+        [Print]
+            [Fn call arity: 2, builtin: true]
+                [Variable index: 1, scope: Global]
+                - args:
+                [Bool false]
+                [Float 3]
+    [Block pop count: 3, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [Int 1]
+        [Use count: 2]
+        [Print]
+            [Fn call arity: 1, builtin: true]
+                [Variable index: 2, scope: Local]
+                - args:
+                [Int 56]
+    [Use count: 2]
+    [Block pop count: 4, is_expr: false]
+        [Use count: 2]
+        [Use count: 2]
+        [Print]
+            [Fn call arity: 1, builtin: true]
+                [Variable index: 5, scope: Local]
+                - args:
+                [Int 56]
+        [Print]
+            [Fn call arity: 2, builtin: true]
+                [Variable index: 4, scope: Local]
+                - args:
+                [Int 24]
+                [Float 3]
 
 ================
 

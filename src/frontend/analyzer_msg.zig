@@ -98,7 +98,7 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidUnary,
             .NonBoolCond,
             => writer.print("expression is not a boolean type", .{}),
-            .InvalidAssignType => writer.print("expression dosen't match variable type", .{}),
+            .InvalidAssignType => writer.print("expression doesn't match variable's type", .{}),
             .ImplicitCast => writer.print("expressions have different types", .{}),
             .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
             .NoMain => writer.print("in this file", .{}),
@@ -152,7 +152,7 @@ pub const AnalyzerMsg = union(enum) {
             .InvalidLogical => writer.print("modify the logic to operate on booleans", .{}),
             .InvalidUnary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
             .InvalidAssignType => |e| writer.print(
-                "variable is declared of type '{s}' but expression is type '{s}'",
+                "variable is declared of type '{s}' but expression is of type '{s}'",
                 .{ e.expect, e.found },
             ),
             .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),

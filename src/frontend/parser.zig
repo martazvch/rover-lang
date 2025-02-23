@@ -278,6 +278,8 @@ pub const Parser = struct {
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
         _ = try self.block_expr();
 
+        _ = try self.add_node(.{ .tag = .FnDeclEnd });
+
         return idx;
     }
 
@@ -409,6 +411,16 @@ pub const Parser = struct {
         }
     }
 
+    fn assignment(self: *Self) !Node.Index {
+        // Converts the previous expression to an assignment
+        const idx = self.nodes.len - 1;
+        try self.nodes.insert(self.allocator, idx, .{ .tag = .Assignment });
+
+        _ = try self.parse_precedence_expr(0);
+
+        return idx;
+    }
+
     fn print_stmt(self: *Self) Error!Node.Index {
         const idx = try self.add_node(.{
             .tag = .Print,
@@ -416,6 +428,8 @@ pub const Parser = struct {
         });
 
         _ = try self.parse_precedence_expr(0);
+        self.nodes.items(.data)[idx] = self.nodes.len;
+
         return idx;
     }
 
@@ -433,15 +447,8 @@ pub const Parser = struct {
         else
             return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
 
-        return idx;
-    }
-
-    fn assignment(self: *Self) !Node.Index {
-        // Converts the previous expression to an assignment
-        const idx = self.nodes.len - 1;
-        try self.nodes.insert(self.allocator, idx, .{ .tag = .Assignment });
-
-        _ = try self.parse_precedence_expr(0);
+        // We save in `data` the end of the while to be able to jump over it in later stages
+        self.nodes.items(.data)[idx] = self.nodes.len;
 
         return idx;
     }
@@ -578,6 +585,9 @@ pub const Parser = struct {
             _ = try self.add_node(Node.Empty);
         }
 
+        // We save in `data` the end of the node to be able to jump over it later
+        self.nodes.items(.data)[idx] = self.nodes.len;
+
         return idx;
     }
 
@@ -693,6 +703,7 @@ pub const Parser = struct {
         }
 
         try self.expect(.RightParen, .ExpectParenAfterFnArgs);
+        _ = try self.add_node(.{ .tag = .FnCallEnd });
 
         self.nodes.items(.data)[node] = arity;
     }

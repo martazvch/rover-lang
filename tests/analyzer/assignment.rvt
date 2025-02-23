@@ -16,23 +16,29 @@ noval_binop_typed = 1/2
 fn main() {}
 
 expect:
-[Variable scope Global, index 0]
-[Variable scope Global, index 0]
-
-[Variable scope Global, index 1]
-[Variable scope Global, index 1]
-
-[Variable scope Global, index 2]
-[Binop cast Lhs, type float]
-[Unary type float]
-[Variable scope Global, index 2]
-
-[Variable scope Global, index 3]
-[Binop cast None, type int]
-[Assignment cast to float]
-[Variable scope Global, index 3]
-
-[Fn declaration, scope Global, index 4, return ImplicitVoid]
+[Variable declaration index: 0, scope: Global]
+    [Null]
+[Assignment index: 0, scope: Global]
+    [Int 1]
+[Variable declaration index: 1, scope: Global]
+    [Null]
+[Assignment index: 1, scope: Global]
+    [Float 0.7]
+[Variable declaration index: 2, scope: Global]
+    [Null]
+[Assignment index: 2, scope: Global]
+    [Binop type: DivFloat, cast: Lhs]
+        [Int 12]
+        [Unary Minus]
+            [Float 0.7]
+[Variable declaration index: 3, scope: Global]
+    [Null]
+[Assignment index: 3, scope: Global]
+    [Binop type: DivInt, cast: None]
+        [Int 1]
+        [Int 2]
+    [Cast to Float]
+[Fn declaration main, index: 4, scope: Global, return kind: ImplicitVoid]
 
 ================
 
@@ -58,10 +64,12 @@ noval = 1
 fn main() {}
 
 expect:
-[Variable scope Global, index 0]
-[Assignment cast to float]
-[Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
+[Variable declaration index: 0, scope: Global]
+    [Null]
+[Assignment index: 0, scope: Global]
+    [Int 1]
+    [Cast to Float]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
 
 ================
 
@@ -81,17 +89,18 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Variable scope Local, index 1]
-[Assignment cast to float]
-[Variable scope Local, index 1]
-
-// Sub scope
-[Block pop count 1]
-[Variable scope Local, index 2]
-[Variable scope Local, index 2]
-
-// Exit sub scope
-[Variable scope Local, index 1]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [Null]
+    [Assignment index: 1, scope: Local]
+        [Int 1]
+        [Cast to Float]
+    [Block pop count: 1, is_expr: false]
+        [Variable declaration index: 2, scope: Local]
+            [Int 1]
+        [Print]
+            [Variable index: 2, scope: Local]
+    [Print]
+        [Variable index: 1, scope: Local]
 
 ================

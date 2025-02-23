@@ -93,6 +93,7 @@ pub const AstPrinter = struct {
             .Use => self.use_stmt(),
             .VarDecl => self.var_decl(),
             .While => self.while_stmt(),
+            .FnCallEnd, .FnDeclEnd => unreachable,
         };
     }
 
@@ -188,6 +189,8 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
+        // Skips the FnCallEnd
+        self.node_idx += 1;
     }
 
     fn fn_decl(self: *Self) Error!void {
@@ -235,6 +238,8 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
+        // Skips the FnDeclEnd
+        self.node_idx += 1;
     }
 
     fn parameter(self: *Self) Error!void {

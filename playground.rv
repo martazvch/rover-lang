@@ -1,16 +1,10 @@
-use std.time
+fn add(a: int) {
+    var b = 1
+    return
 
-fn fib(n: int) -> int {
-    if n < 2 do return n
-
-    fib(n-2) + fib(n-1)
+    var c = 4
 }
 
 fn main() {
-    var tmp = fib
-
-    var name = "theprimeagen"
-    print name
-    print tmp(4)
+    add(2)
 }
-

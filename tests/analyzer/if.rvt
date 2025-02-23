@@ -21,26 +21,67 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast Then]
-[Variable scope Local, index 1]
-
-[If cast Else]
-[Block pop count 0]
-[Variable scope Local, index 2]
-
-[If cast Else]
-[Block pop count 0]
-[If cast None]
-[Block pop count 0]
-[Block pop count 0]
-[Variable scope Local, index 3]
-
-[If cast None]
-[Block pop count 0]
-[If cast None]
-[If cast None]
-[Block pop count 0]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [If cast: Then, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Int 4]
+        - else:
+            [Float 5.6]
+    [Variable declaration index: 2, scope: Local]
+        [If cast: Else, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 0, is_expr: true]
+                [Float 5.6]
+        - else:
+            [Int 4]
+    [Variable declaration index: 3, scope: Local]
+        [If cast: Else, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 0, is_expr: true]
+                [Float 8.7]
+        - else:
+            [If cast: None, has else: true]
+            - condition:
+                [Bool true]
+            - then:
+                [Block pop count: 0, is_expr: true]
+                    [Int 6]
+            - else:
+                [Block pop count: 0, is_expr: true]
+                    [Int 4]
+    [Discard]
+        [If cast: None, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 0, is_expr: true]
+                [String ok]
+        - else:
+            [String ko]
+    [Discard]
+        [If cast: None, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [String ok]
+        - else:
+            [String ko]
+    [Discard]
+        [If cast: None, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Bool false]
+        - else:
+            [Block pop count: 0, is_expr: true]
+                [Bool true]
 
 ================
 
@@ -55,14 +96,22 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast Else]
-[Block pop count 2]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Binop cast None, type float]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Discard]
+        [If cast: Else, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 2, is_expr: true]
+                [Variable declaration index: 1, scope: Local]
+                    [Float 5.5]
+                [Variable declaration index: 2, scope: Local]
+                    [Float 8.7]
+                [Binop type: AddFloat, cast: None]
+                    [Variable index: 1, scope: Local]
+                    [Variable index: 2, scope: Local]
+        - else:
+            [Int 4]
 
 ================
 
@@ -79,13 +128,21 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast Else]
-[Block pop count 2]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Variable scope Local, index 1]
-[Block pop count 0]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Discard]
+        [If cast: Else, has else: true]
+        - condition:
+            [Block pop count: 2, is_expr: true]
+                [Variable declaration index: 1, scope: Local]
+                    [Bool true]
+                [Variable declaration index: 2, scope: Local]
+                    [Int 1]
+                [Variable index: 1, scope: Local]
+        - then:
+            [Float 1.5]
+        - else:
+            [Block pop count: 0, is_expr: true]
+                [Int 4]
 
 ================
 
@@ -98,11 +155,23 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast Then]
-[Block pop count 0]
-[If cast None]
-[Block pop count 0]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Discard]
+        [If cast: Then, has else: true]
+        - condition:
+            [Block pop count: 0, is_expr: true]
+                [If cast: None, has else: true]
+                - condition:
+                    [Bool true]
+                - then:
+                    [Bool true]
+                - else:
+                    [Bool false]
+        - then:
+            [Int 1]
+        - else:
+            [Block pop count: 0, is_expr: true]
+                [Float 4.5]
 
 ================
 
@@ -119,6 +188,7 @@ fn main() {
 
 error:
 NonBoolCond, if, int
+ImplicitCast, else branch, float
 
 ================
 
@@ -135,13 +205,18 @@ fn main() {
 
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Fn declaration, scope Local, index 1, return ImplicitValue]
-[If cast None]
-
-// Call
-[Variable scope Local, index 1]
-[Fn call, casts: []]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Fn declaration add, index: 1, scope: Local, return kind: ImplicitValue]
+        [If cast: None, has else: false]
+        - condition:
+            [Bool true]
+        - then:
+            [Return expr: true]
+                [Int 1]
+        [Int 2]
+    [Discard]
+        [Fn call arity: 0, builtin: false]
+            [Variable index: 1, scope: Local]
 
 ================
 
@@ -209,7 +284,6 @@ fn main() {
 
 error:
 UnusedValue
-IncompatibleFnType, void, float
 
 ================
 

@@ -61,7 +61,7 @@ pub fn get_test_data(
     );
     defer rir_renderer.deinit();
 
-    try rir_renderer.parse_ir();
+    if (analyzer.errs.items.len == 0) try rir_renderer.parse_ir();
 
     return .{ .expect = try rir_renderer.tree.toOwnedSlice(), .reports = try msgs.toOwnedSlice() };
 }

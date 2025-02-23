@@ -1,0 +1,36 @@
+// Tests invalid binop
+
+code:
+fn main() {
+    _ = 1 + 2.
+    _ = 5.6 + 4
+    _ = "steak" * 3
+    _ = 5 * "house"
+    _ = "juicy " + "orange"
+}
+
+expect:
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Discard]
+        [Binop type: AddFloat, cast: Lhs]
+            [Int 1]
+            [Float 2]
+    [Discard]
+        [Binop type: AddFloat, cast: Rhs]
+            [Float 5.6]
+            [Int 4]
+    [Discard]
+        [Binop type: MulStr, cast: Rhs]
+            [String steak]
+            [Int 3]
+    [Discard]
+        [Binop type: MulStr, cast: Lhs]
+            [Int 5]
+            [String house]
+    [Discard]
+        [Binop type: AddStr, cast: None]
+            [String juicy ]
+            [String orange]
+
+================
+

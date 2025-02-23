@@ -26,12 +26,18 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Unary type float]
-[Unary type bool]
-[Unary type bool]
-[Unary type int]
-[Unary type int]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Discard]
+        [Unary Minus]
+            [Float 6.7]
+    [Discard]
+        [Unary Bang]
+            [Unary Bang]
+                [Bool true]
+    [Discard]
+        [Unary Minus]
+            [Unary Minus]
+                [Int 5]
 
 ================
 

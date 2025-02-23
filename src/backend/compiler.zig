@@ -462,7 +462,10 @@ const Compiler = struct {
         }
 
         if (data.return_kind == .ImplicitValue) {
-            try compiler.write_op(.Return, self.get_start());
+            try compiler.write_op(
+                .Return,
+                self.manager.instr_starts[self.manager.instr_idx - 1],
+            );
         } else if (data.return_kind == .ImplicitVoid) {
             try compiler.emit_return(0);
         }

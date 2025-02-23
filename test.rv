@@ -1,75 +1,41 @@
 fn main() {
-    _ = 5. != 3
-}
+    // First error, retuns an int
+    var a = if true { return 1 } else 4
+    // Second, same with str
+    var b = if false do 5 else return "oui"
 
-//fn main() {
-    // _ = 56
-    // _ = true
-    // _ = "tre"
-    // _ = (5)
-    // print "oui"
-    // _ = -5
-    // _ = -42.13
-    // _ = not false
-    // _ = 1+1
-    // print 5 / 6.
-    // print 5 / 6
-    // _ = true or false
-    // _ = 1 > 4
-    // _ = 5 >= 56
-    // _ = true == not false
-    // _ = 1 == 2.
-    // _ = "str" + "other"
-    // _ = 3 * "oui"
-    // _ = "non" * 5
-// 
-    // var a
-    // var b: int
-    // var c = 1
-    // var d:float = 1 * 5.
-// 
-    // {}
-    // {
-    //     _ = 5 + 4
-    // }
-    // { var tmp = 5 }
-    // var from_block = {5}
-// 
-    // {
-    //     var a = 4
-    //     var b: float = a
-    //     print "coucou"
-    //     var c
-    //     c = b
-    //     print c
-    // }
-// 
-    // var count = 1
-    // while count < 2 {
-    //     var a = 4
-    //     print a
-    //     var i = 0
-    //     while i<8 {
-    //         var c = "str"
-    //         i = i + 1
-    //     }
-    //     print i
-    //     count = 2
-    // }
-// 
-    // fn add() {}
-    // fn sub(a: float) -> float {
-    //     // var tmp = 5
-    //     return 67. + a
-    // }
-    // _ = sub(2.)
-    // print sub(sub(2.))
-// 
-    // if true and false {
-    //     var abc = "st"
-    //     print 4
-    // } else {
-    //     print "non"
-    //     var abc = 4
-    // }
-//}
+    // If without else in non-partial context
+    var c = if true do 6
+
+    fn func(a: int, b: float) -> int {
+        // Returns b, which is a float
+        print if true do "str" else return b
+
+        var tmp: str = if true do return a + 2 else {
+            var local = 56.4
+            if false do "champ"
+        }
+
+        return if true {
+            if true {
+                return { 1. }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3
+            } else 8
+        }
+    }
+
+    fn func2() -> int {
+        return if true {
+            if true {
+                return { 1 }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3.6
+            } else 8
+        }
+    }
+}

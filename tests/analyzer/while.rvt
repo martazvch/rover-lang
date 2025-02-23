@@ -3,7 +3,6 @@
 // Errors
 
 code:
-
 fn main() {
     while 1 {}
     while "true" {}

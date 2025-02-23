@@ -33,43 +33,89 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[If cast None]
-[Block pop count 0]
-[Variable scope Local, index 1]
-
-[If cast None]
-[Variable scope Local, index 2]
-
-[Fn declaration, scope Local, index 3, return Explicit]
-[If cast None]
-[Variable scope Local, index 1]
-
-[If cast None]
-[Binop cast None, type int]
-[Variable scope Local, index 1]
-[Block pop count 1]
-// Definition of "local"
-[Variable scope Local, index 2]
-
-// Definition of tmp
-[Variable scope Local, index 2]
-
-// If without else
-[If cast None]
-
-[If cast None]
-[Block pop count 0]
-[If cast None]
-[Block pop count 0]
-[Block pop count 0]
-
-// Else
-[Block pop count 0]
-[If cast None]
-[Block pop count 0]
-[If cast None]
-[Block pop count 0]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [If cast: None, has else: true]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 0, is_expr: false]
+                [Return expr: false]
+        - else:
+            [Int 4]
+    [Variable declaration index: 2, scope: Local]
+        [If cast: None, has else: true]
+        - condition:
+            [Bool false]
+        - then:
+            [Int 5]
+        - else:
+            [Return expr: false]
+    [Fn declaration func, index: 3, scope: Local, return kind: Explicit]
+        [Print]
+            [If cast: None, has else: true]
+            - condition:
+                [Bool true]
+            - then:
+                [String str]
+            - else:
+                [Return expr: true]
+                    [Variable index: 1, scope: Local]
+        [Variable declaration index: 2, scope: Local]
+            [If cast: None, has else: true]
+            - condition:
+                [Bool true]
+            - then:
+                [Return expr: true]
+                    [Binop type: AddInt, cast: None]
+                        [Variable index: 1, scope: Local]
+                        [Int 2]
+            - else:
+                [Block pop count: 1, is_expr: true]
+                    [Variable declaration index: 2, scope: Local]
+                        [Float 56.4]
+                    [String champ]
+        [If cast: None, has else: false]
+        - condition:
+            [Bool true]
+        - then:
+            [Return expr: true]
+                [Int 8]
+        [Return expr: true]
+            [If cast: None, has else: true]
+            - condition:
+                [Bool true]
+            - then:
+                [Block pop count: 0, is_expr: true]
+                    [If cast: None, has else: true]
+                    - condition:
+                        [Bool true]
+                    - then:
+                        [Block pop count: 0, is_expr: true]
+                            [Return expr: true]
+                                [Block pop count: 0, is_expr: true]
+                                    [Int 1]
+                    - else:
+                        [Int 5]
+            - else:
+                [Block pop count: 0, is_expr: true]
+                    [If cast: None, has else: true]
+                    - condition:
+                        [Bool false]
+                    - then:
+                        [Block pop count: 0, is_expr: true]
+                            [Return expr: true]
+                                [If cast: None, has else: true]
+                                - condition:
+                                    [Bool true]
+                                - then:
+                                    [Block pop count: 0, is_expr: true]
+                                        [Return expr: true]
+                                            [Int 4]
+                                - else:
+                                    [Int 3]
+                    - else:
+                        [Int 8]
 
 ================
 
@@ -118,6 +164,8 @@ fn main() {
 
 error:
 IncompatibleFnType, void, int
+// Because the if is corrupt, it produces this error on the first one too
+IncompatibleIfType, void, int
 IncompatibleFnType, void, str
 
 // Partial if

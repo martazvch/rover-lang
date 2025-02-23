@@ -12,16 +12,19 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Block pop count 3]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Unary type float]
-[Variable scope Local, index 3]
-
-[Binop cast None, type float]
-[Variable scope Local, index 3]
-[Variable scope Local, index 1]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 3, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [Float 1.5]
+        [Variable declaration index: 2, scope: Local]
+            [Int 5]
+        [Variable declaration index: 3, scope: Local]
+            [Unary Minus]
+                [Float 0.5]
+        [Print]
+            [Binop type: AddFloat, cast: None]
+                [Variable index: 3, scope: Local]
+                [Variable index: 1, scope: Local]
 
 ================
 
@@ -47,30 +50,34 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Block pop count 3]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Unary type float]
-[Variable scope Local, index 3]
-
-[Binop cast None, type float]
-[Variable scope Local, index 3]
-[Variable scope Local, index 1]
-
-[Block pop count 2]
-[Variable scope Local, index 4]
-[Variable scope Local, index 5]
-
-[Binop cast None, type float]
-[Variable scope Local, index 5]
-[Variable scope Local, index 4]
-
-[Binop cast None, type float]
-[Variable scope Local, index 4]
-[Variable scope Local, index 3]
-
-[Variable scope Local, index 2]
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 3, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [Float 1.5]
+        [Variable declaration index: 2, scope: Local]
+            [Int 5]
+        [Variable declaration index: 3, scope: Local]
+            [Unary Minus]
+                [Float 0.5]
+        [Print]
+            [Binop type: AddFloat, cast: None]
+                [Variable index: 3, scope: Local]
+                [Variable index: 1, scope: Local]
+        [Block pop count: 2, is_expr: false]
+            [Variable declaration index: 4, scope: Local]
+                [Float 6]
+            [Variable declaration index: 5, scope: Local]
+                [Float 1.5]
+            [Print]
+                [Binop type: AddFloat, cast: None]
+                    [Variable index: 5, scope: Local]
+                    [Variable index: 4, scope: Local]
+            [Print]
+                [Binop type: AddFloat, cast: None]
+                    [Variable index: 4, scope: Local]
+                    [Variable index: 3, scope: Local]
+        [Print]
+            [Variable index: 2, scope: Local]
 
 ================
 
@@ -89,20 +96,24 @@ fn main() {
 }
 
 expect:
-[Variable scope Global, index 0]
-[Variable scope Global, index 1]
-[Variable scope Global, index 2]
-[Fn declaration, scope Global, index 3, return ImplicitVoid]
-
-[Block pop count 2]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-
-[Binop cast None, type str]
-[Binop cast None, type str]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Variable scope Global, index 1]
+[Variable declaration index: 0, scope: Global]
+    [Int 1]
+[Variable declaration index: 1, scope: Global]
+    [String .]
+[Variable declaration index: 2, scope: Global]
+    [String sneaky]
+[Fn declaration main, index: 3, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 2, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [String local]
+        [Variable declaration index: 2, scope: Local]
+            [String  var]
+        [Print]
+            [Binop type: AddStr, cast: None]
+                [Binop type: AddStr, cast: None]
+                    [Variable index: 1, scope: Local]
+                    [Variable index: 2, scope: Local]
+                [Variable index: 1, scope: Global]
 
 ================
 
@@ -126,22 +137,25 @@ fn main() {
 loc2 = "still glob"
 
 expect:
-[Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
-
-[Block pop count 2]
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-[Variable scope Local, index 2]
-
-[Block pop count 1]
-[Variable scope Local, index 3]
-[Variable scope Local, index 3]
-
-[Variable scope Local, index 1]
-[Variable scope Local, index 2]
-
-[Variable scope Global, index 0]
+[Variable declaration index: 0, scope: Global]
+    [String sneaky]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 2, is_expr: false]
+        [Variable declaration index: 1, scope: Local]
+            [String local]
+        [Variable declaration index: 2, scope: Local]
+            [String  var]
+        [Assignment index: 2, scope: Local]
+            [String assign local]
+        [Block pop count: 1, is_expr: false]
+            [Variable declaration index: 3, scope: Local]
+                [String sublocal]
+            [Assignment index: 3, scope: Local]
+                [String assign sub]
+        [Assignment index: 2, scope: Local]
+            [Variable index: 1, scope: Local]
+[Assignment index: 0, scope: Global]
+    [String still glob]
 
 ================
 

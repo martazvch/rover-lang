@@ -10,12 +10,15 @@ fn main() {
 
 // There is no cast in the binop
 expect:
-[Variable scope Global, index 0]
-[Variable scope Global, index 1]
-[Fn declaration, scope Global, index 2, return ImplicitVoid]
-[Binop cast None, type float]
-[Variable scope Global, index 0]
-[Variable scope Global, index 1]
+[Variable declaration index: 0, scope: Global]
+    [Float 7.5]
+[Variable declaration index: 1, scope: Global]
+    [Float 1.2]
+[Fn declaration main, index: 2, scope: Global, return kind: ImplicitVoid]
+    [Print]
+        [Binop type: AddFloat, cast: None]
+            [Variable index: 0, scope: Global]
+            [Variable index: 1, scope: Global]
 
 ================
 
@@ -28,10 +31,37 @@ fn main() {
 
 // No errors
 expect:
-[Variable scope Global, index 0]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
-[Unary type bool]
-[Variable scope Global, index 0]
+[Variable declaration index: 0, scope: Global]
+    [Bool true]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
+    [Print]
+        [Unary Bang]
+            [Variable index: 0, scope: Global]
+
+================
+
+// Function's return
+
+code:
+fn get_bool() -> bool { return true }
+
+fn main() {
+    var a = get_bool() // infered as bool
+    print not a // 'not' only allowed with booleans
+}
+
+// No errors
+expect:
+[Fn declaration get_bool, index: 0, scope: Global, return kind: Explicit]
+    [Return expr: true]
+        [Bool true]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [Fn call arity: 0, builtin: false]
+            [Variable index: 0, scope: Global]
+    [Print]
+        [Unary Bang]
+            [Variable index: 1, scope: Local]
 
 ================
 

@@ -5,8 +5,8 @@ fn add(a: int) {}
 fn main() {}
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
+[Fn declaration add, index: 0, scope: Global, return kind: ImplicitVoid]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
 
 ================
 
@@ -27,13 +27,16 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitValue]
-[Fn declaration, scope Global, index 1, return ImplicitVoid]
-
-[Block pop count 1]
-[Fn declaration, scope Local, index 1, return ImplicitValue]
-[Variable scope Local, index 3]
-[Binop cast None, type bool]
+[Fn declaration get_bool, index: 0, scope: Global, return kind: ImplicitValue]
+    [Bool true]
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
+    [Block pop count: 1, is_expr: false]
+        [Fn declaration another_bool, index: 1, scope: Local, return kind: ImplicitValue]
+            [Variable declaration index: 3, scope: Local]
+                [Int 5]
+            [Binop type: Or, cast: None]
+                [Bool true]
+                [Bool false]
 
 ================
 
@@ -52,19 +55,17 @@ fn main() {
 }
 
 expect:
-[Fn declaration, scope Global, index 0, return ImplicitVoid]
-
-// Add
-[Fn declaration, scope Local, index 1, return ImplicitVoid]
-
-// Sub
-[Fn declaration, scope Local, index 3, return ImplicitValue]
-[Variable scope Local, index 1]
-// Fin sub
-
-[Variable scope Local, index 3]
-[Fn call, casts: []]
-// Fin add
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Fn declaration add, index: 1, scope: Local, return kind: ImplicitVoid]
+        [Fn declaration sub, index: 3, scope: Local, return kind: ImplicitValue]
+            [Print]
+                [Variable index: 1, scope: Local]
+            [String yes]
+        [Discard]
+            [Fn call arity: 1, builtin: false]
+                [Variable index: 3, scope: Local]
+                - args:
+                [Int 1]
 
 ================
 
@@ -79,17 +80,22 @@ fn add3() -> int { return 5 }
 fn main() { }
 
 expect:
-[Fn declaration, scope Global, index 0, return Explicit]
-[Fn declaration, scope Global, index 1, return ImplicitValue]
-[Fn declaration, scope Global, index 2, return ImplicitVoid]
-[Fn declaration, scope Global, index 3, return Explicit]
-[Fn declaration, scope Global, index 4, return ImplicitVoid]
+[Fn declaration add, index: 0, scope: Global, return kind: Explicit]
+    [Return expr: false]
+[Fn declaration add1, index: 1, scope: Global, return kind: ImplicitValue]
+    [Int 5]
+[Fn declaration add2, index: 2, scope: Global, return kind: ImplicitVoid]
+[Fn declaration add3, index: 3, scope: Global, return kind: Explicit]
+    [Return expr: true]
+        [Int 5]
+[Fn declaration main, index: 4, scope: Global, return kind: ImplicitVoid]
 
 ================
 
 // Errors
 
 code:
+fn main() {}
 fn add1(arg1: void) {}
 fn add2(arg1: int, arg1: float) {}
 
@@ -103,7 +109,6 @@ fn add4() {
 
 fn bis() {}
 fn bis() {}
-fn main() {}
 
 error:
 VoidParam

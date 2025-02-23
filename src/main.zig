@@ -144,7 +144,6 @@ fn repl(
 const test_config = @import("test_config");
 
 pub const Parser = @import("frontend/parser.zig").Parser;
-pub const Analyzer = @import("frontend/analyzer.zig").Analyzer;
 pub const Compiler = @import("backend/compiler.zig");
 
 test {
@@ -155,6 +154,7 @@ test {
     }
 
     if (stage == .analyzer or stage == .all) {
+        const Analyzer = @import("frontend/analyzer.zig").Analyzer;
         std.testing.refAllDecls(Analyzer);
     }
 
