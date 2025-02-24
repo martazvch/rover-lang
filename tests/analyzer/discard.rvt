@@ -5,12 +5,10 @@
 code:
 fn main() {
     3+4
-    "ok"
     _ = 3+4
 }
 
 error:
-UnusedValue
 UnusedValue
 
 ================

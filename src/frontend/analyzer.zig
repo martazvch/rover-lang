@@ -233,7 +233,7 @@ pub const Analyzer = struct {
         self.node_mains = nodes.items(.main);
         self.node_data = nodes.items(.data);
 
-        // HACK: to protect an -1 access
+        // HACK: to protect a -1 access
         try self.states.append(.{});
 
         while (self.node_idx < self.node_data.len) {
@@ -823,10 +823,7 @@ pub const Analyzer = struct {
         self.node_idx += 1;
 
         for (0..length) |i| {
-            final = self.analyze_node(self.node_idx) catch |e| switch (e) {
-                error.Err => continue,
-                else => return e,
-            };
+            final = try self.analyze_node(self.node_idx);
 
             if (final != Void and i != length - 1) {
                 return self.err(.UnusedValue, self.to_span(self.node_idx));
@@ -1049,6 +1046,7 @@ pub const Analyzer = struct {
         // We don't use block because we don't want to emit extra data from the block
         self.node_idx += 1;
         var start = self.node_idx;
+        var body_err = false;
         var body_type: Type = Void;
         var deadcode_start: usize = 0;
         var deadcode_count: usize = 0;
@@ -1069,7 +1067,10 @@ pub const Analyzer = struct {
             // We try to analyze the whole body
             start = self.node_idx;
             const type_ = self.analyze_node(self.node_idx) catch |e| switch (e) {
-                error.Err => continue,
+                error.Err => {
+                    body_err = true;
+                    continue;
+                },
                 else => return e,
             };
 
@@ -1083,7 +1084,7 @@ pub const Analyzer = struct {
             }
         }
 
-        if (body_type != return_type) {
+        if (!body_err and body_type != return_type) {
             return self.err(
                 .{ .IncompatibleFnType = .{
                     .expect = self.get_type_name(return_type),

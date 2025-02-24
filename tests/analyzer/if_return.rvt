@@ -164,8 +164,6 @@ fn main() {
 
 error:
 IncompatibleFnType, void, int
-// Because the if is corrupt, it produces this error on the first one too
-IncompatibleIfType, void, int
 IncompatibleFnType, void, str
 
 // Partial if
@@ -179,15 +177,9 @@ MissingElseClause, str
 
 // Nested if
 IncompatibleFnType, int, float
-// Here void because first nested return invalidates the whole if
-// so analyze produces a "void" for then branch that is incompatible
-// from function return type. After that, the else branch is skipped
-IncompatibleFnType, int, void
 
 // Func 2, very nested type error
 IncompatibleFnType, int, float
-// Same, because of first error, resulting type is void, so new error
-IncompatibleFnType, int, void
 
 ================
 
