@@ -3,7 +3,6 @@ const print = std.debug.print;
 const config = @import("config");
 const Allocator = std.mem.Allocator;
 const Stmt = @import("../frontend/ast.zig").Stmt;
-const AnalyzedStmt = @import("../frontend/analyzed_ast.zig").AnalyzedStmt;
 const Gc = @import("gc.zig").Gc;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;

@@ -30,14 +30,12 @@ pub const RirRenderer = struct {
     pub fn init(
         allocator: Allocator,
         source: []const u8,
-        // instructions: []const Instruction,
         instr_tags: []const Instruction.Tag,
         instr_data: []const Instruction.Data,
         interner: *const Interner,
     ) Self {
         return .{
             .source = source,
-            // .instructions = instructions,
             .instr_tags = instr_tags,
             .instr_data = instr_data,
             .interner = interner,
@@ -101,21 +99,6 @@ pub const RirRenderer = struct {
             .Use => self.use(index),
             .VarDecl => self.var_decl(index),
             .While => self.while_instr(),
-            // .Assignment => |i| self.assignment(i),
-            // .Binop => |i| self.binop(i),
-            // .Block => |i| self.block(i),
-            // .Bool => |i| self.bool_instr(i),
-            // .CastToFloat => try self.tree.appendSlice("[Cast to float]\n"),
-            // .Discard => try self.discard(),
-            // .Float => |i| self.float_instr(i),
-            // .Identifier => |i| self.identifier(i),
-            // .Int => |i| self.int_instr(i),
-            // .Null => try self.tree.appendSlice("[Null]\n"),
-            // .Print => try self.tree.appendSlice("[Print]\n"),
-            // .String => |i| self.string_instr(i),
-            // .Unary => |i| self.unary(i),
-            // .VarDecl => |i| self.var_decl(i),
-            // .While => self.while_instr(),
         };
     }
 

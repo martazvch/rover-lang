@@ -5,14 +5,6 @@ const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 const Interner = @import("../interner.zig").Interner;
-// const Stmt = Ast.Stmt;
-// const Expr = Ast.Expr;
-// const Span = Ast.Span;
-// const AstType = Ast.Type;
-// const AnalyzedAst = @import("analyzed_ast.zig");
-// const AnalyzedStmt = AnalyzedAst.AnalyzedStmt;
-// const Scope = AnalyzedAst.Scope;
-// const ReturnKind = AnalyzedAst.ReturnKind;
 const Ast = @import("ast.zig");
 const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
@@ -24,7 +16,6 @@ const Instruction = Rir.Instruction;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
-// const SourceSlice = @import("../frontend/ast.zig").SourceSlice;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const GenReport = @import("../reporter.zig").GenReport;
 const BA = @import("builtins_analyzer.zig");
@@ -62,11 +53,6 @@ pub const TypeManager = struct {
         try self.declared.put(try interner.intern("float"), Float);
         try self.declared.put(try interner.intern("int"), Int);
         try self.declared.put(try interner.intern("str"), Str);
-        // try self.declared.put("null", Null);
-        // try self.declared.put("bool", Bool);
-        // try self.declared.put("float", Float);
-        // try self.declared.put("int", Int);
-        // try self.declared.put("str", Str);
     }
 
     pub fn deinit(self: *Self) void {
@@ -150,7 +136,6 @@ pub const Analyzer = struct {
     globals: ArrayList(Variable),
     locals: ArrayList(Variable),
     scope_depth: usize,
-    // main: ?*const Ast.FnDecl,
     /// Offset updated at each fn call, emulate the frame pointer at runtime
     local_offset: usize,
     main: ?Node.Index,

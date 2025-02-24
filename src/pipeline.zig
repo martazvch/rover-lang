@@ -15,7 +15,6 @@ const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Chunk = @import("backend/chunk.zig").Chunk;
 const Vm = @import("runtime/vm.zig").Vm;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
-// const AnalyzedAstPrinter = @import("frontend/analyzed_ast_print.zig").AnalyzedAstPrinter;
 const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 
 pub const Config = struct {

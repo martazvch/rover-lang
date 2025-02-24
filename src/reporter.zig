@@ -5,7 +5,6 @@ const print = std.debug.print;
 const assert = std.debug.assert;
 const Writer = std.fs.File.Writer;
 const Span = @import("frontend/lexer.zig").Span;
-const UnsafeIterStr = @import("unsafe_iter.zig").UnsafeIterStr;
 
 const BoxChar = enum {
     BottomLeft,
