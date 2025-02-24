@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v1
         with:
-          version: master
+          version: 0.14.0-dev.2577+271452d22 
       - run: zig build -Doptimize=ReleaseFast test -Dstage=${{ matrix.stage }}
   lint:
     runs-on: macos-latest
