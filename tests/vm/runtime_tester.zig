@@ -18,10 +18,16 @@ test "runtime" {
     var test_dir = try cwd.openDir(path, .{ .iterate = true });
     defer test_dir.close();
 
+    std.debug.print("cwd: {s}", .{
+        try std.fs.cwd().realpathAlloc(allocator, "."),
+    });
+
     var base_walker = try test_dir.walk(allocator);
     defer base_walker.deinit();
 
     while (try base_walker.next()) |*item| {
+        std.debug.print("Item: {s}\n", .{item.path});
+
         if (std.mem.endsWith(u8, item.path, ".rv")) {
             const exe_name = if (builtin.os.tag == .windows) "rover-lang.exe" else "rover-lang";
 
