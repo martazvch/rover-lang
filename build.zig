@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Stage = enum { all, parser, analyzer, compiler, vm };
+const Stage = enum { all, lexer, parser, analyzer, compiler, vm };
 
 pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "rover-lang",
+        .name = "rover",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -100,11 +100,35 @@ pub fn build(b: *std.Build) !void {
 
     const run_exe_tests = b.addRunArtifact(tests_exe);
     tests_exe.root_module.addOptions("test_config", test_options);
-
     tests_exe.root_module.addOptions("config", options);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_tests.step);
+
+    // Tmp
+    const test_exe = b.addTest(.{
+        .root_source_file = b.path("tests/tester.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const run_test_exe = b.addRunArtifact(test_exe);
+    test_exe.root_module.addOptions("test_config", test_options);
+
+    test_step.dependOn(&run_test_exe.step);
+
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
 
     // Enable Vm tests
     if (stage == .vm or stage == .all) {

@@ -1,7 +1,7 @@
 import os
 from subprocess import Popen, PIPE
 
-def test(errs_path: str, tests_path: str):
+def test(name: str, errs_path: str, tests_path: str):
     errs = []
     success = True
 
@@ -28,6 +28,7 @@ def test(errs_path: str, tests_path: str):
                      errs.append(line.split(",")[0])
 
     # Check if there are all tested
+    first = True
     for e in errs:
         process = Popen(["rg", e, tests_path], stdout=PIPE, text=True)
 
@@ -37,7 +38,11 @@ def test(errs_path: str, tests_path: str):
             assert stdout
         except AssertionError:
             success = False
-            print(f"Not tested error: {e}")
+            if first:
+                print(f"Untested errors in: {name}")
+                first = False
+
+            print(f"  - {e}")
 
     return success
 
@@ -46,17 +51,33 @@ def test(errs_path: str, tests_path: str):
 # -----------
 
 success = test(
+    "Lexer",
+    os.path.join(os.getcwd(), "src", "frontend", "lexer_msg.zig"),
+    os.path.join(os.getcwd(), "tests", "lexer")
+)
+
+tmp = test(
+    "Parser",
     os.path.join(os.getcwd(), "src", "frontend", "parser_msg.zig"),
     os.path.join(os.getcwd(), "tests", "parser")
 )
 
-success = test(
-    os.path.join(os.getcwd(), "src", "frontend", "parser_msg.zig"),
-    os.path.join(os.getcwd(), "tests", "parser")
+if not tmp: success = False
+
+tmp = test(
+    "Analyzer",
+    os.path.join(os.getcwd(), "src", "frontend", "analyzer_msg.zig"),
+    os.path.join(os.getcwd(), "tests", "analyzer")
 )
 
-success = test(
-    os.path.join(os.getcwd(), "src", "frontend", "parser_msg.zig"),
-    os.path.join(os.getcwd(), "tests", "parser")
+if not tmp: success = False
+
+tmp = test(
+    "Compiler",
+    os.path.join(os.getcwd(), "src", "backend", "compiler_msg.zig"),
+    os.path.join(os.getcwd(), "tests", "compiler")
 )
 
+if not tmp: success = False
+
+assert success

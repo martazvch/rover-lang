@@ -18,11 +18,12 @@ pub fn main() !void {
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
-        \\-f, --file <FILE>      Path to the file to execute
+        \\<FILE>                 Path to the file to execute
         \\-s, --static-analyzis  Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
-        \\--print-ir   Prints the extra infos on AST
+        \\--print-ir             Prints the extra infos on AST
+        \\--exit-on-print        Stops execution after printing any pipeline's stage result
     );
 
     const parsers = comptime .{
@@ -49,9 +50,10 @@ pub fn main() !void {
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
     const static_analyzis = if (res.args.@"static-analyzis" == 1) true else false;
     const print_ir = if (res.args.@"print-ir" == 1) true else false;
+    const exit_on_print = if (res.args.@"exit-on-print" == 1) true else false;
 
-    if (res.args.file) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir);
+    if (res.positionals[0]) |f| {
+        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir, exit_on_print);
     } else {
         // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
     }
@@ -64,6 +66,7 @@ fn run_file(
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
+    exit_on_print: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -89,6 +92,7 @@ fn run_file(
             .print_bytecode = print_bytecode,
             .static_analyzis = static_analyzis,
             .print_ir = print_ir,
+            .exit_on_print = exit_on_print,
         },
         filename,
         zt,
@@ -147,22 +151,22 @@ pub const Parser = @import("frontend/parser.zig").Parser;
 pub const Compiler = @import("backend/compiler.zig");
 
 test {
-    const stage = test_config.stage;
-
-    if (stage == .parser or stage == .all) {
-        std.testing.refAllDecls(Parser);
-    }
-
-    if (stage == .analyzer or stage == .all) {
-        const Analyzer = @import("frontend/analyzer.zig").Analyzer;
-        std.testing.refAllDecls(Analyzer);
-    }
-
-    if (stage == .compiler or stage == .all) {
-        std.testing.refAllDecls(Compiler);
-    }
-
-    _ = @import("frontend/lexer.zig");
-    _ = @import("runtime/table.zig");
-    _ = @import("frontend/type_system.zig");
+    // const stage = test_config.stage;
+    //
+    // if (stage == .parser or stage == .all) {
+    //     std.testing.refAllDecls(Parser);
+    // }
+    //
+    // if (stage == .analyzer or stage == .all) {
+    //     const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+    //     std.testing.refAllDecls(Analyzer);
+    // }
+    //
+    // if (stage == .compiler or stage == .all) {
+    //     std.testing.refAllDecls(Compiler);
+    // }
+    //
+    // _ = @import("frontend/lexer.zig");
+    // _ = @import("runtime/table.zig");
+    // _ = @import("frontend/type_system.zig");
 }

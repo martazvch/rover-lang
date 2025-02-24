@@ -22,6 +22,7 @@ pub const Config = struct {
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
+    exit_on_print: bool,
 };
 
 pub const ReplPipeline = struct {
@@ -197,6 +198,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
 
         try ast_printer.parse_ast();
         ast_printer.display();
+
+        if (config.exit_on_print) return;
     }
 
     // Analyzer
@@ -241,6 +244,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
 
         try rir_renderer.parse_ir();
         rir_renderer.display();
+
+        if (config.exit_on_print) return;
     }
 
     // Start of Vm for compilation
@@ -261,6 +266,9 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         false,
     );
     defer compiler.deinit();
+
+    if (config.print_bytecode and config.exit_on_print) return;
+
     const function = try compiler.compile();
 
     // Run the program
