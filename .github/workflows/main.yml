@@ -14,7 +14,7 @@ jobs:
     steps:
       - run: gh cache delete --all --repo martazvch/rover-lang
         env:
-            GITHUB_TOKEN: ${{ secrets.ACTION_CLEAR_CACHES_TOKEN }}
+            GH_TOKEN: ${{ secrets.ACTION_CLEAR_CACHES_TOKEN }}
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v1
         with:
