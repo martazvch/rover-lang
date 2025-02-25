@@ -17,7 +17,8 @@ jobs:
         with:
           version: 0.14.0-dev.2577+271452d22 
       - run: zig env
-      - run: rm -rf /home/runner/.cache/zig
+      - run: rm -rf /home/runner/.cache/zig/*
+      - run: rm -rf /Users/runner/.cache/zig/*
       - run: zig env
       - run: zig build -Doptimize=ReleaseFast test -Dstage=${{ matrix.stage }}
   lint:
