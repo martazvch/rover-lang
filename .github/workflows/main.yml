@@ -12,6 +12,9 @@ jobs:
         stage: [parser, analyzer, compiler, vm]
     runs-on: ${{matrix.os}}
     steps:
+      - run: gh cache delete --all --repo martazvch/rover-lang
+        env:
+            GITHUB_TOKEN: ${{ secrets.ACTION_CLEAR_CACHES_TOKEN }}
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v1
         with:
