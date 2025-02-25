@@ -1,6 +1,4 @@
 // Tests imports
-config:
-ignore main-call
 
 // Global use
 
@@ -16,7 +14,7 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_GET_GLOBAL index 0
 OP_CONSTANT index 0, value 12
 OP_NATIVE_CALL index 1
@@ -31,11 +29,16 @@ OP_PRINT
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <native fn>
 OP_DEFINE_GLOBAL index 0
 OP_CONSTANT index 1, value <native fn>
 OP_DEFINE_GLOBAL index 1
+
+OP_CONSTANT index 2, value <fn main>
+OP_DEFINE_GLOBAL index 2
+OP_GET_GLOBAL index 2
+OP_CALL index 0
 
 ================
 
@@ -61,7 +64,7 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 // First block
 OP_CONSTANT index 0, value <native fn>
 OP_CONSTANT index 1, value <native fn>
@@ -96,6 +99,12 @@ OP_POP
 
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -132,7 +141,7 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 // First block
 OP_CONSTANT index 0, value <native fn>
 OP_CONSTANT index 1, value <native fn>
@@ -192,10 +201,15 @@ OP_POP
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <native fn>
 OP_DEFINE_GLOBAL index 0
 OP_CONSTANT index 1, value <native fn>
 OP_DEFINE_GLOBAL index 1
+
+OP_CONSTANT index 2, value <fn main>
+OP_DEFINE_GLOBAL index 2
+OP_GET_GLOBAL index 2
+OP_CALL index 0
 
 ================

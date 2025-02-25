@@ -28,13 +28,13 @@ pub const CompilationManager = struct {
     instr_data: []const Instruction.Data,
     instr_starts: []const usize,
     instr_idx: usize,
-    print_bytecode: bool,
+    render_mode: Disassembler.RenderMode,
     main: usize,
     main_index: ?u8,
     repl: bool,
 
     const Self = @This();
-    const Error = error{err} || Chunk.Error;
+    const Error = error{err} || Chunk.Error || std.posix.WriteError;
     const CompilerReport = GenReport(CompilerMsg);
 
     pub fn init(
@@ -44,7 +44,7 @@ pub const CompilationManager = struct {
         instr_tags: []const Instruction.Tag,
         instr_data: []const Instruction.Data,
         instr_starts: []const usize,
-        print_bytecode: bool,
+        render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
     ) Self {
@@ -58,7 +58,7 @@ pub const CompilationManager = struct {
             .instr_data = instr_data,
             .instr_starts = instr_starts,
             .instr_idx = 0,
-            .print_bytecode = print_bytecode,
+            .render_mode = render_mode,
             .main = main,
             .main_index = null,
             .repl = repl,
@@ -100,7 +100,7 @@ const Compiler = struct {
     fn_kind: FnKind,
 
     const Self = @This();
-    const Error = error{err} || Chunk.Error;
+    const Error = error{err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
 
@@ -213,13 +213,15 @@ const Compiler = struct {
         try self.write_op(.Return, offset);
     }
 
-    pub fn end(self: *Self) !*ObjFunction {
+    pub fn end(self: *Self) Error!*ObjFunction {
         // Disassembler
-        if (self.manager.print_bytecode) {
-            var dis = Disassembler.init(&self.function.chunk, self.manager.vm.allocator, false);
+        if (self.manager.render_mode != .None) {
+            var dis = Disassembler.init(&self.function.chunk, self.manager.vm.allocator, self.manager.render_mode);
             defer dis.deinit();
             dis.dis_chunk(if (self.function.name) |n| n.chars else "Script") catch unreachable;
-            std.debug.print("\n{s}", .{dis.disassembled.items});
+            const stdout = std.io.getStdOut().writer();
+            try stdout.print("{s}", .{dis.disassembled.items});
+            if (self.enclosing != null) try stdout.writeAll("\n");
         }
 
         return self.function;
@@ -617,12 +619,3 @@ const Compiler = struct {
         try chunk.write_op(.Pop, start);
     }
 };
-
-// Tests
-test Compiler {
-    const GenericTester = @import("../tester.zig").GenericTester;
-    const get_test_data = @import("test_compiler.zig").get_test_data;
-
-    const Tester = GenericTester("compiler", CompilerMsg, get_test_data);
-    try Tester.run();
-}

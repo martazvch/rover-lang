@@ -8,15 +8,16 @@ const OpCode = @import("chunk.zig").OpCode;
 pub const Disassembler = struct {
     chunk: *const Chunk,
     disassembled: ArrayList(u8),
-    test_mode: bool,
+    render_mode: RenderMode,
 
     const Self = @This();
+    pub const RenderMode = enum { None, Normal, Test };
 
-    pub fn init(chunk: *const Chunk, allocator: Allocator, test_mode: bool) Self {
+    pub fn init(chunk: *const Chunk, allocator: Allocator, render_mode: RenderMode) Self {
         return .{
             .chunk = chunk,
             .disassembled = ArrayList(u8).init(allocator),
-            .test_mode = test_mode,
+            .render_mode = render_mode,
         };
     }
 
@@ -30,8 +31,7 @@ pub const Disassembler = struct {
 
     pub fn dis_slice(self: *Self, name: []const u8, start: usize) !void {
         var writer = self.disassembled.writer();
-
-        if (!self.test_mode) try writer.print("== {s} ==\n", .{name});
+        try writer.print("-- {s} --\n", .{name});
 
         var i: usize = start;
         while (i < self.chunk.code.items.len) {
@@ -40,7 +40,7 @@ pub const Disassembler = struct {
     }
 
     pub fn dis_instruction(self: *const Self, offset: usize, writer: anytype) !usize {
-        if (!self.test_mode) try writer.print("{:0>4} ", .{offset});
+        if (self.render_mode == .Normal) try writer.print("{:0>4} ", .{offset});
 
         // if (offset > 0 and self.chunk.lines.items[offset] == self.chunk.lines.items[offset - 1]) {
         //     print("   | ", .{});
@@ -139,7 +139,7 @@ pub const Disassembler = struct {
     }
 
     fn simple_instruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
-        if (self.test_mode) {
+        if (self.render_mode == .Test) {
             try writer.print("{s}\n", .{name});
         } else {
             try writer.print("{s:<24}\n", .{name});
@@ -151,7 +151,7 @@ pub const Disassembler = struct {
     fn index_instruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
         const index = self.chunk.code.items[offset + 1];
 
-        if (self.test_mode) {
+        if (self.render_mode == .Test) {
             try writer.print("{s} index {}\n", .{ name, index });
         } else {
             try writer.print("{s:<24} index {:>4}\n", .{ name, index });
@@ -169,7 +169,7 @@ pub const Disassembler = struct {
         const constant = self.chunk.code.items[offset + 1];
         const value = self.chunk.constants[constant];
 
-        if (self.test_mode) {
+        if (self.render_mode == .Test) {
             try writer.print("{s} index {}, value ", .{ name, constant });
         } else {
             try writer.print("{s:<24} index {:>4}, value ", .{ name, constant });
@@ -191,7 +191,7 @@ pub const Disassembler = struct {
         jump |= self.chunk.code.items[offset + 2];
         const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 3;
 
-        if (self.test_mode) {
+        if (self.render_mode == .Test) {
             try writer.print("{s} {} -> {}\n", .{ name, offset, target });
         } else {
             try writer.print("{s:<24} {:>4} -> {}\n", .{ name, offset, target });
@@ -212,7 +212,7 @@ pub const Disassembler = struct {
         const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 4;
         const iter_index = self.chunk.code.items[offset + 3];
 
-        if (self.test_mode) {
+        if (self.render_mode == .Test) {
             try writer.print("{s} iter index {}, {} -> {}\n", .{ name, iter_index, offset, target });
         } else {
             try writer.print("{s:<24} iter index {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });

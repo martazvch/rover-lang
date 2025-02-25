@@ -1,20 +1,23 @@
 // Tests literals
 
-config:
-ignore main-call
-
 code:
 fn main() {
     _ = -1
 }
 
 expect:
--- Function main
+-- main --
 OP_CONSTANT index 0, value 1
 OP_NEGATE_INT
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -24,7 +27,7 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_CONSTANT index 0, value 1
 OP_NEGATE_INT
 OP_NEGATE_INT
@@ -34,6 +37,12 @@ OP_POP
 OP_NULL
 OP_RETURN
 
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
+
 ================
 
 code:
@@ -42,12 +51,18 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_CONSTANT index 0, value 65.82
 OP_NEGATE_FLOAT
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -57,12 +72,18 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_TRUE
 OP_NOT
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -72,12 +93,18 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_FALSE
 OP_NOT
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -87,7 +114,7 @@ fn main() {
 }
 
 expect:
--- Function main
+-- main --
 OP_TRUE
 OP_NOT
 OP_NOT
@@ -95,6 +122,12 @@ OP_NOT
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 

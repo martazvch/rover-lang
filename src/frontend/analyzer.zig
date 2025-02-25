@@ -173,7 +173,7 @@ pub const Analyzer = struct {
         returns: bool = false,
     };
 
-    const AnalyzerReport = GenReport(AnalyzerMsg);
+    pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
     pub fn init(self: *Self, allocator: Allocator, repl: bool) !void {
         self.arena = std.heap.ArenaAllocator.init(allocator);
@@ -963,7 +963,12 @@ pub const Analyzer = struct {
 
         // We add a empty variable to anticipate the function it self on the stack
         // it's the returned address for the function
-        try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx });
+        try self.locals.append(.{
+            .depth = self.scope_depth,
+            .name = name_idx,
+            .type_ = fn_type,
+            .initialized = true,
+        });
 
         // Skips function's node
         self.node_idx += 1;
@@ -1526,12 +1531,3 @@ pub const Analyzer = struct {
         );
     }
 };
-
-// Test
-test Analyzer {
-    const GenericTester = @import("../tester.zig").GenericTester;
-    const get_test_data = @import("test_analyzer.zig").get_test_data;
-
-    const Tester = GenericTester("analyzer", AnalyzerMsg, get_test_data);
-    try Tester.run();
-}

@@ -1,8 +1,5 @@
 // Function declaration
 
-config:
-ignore main-call
-
 // Global scope
 
 code:
@@ -12,15 +9,21 @@ fn main() {}
 // First for the 'add' implicit null return
 // Then for the 'main' body
 expect:
--- Function add
+-- add --
 OP_NULL
 OP_RETURN
 
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
+
+-- Global scope --
 OP_CONSTANT index 0, value <fn add>
 OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
@@ -34,15 +37,21 @@ fn main() {
 }
 
 expect:
--- Function main
+-- add --
+OP_NULL
+OP_RETURN
+
+-- main --
 OP_CONSTANT index 0, value <fn add>
 OP_POP
 OP_NULL
 OP_RETURN
 
--- Function add
-OP_NULL
-OP_RETURN
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -54,22 +63,28 @@ fn sub(a:int, b: float) -> int {
 fn main() {}
 
 expect:
--- Function add
+-- add --
 OP_NULL
 OP_RETURN
 
--- Function sub
+-- sub --
 OP_CONSTANT index 0, value 5
 OP_RETURN
 
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
+-- Global scope --
 OP_CONSTANT index 0, value <fn add>
 OP_DEFINE_GLOBAL index 0
 OP_CONSTANT index 1, value <fn sub>
 OP_DEFINE_GLOBAL index 1
+
+OP_CONSTANT index 2, value <fn main>
+OP_DEFINE_GLOBAL index 2
+OP_GET_GLOBAL index 2
+OP_CALL index 0
 
 ================
 

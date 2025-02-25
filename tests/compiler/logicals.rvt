@@ -1,15 +1,12 @@
 // Tests logicals
 
-config:
-ignore main-call
-
 code:
 fn main() {
     if true and false do print "yes"
 }
 
 expect:
--- Function main
+-- main --
 OP_TRUE
 OP_JUMP_IF_FALSE 1 -> 6
 OP_POP
@@ -22,5 +19,11 @@ OP_JUMP 13 -> 17
 OP_POP
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================

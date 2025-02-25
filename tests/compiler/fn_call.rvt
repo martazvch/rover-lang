@@ -1,9 +1,5 @@
 // Discard
 
-config:
-ignore main-call
-
-
 // Global
 code:
 fn add() {}
@@ -12,19 +8,24 @@ fn main() {
 }
 
 expect:
--- Function add
+-- add --
 OP_NULL
 OP_RETURN
 
--- Function main
+-- main --
 OP_GET_GLOBAL index 0
 OP_CALL index 0
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <fn add>
 OP_DEFINE_GLOBAL index 0
+
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
@@ -36,11 +37,11 @@ fn main() {
 }
 
 expect:
--- Function add
+-- add --
 OP_NULL
 OP_RETURN
 
--- Function main
+-- main --
 // Get function
 OP_GET_GLOBAL index 0
 // Compile args
@@ -51,9 +52,14 @@ OP_CALL index 2
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <fn add>
 OP_DEFINE_GLOBAL index 0
+
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
@@ -72,29 +78,34 @@ fn add3() {
 fn main() { }
 
 expect:
--- Function add1
+-- add1 --
 OP_GET_LOCAL index 2
 OP_RETURN
 
--- Function add2
+-- add2 --
 OP_GET_LOCAL index 1
 OP_RETURN
 
--- Function add3
+-- add3 --
 OP_NULL
 OP_RETURN
 
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <fn add1>
 OP_DEFINE_GLOBAL index 0
 OP_CONSTANT index 1, value <fn add2>
 OP_DEFINE_GLOBAL index 1
 OP_CONSTANT index 2, value <fn add3>
 OP_DEFINE_GLOBAL index 2
+
+OP_CONSTANT index 3, value <fn main>
+OP_DEFINE_GLOBAL index 3
+OP_GET_GLOBAL index 3
+OP_CALL index 0
 
 ================
 
@@ -109,7 +120,7 @@ fn add1(arg1: int, arg2: float,) -> float {
 fn main() { }
 
 expect:
--- Function add1
+-- add1 --
 OP_CONSTANT index 0, value 1
 OP_GET_LOCAL index 1
 OP_GET_LOCAL index 3
@@ -117,19 +128,23 @@ OP_ADD_INT
 OP_GET_LOCAL index 2
 OP_RETURN
 
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
-// Global scope
+-- Global scope --
 OP_CONSTANT index 0, value <fn add1>
 OP_DEFINE_GLOBAL index 0
+
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
 // Local args and body
 code:
-
 fn main() {
     fn add1(arg1: int, arg2: float,) -> float {
         var tmp = 1
@@ -141,7 +156,15 @@ fn main() {
 }
 
 expect:
--- Function main
+-- add1 --
+OP_CONSTANT index 0, value 1
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 3
+OP_ADD_INT
+OP_GET_LOCAL index 2
+OP_RETURN
+
+-- main --
 OP_CONSTANT index 0, value <fn add1>
 OP_GET_LOCAL index 1
 OP_CONSTANT index 1, value 1
@@ -151,13 +174,11 @@ OP_POP
 OP_NULL
 OP_RETURN
 
--- Function add1
-OP_CONSTANT index 0, value 1
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 3
-OP_ADD_INT
-OP_GET_LOCAL index 2
-OP_RETURN
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 
@@ -173,11 +194,15 @@ fn main() {
 }
 
 expect:
--- Function sub
+-- sub --
 OP_NULL
 OP_RETURN
 
--- Function main
+-- add1 --
+OP_NULL
+OP_RETURN
+
+-- main --
 OP_CONSTANT index 0, value <fn add1>
 OP_GET_LOCAL index 1
 OP_CONSTANT index 1, value 1
@@ -198,12 +223,13 @@ OP_CALL index 3
 OP_NULL
 OP_RETURN
 
--- Function add1
-OP_NULL
-OP_RETURN
-
-// Main scope
+-- Global scope --
 OP_CONSTANT index 0, value <fn sub>
 OP_DEFINE_GLOBAL index 0
+
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================

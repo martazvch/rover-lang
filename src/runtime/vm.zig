@@ -209,7 +209,7 @@ pub const Vm = struct {
             }
 
             if (comptime config.print_instr) {
-                var dis = Disassembler.init(&frame.function.chunk, self.allocator, false);
+                var dis = Disassembler.init(&frame.function.chunk, self.allocator, .Normal);
                 defer dis.deinit();
                 _ = try dis.dis_instruction(self.instruction_nb(), self.stdout);
             }

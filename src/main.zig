@@ -23,22 +23,18 @@ pub fn main() !void {
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
         \\--print-ir             Prints the extra infos on AST
-        \\--exit-on-print        Stops execution after printing any pipeline's stage result
+        \\--test-bytecode        Get the compiled bytecode in test format
     );
 
     const parsers = comptime .{
         .FILE = clap.parsers.string,
     };
 
-    // Initialize our diagnostics, which can be used for reporting useful errors.
-    // This is optional. You can also pass `.{}` to `clap.parse` if you don't
-    // care about the extra information `Diagnostics` provides.
     var diag = clap.Diagnostic{};
     var res = clap.parse(clap.Help, &params, parsers, .{
         .diagnostic = &diag,
         .allocator = gpa.allocator(),
     }) catch |err| {
-        // Report useful error and exit
         diag.report(std.io.getStdErr().writer(), err) catch {};
         std.process.exit(0);
     };
@@ -50,10 +46,10 @@ pub fn main() !void {
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
     const static_analyzis = if (res.args.@"static-analyzis" == 1) true else false;
     const print_ir = if (res.args.@"print-ir" == 1) true else false;
-    const exit_on_print = if (res.args.@"exit-on-print" == 1) true else false;
+    const test_bytecode = if (res.args.@"test-bytecode" == 1) true else false;
 
     if (res.positionals[0]) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir, exit_on_print);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir, test_bytecode);
     } else {
         // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
     }
@@ -66,7 +62,7 @@ fn run_file(
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
-    exit_on_print: bool,
+    test_bytecode: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -92,7 +88,7 @@ fn run_file(
             .print_bytecode = print_bytecode,
             .static_analyzis = static_analyzis,
             .print_ir = print_ir,
-            .exit_on_print = exit_on_print,
+            .test_bytecode = test_bytecode,
         },
         filename,
         zt,

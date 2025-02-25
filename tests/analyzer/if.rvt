@@ -235,6 +235,9 @@ MissingElseClause, float
 
 // Incompatible types warnings
 
+config:
+static-analyzis
+
 code:
 fn main() {
     var res = if true {1} else {5.6}

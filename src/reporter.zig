@@ -342,5 +342,21 @@ pub fn GenReport(comptime T: type) type {
         pub fn get_help(self: *const Self, writer: anytype) !void {
             return self.report.get_help(writer);
         }
+
+        pub fn to_str(self: *const Self, writer: anytype) !void {
+            const name = @tagName(self.report);
+            try writer.writeAll(name);
+
+            inline for (std.meta.fields(T)) |field| {
+                if (field.type != void and std.mem.eql(u8, field.name, name)) {
+                    const field_info = @field(self.report, field.name);
+
+                    inline for (std.meta.fields(field.type)) |subf| {
+                        const subv = @field(field_info, subf.name);
+                        try writer.print(", {s}", .{subv});
+                    }
+                }
+            }
+        }
     };
 }

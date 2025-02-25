@@ -1,10 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const print = std.debug.print;
 const Ast = @import("ast.zig");
 const Node = @import("ast.zig").Node;
 const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
+const ParserReport = @import("parser.zig").Parser.ParserReport;
 
 pub const AstPrinter = struct {
     source: [:0]const u8,
@@ -13,6 +13,7 @@ pub const AstPrinter = struct {
     node_tags: []const Node.Tag,
     node_mains: []const Ast.TokenIndex,
     node_data: []const usize,
+    errs: []const ParserReport,
     node_idx: usize,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
@@ -31,6 +32,7 @@ pub const AstPrinter = struct {
         node_tags: []const Node.Tag,
         node_mains: []const Ast.TokenIndex,
         node_data: []const usize,
+        errs: []const ParserReport,
     ) Self {
         return .{
             .source = source,
@@ -39,6 +41,7 @@ pub const AstPrinter = struct {
             .node_tags = node_tags,
             .node_mains = node_mains,
             .node_data = node_data,
+            .errs = errs,
             .node_idx = 0,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
@@ -49,8 +52,9 @@ pub const AstPrinter = struct {
         self.tree.deinit();
     }
 
-    pub fn display(self: *const Self) void {
-        print("\n--- AST ---\n{s}", .{self.tree.items});
+    pub fn display(self: *const Self) !void {
+        var stdout = std.io.getStdOut().writer();
+        try stdout.writeAll(self.tree.items);
     }
 
     fn indent(self: *Self) !void {
@@ -63,8 +67,18 @@ pub const AstPrinter = struct {
     }
 
     pub fn parse_ast(self: *Self) !void {
-        while (self.node_idx < self.node_data.len) {
+        if (self.errs.len > 0)
+            try self.parse_errs()
+        else while (self.node_idx < self.node_data.len)
             try self.parse_node(self.node_idx);
+    }
+
+    fn parse_errs(self: *Self) !void {
+        const stdout = std.io.getStdOut().writer();
+        for (self.errs, 0..) |err, i| {
+            try err.to_str(stdout);
+
+            if (i < self.errs.len - 1) try stdout.writeAll("\n");
         }
     }
 

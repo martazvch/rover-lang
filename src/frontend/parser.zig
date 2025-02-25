@@ -708,12 +708,3 @@ pub const Parser = struct {
         self.nodes.items(.data)[node] = arity;
     }
 };
-
-// Tests
-test Parser {
-    const GenericTester = @import("../tester.zig").GenericTester;
-    const get_test_data = @import("test_parser.zig").get_test_data;
-
-    const Tester = GenericTester("parser", ParserMsg, get_test_data);
-    try Tester.run();
-}

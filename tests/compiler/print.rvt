@@ -1,19 +1,22 @@
 // Tests print statement
 
-config:
-ignore main-call
-
 code:
 fn main() {
     print 1
 }
 
 expect:
--- Function main
+-- main --
 OP_CONSTANT index 0, value 1
 OP_PRINT
 OP_NULL
 OP_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
 
 ================
 

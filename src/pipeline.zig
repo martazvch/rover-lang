@@ -22,7 +22,7 @@ pub const Config = struct {
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
-    exit_on_print: bool,
+    test_bytecode: bool,
 };
 
 pub const ReplPipeline = struct {
@@ -177,12 +177,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         lexer.tokens.items(.span),
     );
 
-    if (parser.errs.items.len > 0) {
-        var reporter = GenReporter(ParserMsg).init(source);
-        try reporter.report_all(filename, parser.errs.items);
-        return;
-    }
-
     // Printer
     if (config.print_ast) {
         var ast_printer = AstPrinter.init(
@@ -193,13 +187,18 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
             parser.nodes.items(.tag),
             parser.nodes.items(.main),
             parser.nodes.items(.data),
+            parser.errs.items,
         );
         defer ast_printer.deinit();
 
         try ast_printer.parse_ast();
-        ast_printer.display();
+        try ast_printer.display();
 
-        if (config.exit_on_print) return;
+        return;
+    } else if (parser.errs.items.len > 0) {
+        var reporter = GenReporter(ParserMsg).init(source);
+        try reporter.report_all(filename, parser.errs.items);
+        return;
     }
 
     // Analyzer
@@ -211,8 +210,25 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
 
     try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
 
-    // Analyzer errors
-    if (analyzer.errs.items.len > 0) {
+    // Analyzed Ast printer
+    if (config.print_ir) {
+        var rir_renderer = RirRenderer.init(
+            allocator,
+            source,
+            analyzer.instructions.items(.tag),
+            analyzer.instructions.items(.data),
+            analyzer.errs.items,
+            analyzer.warns.items,
+            &analyzer.interner,
+            config.static_analyzis,
+        );
+        defer rir_renderer.deinit();
+
+        try rir_renderer.parse_ir();
+        try rir_renderer.display();
+
+        return;
+    } else if (analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.errs.items);
 
@@ -231,23 +247,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         return;
     }
 
-    // Analyzed Ast printer
-    if (config.print_ir) {
-        var rir_renderer = RirRenderer.init(
-            allocator,
-            source,
-            analyzer.instructions.items(.tag),
-            analyzer.instructions.items(.data),
-            &analyzer.interner,
-        );
-        defer rir_renderer.deinit();
-
-        try rir_renderer.parse_ir();
-        rir_renderer.display();
-
-        if (config.exit_on_print) return;
-    }
-
     // Start of Vm for compilation
     var vm: Vm = Vm.new(allocator);
     defer vm.deinit();
@@ -261,15 +260,14 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         analyzer.instructions.items(.tag),
         analyzer.instructions.items(.data),
         analyzer.instructions.items(.start),
-        config.print_bytecode,
+        if (config.print_bytecode) .Normal else if (config.test_bytecode) .Test else .None,
         analyzer.main.?,
         false,
     );
     defer compiler.deinit();
 
-    if (config.print_bytecode and config.exit_on_print) return;
-
     const function = try compiler.compile();
+    if (config.print_bytecode or config.test_bytecode) return;
 
     // Run the program
     try vm.run(function);

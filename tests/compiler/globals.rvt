@@ -1,19 +1,21 @@
 // Tests literals
 
-config:
-ignore main-call
-
 code:
 var a = 15.6
 fn main() {}
 
 expect:
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
+-- Global scope --
 OP_CONSTANT index 0, value 15.6
 OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
@@ -22,14 +24,19 @@ var number = 15.6 + .6
 fn main() {}
 
 expect:
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
+-- Global scope --
 OP_CONSTANT index 0, value 15.6
 OP_CONSTANT index 1, value 0.6
 OP_ADD_FLOAT
 OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 2, value <fn main>
+OP_DEFINE_GLOBAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
 
 ================
 
@@ -42,10 +49,11 @@ name = "Best software"
 fn main() {}
 
 expect:
--- Function main
+-- main --
 OP_NULL
 OP_RETURN
 
+-- Global scope --
 OP_CONSTANT index 0, value 15.6
 OP_CONSTANT index 1, value 0.6
 OP_ADD_FLOAT
@@ -57,6 +65,11 @@ OP_CAST_TO_FLOAT
 OP_SET_GLOBAL index 0
 OP_CONSTANT index 4, value "Best software"
 OP_SET_GLOBAL index 1
+
+OP_CONSTANT index 5, value <fn main>
+OP_DEFINE_GLOBAL index 2
+OP_GET_GLOBAL index 2
+OP_CALL index 0
 
 ================
 

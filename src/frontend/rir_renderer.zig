@@ -8,15 +8,18 @@ const Node = @import("ast.zig").Node;
 const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
 const Interner = @import("../interner.zig").Interner;
+const AnalyzerReport = @import("analyzer.zig").Analyzer.AnalyzerReport;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 
 pub const RirRenderer = struct {
     source: []const u8,
-    // instructions: []const Instruction,
     instr_tags: []const Instruction.Tag,
     instr_data: []const Instruction.Data,
+    errs: []const AnalyzerReport,
+    warns: []const AnalyzerReport,
     interner: *const Interner,
+    static_analyzis: bool,
     indent_level: u8 = 0,
     tree: ArrayList(u8),
     instr_idx: usize,
@@ -32,13 +35,19 @@ pub const RirRenderer = struct {
         source: []const u8,
         instr_tags: []const Instruction.Tag,
         instr_data: []const Instruction.Data,
+        errs: []const AnalyzerReport,
+        warns: []const AnalyzerReport,
         interner: *const Interner,
+        static_analyzis: bool,
     ) Self {
         return .{
             .source = source,
             .instr_tags = instr_tags,
             .instr_data = instr_data,
+            .errs = errs,
+            .warns = warns,
             .interner = interner,
+            .static_analyzis = static_analyzis,
             .indent_level = 0,
             .tree = ArrayList(u8).init(allocator),
             .instr_idx = 0,
@@ -49,8 +58,9 @@ pub const RirRenderer = struct {
         self.tree.deinit();
     }
 
-    pub fn display(self: *const Self) void {
-        print("\n--- IR ---\n{s}", .{self.tree.items});
+    pub fn display(self: *const Self) !void {
+        var stdout = std.io.getStdOut().writer();
+        try stdout.writeAll(self.tree.items);
     }
 
     fn indent(self: *Self) !void {
@@ -58,8 +68,27 @@ pub const RirRenderer = struct {
     }
 
     pub fn parse_ir(self: *Self) !void {
-        while (self.instr_idx < self.instr_tags.len) {
+        if (self.errs.len > 0)
+            try self.parse_errs()
+        else if (self.static_analyzis and self.warns.len > 0)
+            try self.parse_errs()
+        else while (self.instr_idx < self.instr_tags.len)
             try self.parse_instr(self.instr_idx);
+    }
+
+    fn parse_errs(self: *Self) !void {
+        const stdout = std.io.getStdOut().writer();
+        for (self.errs, 0..) |err, i| {
+            try err.to_str(stdout);
+
+            if (self.warns.len > 0 or i < self.errs.len - 1)
+                try stdout.writeAll("\n");
+        }
+
+        for (self.warns, 0..) |warn, i| {
+            try warn.to_str(stdout);
+
+            if (i < self.warns.len - 1) try stdout.writeAll("\n");
         }
     }
 

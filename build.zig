@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Stage = enum { all, lexer, parser, analyzer, compiler, vm };
+const Stage = enum { all, parser, analyzer, compiler, vm };
 
 pub fn build(b: *std.Build) !void {
     const options = b.addOptions();
@@ -105,7 +105,7 @@ pub fn build(b: *std.Build) !void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_tests.step);
 
-    // Tmp
+    // Tester for all pipeline's stages
     const test_exe = b.addTest(.{
         .root_source_file = b.path("tests/tester.zig"),
         .target = target,
@@ -115,37 +115,6 @@ pub fn build(b: *std.Build) !void {
     test_exe.root_module.addOptions("test_config", test_options);
 
     test_step.dependOn(&run_test_exe.step);
-
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-
-    // Enable Vm tests
-    if (stage == .vm or stage == .all) {
-        // Vm tests use the compiled Vm to run, with a special main
-        const runtime_tests_exe = b.addTest(.{
-            .root_source_file = b.path("tests/vm/runtime_tester.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-
-        const run_runtime_tests_exe = b.addRunArtifact(runtime_tests_exe);
-
-        test_step.dependOn(&run_runtime_tests_exe.step);
-
-        // Compiles the exe for the runtime tests
-        test_step.dependOn(b.getInstallStep());
-    }
 }
 
 fn get_stage_from_file(file_path: []const u8) Stage {

@@ -5,7 +5,6 @@ def test(name: str, errs_path: str, tests_path: str):
     errs = []
     success = True
 
-
     # Get all error messages
     with open(errs_path) as f:
         start = False
@@ -31,7 +30,6 @@ def test(name: str, errs_path: str, tests_path: str):
     first = True
     for e in errs:
         process = Popen(["rg", e, tests_path], stdout=PIPE, text=True)
-
         (stdout, _) = process.communicate()
 
         try:

@@ -34,6 +34,9 @@ InvalidArithmetic, str
 
 // Tests implicit casts
 
+config:
+static-analyzis
+
 code:
 fn main() {
     _ = 1+7.
@@ -62,6 +65,9 @@ FloatEqualCast
 ================
 
 // Float equality
+
+config:
+static-analyzis
 
 code:
 fn main() {
