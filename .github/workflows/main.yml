@@ -26,6 +26,8 @@ jobs:
       - name: Debug with SSH
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
+      - run: rm -rf ~/.cache/zig
+        if: ${{ matrix.stage == 'macos-latest' || matrix.stage == 'ubuntu-latest' }}
       - run: zig build -Doptimize=ReleaseFast test -Dstage=${{ matrix.stage }}
   lint:
     runs-on: macos-latest
