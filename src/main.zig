@@ -139,30 +139,3 @@ fn repl(
         try pipeline.run("stdin", zt);
     }
 }
-
-// Tests
-const test_config = @import("test_config");
-
-pub const Parser = @import("frontend/parser.zig").Parser;
-pub const Compiler = @import("backend/compiler.zig");
-
-test {
-    // const stage = test_config.stage;
-    //
-    // if (stage == .parser or stage == .all) {
-    //     std.testing.refAllDecls(Parser);
-    // }
-    //
-    // if (stage == .analyzer or stage == .all) {
-    //     const Analyzer = @import("frontend/analyzer.zig").Analyzer;
-    //     std.testing.refAllDecls(Analyzer);
-    // }
-    //
-    // if (stage == .compiler or stage == .all) {
-    //     std.testing.refAllDecls(Compiler);
-    // }
-    //
-    // _ = @import("frontend/lexer.zig");
-    // _ = @import("runtime/table.zig");
-    // _ = @import("frontend/type_system.zig");
-}

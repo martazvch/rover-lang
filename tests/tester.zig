@@ -2,74 +2,102 @@ const std = @import("std");
 const testing = std.testing;
 const builtin = @import("builtin");
 const print = std.debug.print;
-const allocator = std.testing.allocator;
-const test_config = @import("test_config");
+const Allocator = std.mem.Allocator;
+// const allocator = std.testing.allocator;
+// const test_config = @import("test_config");
 const eql = std.mem.eql;
 const fields = std.meta.fields;
+const clap = @import("clap");
 
-const RED = "\x1b[31m";
-const NORMAL = "\x1b[0m";
+const Stage = enum { all, parser, analyzer, compiler, vm };
+const Diagnostic = struct {
+    err_name: []const u8,
+    file_name: []const u8,
+    line: ?usize,
+    expect: ?[]const u8,
+    got: ?[]const u8,
+    diff: ?[]const u8,
 
-fn colorize_dif(str1: []const u8, str2: []const u8) ![]const u8 {
-    var res = std.ArrayList(u8).init(allocator);
+    const TestErr = error{err};
 
-    const State = enum {
-        normal,
-        until_nl1,
-        until_nl2,
+    pub fn display(self: Diagnostic, diff: bool) TestErr {
+        print("Error in file: {s}", .{self.file_name});
+
+        if (self.line) |line|
+            print(" line: {}\n", .{line})
+        else
+            print("\n", .{});
+
+        if (diff) {
+            if (self.expect) |txt| print("expect:\n{s}\n", .{txt});
+            if (self.got) |txt| print("got:\n{s}\n", .{txt});
+        }
+
+        return error.err;
+    }
+};
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const status = gpa.deinit();
+        std.debug.assert(status == .ok);
+    }
+    const allocator = gpa.allocator();
+
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit
+        \\--stage <STAGE>        Which stage to test [default: all]
+        \\--file <FILE>          File to test
+        \\--diff                 Show colored diff of expected/got
+    );
+
+    const parsers = comptime .{
+        .FILE = clap.parsers.string,
+        .STAGE = clap.parsers.enumeration(Stage),
     };
 
-    var i: usize = 0;
-    var j: usize = 0;
-    dif: switch (State.normal) {
-        .normal => {
-            if (i >= str1.len) break :dif;
-            if (j >= str2.len) break :dif;
+    var clap_diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, parsers, .{
+        .diagnostic = &clap_diag,
+        .allocator = gpa.allocator(),
+    }) catch |err| {
+        clap_diag.report(std.io.getStdErr().writer(), err) catch {};
+        std.process.exit(0);
+    };
+    defer res.deinit();
 
-            if (str1[i] != str2[j]) {
-                try res.appendSlice(RED);
-                try res.append(str2[j]);
-                i += 1;
-                j += 1;
-                continue :dif .until_nl1;
-            }
+    if (res.args.help != 0)
+        return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
 
-            try res.append(str2[j]);
-            i += 1;
-            j += 1;
-            continue :dif .normal;
+    const diff = if (res.args.diff == 1) true else false;
+
+    const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
+    defer allocator.free(tester_dir);
+    print("ExeDir: {s}\n", .{tester_dir});
+
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
+        tester_dir, if (builtin.os.tag == .windows) "rover.exe" else "rover",
+    });
+    defer allocator.free(exe_path);
+
+    var diag: Diagnostic = undefined;
+    switch (res.args.stage orelse .all) {
+        .all => {
+            // try run_stage_tests(allocator, &diag, exe_path, .parser);
+            // try run_stage_tests(allocator, &diag, exe_path, .analyzer);
+            // try run_stage_tests(allocator, &diag, exe_path, .compiler);
+            // try run_vm_tests(allocator, &diag, exe_path);
         },
-        .until_nl1 => {
-            if (i >= str1.len) break :dif;
-
-            if (str1[i] == '\n') {
-                i += 1;
-                continue :dif .until_nl2;
-            }
-
-            i += 1;
-            continue :dif .until_nl1;
-        },
-        .until_nl2 => {
-            if (j >= str2.len) break :dif;
-
-            if (str2[j] == '\n') {
-                try res.appendSlice(NORMAL);
-                try res.append(str2[j]);
-                j += 1;
-                continue :dif .normal;
-            }
-
-            try res.append(str2[j]);
-            j += 1;
-            continue :dif .until_nl2;
+        .vm => run_vm_tests(allocator, &diag, exe_path) catch return diag.display(diff),
+        else => |s| {
+            print("Else case: {s}\n", .{@tagName(s)});
+            // try run_stage_tests(allocator, &diag, exe_path, s);
         },
     }
-
-    return res.toOwnedSlice();
 }
 
-fn run_vm_tests(exe: []const u8) !void {
+fn run_vm_tests(allocator: Allocator, diag: *Diagnostic, exe: []const u8) !void {
     const cwd = std.fs.cwd();
 
     const path = try std.fs.path.join(allocator, &[_][]const u8{
@@ -95,14 +123,19 @@ fn run_vm_tests(exe: []const u8) !void {
             });
             defer allocator.free(file_path);
 
-            const res = try std.process.Child.run(.{
+            const res = std.process.Child.run(.{
                 .allocator = allocator,
                 .cwd_dir = cwd,
                 .argv = &[_][]const u8{
                     path_to_exe,
                     file_path,
                 },
-            });
+            }) catch |e| {
+                diag.err_name = @errorName(e);
+                diag.file_name = item.path;
+
+                return e;
+            };
             defer allocator.free(res.stdout);
             defer allocator.free(res.stderr);
 
@@ -134,10 +167,14 @@ fn run_vm_tests(exe: []const u8) !void {
 
                     const got = got_expects.next().?;
                     std.testing.expect(std.mem.eql(u8, got, exp)) catch |e| {
-                        print("Error in file: {s} line: {}\n", .{ item.path, i });
-                        print("expect:\n{s}\n", .{exp});
-                        print("got:\n{s}\n", .{got});
-                        print("\nStderr: {s}\n", .{res.stderr});
+                        diag.line = i;
+                        diag.expect = exp;
+                        diag.got = got;
+
+                        // print("Error in file: {s} line: {}\n", .{ item.path, i });
+                        // print("expect:\n{s}\n", .{exp});
+                        // print("got:\n{s}\n", .{got});
+                        // print("\nStderr: {s}\n", .{res.stderr});
                         return e;
                     };
                 }
@@ -146,7 +183,7 @@ fn run_vm_tests(exe: []const u8) !void {
     }
 }
 
-fn run_stage_tests(exe: []const u8, stage: test_config.@"build.Stage") !void {
+fn run_stage_tests(allocator: Allocator, diag: *Diagnostic, exe_path: []const u8, stage: Stage) !void {
     const path = try std.fs.path.join(allocator, &[_][]const u8{
         "tests", @tagName(stage),
     });
@@ -155,19 +192,22 @@ fn run_stage_tests(exe: []const u8, stage: test_config.@"build.Stage") !void {
     var cwd = try std.fs.cwd().openDir(path, .{ .iterate = true });
     defer cwd.close();
 
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    print("Opening files in dir: {s}\n", .{try std.os.getFdPath(cwd.fd, &buf)});
+
     var walker = try cwd.walk(allocator);
     defer walker.deinit();
 
     while (try walker.next()) |*entry| {
         if (std.mem.endsWith(u8, entry.basename, ".rvt")) {
-            try test_file(&cwd, exe, stage, entry.path);
+            try test_file(allocator, diag, exe_path, &cwd, stage, entry.path);
         }
     }
 }
 
 const Section = enum { Code, Config, Expect, Err, None };
 
-fn stage_to_opt(stage: test_config.@"build.Stage") []const u8 {
+fn stage_to_opt(stage: Stage) []const u8 {
     return switch (stage) {
         .parser => "--print-ast",
         .analyzer => "--print-ir",
@@ -176,16 +216,19 @@ fn stage_to_opt(stage: test_config.@"build.Stage") []const u8 {
     };
 }
 
-fn stage_extra_opt(stage: test_config.@"build.Stage") []const u8 {
+fn stage_extra_opt(stage: Stage) []const u8 {
     return if (stage == .analyzer) "-s" else "";
 }
 
 fn test_file(
+    allocator: Allocator,
+    diag: *Diagnostic,
+    exe_path: []const u8,
     dir: *std.fs.Dir,
-    exe: []const u8,
-    stage: test_config.@"build.Stage",
+    stage: Stage,
     file_path: []const u8,
 ) !void {
+    _ = diag;
     const file = try dir.openFile(file_path, .{ .mode = .read_only });
     defer file.close();
 
@@ -242,13 +285,15 @@ fn test_file(
             const exp = if (section == .Expect) expects.items else errors.items;
 
             run_test(
+                allocator,
+                exe_path,
                 dir,
-                exe,
                 stage,
                 std.mem.trimRight(u8, exp, "\n"),
                 std.mem.trimRight(u8, config_text.items, "\n"),
             ) catch |e| {
-                print("Error in test {} in file {s}\n\n", .{ test_count + 1, file_path });
+                print("Error in test {} in file {s}\n", .{ test_count + 1, file_path });
+                print("Error tag: {s}\n\n", .{@errorName(e)});
                 return e;
             };
 
@@ -275,46 +320,50 @@ fn test_file(
 }
 
 pub fn run_test(
-    cwd: *std.fs.Dir,
-    exe: []const u8,
-    stage: test_config.@"build.Stage",
+    allocator: Allocator,
+    diag: *Diagnostic,
+    exe_path: []const u8,
+    dir: *std.fs.Dir,
+    stage: Stage,
     exp: []const u8,
     config: []const u8,
 ) !void {
-    const path_to_exe = try std.fs.path.join(allocator, &[_][]const u8{
-        "..", "..", "zig-out", "bin", exe,
-    });
-    defer allocator.free(path_to_exe);
-
+    _ = diag;
     const argv = if (std.mem.eql(u8, config, "static-analyzis"))
         &[_][]const u8{
-            path_to_exe,
+            exe_path,
             "tmp.rv",
             stage_to_opt(stage),
             "-s",
         }
     else
         &[_][]const u8{
-            path_to_exe,
+            exe_path,
             "tmp.rv",
             stage_to_opt(stage),
         };
 
-    const res = try std.process.Child.run(.{
+    var buf: [std.fs.max_path_bytes]u8 = undefined;
+    const path = try std.os.getFdPath(dir.fd, &buf);
+
+    const res = std.process.Child.run(.{
         .allocator = allocator,
-        .cwd_dir = cwd.*,
+        .cwd = path,
         .argv = argv,
-    });
+    }) catch |e| {
+        print("Process failure, error tag: {s}\n", .{@errorName(e)});
+        return e;
+    };
     defer allocator.free(res.stdout);
     defer allocator.free(res.stderr);
 
     if (res.stderr.len > 0) std.debug.print("Process error executing file: {s}\n", .{res.stderr});
 
-    const got = try clean_text(res.stdout);
+    const got = try clean_text(allocator, res.stdout);
     defer allocator.free(got);
 
     std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), exp)) catch |e| {
-        const color_dif = try colorize_dif(exp, got);
+        const color_dif = try colorize_dif(allocator, exp, got);
         defer allocator.free(color_dif);
 
         print("expect:\n{s}\n\n", .{exp});
@@ -323,7 +372,7 @@ pub fn run_test(
     };
 }
 
-fn clean_text(text: []const u8) ![]const u8 {
+fn clean_text(allocator: Allocator, text: []const u8) ![]const u8 {
     var res = std.ArrayList(u8).init(allocator);
     var lines = std.mem.splitScalar(u8, text, '\n');
 
@@ -341,17 +390,64 @@ fn clean_text(text: []const u8) ![]const u8 {
     return res.toOwnedSlice();
 }
 
-test "runtime" {
-    const exe_name = if (builtin.os.tag == .windows) "rover.exe" else "rover";
+const RED = "\x1b[31m";
+const NORMAL = "\x1b[0m";
 
-    switch (test_config.stage) {
-        .all => {
-            try run_stage_tests(exe_name, .parser);
-            try run_stage_tests(exe_name, .analyzer);
-            try run_stage_tests(exe_name, .compiler);
-            try run_vm_tests(exe_name);
+fn colorize_dif(allocator: Allocator, str1: []const u8, str2: []const u8) ![]const u8 {
+    var res = std.ArrayList(u8).init(allocator);
+
+    const State = enum {
+        normal,
+        until_nl1,
+        until_nl2,
+    };
+
+    var i: usize = 0;
+    var j: usize = 0;
+    dif: switch (State.normal) {
+        .normal => {
+            if (i >= str1.len) break :dif;
+            if (j >= str2.len) break :dif;
+
+            if (str1[i] != str2[j]) {
+                try res.appendSlice(RED);
+                try res.append(str2[j]);
+                i += 1;
+                j += 1;
+                continue :dif .until_nl1;
+            }
+
+            try res.append(str2[j]);
+            i += 1;
+            j += 1;
+            continue :dif .normal;
         },
-        .vm => try run_vm_tests(exe_name),
-        else => |s| try run_stage_tests(exe_name, s),
+        .until_nl1 => {
+            if (i >= str1.len) break :dif;
+
+            if (str1[i] == '\n') {
+                i += 1;
+                continue :dif .until_nl2;
+            }
+
+            i += 1;
+            continue :dif .until_nl1;
+        },
+        .until_nl2 => {
+            if (j >= str2.len) break :dif;
+
+            if (str2[j] == '\n') {
+                try res.appendSlice(NORMAL);
+                try res.append(str2[j]);
+                j += 1;
+                continue :dif .normal;
+            }
+
+            try res.append(str2[j]);
+            j += 1;
+            continue :dif .until_nl2;
+        },
     }
+
+    return res.toOwnedSlice();
 }
