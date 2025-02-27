@@ -80,16 +80,16 @@ pub fn build(b: *std.Build) !void {
     // Options
     const test_options = b.addOptions();
 
-    var stage = b.option(Stage, "stage", "pipeline stage to test, defaults to all") orelse .all;
+    const stage = b.option(Stage, "stage", "pipeline stage to test, defaults to all") orelse .all;
 
     const file_path = b.option([]const u8, "file", "specific file to test, defaults to all") orelse "";
     test_options.addOption([]const u8, "file", file_path);
+    //
+    // if (!std.mem.eql(u8, file_path, "")) {
+    //     stage = get_stage_from_file(file_path);
+    // }
 
-    if (!std.mem.eql(u8, file_path, "")) {
-        stage = get_stage_from_file(file_path);
-    }
-
-    test_options.addOption(Stage, "stage", stage);
+    // test_options.addOption(Stage, "stage", stage);
 
     // All unit tests within source code
     // const tests_exe = b.addTest(.{
@@ -127,7 +127,14 @@ pub fn build(b: *std.Build) !void {
     const run_tester = b.addRunArtifact(tester_exe);
     run_tester.step.dependOn(b.getInstallStep());
     test_step.dependOn(&run_tester.step);
-    // run_tester.addArg("--stage=parser");
+
+    run_tester.addArg(switch (stage) {
+        .parser => "--stage=parser",
+        .analyzer => "--stage=analyzer",
+        .compiler => "--stage=compiler",
+        .vm => "--stage=vm",
+        .all => "--stage=all",
+    });
 }
 
 fn get_stage_from_file(file_path: []const u8) Stage {
