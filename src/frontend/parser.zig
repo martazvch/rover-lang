@@ -64,11 +64,6 @@ pub const Parser = struct {
             _ = self.declaration() catch |e| switch (e) {
                 // If it's our own error, we continue on parsing
                 Error.err => {
-                    // If last error was Eof, exit the parser
-                    if (self.errs.getLast().report == .UnexpectedEof) {
-                        return;
-                    }
-
                     self.synchronize();
                     continue;
                 },
@@ -269,7 +264,7 @@ pub const Parser = struct {
 
         _ = if (self.match(.SmallArrow))
             try self.extract_type()
-        else if (self.check(.Identifier))
+        else if (self.check(.Identifier) or self.check(.Bool) or self.check(.IntKw) or self.check(.FloatKw))
             return self.error_at_current(.ExpectArrowBeforeFnType)
         else
             try self.add_node(Node.Empty);
@@ -622,14 +617,9 @@ pub const Parser = struct {
             .Null => self.literal(.Null),
             .String => self.literal(.String),
             .True => self.bool_(),
-            else => |k| {
-                if (k == .Eof) {
-                    return self.error_at_prev(.UnexpectedEof);
-                } else {
-                    const span = self.token_spans[self.token_idx - 1];
-                    return self.error_at_prev(.{ .ExpectExpr = .{ .found = span.text(self.source) } });
-                }
-                unreachable;
+            else => {
+                const span = self.token_spans[self.token_idx - 1];
+                return self.error_at_prev(.{ .ExpectExpr = .{ .found = span.text(self.source) } });
             },
         };
     }

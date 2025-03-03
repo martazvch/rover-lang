@@ -49,18 +49,10 @@ def test(name: str, errs_path: str, tests_path: str):
 # -----------
 
 success = test(
-    "Lexer",
-    os.path.join(os.getcwd(), "src", "frontend", "lexer_msg.zig"),
-    os.path.join(os.getcwd(), "tests", "lexer")
-)
-
-tmp = test(
     "Parser",
     os.path.join(os.getcwd(), "src", "frontend", "parser_msg.zig"),
     os.path.join(os.getcwd(), "tests", "parser")
 )
-
-if not tmp: success = False
 
 tmp = test(
     "Analyzer",

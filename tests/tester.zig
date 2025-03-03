@@ -76,9 +76,8 @@ const Diagnostic = struct {
     pub fn display(self: Diagnostic, verbose: bool) void {
         print("    {s}", .{self.file_name});
 
-        if (verbose) {
-            if (self.test_id) |id| print(" in test nb {}", .{id});
-        }
+        if (verbose)
+            if (self.test_id) |id| print(" in test {}", .{id});
 
         if (self.line) |line|
             print(", line: {}\n", .{line})
@@ -275,7 +274,7 @@ const Tester = struct {
         return switch (stage) {
             .parser => "--print-ast",
             .analyzer => "--print-ir",
-            .compiler => "--test-bytecode",
+            .compiler => "--print-bytecode",
             else => unreachable,
         };
     }
@@ -345,13 +344,13 @@ const Tester = struct {
                     std.mem.trimRight(u8, config_text.items, "\n"),
                 ) catch {
                     self.diags.items[self.diags.items.len - 1].file_name = try self.allocator.dupe(u8, entry.basename);
-                    self.diags.items[self.diags.items.len - 1].test_id = test_count;
+                    self.diags.items[self.diags.items.len - 1].test_id = test_count + 1;
 
-                    var buf: [250]u8 = undefined;
-                    const written = try std.fmt.bufPrint(&buf, "failed_{s}_test_{}.rv", .{ entry.basename, test_count });
-                    const failed_file = try std.fs.cwd().createFile(written, .{});
-                    try failed_file.writeAll(code.items[0 .. code.items.len - 1]);
-                    failed_file.close();
+                    // var buf: [250]u8 = undefined;
+                    // const written = try std.fmt.bufPrint(&buf, "failed_{s}_test_{}.rv", .{ entry.basename, test_count });
+                    // const failed_file = try std.fs.cwd().createFile(written, .{});
+                    // try failed_file.writeAll(code.items[0 .. code.items.len - 1]);
+                    // failed_file.close();
                 };
 
                 code.clearRetainingCapacity();

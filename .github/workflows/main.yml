@@ -25,7 +25,10 @@ jobs:
       - name: Debug with SSH
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - run: zig build test
+      - name: build and test
+        run: zig build -Dtest-mode test
+      - name: error coverage
+        run: python3 tests/errors_coverage.py
   lint:
     runs-on: macos-latest
     steps:

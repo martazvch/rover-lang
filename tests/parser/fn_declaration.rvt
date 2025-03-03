@@ -107,13 +107,25 @@ fn add(a)
 fn add(a: int -> bool
 fn add() bool
 fn add() -> bool 1 + 1
+fn a(
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+    a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,a:int,
+) -> bool {}
 
 error:
 ExpectFnName
 ExpectParenAfterFnName
-ExpectParenAfterFnParams
+ExpectName, parameter
 ExpectName, parameter
 MissingFnParamType
 ExpectParenAfterFnParams
 ExpectArrowBeforeFnType
 ExpectBraceBeforeFnBody
+TooManyFnArgs, parameter
+
+================
+

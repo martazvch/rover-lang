@@ -17,7 +17,6 @@ pub const ParserMsg = union(enum) {
     TooManyFnArgs: struct { what: []const u8 },
     UnclosedBrace,
     UnclosedParen,
-    UnexpectedEof,
 
     const Self = @This();
 
@@ -41,7 +40,6 @@ pub const ParserMsg = union(enum) {
             .TooManyFnArgs => |e| writer.print("functions can't have more than 255 {s}", .{e.what}),
             .UnclosedBrace => writer.print("unclosed brace", .{}),
             .UnclosedParen => writer.print("unclosed parenthesis", .{}),
-            .UnexpectedEof => writer.print("unexpected end of file", .{}),
         };
     }
 
@@ -57,7 +55,7 @@ pub const ParserMsg = union(enum) {
             .MissingFnParamType,
             => writer.print("expect to be here", .{}),
             .ExpectColonBeforeType => writer.print("before this identifier", .{}),
-            .ExpectExpr, .ExpectNewLine, .UnexpectedEof => writer.print("here", .{}),
+            .ExpectExpr, .ExpectNewLine => writer.print("here", .{}),
             .ExpectFnName, .ExpectTypeName, .ExpectName => writer.print("this is not an identifier", .{}),
             .InvalidDiscard => writer.print("expect an assignment to '_'", .{}),
             .TooManyFnArgs => |e| writer.print("this is the 256th {s}", .{e.what}),

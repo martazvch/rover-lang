@@ -16,8 +16,8 @@ pub fn build(b: *std.Build) !void {
 
     const tracy_enabled = b.option(bool, "tracy", "Enable tracy client library") orelse false;
 
-    // const log_analyzer = b.option(bool, "log-analyzer", "prints the analyzer's logs") orelse false;
-    // options.addOption(bool, "log_analyzer", log_analyzer);
+    const test_mode = b.option(bool, "test-mode", "Compiles in test mode to enable certain behaviors") orelse false;
+    options.addOption(bool, "test_mode", test_mode);
 
     // Tracy module or empty one
     const tracy_dep = if (tracy_enabled) b.dependency("tracy", .{ .tracy_no_exit = true }) else undefined;

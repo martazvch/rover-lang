@@ -23,7 +23,6 @@ pub fn main() !void {
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
         \\--print-ir             Prints the extra infos on AST
-        \\--test-bytecode        Get the compiled bytecode in test format
     );
 
     const parsers = comptime .{
@@ -46,10 +45,9 @@ pub fn main() !void {
     const print_bytecode = if (res.args.@"print-bytecode" == 1) true else false;
     const static_analyzis = if (res.args.@"static-analyzis" == 1) true else false;
     const print_ir = if (res.args.@"print-ir" == 1) true else false;
-    const test_bytecode = if (res.args.@"test-bytecode" == 1) true else false;
 
     if (res.positionals[0]) |f| {
-        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir, test_bytecode);
+        try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir);
     } else {
         try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
     }
@@ -62,7 +60,6 @@ fn run_file(
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
-    test_bytecode: bool,
 ) !void {
     const file = std.fs.cwd().openFile(filename, .{ .mode = .read_only }) catch |err| {
         var buf: [500]u8 = undefined;
@@ -88,7 +85,6 @@ fn run_file(
             .print_bytecode = print_bytecode,
             .static_analyzis = static_analyzis,
             .print_ir = print_ir,
-            .test_bytecode = test_bytecode,
         },
         filename,
         zt,
@@ -117,7 +113,6 @@ fn repl(
         .print_bytecode = print_bytecode,
         .static_analyzis = static_analyzis,
         .print_ir = print_ir,
-        .test_bytecode = false,
     });
     try pipeline.init();
     defer pipeline.deinit();

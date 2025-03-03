@@ -1,10 +1,9 @@
 const std = @import("std");
+const options = @import("config");
 const Allocator = std.mem.Allocator;
 const GenReporter = @import("reporter.zig").GenReporter;
-const GenReport = @import("reporter.zig").GenReport;
 const Lexer = @import("frontend/lexer.zig").Lexer;
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const Token = @import("frontend/lexer.zig").Token;
 const Parser = @import("frontend/parser.zig").Parser;
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
@@ -12,7 +11,6 @@ const Analyzer = @import("frontend/analyzer.zig").Analyzer;
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
-const Chunk = @import("backend/chunk.zig").Chunk;
 const Vm = @import("runtime/vm.zig").Vm;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
 const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
@@ -22,7 +20,6 @@ pub const Config = struct {
     print_bytecode: bool,
     static_analyzis: bool,
     print_ir: bool,
-    test_bytecode: bool,
 };
 
 pub const ReplPipeline = struct {
@@ -85,22 +82,7 @@ pub const ReplPipeline = struct {
             var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, parser.errs.items);
             return;
-        } else if (self.config.print_ast) {
-            var ast_printer = AstPrinter.init(
-                self.allocator,
-                source,
-                lexer.tokens.items(.tag),
-                lexer.tokens.items(.span),
-                parser.nodes.items(.tag),
-                parser.nodes.items(.main),
-                parser.nodes.items(.data),
-                parser.errs.items,
-            );
-            defer ast_printer.deinit();
-
-            try ast_printer.parse_ast();
-            try ast_printer.display();
-        }
+        } else if (self.config.print_ast) try print_ast(self.allocator, source, &lexer, &parser);
 
         // Analyzer
         try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes);
@@ -120,22 +102,8 @@ pub const ReplPipeline = struct {
 
             self.stmts_count = self.analyzer.instructions.len;
             return;
-        } else if (self.config.print_ir) {
-            var rir_renderer = RirRenderer.init(
-                self.allocator,
-                source,
-                self.analyzer.instructions.items(.tag)[self.stmts_count..],
-                self.analyzer.instructions.items(.data)[self.stmts_count..],
-                self.analyzer.errs.items,
-                self.analyzer.warns.items,
-                &self.analyzer.interner,
-                self.config.static_analyzis,
-            );
-            defer rir_renderer.deinit();
-
-            try rir_renderer.parse_ir();
-            try rir_renderer.display();
-        }
+        } else if (self.config.print_ir)
+            try render_ir(self.allocator, source, &self.analyzer, self.config.static_analyzis);
 
         // Analyzer warnings
         if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
@@ -153,7 +121,7 @@ pub const ReplPipeline = struct {
             slice.items(.tag)[self.stmts_count..],
             slice.items(.data)[self.stmts_count..],
             slice.items(.start)[self.stmts_count..],
-            if (self.config.print_bytecode) .Normal else if (self.config.test_bytecode) .Test else .None,
+            if (self.config.print_bytecode) .Normal else .None,
             0,
             true,
         );
@@ -192,28 +160,16 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     );
 
     // Printer
-    if (config.print_ast) {
-        var ast_printer = AstPrinter.init(
-            allocator,
-            source,
-            lexer.tokens.items(.tag),
-            lexer.tokens.items(.span),
-            parser.nodes.items(.tag),
-            parser.nodes.items(.main),
-            parser.nodes.items(.data),
-            parser.errs.items,
-        );
-        defer ast_printer.deinit();
-
-        try ast_printer.parse_ast();
-        try ast_printer.display();
-
+    if (options.test_mode and config.print_ast) {
+        try print_ast(allocator, source, &lexer, &parser);
         return;
-    } else if (parser.errs.items.len > 0) {
+    }
+
+    if (parser.errs.items.len > 0) {
         var reporter = GenReporter(ParserMsg).init(source);
         try reporter.report_all(filename, parser.errs.items);
         return;
-    }
+    } else if (config.print_ast) try print_ast(allocator, source, &lexer, &parser);
 
     // Analyzer
     var analyzer: Analyzer = undefined;
@@ -223,24 +179,12 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
 
     // Analyzed Ast printer
-    if (config.print_ir) {
-        var rir_renderer = RirRenderer.init(
-            allocator,
-            source,
-            analyzer.instructions.items(.tag),
-            analyzer.instructions.items(.data),
-            analyzer.errs.items,
-            analyzer.warns.items,
-            &analyzer.interner,
-            config.static_analyzis,
-        );
-        defer rir_renderer.deinit();
-
-        try rir_renderer.parse_ir();
-        try rir_renderer.display();
-
+    if (options.test_mode and config.print_ir) {
+        try render_ir(allocator, source, &analyzer, config.static_analyzis);
         return;
-    } else if (analyzer.errs.items.len > 0) {
+    }
+
+    if (analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.report_all(filename, analyzer.errs.items);
 
@@ -250,7 +194,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         }
 
         return;
-    }
+    } else if (config.print_ir) try render_ir(allocator, source, &analyzer, config.static_analyzis);
 
     // Analyzer warnings
     if (config.static_analyzis and analyzer.warns.items.len > 0) {
@@ -264,6 +208,8 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     defer vm.deinit();
     try vm.init(false);
 
+    std.debug.print("TEST MODE: {}, PRINT BYTE: {}\n", .{ options.test_mode, config.print_bytecode });
+
     // Compiler
     var compiler = CompilationManager.init(
         &vm,
@@ -272,15 +218,59 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
         analyzer.instructions.items(.tag),
         analyzer.instructions.items(.data),
         analyzer.instructions.items(.start),
-        if (config.print_bytecode) .Normal else if (config.test_bytecode) .Test else .None,
+        if (options.test_mode and config.print_bytecode) .Test else if (config.print_bytecode) .Normal else .None,
         analyzer.main.?,
         false,
     );
     defer compiler.deinit();
 
     const function = try compiler.compile();
-    if (config.print_bytecode or config.test_bytecode) return;
+    if (options.test_mode and config.print_bytecode) return;
 
     // Run the program
     try vm.run(function);
+}
+
+fn print_ast(
+    allocator: Allocator,
+    source: [:0]const u8,
+    lexer: *const Lexer,
+    parser: *const Parser,
+) !void {
+    var ast_printer = AstPrinter.init(
+        allocator,
+        source,
+        lexer.tokens.items(.tag),
+        lexer.tokens.items(.span),
+        parser.nodes.items(.tag),
+        parser.nodes.items(.main),
+        parser.nodes.items(.data),
+        parser.errs.items,
+    );
+    defer ast_printer.deinit();
+
+    try ast_printer.parse_ast();
+    try ast_printer.display();
+}
+
+fn render_ir(
+    allocator: Allocator,
+    source: [:0]const u8,
+    analyzer: *const Analyzer,
+    static: bool,
+) !void {
+    var rir_renderer = RirRenderer.init(
+        allocator,
+        source,
+        analyzer.instructions.items(.tag),
+        analyzer.instructions.items(.data),
+        analyzer.errs.items,
+        analyzer.warns.items,
+        &analyzer.interner,
+        static,
+    );
+    defer rir_renderer.deinit();
+
+    try rir_renderer.parse_ir();
+    try rir_renderer.display();
 }
