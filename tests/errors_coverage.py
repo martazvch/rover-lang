@@ -29,7 +29,7 @@ def test(name: str, errs_path: str, tests_path: str):
     # Check if there are all tested
     first = True
     for e in errs:
-        process = Popen(["rg", e, tests_path], stdout=PIPE, text=True)
+        process = Popen(["grep", e, tests_path], stdout=PIPE, text=True)
         (stdout, _) = process.communicate()
 
         try:
