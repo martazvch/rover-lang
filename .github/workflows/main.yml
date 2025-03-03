@@ -16,7 +16,6 @@ jobs:
       fail-fast: false  # Allows all jobs to complete even if one fails
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
-        stage: [parser, analyzer, compiler, vm]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v4
@@ -26,8 +25,7 @@ jobs:
       - name: Debug with SSH
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
-      - run: zig build -Doptimize=ReleaseFast
-      - run: zig build -Doptimize=ReleaseFast test -Dstage=${{ matrix.stage }}
+      - run: zig build test
   lint:
     runs-on: macos-latest
     steps:
