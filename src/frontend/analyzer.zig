@@ -500,6 +500,7 @@ pub const Analyzer = struct {
             .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
+            .MultiVarDecl => try self.multi_var_decl(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(node),
             .Return => final = try self.return_expr(node),
@@ -821,9 +822,12 @@ pub const Analyzer = struct {
             }
         }
 
+        const count = try self.end_scope();
+        if (count > 255) return self.err(.TooManyLocals, self.to_span(self.node_idx));
+
         self.instructions.items(.data)[idx] = .{ .Block = .{
             .length = length,
-            .pop_count = @intCast(try self.end_scope()),
+            .pop_count = @intCast(count),
             .is_expr = if (final != Void) true else false,
         } };
 
@@ -1292,6 +1296,12 @@ pub const Analyzer = struct {
         return Int;
     }
 
+    fn multi_var_decl(self: *Self, node: Node.Index) !Type {
+        const count = self.node_data[node];
+        const value_count = self.node_data[node + count];
+
+    }
+
     fn null_lit(self: *Self) !Type {
         _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, self.node_idx);
         self.node_idx += 1;
@@ -1449,7 +1459,6 @@ pub const Analyzer = struct {
     fn var_decl(self: *Self, node: Node.Index) !void {
         // In case we propagate an error, we advance the counter to avoid
         // infinite loop
-        // TODO: do as in block?
         self.node_idx += 1;
         const type_idx = self.node_idx;
         self.node_idx += 1;

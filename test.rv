@@ -1,1 +1,3 @@
-fn add() bool
+fn main() {
+    var a, b, c
+}

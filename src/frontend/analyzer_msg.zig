@@ -20,6 +20,7 @@ pub const AnalyzerMsg = union(enum) {
     NonVoidWhile: struct { found: []const u8 },
     NoMain,
     ReturnOutsideFn,
+    TooManyLocals,
     TooManyTypes,
     TypeMismatch: struct { expect: []const u8, found: []const u8 },
     UndeclaredType: struct { found: []const u8 },
@@ -62,6 +63,7 @@ pub const AnalyzerMsg = union(enum) {
             .NoMain => writer.print("no main function found", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
             .ReturnOutsideFn => writer.print("return outside of a function", .{}),
+            .TooManyLocals => writer.print("too many local variables, maximum is 255", .{}),
             .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
             .TypeMismatch => |e| writer.print(
                 "type mismatch, expect a '{s}' but found '{s}' ",
@@ -85,34 +87,34 @@ pub const AnalyzerMsg = union(enum) {
 
     pub fn get_hint(self: Self, writer: anytype) !void {
         try switch (self) {
-            .AlreadyDeclared, .DuplicateParam => writer.print("this name", .{}),
-            .DeadCode => writer.print("code after this expression can't be reached", .{}),
-            .FloatEqual => writer.print("both sides are 'floats'", .{}),
-            .FloatEqualCast => writer.print("this expression is implicitly casted to 'float'", .{}),
+            .AlreadyDeclared, .DuplicateParam => writer.writeAll("this name"),
+            .DeadCode => writer.writeAll("code after this expression can't be reached"),
+            .FloatEqual => writer.writeAll("both sides are 'floats'"),
+            .FloatEqualCast => writer.writeAll("this expression is implicitly casted to 'float'"),
             .IncompatibleFnType => |e| writer.print("this expression is of type '{s}'", .{e.found}),
-            .IncompatibleIfType, .UnpureInGlobal => writer.print("this expression", .{}),
-            .InvalidArithmetic => writer.print("expression is not a numeric type", .{}),
-            .InvalidAssignTarget => writer.print("cannot assign to this expression", .{}),
-            .InvalidComparison => writer.print("expressions have different types", .{}),
+            .IncompatibleIfType, .UnpureInGlobal => writer.writeAll("this expression"),
+            .InvalidArithmetic => writer.writeAll("expression is not a numeric type"),
+            .InvalidAssignTarget => writer.writeAll("cannot assign to this expression"),
+            .InvalidComparison => writer.writeAll("expressions have different types"),
             .InvalidLogical => |e| writer.print("this expression resolves to a '{s}'", .{e.found}),
             .InvalidUnary,
             .NonBoolCond,
-            => writer.print("expression is not a boolean type", .{}),
-            .InvalidAssignType => writer.print("expression doesn't match variable's type", .{}),
-            .ImplicitCast => writer.print("expressions have different types", .{}),
+            => writer.writeAll("expression is not a boolean type"),
+            .InvalidAssignType => writer.writeAll("expression doesn't match variable's type"),
+            .ImplicitCast => writer.writeAll("expressions have different types"),
             .NonVoidWhile => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
-            .NoMain => writer.print("in this file", .{}),
+            .NoMain => writer.writeAll("in this file"),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
-            .ReturnOutsideFn => writer.print("here", .{}),
-            .TooManyTypes => writer.print("this is the exceding one", .{}),
+            .ReturnOutsideFn => writer.writeAll("here"),
+            .TooManyLocals, .TooManyTypes => writer.writeAll("this is the exceding one"),
             .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
-            .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.print("here", .{}),
-            .UnknownModule => writer.print("this name", .{}),
-            .UnusedValue => writer.print("this expression produces a value", .{}),
-            .VoidAssignment => writer.print("this expression produces no value", .{}),
-            .VoidDiscard => writer.print("this expression produces no value", .{}),
-            .VoidParam => writer.print("this parameter", .{}),
-            .WrongFnArgsCount => writer.print("this call", .{}),
+            .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.writeAll("here"),
+            .UnknownModule => writer.writeAll("this name"),
+            .UnusedValue => writer.writeAll("this expression produces a value"),
+            .VoidAssignment => writer.writeAll("this expression produces no value"),
+            .VoidDiscard => writer.writeAll("this expression produces no value"),
+            .VoidParam => writer.writeAll("this parameter"),
+            .WrongFnArgsCount => writer.writeAll("this call"),
         };
     }
 
@@ -120,71 +122,66 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .AlreadyDeclared,
             .DuplicateParam,
-            => writer.print("use another name or introduce numbers, underscore, ...", .{}),
-            .DeadCode => writer.print("remove unreachable code", .{}),
-            .VoidDiscard => writer.print("remove the discard", .{}),
-            .FloatEqual => writer.print(
+            => writer.writeAll("use another name or introduce numbers, underscore, ..."),
+            .DeadCode => writer.writeAll("remove unreachable code"),
+            .VoidDiscard => writer.writeAll("remove the discard"),
+            .FloatEqual => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like
                 \\   value < 1e-6  instead of  value == 0
                 \\   value - other < 1e-6  instead of  value < other
-            ,
-                .{},
+                ,
             ),
-            .FloatEqualCast => writer.print(
+            .FloatEqualCast => writer.writeAll(
                 \\only values of same type can be compared so expression is implicitly casted to a float.
                 \\   This results in an unsafe floating-point comparison. To avoid this, explicitly
                 \\   cast the expression to 'float' and compare against an Epsilon (like 1e-5)
-            ,
-                .{},
+                ,
             ),
             .IncompatibleFnType => |e| writer.print(
                 "modify function's body to match '{s}' type or change function's definition",
                 .{e.expect},
             ),
-            .IncompatibleIfType => writer.print("make both paths return the same type", .{}),
+            .IncompatibleIfType => writer.writeAll("make both paths return the same type"),
             .InvalidArithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),
-            .InvalidAssignTarget => writer.print("can only assign to variables", .{}),
+            .InvalidAssignTarget => writer.writeAll("can only assign to variables"),
             .InvalidComparison => |e| writer.print(
                 "expressions must have the same type when compared, found '{s}' and '{s}'",
                 .{ e.found1, e.found2 },
             ),
-            .InvalidLogical => writer.print("modify the logic to operate on booleans", .{}),
+            .InvalidLogical => writer.writeAll("modify the logic to operate on booleans"),
             .InvalidUnary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
             .InvalidAssignType => |e| writer.print(
                 "variable is declared of type '{s}' but expression is of type '{s}'",
                 .{ e.expect, e.found },
             ),
             .ImplicitCast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
-            .MissingElseClause => writer.print("add an 'else' block that evaluate to the expected type", .{}),
+            .MissingElseClause => writer.writeAll("add an 'else' block that evaluate to the expected type"),
             .NonBoolCond => |e| writer.print("'{s}' conditions can only be boolean type", .{e.what}),
-            .NonVoidWhile => writer.print("use '_' to ignore the value or modify the body", .{}),
-            .NoMain => writer.print("add a 'main' function that will be called automatically at execution", .{}),
-            .ReturnOutsideFn => writer.print(
+            .NonVoidWhile => writer.writeAll("use '_' to ignore the value or modify the body"),
+            .NoMain => writer.writeAll("add a 'main' function that will be called automatically at execution"),
+            .ReturnOutsideFn => writer.writeAll(
                 "return statements are only allow to exit a function's body." ++
                     "If in loops, use 'break' otherwise remove the return",
-                .{},
             ),
-            .TooManyTypes => writer.print(
+            .TooManyLocals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
+            .TooManyTypes => writer.writeAll(
                 "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",
-                .{},
             ),
-            .TypeMismatch => writer.print("change the type to match expected one", .{}),
-            .UndeclaredType => writer.print("consider declaring or importing the type before use", .{}),
-            .UndeclaredVar => writer.print("consider declaring or importing the variable before use", .{}),
-            .UnknownModule => writer.print(
+            .TypeMismatch => writer.writeAll("change the type to match expected one"),
+            .UndeclaredType => writer.writeAll("consider declaring or importing the type before use"),
+            .UndeclaredVar => writer.writeAll("consider declaring or importing the variable before use"),
+            .UnknownModule => writer.writeAll(
                 "create the module first and bring it in project scope (or maybe just a typo?)",
-                .{},
             ),
-            .UnpureInGlobal => writer.print(
+            .UnpureInGlobal => writer.writeAll(
                 "use a constant expression or initialize the value later in a local scope",
-                .{},
             ),
-            .UseUninitVar => writer.print("consider initializing the variable before use", .{}),
-            .UnusedValue => writer.print("use '_' to ignore the value: _ = 1 + 2", .{}),
-            .VoidAssignment => writer.print("consider returning a value from expression or remove assignment", .{}),
-            .VoidParam => writer.print("use a any other type than 'void' or remove parameter", .{}),
-            .WrongFnArgsCount => writer.print("refer to the function's definition to correct the call", .{}),
+            .UseUninitVar => writer.writeAll("consider initializing the variable before use"),
+            .UnusedValue => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
+            .VoidAssignment => writer.writeAll("consider returning a value from expression or remove assignment"),
+            .VoidParam => writer.writeAll("use a any other type than 'void' or remove parameter"),
+            .WrongFnArgsCount => writer.writeAll("refer to the function's definition to correct the call"),
         };
     }
 

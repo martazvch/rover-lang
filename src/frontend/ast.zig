@@ -38,6 +38,8 @@ pub const Node = struct {
         Le,
         Lt,
         Mul,
+        MultiValueDecl,
+        MultiVarDecl,
         Ne,
         Null,
         Or,

@@ -22,6 +22,7 @@ pub const Instruction = struct {
         If,
         Imported,
         Int,
+        Link,
         Null,
         Print,
         Return,
@@ -45,6 +46,7 @@ pub const Instruction = struct {
         If: If,
         Imported: Imported,
         Int: i64,
+        Link: Range,
         Return: bool,
         Unary: Unary,
         Use: u64,
@@ -90,7 +92,7 @@ pub const Instruction = struct {
     };
 
     pub const Assignment = struct { variable: Variable, cast: bool };
-    pub const Block = packed struct { length: usize, pop_count: u63, is_expr: bool };
+    pub const Block = packed struct { length: usize, pop_count: u8, is_expr: bool };
     pub const FnCall = struct { arity: u8, builtin: bool };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
@@ -100,6 +102,7 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { Then, Else, None };
     };
     pub const Imported = struct { index: u64, variable: Variable };
+    pub const Range = struct { start: usize, len: usize };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,

@@ -208,8 +208,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     defer vm.deinit();
     try vm.init(false);
 
-    std.debug.print("TEST MODE: {}, PRINT BYTE: {}\n", .{ options.test_mode, config.print_bytecode });
-
     // Compiler
     var compiler = CompilationManager.init(
         &vm,

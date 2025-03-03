@@ -281,16 +281,64 @@ pub const Parser = struct {
     fn var_declaration(self: *Self) !Node.Index {
         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "variable" } });
 
+        if (self.check(.Comma))
+            return self.multi_var_decl();
+
         const idx = try self.add_node(.{
             .tag = .VarDecl,
             .main = self.token_idx - 1,
         });
+
         try self.parse_type();
 
         _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
         else
             try self.add_node(Node.Empty);
+
+        return idx;
+    }
+
+    fn multi_var_decl(self: *Self) !Node.Index {
+        const idx = try self.add_node(.{
+            .tag = .MultiVarDecl,
+            .main = self.token_idx - 1,
+        });
+
+        var count: usize = 1;
+
+        while (self.match(.Comma)) {
+            try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "variable" } });
+
+            _ = try self.add_node(.{
+                .tag = .VarDecl,
+                .main = self.token_idx - 1,
+            });
+            count += 1;
+        }
+        self.nodes.items(.data)[idx] = count;
+
+        try self.parse_type();
+
+        const value_idx = try self.add_node(.{
+            .tag = .MultiValueDecl,
+            .main = self.token_idx - 1,
+        });
+
+        var value_count: usize = 0;
+
+        if (self.match(.Equal)) {
+            _ = try self.parse_precedence_expr(0);
+
+            while (self.match(.Comma)) {
+                _ = try self.parse_precedence_expr(0);
+                value_count += 1;
+            }
+        } else _ = try self.add_node(Node.Empty);
+
+        // TODO: if value > 1 and != count, error
+
+        self.nodes.items(.data)[value_idx] = value_count;
 
         return idx;
     }

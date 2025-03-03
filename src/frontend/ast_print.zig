@@ -97,6 +97,7 @@ pub const AstPrinter = struct {
             .Identifier => self.literal("Identifier"),
             .If => self.if_expr(),
             .Int => self.literal("Int literal"),
+            .MultiVarDecl => self.multi_var_decl(),
             .Null => self.null_(),
             .Parameter => self.parameter(),
             .Print => self.print_stmt(),
@@ -107,7 +108,7 @@ pub const AstPrinter = struct {
             .Use => self.use_stmt(),
             .VarDecl => self.var_decl(),
             .While => self.while_stmt(),
-            .FnCallEnd, .FnDeclEnd => unreachable,
+            .FnCallEnd, .FnDeclEnd, .MultiValueDecl => unreachable,
         };
     }
 
@@ -317,6 +318,29 @@ pub const AstPrinter = struct {
         var writer = self.tree.writer();
         try writer.print("[{s} {s}]\n", .{ text, self.source_from_tk(self.node_idx) });
         self.node_idx += 1;
+    }
+
+    fn multi_var_decl(self: *Self) Error!void {
+        const count = self.node_data[self.node_idx];
+        const value_count = self.node_data[self.node_idx + count];
+
+        try self.indent();
+        try self.tree.appendSlice("[Multi var declaration\n");
+        self.indent_level += 1;
+
+        try self.tree.appendSlice("names:\n");
+
+        for (0..count) |_|
+            try self.parse_node(self.node_idx);
+
+        try self.tree.appendSlice("values:\n");
+
+        for (0..value_count) |_|
+            try self.parse_node(self.node_idx);
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
     }
 
     fn null_(self: *Self) Error!void {

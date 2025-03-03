@@ -106,6 +106,11 @@ pub fn GenReporter(comptime Report: type) type {
                 return writer.write(bytes);
             }
 
+            pub fn writeAll(self: *const WriterType, comptime format: []const u8) !void {
+                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
+                return writer.writeAll(format);
+            }
+
             pub fn print(self: *const WriterType, comptime format: []const u8, args: anytype) !void {
                 const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
                 return writer.print(format, args);

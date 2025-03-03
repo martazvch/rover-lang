@@ -109,6 +109,7 @@ pub const RirRenderer = struct {
             .If => self.if_instr(index),
             .Imported => unreachable,
             .Int => self.int_instr(index),
+            .Link => self.link(index),
             .Null => {
                 try self.indent();
                 try self.tree.appendSlice("[Null]\n");
@@ -323,6 +324,13 @@ pub const RirRenderer = struct {
         var writer = self.tree.writer();
         try writer.print("[Int {}]\n", .{value});
         self.instr_idx += 1;
+    }
+
+    fn link(self: *Self, instr: usize) Error!void {
+        const range = self.instr_data[instr].Link;
+
+        for (0..range.len) |i|
+            try self.parse_instr(range.start + i);
     }
 
     fn return_instr(self: *Self, instr: usize) Error!void {
