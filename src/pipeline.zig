@@ -74,33 +74,41 @@ pub const ReplPipeline = struct {
         var parser: Parser = undefined;
         parser.init(self.allocator);
         defer parser.deinit();
-        try parser.parse(source, lexer.tokens.items);
 
-        // Parser errors
+        try parser.parse(
+            source,
+            lexer.tokens.items(.tag),
+            lexer.tokens.items(.span),
+        );
+
         if (parser.errs.items.len > 0) {
             var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, parser.errs.items);
             return;
-        }
-
-        // Ast printer
-        if (self.config.print_ast) {
-            var ast_printer = AstPrinter.init(self.allocator);
+        } else if (self.config.print_ast) {
+            var ast_printer = AstPrinter.init(
+                self.allocator,
+                source,
+                lexer.tokens.items(.tag),
+                lexer.tokens.items(.span),
+                parser.nodes.items(.tag),
+                parser.nodes.items(.main),
+                parser.nodes.items(.data),
+                parser.errs.items,
+            );
             defer ast_printer.deinit();
 
-            try ast_printer.parse_ast(source, parser.stmts.items);
-            ast_printer.display();
+            try ast_printer.parse_ast();
+            try ast_printer.display();
         }
 
         // Analyzer
-        // TODO: init analyzer extra info with exact number of element per array list
-        // for optimal memory allocation
-        try self.analyzer.analyze(parser.stmts.items, source);
+        try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes);
+        defer self.analyzer.reinit();
         // We don't keep errors/warnings from a prompt to another
         defer self.analyzer.errs.clearRetainingCapacity();
         defer self.analyzer.warns.clearRetainingCapacity();
 
-        // Analyzer errors
         if (self.analyzer.errs.items.len > 0) {
             var reporter = GenReporter(AnalyzerMsg).init(source);
             try reporter.report_all(filename, self.analyzer.errs.items);
@@ -110,8 +118,23 @@ pub const ReplPipeline = struct {
                 try reporter.report_all(filename, self.analyzer.warns.items);
             }
 
-            self.stmts_count = self.analyzer.analyzed_stmts.items.len;
+            self.stmts_count = self.analyzer.instructions.len;
             return;
+        } else if (self.config.print_ir) {
+            var rir_renderer = RirRenderer.init(
+                self.allocator,
+                source,
+                self.analyzer.instructions.items(.tag)[self.stmts_count..],
+                self.analyzer.instructions.items(.data)[self.stmts_count..],
+                self.analyzer.errs.items,
+                self.analyzer.warns.items,
+                &self.analyzer.interner,
+                self.config.static_analyzis,
+            );
+            defer rir_renderer.deinit();
+
+            try rir_renderer.parse_ir();
+            try rir_renderer.display();
         }
 
         // Analyzer warnings
@@ -121,26 +144,17 @@ pub const ReplPipeline = struct {
             return;
         }
 
-        // Analyzed Ast printer
-        // if (self.config.print_analyzed_ast) {
-        //     var analyzed_ast_printer = AnalyzedAstPrinter.init(self.allocator, &self.analyzer.type_manager);
-        //     defer analyzed_ast_printer.deinit();
-        //
-        //     try analyzed_ast_printer.parse(source, self.analyzer.analyzed_stmts.items[self.stmts_count..]);
-        //     analyzed_ast_printer.display();
-        // }
-
-        // Vm run
-        // try self.vm.run(parser.stmts.items, self.analyzer.analyzed_stmts.items[self.stmts_count..], self.config.print_bytecode);
-
         // Compiler
+        const slice = self.analyzer.instructions.slice();
         var compiler = CompilationManager.init(
             &self.vm,
             self.analyzer.type_manager.builtins.functions,
-            parser.stmts.items,
-            self.analyzer.analyzed_stmts.items[self.stmts_count..],
-            self.config.print_bytecode,
-            undefined,
+            &self.analyzer.interner,
+            slice.items(.tag)[self.stmts_count..],
+            slice.items(.data)[self.stmts_count..],
+            slice.items(.start)[self.stmts_count..],
+            if (self.config.print_bytecode) .Normal else if (self.config.test_bytecode) .Test else .None,
+            0,
             true,
         );
         defer compiler.deinit();
@@ -149,7 +163,7 @@ pub const ReplPipeline = struct {
         // Run the program
         try self.vm.run(function);
 
-        self.stmts_count = self.analyzer.analyzed_stmts.items.len;
+        self.stmts_count = self.analyzer.instructions.len;
     }
 };
 
@@ -202,8 +216,6 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     }
 
     // Analyzer
-    // TODO: init analyzer extra info with exact number of element per array list
-    // for optimal memory allocation
     var analyzer: Analyzer = undefined;
     try analyzer.init(allocator, false);
     defer analyzer.deinit();

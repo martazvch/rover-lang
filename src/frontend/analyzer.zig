@@ -1,11 +1,10 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 const Interner = @import("../interner.zig").Interner;
-const Ast = @import("ast.zig");
+const TokenIndex = @import("ast.zig").TokenIndex;
 const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
 const Node = @import("ast.zig").Node;
@@ -91,12 +90,12 @@ pub const TypeManager = struct {
         // Error
         if (count == std.math.maxInt(TypeSys.Value)) return error.TooManyTypes;
 
-        const type_ = TypeSys.create(kind, extra, @intCast(count));
+        const typ = TypeSys.create(kind, extra, @intCast(count));
         try self.type_infos.append(info);
 
-        try self.declared.put(name, type_);
+        try self.declared.put(name, typ);
 
-        return type_;
+        return typ;
     }
 
     /// Use builtins function whose informations are gathered at compile time. Import the
@@ -109,10 +108,10 @@ pub const TypeManager = struct {
     // Used only in error mode, no need for performance. If used in
     // performance path, maybe use a ArrayHashMap to retreive with
     // index (as type == index) but every thing else is slow?
-    pub fn idx(self: *const Self, type_: Type) usize {
+    pub fn idx(self: *const Self, typ: Type) usize {
         var iter = self.declared.iterator();
         while (iter.next()) |entry| {
-            if (entry.value_ptr.* == type_) {
+            if (entry.value_ptr.* == typ) {
                 return entry.key_ptr.*;
             }
         }
@@ -125,7 +124,7 @@ pub const Analyzer = struct {
     token_tags: []const Token.Tag,
     token_spans: []const Span,
     node_tags: []const Node.Tag,
-    node_mains: []const Ast.TokenIndex,
+    node_mains: []const TokenIndex,
     node_data: []const usize,
     node_idx: usize,
 
@@ -156,7 +155,7 @@ pub const Analyzer = struct {
     // Voir si possible de faire autrement que de stocker le nom des vars
     const Variable = struct {
         index: usize = 0,
-        type_: Type = Void,
+        typ: Type = Void,
         depth: usize,
         name: usize,
         initialized: bool = false,
@@ -199,6 +198,13 @@ pub const Analyzer = struct {
         _ = try self.interner.intern("std");
         try self.type_manager.init_builtins(&self.interner);
         self.repl = repl;
+    }
+
+    /// For REPL
+    pub fn reinit(self: *Self) void {
+        self.node_idx = 0;
+        self.scope_depth = 0;
+        self.local_offset = 0;
     }
 
     pub fn deinit(self: *Self) void {
@@ -300,8 +306,8 @@ pub const Analyzer = struct {
         };
     }
 
-    fn get_type_name(self: *const Self, type_: Type) []const u8 {
-        const idx = self.type_manager.idx(type_);
+    fn get_type_name(self: *const Self, typ: Type) []const u8 {
+        const idx = self.type_manager.idx(typ);
         return self.interner.get_key(idx).?;
     }
 
@@ -430,10 +436,10 @@ pub const Analyzer = struct {
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
-    fn declare_variable(self: *Self, name: usize, type_: Type, initialized: bool) !Instruction.Variable {
+    fn declare_variable(self: *Self, name: usize, typ: Type, initialized: bool) !Instruction.Variable {
         var variable: Variable = .{
             .name = name,
-            .type_ = type_,
+            .typ = typ,
             .depth = self.scope_depth,
             .initialized = initialized,
         };
@@ -491,7 +497,7 @@ pub const Analyzer = struct {
                 self.node_idx += 1;
                 final = try self.analyze_node(self.node_idx);
             },
-            .Identifier => final = (try self.identifier(node, true)).type_,
+            .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
             .Null => final = try self.null_lit(),
@@ -538,11 +544,11 @@ pub const Analyzer = struct {
                 }
 
                 // If type is unknown, we update it
-                if (assigne.type_ == Void) {
-                    assigne.type_ = value_type;
-                } else if (assigne.type_ != value_type) {
+                if (assigne.typ == Void) {
+                    assigne.typ = value_type;
+                } else if (assigne.typ != value_type) {
                     // One case in wich we can coerce; int -> float
-                    if (assigne.type_ == Float and value_type == Int) {
+                    if (assigne.typ == Float and value_type == Int) {
                         cast = true;
                         _ = try self.add_instr(
                             .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
@@ -551,7 +557,7 @@ pub const Analyzer = struct {
                     } else {
                         return self.err(
                             .{ .InvalidAssignType = .{
-                                .expect = self.get_type_name(assigne.type_),
+                                .expect = self.get_type_name(assigne.typ),
                                 .found = self.get_type_name(value_type),
                             } },
                             self.to_span(assigne_idx),
@@ -966,7 +972,7 @@ pub const Analyzer = struct {
         try self.locals.append(.{
             .depth = self.scope_depth,
             .name = name_idx,
-            .type_ = fn_type,
+            .typ = fn_type,
             .initialized = true,
         });
 
@@ -1056,7 +1062,7 @@ pub const Analyzer = struct {
 
             // We try to analyze the whole body
             start = self.node_idx;
-            const type_ = self.analyze_node(self.node_idx) catch |e| switch (e) {
+            const typ = self.analyze_node(self.node_idx) catch |e| switch (e) {
                 error.Err => {
                     body_err = true;
                     continue;
@@ -1065,7 +1071,7 @@ pub const Analyzer = struct {
             };
 
             // If we analyze dead code, we don't update the type
-            if (deadcode_start == 0) body_type = type_;
+            if (deadcode_start == 0) body_type = typ;
 
             // If last expression produced a value and that it wasn't the last one and it
             // wasn't a return, error
@@ -1349,7 +1355,7 @@ pub const Analyzer = struct {
             .tag = .Unary,
             .data = .{ .Unary = .{
                 .op = if (op == .Not) .Bang else .Minus,
-                .type_ = .Float,
+                .typ = .Float,
             } },
         }, node);
 
@@ -1368,7 +1374,7 @@ pub const Analyzer = struct {
             );
         }
 
-        if (rhs == Int) self.instructions.items(.data)[idx].Unary.type_ = .Int;
+        if (rhs == Int) self.instructions.items(.data)[idx].Unary.typ = .Int;
 
         return rhs;
     }
@@ -1411,9 +1417,9 @@ pub const Analyzer = struct {
                         } };
 
                         // Declare the type and additional informations
-                        const type_ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
+                        const typ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
                         // Declare the variable
-                        const variable = try self.declare_variable(name_idx, type_, true);
+                        const variable = try self.declare_variable(name_idx, typ, true);
 
                         _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
                             .index = func.index,

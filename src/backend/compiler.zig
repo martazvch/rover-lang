@@ -548,7 +548,7 @@ const Compiler = struct {
 
         if (data.op == .Minus) {
             try self.write_op(
-                if (data.type_ == .Int) .NegateInt else .NegateFloat,
+                if (data.typ == .Int) .NegateInt else .NegateFloat,
                 start,
             );
         } else {

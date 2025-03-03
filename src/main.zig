@@ -51,7 +51,7 @@ pub fn main() !void {
     if (res.positionals[0]) |f| {
         try run_file(allocator, f, print_ast, print_bytecode, static_analyzis, print_ir, test_bytecode);
     } else {
-        // try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
+        try repl(allocator, print_ast, print_bytecode, static_analyzis, print_ir);
     }
 }
 
@@ -117,6 +117,7 @@ fn repl(
         .print_bytecode = print_bytecode,
         .static_analyzis = static_analyzis,
         .print_ir = print_ir,
+        .test_bytecode = false,
     });
     try pipeline.init();
     defer pipeline.deinit();

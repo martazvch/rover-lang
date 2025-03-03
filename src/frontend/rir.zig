@@ -102,7 +102,7 @@ pub const Instruction = struct {
     pub const Imported = struct { index: u64, variable: Variable };
     pub const Unary = packed struct {
         op: Op,
-        type_: Type,
+        typ: Type,
 
         pub const Op = enum(u1) { Minus, Bang };
     };
