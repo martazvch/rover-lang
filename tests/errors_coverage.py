@@ -30,7 +30,7 @@ def test(name: str, errs_path: str, tests_path: str):
     first = True
     for e in errs:
         if os.name == "nt":
-            process = Popen(["findstr", e, tests_path], stdout=PIPE, text=True)
+            process = Popen(["findstr", "/s", e, tests_path], stdout=PIPE, text=True)
         else:
             process = Popen(["grep", "-r", e, tests_path], stdout=PIPE, text=True)
 
