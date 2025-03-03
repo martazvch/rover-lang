@@ -76,45 +76,7 @@ pub fn build(b: *std.Build) !void {
     // -------
     //  Tests
     // -------
-
-    // Options
-    const test_options = b.addOptions();
-
-    const stage = b.option(Stage, "stage", "pipeline stage to test, defaults to all") orelse .all;
-
-    const file_path = b.option([]const u8, "file", "specific file to test, defaults to all") orelse "";
-    test_options.addOption([]const u8, "file", file_path);
-    //
-    // if (!std.mem.eql(u8, file_path, "")) {
-    //     stage = get_stage_from_file(file_path);
-    // }
-
-    // test_options.addOption(Stage, "stage", stage);
-
-    // All unit tests within source code
-    // const tests_exe = b.addTest(.{
-    //     .root_source_file = b.path("src/main.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-
-    // const run_exe_tests = b.addRunArtifact(tests_exe);
-    // tests_exe.root_module.addOptions("test_config", test_options);
-    // tests_exe.root_module.addOptions("config", options);
-
     const test_step = b.step("test", "Run unit tests");
-    // test_step.dependOn(&run_exe_tests.step);
-
-    // // Tester for all pipeline's stages
-    // const test_exe = b.addTest(.{
-    //     .root_source_file = b.path("tests/tester.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // const run_test_exe = b.addRunArtifact(test_exe);
-    // test_exe.root_module.addOptions("test_config", test_options);
-
-    // test_step.dependOn(&run_test_exe.step);
 
     // Tester
     const tester_exe = b.addExecutable(.{
@@ -122,30 +84,28 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("tests/tester.zig"),
         .target = target,
     });
+
     tester_exe.root_module.addImport("clap", clap.module("clap"));
     b.installArtifact(tester_exe);
     const run_tester = b.addRunArtifact(tester_exe);
     run_tester.step.dependOn(b.getInstallStep());
     test_step.dependOn(&run_tester.step);
 
-    run_tester.addArg(switch (stage) {
-        .parser => "--stage=parser",
-        .analyzer => "--stage=analyzer",
-        .compiler => "--stage=compiler",
-        .vm => "--stage=vm",
-        .all => "--stage=all",
-    });
+    if (b.args) |args|
+        run_tester.addArgs(args)
+    else
+        run_tester.addArg("--stage=all");
 }
 
-fn get_stage_from_file(file_path: []const u8) Stage {
-    return if (std.mem.indexOf(u8, file_path, "parser")) |_|
-        .parser
-    else if (std.mem.indexOf(u8, file_path, "analyzer")) |_|
-        .analyzer
-    else if (std.mem.indexOf(u8, file_path, "compiler")) |_|
-        .compiler
-    else if (std.mem.indexOf(u8, file_path, "vm")) |_|
-        .vm
-    else
-        .all;
-}
+// fn get_stage_from_file(file_path: []const u8) Stage {
+//     return if (std.mem.indexOf(u8, file_path, "parser")) |_|
+//         .parser
+//     else if (std.mem.indexOf(u8, file_path, "analyzer")) |_|
+//         .analyzer
+//     else if (std.mem.indexOf(u8, file_path, "compiler")) |_|
+//         .compiler
+//     else if (std.mem.indexOf(u8, file_path, "vm")) |_|
+//         .vm
+//     else
+//         .all;
+// }

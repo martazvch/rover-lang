@@ -1,8 +1,6 @@
-fn fib(n: int) -> int {
-    if n < 2 do return n
-    fib(n-1) + fib(n-2)
-}
-
-fn main() {
-    print fib(35)
+if {
+    print "in cond"
+    false
+}{
+    print "ok"
 }

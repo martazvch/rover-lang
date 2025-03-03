@@ -11,10 +11,64 @@ const fields = std.meta.fields;
 const clap = @import("clap");
 
 const Stage = enum { all, parser, analyzer, compiler, vm };
+
+pub fn main() !u8 {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer {
+        const status = gpa.deinit();
+        std.debug.assert(status == .ok);
+    }
+    const allocator = gpa.allocator();
+
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help             Display this help and exit
+        \\--stage <STAGE>        Which stage to test [default: all]
+        \\--file <FILE>          File to test
+        \\-v, --verbose          Show additional data about tests
+    );
+
+    const parsers = comptime .{
+        .FILE = clap.parsers.string,
+        .STAGE = clap.parsers.enumeration(Stage),
+    };
+
+    var clap_diag = clap.Diagnostic{};
+    var res = clap.parse(clap.Help, &params, parsers, .{
+        .diagnostic = &clap_diag,
+        .allocator = gpa.allocator(),
+    }) catch |err| {
+        clap_diag.report(std.io.getStdErr().writer(), err) catch {};
+        std.process.exit(0);
+    };
+    defer res.deinit();
+
+    if (res.args.help != 0) {
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        return 0;
+    }
+
+    const diff = if (res.args.verbose == 1) true else false;
+
+    const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
+    defer allocator.free(tester_dir);
+
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
+        tester_dir, if (builtin.os.tag == .windows) "rover.exe" else "rover",
+    });
+    defer allocator.free(exe_path);
+
+    var tester = Tester.init(allocator, exe_path, diff);
+    defer tester.deinit();
+    const success = try tester.run(res.args.stage orelse .all);
+
+    return if (success) 0 else 1;
+}
+
 const Diagnostic = struct {
     err_name: []const u8 = undefined,
     file_name: []const u8 = undefined,
     line: ?usize = null,
+    test_id: ?usize = null,
     expect: ?[]const u8 = null,
     got: ?[]const u8 = null,
     diff: ?[]const u8 = null,
@@ -22,15 +76,21 @@ const Diagnostic = struct {
     pub fn display(self: Diagnostic, verbose: bool) void {
         print("    {s}", .{self.file_name});
 
+        if (verbose) {
+            if (self.test_id) |id| print(" in test nb {}", .{id});
+        }
+
         if (self.line) |line|
-            print(" line: {}\n", .{line})
+            print(", line: {}\n", .{line})
         else
             print("\n", .{});
 
         if (verbose) {
-            print("ACQUI\n", .{});
-            // if (self.expect) |txt| print("expect:\n{s}\n", .{txt});
-            // if (self.got) |txt| print("got:\n{s}\n", .{txt});
+            // For VM's tests
+            if (self.expect) |txt| print("expect:\n{s}\n", .{txt});
+            if (self.got) |txt| print("got:\n{s}\n", .{txt});
+
+            // For all other tests
             if (self.diff) |txt| print("{s}\n", .{txt});
         }
     }
@@ -61,39 +121,54 @@ const Tester = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        for (self.diags.items) |*diag|
-            diag.deinit(self.allocator);
-
+        self.clear_diags();
         self.diags.deinit();
     }
 
-    fn run(self: *Self, stage: Stage) !void {
+    fn clear_diags(self: *Self) void {
+        for (self.diags.items) |*diag|
+            diag.deinit(self.allocator);
+
+        self.diags.clearRetainingCapacity();
+    }
+
+    fn run(self: *Self, stage: Stage) !bool {
+        var success = false;
+
         switch (stage) {
             .all => {
                 try self.run_stage_tests(.parser);
-                self.report(.parser);
+                success = self.report(.parser);
+                self.clear_diags();
+
                 try self.run_stage_tests(.analyzer);
-                self.report(.analyzer);
+                success = self.report(.analyzer) or success;
+                self.clear_diags();
+
                 try self.run_stage_tests(.compiler);
-                self.report(.compiler);
+                success = self.report(.compiler) or success;
                 try self.run_vm_tests();
             },
             .vm => try self.run_vm_tests(),
             else => |s| try self.run_stage_tests(s),
         }
 
-        self.report(stage);
+        success = self.report(stage);
+
+        return success;
     }
 
-    fn report(self: *const Self, stage: Stage) void {
+    fn report(self: *const Self, stage: Stage) bool {
         if (self.diags.items.len > 0) {
-            print("Error testing {s}:\n", .{@tagName(stage)});
+            print("Error in {s}:\n", .{@tagName(stage)});
 
-            for (self.diags.items) |diag| {
-                print("SHOW_DIFF: {}\n", .{self.show_diff});
+            for (self.diags.items) |diag|
                 diag.display(self.show_diff);
-            }
+
+            return false;
         }
+
+        return true;
     }
 
     fn run_vm_tests(self: *Self) !void {
@@ -214,7 +289,7 @@ const Tester = struct {
         defer file.close();
 
         const size = try file.getEndPos();
-        const content = try self.allocator.alloc(u8, size);
+        const content = try self.allocator.alloc(u8, size + 1);
         defer self.allocator.free(content);
 
         _ = try file.readAll(content);
@@ -254,11 +329,10 @@ const Tester = struct {
                 section = .Err;
                 continue;
             } else if (std.mem.startsWith(u8, line, "==")) {
-                // try code.append(0);
+                try code.append(0);
 
                 const tmp_file = try dir.createFile("tmp.rv", .{});
-                // try tmp_file.writeAll(code.items[0 .. code.items.len - 1 :0]);
-                try tmp_file.writeAll(code.items[0 .. code.items.len - 1]);
+                try tmp_file.writeAll(code.items[0 .. code.items.len - 1 :0]);
                 tmp_file.close();
                 defer dir.deleteFile("tmp.rv") catch unreachable;
 
@@ -271,6 +345,13 @@ const Tester = struct {
                     std.mem.trimRight(u8, config_text.items, "\n"),
                 ) catch {
                     self.diags.items[self.diags.items.len - 1].file_name = try self.allocator.dupe(u8, entry.basename);
+                    self.diags.items[self.diags.items.len - 1].test_id = test_count;
+
+                    var buf: [250]u8 = undefined;
+                    const written = try std.fmt.bufPrint(&buf, "failed_{s}_test_{}.rv", .{ entry.basename, test_count });
+                    const failed_file = try std.fs.cwd().createFile(written, .{});
+                    try failed_file.writeAll(code.items[0 .. code.items.len - 1]);
+                    failed_file.close();
                 };
 
                 code.clearRetainingCapacity();
@@ -419,52 +500,3 @@ const Tester = struct {
         return res.toOwnedSlice();
     }
 };
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const status = gpa.deinit();
-        std.debug.assert(status == .ok);
-    }
-    const allocator = gpa.allocator();
-
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit
-        \\--stage <STAGE>        Which stage to test [default: all]
-        \\--file <FILE>          File to test
-        \\--diff                 Show colored diff of expected/got
-    );
-
-    const parsers = comptime .{
-        .FILE = clap.parsers.string,
-        .STAGE = clap.parsers.enumeration(Stage),
-    };
-
-    var clap_diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, parsers, .{
-        .diagnostic = &clap_diag,
-        .allocator = gpa.allocator(),
-    }) catch |err| {
-        clap_diag.report(std.io.getStdErr().writer(), err) catch {};
-        std.process.exit(0);
-    };
-    defer res.deinit();
-
-    if (res.args.help != 0)
-        return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
-
-    const diff = if (res.args.diff == 1) true else false;
-    print("DIF: {}\n", .{diff});
-
-    const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
-    defer allocator.free(tester_dir);
-
-    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
-        tester_dir, if (builtin.os.tag == .windows) "rover.exe" else "rover",
-    });
-    defer allocator.free(exe_path);
-
-    var tester = Tester.init(allocator, exe_path, diff);
-    defer tester.deinit();
-    try tester.run(res.args.stage orelse .all);
-}
