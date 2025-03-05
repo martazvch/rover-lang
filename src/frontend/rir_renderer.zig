@@ -78,17 +78,15 @@ pub const RirRenderer = struct {
 
     fn parse_errs(self: *Self) !void {
         const stdout = std.io.getStdOut().writer();
-        for (self.errs, 0..) |err, i| {
-            try err.to_str(stdout);
 
-            if (self.warns.len > 0 or i < self.errs.len - 1)
-                try stdout.writeAll("\n");
+        for (self.errs) |err| {
+            try err.to_str(stdout);
+            try stdout.writeAll("\n");
         }
 
-        for (self.warns, 0..) |warn, i| {
+        for (self.warns) |warn| {
             try warn.to_str(stdout);
-
-            if (i < self.warns.len - 1) try stdout.writeAll("\n");
+            try stdout.writeAll("\n");
         }
     }
 
@@ -109,7 +107,7 @@ pub const RirRenderer = struct {
             .If => self.if_instr(index),
             .Imported => unreachable,
             .Int => self.int_instr(index),
-            .Link => self.link(index),
+            .MultipleVarDecl => self.multiple_var_decl(index),
             .Null => {
                 try self.indent();
                 try self.tree.appendSlice("[Null]\n");
@@ -326,11 +324,13 @@ pub const RirRenderer = struct {
         self.instr_idx += 1;
     }
 
-    fn link(self: *Self, instr: usize) Error!void {
-        const range = self.instr_data[instr].Link;
+    fn multiple_var_decl(self: *Self, instr: usize) Error!void {
+        const count = self.instr_data[instr].Id;
+        self.instr_idx += 1;
 
-        for (0..range.len) |i|
-            try self.parse_instr(range.start + i);
+        for (0..count) |_| {
+            try self.parse_instr(self.instr_idx);
+        }
     }
 
     fn return_instr(self: *Self, instr: usize) Error!void {

@@ -358,7 +358,11 @@ pub fn GenReport(comptime T: type) type {
 
                     inline for (std.meta.fields(field.type)) |subf| {
                         const subv = @field(field_info, subf.name);
-                        try writer.print(", {s}", .{subv});
+
+                        switch (@TypeOf(subv)) {
+                            usize => try writer.print(", {}", .{subv}),
+                            else => try writer.print(", {s}", .{subv}),
+                        }
                     }
                 }
             }

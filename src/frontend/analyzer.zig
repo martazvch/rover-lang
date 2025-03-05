@@ -278,6 +278,7 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
+            .Link => self.token_spans[self.node_data[node]],
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -302,7 +303,7 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
             },
             .While => self.token_spans[self.node_mains[node]],
-            .FnCallEnd, .FnDeclEnd => unreachable,
+            .FnCallEnd, .FnDeclEnd, .MultiVarDecl => unreachable,
         };
     }
 
@@ -500,6 +501,10 @@ pub const Analyzer = struct {
             .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
+            .Link => {
+                self.node_idx += 1;
+                final = try self.analyze_node(self.node_data[node]);
+            },
             .MultiVarDecl => try self.multi_var_decl(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(node),
@@ -1090,7 +1095,9 @@ pub const Analyzer = struct {
                     .expect = self.get_type_name(return_type),
                     .found = self.get_type_name(body_type),
                 } },
-                self.to_span(start),
+                // If the block was empty, we're on 'FnDeclEnd' so we take the span
+                // of the previous node
+                self.to_span(if (length == 0) start - 1 else start),
             );
         }
 
@@ -1296,10 +1303,14 @@ pub const Analyzer = struct {
         return Int;
     }
 
-    fn multi_var_decl(self: *Self, node: Node.Index) !Type {
-        const count = self.node_data[node];
-        const value_count = self.node_data[node + count];
+    fn multi_var_decl(self: *Self, node: Node.Index) !void {
+        const count = self.node_mains[node];
+        self.node_idx += 1;
+        _ = try self.add_instr(.{ .tag = .MultipleVarDecl, .data = .{ .Id = count } }, self.node_idx);
 
+        for (0..count) |_| {
+            try self.var_decl(self.node_idx);
+        }
     }
 
     fn null_lit(self: *Self) !Type {
@@ -1456,13 +1467,20 @@ pub const Analyzer = struct {
         );
     }
 
+    fn resolve_link(self: *const Self, node: Node.Index) Node.Index {
+        return if (self.node_tags[node] == .Link)
+            self.node_data[node]
+        else
+            node;
+    }
+
     fn var_decl(self: *Self, node: Node.Index) !void {
         // In case we propagate an error, we advance the counter to avoid
         // infinite loop
         self.node_idx += 1;
-        const type_idx = self.node_idx;
+        const type_idx = self.resolve_link(self.node_idx);
         self.node_idx += 1;
-        const value_idx = self.node_idx;
+        const value_idx = self.resolve_link(self.node_idx);
 
         const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined }, node);
 

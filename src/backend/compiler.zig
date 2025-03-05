@@ -243,7 +243,7 @@ const Compiler = struct {
             .Imported => unreachable,
             .Int => self.int_instr(),
             .If => self.if_instr(),
-            .Link => self.link(),
+            .MultipleVarDecl => self.multiple_var_decl(),
             .Null => self.null_instr(),
             .Print => self.print_instr(),
             .Return => self.return_instr(),
@@ -505,15 +505,13 @@ const Compiler = struct {
         try self.patch_jump(else_jump);
     }
 
-    fn link(self: *Self) !void {
-        const range = self.get_data().Link;
-        const prev = self.manager.instr_idx;
-        self.manager.instr_idx = range.start;
+    fn multiple_var_decl(self: *Self) !void {
+        const data = self.get_data().Id;
+        self.manager.instr_idx += 1;
 
-        for (0..range.len) |_|
+        for (0..data) |_| {
             try self.compile_instr();
-
-        self.manager.instr_idx = prev;
+        }
     }
 
     fn null_instr(self: *Self) !void {

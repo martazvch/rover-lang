@@ -1,4 +1,5 @@
 const std = @import("std");
+const assert = std.debug.assert;
 const tracy = @import("tracy");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
@@ -289,7 +290,7 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
-        try self.parse_type();
+        _ = try self.parse_type();
 
         _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
@@ -300,55 +301,63 @@ pub const Parser = struct {
     }
 
     fn multi_var_decl(self: *Self) !Node.Index {
-        const idx = try self.add_node(.{
-            .tag = .MultiVarDecl,
-            .main = self.token_idx - 1,
-        });
+        const idx = try self.add_node(.{ .tag = .MultiVarDecl });
+        _ = try self.add_node(.{ .tag = .VarDecl, .main = self.token_idx - 1 });
 
         var count: usize = 1;
+        var variables = std.ArrayListUnmanaged(usize){};
+        defer variables.deinit(self.allocator);
 
-        while (self.match(.Comma)) {
+        while (self.match(.Comma)) : (count += 1) {
             try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "variable" } });
-
-            _ = try self.add_node(.{
-                .tag = .VarDecl,
-                .main = self.token_idx - 1,
-            });
-            count += 1;
+            try variables.append(self.allocator, self.token_idx - 1);
         }
-        self.nodes.items(.data)[idx] = count;
+        self.nodes.items(.main)[idx] = count;
 
-        try self.parse_type();
+        const type_idx = try self.parse_type();
 
-        const value_idx = try self.add_node(.{
-            .tag = .MultiValueDecl,
-            .main = self.token_idx - 1,
-        });
+        const first_value = if (self.match(.Equal))
+            try self.parse_precedence_expr(0)
+        else
+            try self.add_node(Node.Empty);
 
-        var value_count: usize = 0;
+        count = 1;
 
-        if (self.match(.Equal)) {
-            _ = try self.parse_precedence_expr(0);
-
-            while (self.match(.Comma)) {
-                _ = try self.parse_precedence_expr(0);
-                value_count += 1;
+        // If only one value
+        if (!self.check(.Comma)) {
+            for (variables.items) |var_idx| {
+                _ = try self.add_node(.{ .tag = .VarDecl, .main = var_idx });
+                _ = try self.add_node(.{ .tag = .Link, .data = type_idx });
+                _ = try self.add_node(.{ .tag = .Link, .data = first_value });
             }
-        } else _ = try self.add_node(Node.Empty);
+        } else while (self.match(.Comma)) : (count += 1) {
+            // assert(count - 1 < variables.items.len);
+            if (count > variables.items.len) {
+                count -= 1;
+                break;
+            }
 
-        // TODO: if value > 1 and != count, error
+            _ = try self.add_node(.{ .tag = .VarDecl, .main = variables.items[count - 1] });
+            _ = try self.add_node(.{ .tag = .Link, .data = type_idx });
+            _ = try self.parse_precedence_expr(0);
+        }
 
-        self.nodes.items(.data)[value_idx] = value_count;
+        if (count > 1 and count != variables.items.len + 1)
+            return self.error_at(variables.items[count - 1], .{ .WrongValueCountVarDecl = .{
+                .expect = variables.items.len + 1,
+            } });
+
+        self.nodes.items(.data)[idx] = count;
 
         return idx;
     }
 
     /// Expects and declare a type. If none, declare an empty one
-    fn parse_type(self: *Self) Error!void {
-        _ = if (self.match(.Colon))
+    fn parse_type(self: *Self) Error!Node.Index {
+        return if (self.match(.Colon))
             try self.extract_type()
         else if (self.check(.Identifier))
-            return self.error_at_current(.ExpectColonBeforeType)
+            self.error_at_current(.ExpectColonBeforeType)
         else
             try self.add_node(Node.Empty);
     }

@@ -17,6 +17,7 @@ pub const ParserMsg = union(enum) {
     TooManyFnArgs: struct { what: []const u8 },
     UnclosedBrace,
     UnclosedParen,
+    WrongValueCountVarDecl: struct { expect: usize },
 
     const Self = @This();
 
@@ -40,6 +41,10 @@ pub const ParserMsg = union(enum) {
             .TooManyFnArgs => |e| writer.print("functions can't have more than 255 {s}", .{e.what}),
             .UnclosedBrace => writer.print("unclosed brace", .{}),
             .UnclosedParen => writer.print("unclosed parenthesis", .{}),
+            .WrongValueCountVarDecl => |e| writer.print(
+                "value count mismatch variable count, expect {} values",
+                .{e.expect},
+            ),
         };
     }
 
@@ -61,6 +66,7 @@ pub const ParserMsg = union(enum) {
             .TooManyFnArgs => |e| writer.print("this is the 256th {s}", .{e.what}),
             .UnclosedBrace => writer.print("this opening brace", .{}),
             .UnclosedParen => writer.print("this opening parenthesis", .{}),
+            .WrongValueCountVarDecl => writer.writeAll("from this variable"),
         };
     }
 
@@ -89,6 +95,9 @@ pub const ParserMsg = union(enum) {
             ),
             .UnclosedBrace => writer.print("close the opening brace", .{}),
             .UnclosedParen => writer.print("close the opening parenthesis", .{}),
+            .WrongValueCountVarDecl => writer.writeAll(
+                "you must either provide no value, 1 value that will assigned to each variable or one per variable",
+            ),
             else => {},
         };
     }

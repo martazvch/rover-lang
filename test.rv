@@ -1,3 +1,6 @@
+fn sub() -> bool { false }
+
 fn main() {
-    var a, b, c
+    // Here both variables are integers
+    var a, b: int = 1 * (56 - 2), sub()
 }

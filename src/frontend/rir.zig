@@ -22,7 +22,7 @@ pub const Instruction = struct {
         If,
         Imported,
         Int,
-        Link,
+        MultipleVarDecl,
         Null,
         Print,
         Return,
@@ -46,7 +46,6 @@ pub const Instruction = struct {
         If: If,
         Imported: Imported,
         Int: i64,
-        Link: Range,
         Return: bool,
         Unary: Unary,
         Use: u64,
@@ -102,7 +101,6 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { Then, Else, None };
     };
     pub const Imported = struct { index: u64, variable: Variable };
-    pub const Range = struct { start: usize, len: usize };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,

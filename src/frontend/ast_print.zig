@@ -75,10 +75,9 @@ pub const AstPrinter = struct {
 
     fn parse_errs(self: *Self) !void {
         const stdout = std.io.getStdOut().writer();
-        for (self.errs, 0..) |err, i| {
+        for (self.errs) |err| {
             try err.to_str(stdout);
-
-            if (i < self.errs.len - 1) try stdout.writeAll("\n");
+            try stdout.writeAll("\n");
         }
     }
 
@@ -97,6 +96,13 @@ pub const AstPrinter = struct {
             .Identifier => self.literal("Identifier"),
             .If => self.if_expr(),
             .Int => self.literal("Int literal"),
+            .Link => {
+                const start = self.node_idx;
+                self.node_idx = self.node_data[index];
+                try self.parse_node(self.node_idx);
+                // Past the link
+                self.node_idx = start + 1;
+            },
             .MultiVarDecl => self.multi_var_decl(),
             .Null => self.null_(),
             .Parameter => self.parameter(),
@@ -108,7 +114,7 @@ pub const AstPrinter = struct {
             .Use => self.use_stmt(),
             .VarDecl => self.var_decl(),
             .While => self.while_stmt(),
-            .FnCallEnd, .FnDeclEnd, .MultiValueDecl => unreachable,
+            .FnCallEnd, .FnDeclEnd => unreachable,
         };
     }
 
@@ -321,26 +327,12 @@ pub const AstPrinter = struct {
     }
 
     fn multi_var_decl(self: *Self) Error!void {
-        const count = self.node_data[self.node_idx];
-        const value_count = self.node_data[self.node_idx + count];
+        const count = self.node_mains[self.node_idx];
+        self.node_idx += 1;
 
-        try self.indent();
-        try self.tree.appendSlice("[Multi var declaration\n");
-        self.indent_level += 1;
-
-        try self.tree.appendSlice("names:\n");
-
-        for (0..count) |_|
+        for (0..count) |_| {
             try self.parse_node(self.node_idx);
-
-        try self.tree.appendSlice("values:\n");
-
-        for (0..value_count) |_|
-            try self.parse_node(self.node_idx);
-
-        self.indent_level -= 1;
-        try self.indent();
-        try self.tree.appendSlice("]\n");
+        }
     }
 
     fn null_(self: *Self) Error!void {
@@ -386,6 +378,13 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
+    fn link_to_empty(self: *const Self, index: Node.Index) bool {
+        if (self.node_tags[index] == .Link)
+            return self.node_tags[self.node_data[index]] == .Empty;
+
+        return false;
+    }
+
     fn var_decl(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
@@ -401,9 +400,9 @@ pub const AstPrinter = struct {
         );
 
         self.indent_level += 1;
-
         self.node_idx += 1;
-        if (self.node_tags[self.node_idx] != .Empty) {
+
+        if (self.node_tags[self.node_idx] != .Empty and !self.link_to_empty(self.node_idx)) {
             try self.parse_node(self.node_idx);
         } else {
             try self.indent();
@@ -420,6 +419,7 @@ pub const AstPrinter = struct {
         if (self.node_tags[index] == .Empty) return "void";
 
         return switch (self.node_tags[index]) {
+            .Link => return self.get_type(self.node_data[index]),
             .Type => {
                 return self.source_from_tk(index);
             },

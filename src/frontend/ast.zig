@@ -38,7 +38,6 @@ pub const Node = struct {
         Le,
         Lt,
         Mul,
-        MultiValueDecl,
         MultiVarDecl,
         Ne,
         Null,
@@ -53,5 +52,6 @@ pub const Node = struct {
         Use,
         VarDecl,
         While,
+        Link,
     };
 };

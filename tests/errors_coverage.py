@@ -15,7 +15,7 @@ def test(name: str, errs_path: str, tests_path: str):
 
             if "union(enum)" in line:
                 start = True
-            elif line.startswith("const"):
+            elif line.startswith("const Self"):
                 break
             elif start:
                 # Check if there is a type
@@ -58,20 +58,16 @@ success = test(
     os.path.join(os.getcwd(), "tests", "parser")
 )
 
-tmp = test(
+success = test(
     "Analyzer",
     os.path.join(os.getcwd(), "src", "frontend", "analyzer_msg.zig"),
     os.path.join(os.getcwd(), "tests", "analyzer")
-)
+) and success
 
-if not tmp: success = False
-
-tmp = test(
+success = test(
     "Compiler",
     os.path.join(os.getcwd(), "src", "backend", "compiler_msg.zig"),
     os.path.join(os.getcwd(), "tests", "compiler")
-)
-
-if not tmp: success = False
+) and success
 
 assert success
