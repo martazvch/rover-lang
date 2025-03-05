@@ -30,6 +30,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Run error coverage script
         run: python3 tests/errors_coverage.py
   lint:
     runs-on: macos-latest
