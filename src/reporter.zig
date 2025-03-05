@@ -89,6 +89,12 @@ pub fn GenReporter(comptime Report: type) type {
                 return count;
             }
 
+            pub fn writeAll(self: InnerSelf, bytes: []const u8) !void {
+                _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+                try self.writer.writeAll(bytes);
+                _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
+            }
+
             pub fn print(self: InnerSelf, comptime format: []const u8, args: anytype) !void {
                 _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
                 const count = try self.writer.print(format, args);
