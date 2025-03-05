@@ -29,7 +29,8 @@ jobs:
   err-coverage:
     runs-on: macos-latest
     steps:
-      run: python3 tests/errors_coverage.py
+      - uses: actions/checkout@v4
+      - run: python3 tests/errors_coverage.py
   lint:
     runs-on: macos-latest
     steps:
