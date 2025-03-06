@@ -458,19 +458,19 @@ pub const Parser = struct {
             const assigne = try self.parse_precedence_expr(0);
 
             if (self.match(.Equal)) {
-                return self.assignment();
+                return self.assignment(assigne);
             } else return assigne;
         }
     }
 
-    fn assignment(self: *Self) !Node.Index {
+    fn assignment(self: *Self, assigne: Node.Index) !Node.Index {
         // Converts the previous expression to an assignment
-        const idx = self.nodes.len - 1;
-        try self.nodes.insert(self.allocator, idx, .{ .tag = .Assignment });
+        // const idx = self.nodes.len - 1;
+        try self.nodes.insert(self.allocator, assigne, .{ .tag = .Assignment });
 
         _ = try self.parse_precedence_expr(0);
 
-        return idx;
+        return assigne;
     }
 
     fn print_stmt(self: *Self) Error!Node.Index {

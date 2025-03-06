@@ -542,6 +542,12 @@ pub const Analyzer = struct {
 
                 const value_idx = self.node_idx;
                 const value_type = try self.analyze_node(value_idx);
+
+                // For now, we can assign only to scalar variables
+                if (TypeSys.get_kind(assigne.typ) != TypeSys.Var) {
+                    return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
+                }
+
                 // Restore state
                 state.allow_partial = last;
 
@@ -582,7 +588,13 @@ pub const Analyzer = struct {
                 } };
             },
             // Later, manage member, pointer, ...
-            else => return self.err(.InvalidAssignTarget, self.to_span(self.node_idx)),
+            else => {
+                // Skips the assigne
+                _ = self.analyze_node(assigne_idx) catch {};
+                // Skips the value
+                _ = self.analyze_node(self.node_idx) catch {};
+                return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
+            },
         }
     }
 

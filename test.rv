@@ -1,36 +1,9 @@
-fn naked_return(a: int) {}
-fn naked_explicit_return(a: int) { return }
-
-fn glob_add(a: int, b: float) -> str {
-    if a + b < 12 do "under" else "above"
-}
+fn add() {}
 
 fn main() {
-    var arg1 = 2
-    var arg2 = 10.
-    var arg3 = 5
-
-    // Checks that naked return doesn't mess up the stack
-    naked_return(arg1)
-    print arg3 // expect: 5
-    
-    // Same but with explicit void return
-    naked_explicit_return(arg3)
-    print arg2 // expect: 10
-    print arg3 // expect: 5
-
-    print glob_add(arg1, arg2) // expect: "above"
-
-    fn add1(arg1: int, arg2: float,) -> float {
-        var tmp = 1
-        var local = arg1 + tmp
-
-        if glob_add(tmp, local) == "under" do arg2 else arg1
-    }
-
-    // Tests: implicit cast of return in 'if'
-    // implicit cast in function args
-    print add1(1, 2.) // expect: 2
-    print add1(15, 12) // expect: 15
+   _ = 1 == true 
+   _ = "str" == true 
+   _ = false == 5.6 
+   _ = 34 == "str" 
 }
 

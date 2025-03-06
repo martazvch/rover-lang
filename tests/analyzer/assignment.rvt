@@ -104,3 +104,18 @@ expect:
         [Variable index: 1, scope: Local]
 
 ================
+
+// Invalid assignment
+
+code:
+fn add() {}
+fn main() {
+    add = 1
+    add() = 1
+}
+
+error:
+InvalidAssignTarget
+InvalidAssignTarget
+
+================
