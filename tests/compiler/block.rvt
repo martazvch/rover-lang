@@ -16,8 +16,7 @@ expect:
 OP_CONSTANT index 0, value 5
 OP_SCOPE_RETURN index 0
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -36,8 +35,7 @@ expect:
 -- main --
 OP_CONSTANT index 0, value 5
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -56,8 +54,7 @@ expect:
 -- main --
 OP_NULL
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -92,8 +89,7 @@ OP_GET_LOCAL index 2
 OP_PRINT
 OP_POP
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -116,8 +112,7 @@ expect:
 OP_CONSTANT index 0, value 7
 OP_GET_LOCAL index 1
 OP_SCOPE_RETURN index 1
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -147,8 +142,7 @@ OP_CONSTANT index 2, value 7
 OP_CONSTANT index 3, value 90
 OP_GET_LOCAL index 3
 OP_SCOPE_RETURN index 4
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>

@@ -111,6 +111,7 @@ pub const Disassembler = struct {
             // .Method => self.constant_instruction("OP_METHOD", offset),
             .MulFloat => self.simple_instruction("OP_MULTIPLY_FLOAT", offset, writer),
             .MulInt => self.simple_instruction("OP_MULTIPLY_INT", offset, writer),
+            .NakedReturn => self.simple_instruction("OP_NAKED_RETURN", offset, writer),
             .NativeFnCall => self.index_instruction("OP_NATIVE_CALL", offset, writer),
             .NeBool => self.simple_instruction("OP_DIFFERENT_BOOL", offset, writer),
             .NeFloat => self.simple_instruction("OP_DIFFERENT_FLOAT", offset, writer),

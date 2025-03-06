@@ -10,8 +10,7 @@ expect:
 OP_CONSTANT index 0, value 1
 OP_NEGATE_INT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -34,8 +33,7 @@ OP_NEGATE_INT
 OP_NEGATE_INT
 OP_NEGATE_INT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -55,8 +53,7 @@ expect:
 OP_CONSTANT index 0, value 65.82
 OP_NEGATE_FLOAT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -76,8 +73,7 @@ expect:
 OP_TRUE
 OP_NOT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -97,8 +93,7 @@ expect:
 OP_FALSE
 OP_NOT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -120,8 +115,7 @@ OP_NOT
 OP_NOT
 OP_NOT
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>

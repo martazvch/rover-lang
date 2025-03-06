@@ -34,6 +34,7 @@ pub const OpCode = enum(u8) {
     Loop,
     MulFloat,
     MulInt,
+    NakedReturn,
     NativeFnCall,
     NeBool,
     NeFloat,

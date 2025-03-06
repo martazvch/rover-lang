@@ -6,8 +6,7 @@ fn main() {}
 
 expect:
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value 15.6
@@ -25,8 +24,7 @@ fn main() {}
 
 expect:
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value 15.6
@@ -50,8 +48,7 @@ fn main() {}
 
 expect:
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value 15.6

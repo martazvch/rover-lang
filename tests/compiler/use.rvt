@@ -26,8 +26,7 @@ OP_CONSTANT index 1, value 5
 OP_CAST_TO_FLOAT
 OP_NATIVE_CALL index 2
 OP_PRINT
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <native fn>
@@ -97,8 +96,7 @@ OP_CONSTANT index 10, value <native fn>
 OP_POP
 OP_POP
 
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -198,8 +196,7 @@ OP_POP
 OP_POP
 OP_POP
 
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <native fn>

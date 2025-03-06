@@ -10,12 +10,10 @@ fn main() {}
 // Then for the 'main' body
 expect:
 -- add --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add>
@@ -38,14 +36,12 @@ fn main() {
 
 expect:
 -- add --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
 OP_CONSTANT index 0, value <fn add>
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -64,16 +60,14 @@ fn main() {}
 
 expect:
 -- add --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- sub --
 OP_CONSTANT index 0, value 5
 OP_RETURN
 
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add>

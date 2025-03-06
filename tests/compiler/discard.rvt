@@ -11,9 +11,7 @@ OP_CONSTANT index 0, value 3
 OP_CONSTANT index 1, value 4
 OP_ADD_INT
 OP_POP
-
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>

@@ -9,8 +9,7 @@ expect:
 -- main --
 OP_CONSTANT index 0, value 1
 OP_PRINT
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>

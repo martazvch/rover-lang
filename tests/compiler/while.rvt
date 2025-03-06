@@ -26,8 +26,7 @@ OP_SET_GLOBAL index 0
 OP_LOOP 19 -> 0
 OP_POP
 
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value 0
@@ -66,8 +65,7 @@ OP_SET_LOCAL index 1
 OP_LOOP 21 -> 2
 OP_POP
 
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>

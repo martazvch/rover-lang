@@ -9,14 +9,12 @@ fn main() {
 
 expect:
 -- add --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
 OP_GET_GLOBAL index 0
 OP_CALL index 0
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add>
@@ -38,8 +36,7 @@ fn main() {
 
 expect:
 -- add --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
 // Get function
@@ -49,8 +46,7 @@ OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2.5
 // Call
 OP_CALL index 2
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add>
@@ -87,12 +83,10 @@ OP_GET_LOCAL index 1
 OP_RETURN
 
 -- add3 --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add1>
@@ -129,8 +123,7 @@ OP_GET_LOCAL index 2
 OP_RETURN
 
 -- main --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add1>
@@ -171,8 +164,7 @@ OP_CONSTANT index 1, value 1
 OP_CONSTANT index 2, value 2
 OP_CALL index 2
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -195,12 +187,10 @@ fn main() {
 
 expect:
 -- sub --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- add1 --
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- main --
 OP_CONSTANT index 0, value <fn add1>
@@ -220,8 +210,7 @@ OP_CAST_TO_FLOAT
 OP_CALL index 3
 
 // Implicit return of main
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn sub>

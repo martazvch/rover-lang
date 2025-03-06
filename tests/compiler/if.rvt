@@ -19,8 +19,7 @@ OP_CONSTANT index 0, value "yes"
 OP_PRINT
 OP_JUMP 8 -> 12
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -47,8 +46,7 @@ OP_CONSTANT index 0, value "yes"
 OP_PRINT
 OP_JUMP 13 -> 17
 OP_POP
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -77,8 +75,7 @@ OP_JUMP 13 -> 20
 OP_POP
 OP_CONSTANT index 1, value "no"
 OP_PRINT
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -107,8 +104,7 @@ OP_JUMP 9 -> 17
 OP_POP
 OP_CONSTANT index 1, value 2
 OP_SCOPE_RETURN index 0
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -138,8 +134,7 @@ OP_JUMP 12 -> 20
 OP_POP
 OP_CONSTANT index 2, value 1
 OP_SCOPE_RETURN index 0
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -188,9 +183,7 @@ OP_ADD_INT
 OP_GET_LOCAL index 1
 OP_ADD_INT
 OP_SCOPE_RETURN index 1
-
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value 1

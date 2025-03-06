@@ -207,12 +207,6 @@ const Compiler = struct {
         try chunk.write_byte(@intCast(jump_offset & 0xff), offset);
     }
 
-    /// Emits a `Null` and `Return` op code
-    fn emit_return(self: *Self, offset: usize) Error!void {
-        try self.write_op(.Null, offset);
-        try self.write_op(.Return, offset);
-    }
-
     pub fn end(self: *Self) Error!*ObjFunction {
         // Disassembler
         if (self.manager.render_mode != .None) {
@@ -448,7 +442,10 @@ const Compiler = struct {
                 self.manager.instr_starts[self.manager.instr_idx - 1],
             );
         } else if (data.return_kind == .ImplicitVoid) {
-            try compiler.emit_return(0);
+            try compiler.write_op(
+                .NakedReturn,
+                self.manager.instr_starts[self.manager.instr_idx - 1],
+            );
         }
 
         const func = try compiler.end();
@@ -534,7 +531,7 @@ const Compiler = struct {
         if (data) {
             try self.compile_instr();
             try self.write_op(.Return, start);
-        } else try self.emit_return(start);
+        } else try self.write_op(.NakedReturn, start);
     }
 
     fn string_instr(self: *Self) !void {

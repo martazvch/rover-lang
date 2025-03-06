@@ -289,6 +289,19 @@ pub const Vm = struct {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int *= rhs;
                 },
+                .NakedReturn => {
+                    self.frame_stack.count -= 1;
+
+                    // The last standing frame is the artificial one created when we run
+                    // the global scope at the very beginning
+                    if (self.frame_stack.count == 1) {
+                        _ = self.stack.pop();
+                        break;
+                    }
+
+                    self.stack.top = frame.slots;
+                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                },
                 .NativeFnCall => {
                     const args_count = frame.read_byte();
                     const native = self.stack.peek_ref(args_count).Obj.as(ObjNativeFn).function;

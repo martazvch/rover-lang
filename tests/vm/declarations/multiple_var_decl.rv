@@ -1,0 +1,43 @@
+// Multiple variables declaration
+
+fn get_bool() -> bool { true }
+fn needs_bool(arg: bool) {}
+
+fn main() {
+    // Distribute the value
+    var a, b = 1
+    print a // expect: 1
+    print b // expect: 1
+
+    // Complexe expressions
+    var c, d, e = 45.6, 65 * (6 - 8), get_bool()
+    print c // expect: 45.6
+    print d // expect: -130
+    print e // expect: true
+
+    // Null at first without any type
+    var f, g, h
+    h = 5
+    f = get_bool
+    g = f() and false
+    print h // expect: 5
+    print f // expect: <fn get_bool>
+    print g // expect: false
+
+    // Infered type
+    needs_bool(g) // no error
+
+    // Null at first with any type
+    var i, j, k: float
+    i = 5
+    j = i * h
+    k = i - j * 3.
+    print i // expect: 5
+    print j // expect: 25
+    print k // expect: -70
+
+    // Typed + casts
+    var l, m: float = 1, 56.7
+    print l // expect: 1
+    print m // expect: 56.7
+}

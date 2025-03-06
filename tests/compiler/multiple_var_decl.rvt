@@ -30,8 +30,7 @@ OP_CONSTANT index 7, value 6
 OP_CAST_TO_FLOAT
 OP_CONSTANT index 8, value 7
 OP_CAST_TO_FLOAT
-OP_NULL
-OP_RETURN
+OP_NAKED_RETURN
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn main>
@@ -62,8 +61,7 @@ OP_SUBTRACT_INT
 OP_MULTIPLY_INT
 OP_GET_GLOBAL index 0
 OP_CALL index 0
-OP_NULL
-OP_RETURN  
+OP_NAKED_RETURN  
 
 -- Global scope --
 OP_CONSTANT index 0, value <fn add>
