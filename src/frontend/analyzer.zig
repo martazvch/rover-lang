@@ -142,6 +142,9 @@ pub const Analyzer = struct {
     type_manager: TypeManager,
     interner: Interner,
 
+    starts: []const usize,
+    start_idx: usize,
+
     arena: std.heap.ArenaAllocator,
     allocator: Allocator,
     repl: bool,
@@ -192,6 +195,8 @@ pub const Analyzer = struct {
         self.type_manager = TypeManager.init(self.allocator);
         self.interner = Interner.init(self.allocator);
 
+        self.start_idx = 0;
+
         // We reserve slot 0 for 'main'
         _ = try self.interner.intern("main");
         // Slot 1 for std
@@ -205,6 +210,7 @@ pub const Analyzer = struct {
         self.node_idx = 0;
         self.scope_depth = 0;
         self.local_offset = 0;
+        self.start_idx = 0;
     }
 
     pub fn deinit(self: *Self) void {
@@ -216,6 +222,7 @@ pub const Analyzer = struct {
         source: []const u8,
         tokens: *const MultiArrayList(Token),
         nodes: *const MultiArrayList(Node),
+        starts: []const usize,
     ) !void {
         self.source = source;
         self.token_tags = tokens.items(.tag);
@@ -224,16 +231,21 @@ pub const Analyzer = struct {
         self.node_mains = nodes.items(.main);
         self.node_data = nodes.items(.data);
 
+        self.starts = starts;
+
         // HACK: to protect a -1 access
         try self.states.append(.{});
 
-        while (self.node_idx < self.node_data.len) {
+        while (self.node_idx < self.node_data.len) : (self.start_idx += 1) {
             const start = self.node_idx;
 
             const node_type = self.analyze_node(self.node_idx) catch |e| {
                 switch (e) {
                     // If it's our own error, we continue
-                    error.Err => continue,
+                    error.Err => {
+                        self.node_idx = self.starts[self.start_idx + 1];
+                        continue;
+                    },
                     error.TooManyTypes => return self.err(.TooManyTypes, self.to_span(self.node_idx)),
                     else => return e,
                 }
@@ -250,6 +262,7 @@ pub const Analyzer = struct {
         else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
+    // TODO: move to other file
     fn to_span(self: *const Self, node: Node.Index) Span {
         return switch (self.node_tags[node]) {
             .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
@@ -469,21 +482,23 @@ pub const Analyzer = struct {
         // Identifier: Identifier,
         // If: If,
         return switch (self.node_tags[node]) {
-            .Bool, .Float, .Int, .Null, .String => true,
+            .Bool, .Float, .Int, .Null, .String, .FnDecl => true,
             .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
                 const lhs = self.is_pure(node + 1);
                 return lhs and self.is_pure(node + 2);
             },
             .Grouping => self.is_pure(node + 1),
             .Unary => self.is_pure(node + 1),
+            // Skips type
+            .VarDecl => self.is_pure(node + 2),
             else => false,
         };
     }
 
     fn analyze_node(self: *Self, node: Node.Index) Error!Type {
-        // if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
-        //     return self.err(.UnpureInGlobal, self.to_span(node));
-        // }
+        if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
+            return self.err(.UnpureInGlobal, self.to_span(node));
+        }
 
         var final: Type = Void;
 

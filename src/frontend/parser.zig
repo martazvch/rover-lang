@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 
 const tracy = @import("tracy");
@@ -25,6 +26,7 @@ pub const Parser = struct {
     token_spans: []const Span,
     token_idx: usize,
     nodes: MultiArrayList(Node),
+    mains: ArrayListUnmanaged(Node.Index),
     panic_mode: bool,
 
     const Self = @This();
@@ -38,12 +40,13 @@ pub const Parser = struct {
     /// parser.init(allocator);
     /// ```
     pub fn init(self: *Self, allocator: Allocator) void {
-        self.arena = ArenaAllocator.init(allocator);
+        self.arena = .init(allocator);
         self.allocator = self.arena.allocator();
-        self.nodes = MultiArrayList(Node){};
-        self.errs = ArrayList(ParserReport).init(self.allocator);
+        self.nodes = .{};
+        self.errs = .init(self.allocator);
         self.token_idx = 0;
         self.panic_mode = false;
+        self.mains = ArrayListUnmanaged(usize).initCapacity(self.allocator, 0) catch @panic("OOM");
     }
 
     pub fn deinit(self: *Self) void {
@@ -86,11 +89,6 @@ pub const Parser = struct {
                 ) catch {};
 
                 self.synchronize();
-                //     catch |e| switch (e) {
-                //     // If it's our own error, we just synchronize before resuming
-                //     error.err => self.synchronize(),
-                //     else => return e,
-                // };
             }
 
             self.skip_new_lines();
@@ -232,6 +230,8 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
+        try self.mains.append(self.allocator, idx);
+
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
         self.skip_new_lines();
 
@@ -285,7 +285,9 @@ pub const Parser = struct {
 
     fn return_expr(self: *Self) Error!Node.Index {
         const tk = self.token_idx - 1;
-        const idx = self.add_node(.{ .tag = .Return, .main = tk });
+        const idx = try self.add_node(.{ .tag = .Return, .main = tk });
+
+        try self.mains.append(self.allocator, idx);
 
         _ = if (self.check(.NewLine) or self.check(.RightBrace))
             try self.add_node(Node.Empty)
@@ -306,6 +308,8 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
+        try self.mains.append(self.allocator, idx);
+
         _ = try self.parse_type();
 
         _ = if (self.match(.Equal))
@@ -318,6 +322,8 @@ pub const Parser = struct {
 
     fn multi_var_decl(self: *Self) !Node.Index {
         const idx = try self.add_node(.{ .tag = .MultiVarDecl });
+
+        try self.mains.append(self.allocator, idx);
         _ = try self.add_node(.{ .tag = .VarDecl, .main = self.token_idx - 1 });
 
         var count: usize = 1;
@@ -428,10 +434,12 @@ pub const Parser = struct {
 
     fn discard(self: *Self) !Node.Index {
         try self.expect(.Equal, .InvalidDiscard);
-        const idx = self.add_node(.{
+        const idx = try self.add_node(.{
             .tag = .Discard,
             .main = self.token_idx - 1,
         });
+
+        try self.mains.append(self.allocator, idx);
         _ = try self.parse_precedence_expr(0);
 
         return idx;
@@ -442,6 +450,8 @@ pub const Parser = struct {
             .tag = .Use,
             .main = self.token_idx - 1,
         });
+
+        try self.mains.append(self.allocator, idx);
 
         if (!self.check(.Identifier)) {
             return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
@@ -472,6 +482,8 @@ pub const Parser = struct {
             return self.while_stmt();
         } else {
             const assigne = try self.parse_precedence_expr(0);
+
+            try self.mains.append(self.allocator, assigne);
 
             if (self.match(.Equal)) {
                 return self.assignment(assigne);
