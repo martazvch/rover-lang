@@ -1,10 +1,14 @@
 const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+const Alignment = std.mem.Alignment;
+
 const config = @import("config");
-const Vm = @import("vm.zig").Vm;
-const Value = @import("values.zig").Value;
+
 const Obj = @import("obj.zig").Obj;
+const Value = @import("values.zig").Value;
+const Vm = @import("vm.zig").Vm;
+
 // const ObjClosure = @import("obj.zig").ObjClosure;
 // const ObjFunction = @import("obj.zig").ObjFunction;
 // const ObjStruct = @import("obj.zig").ObjStruct;
@@ -216,7 +220,7 @@ pub const Gc = struct {
     // }
 
     /// Calling alloc triggers the GC before allocating
-    pub fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+    pub fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
 
         self.bytes_allocated += len;
@@ -225,35 +229,49 @@ pub const Gc = struct {
         //     self.collect_garbage() catch return null;
         // }
 
-        return self.parent_allocator.rawAlloc(len, ptr_align, ret_addr);
+        return self.parent_allocator.rawAlloc(len, alignment, ret_addr);
     }
 
-    pub fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+    pub fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
 
-        self.bytes_allocated -= buf.len;
-
-        self.parent_allocator.rawFree(buf, buf_align, ret_addr);
-    }
-
-    pub fn resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
-        const self: *Self = @ptrCast(@alignCast(ctx));
-
-        self.bytes_allocated += new_len - buf.len;
+        self.bytes_allocated += new_len - memory.len;
 
         // if (self.active and (self.bytes_allocated > self.next_gc or config.STRESS_GC)) {
         // if (self.active and (self.bytes_allocated > self.next_gc)) {
         //     self.collect_garbage() catch return false;
         // }
 
-        return self.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr);
+        return self.parent_allocator.rawResize(memory, alignment, new_len, ret_addr);
     }
 
+    // TODO: see if this is well implemented
+    pub fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        const self: *Self = @ptrCast(@alignCast(ctx));
+
+        self.bytes_allocated += new_len - memory.len;
+
+        // if (self.active and (self.bytes_allocated > self.next_gc or config.STRESS_GC)) {
+        // if (self.active and (self.bytes_allocated > self.next_gc)) {
+        //     self.collect_garbage() catch return false;
+        // }
+
+        return self.parent_allocator.rawRemap(memory, alignment, new_len, ret_addr);
+    }
+
+    pub fn free(ctx: *anyopaque, buf: []u8, alignment: Alignment, ret_addr: usize) void {
+        const self: *Self = @ptrCast(@alignCast(ctx));
+
+        self.bytes_allocated -= buf.len;
+
+        self.parent_allocator.rawFree(buf, alignment, ret_addr);
+    }
     /// Returns the Gc as an allocator
     pub fn allocator(self: *Self) Allocator {
         return .{ .ptr = self, .vtable = &.{
             .alloc = alloc,
             .resize = resize,
+            .remap = remap,
             .free = free,
         } };
     }

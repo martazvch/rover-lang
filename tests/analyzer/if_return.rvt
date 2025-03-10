@@ -40,7 +40,7 @@ expect:
             [Bool true]
         - then:
             [Block pop count: 0, is_expr: false]
-                [Return expr: false]
+                [Return expr: false, cast: false]
         - else:
             [Int 4]
     [Variable declaration index: 2, scope: Local]
@@ -50,7 +50,7 @@ expect:
         - then:
             [Int 5]
         - else:
-            [Return expr: false]
+            [Return expr: false, cast: false]
     [Fn declaration func, index: 3, scope: Local, return kind: Explicit]
         [Print]
             [If cast: None, has else: true]
@@ -59,14 +59,14 @@ expect:
             - then:
                 [String str]
             - else:
-                [Return expr: true]
+                [Return expr: true, cast: false]
                     [Variable index: 1, scope: Local]
         [Variable declaration index: 2, scope: Local]
             [If cast: None, has else: true]
             - condition:
                 [Bool true]
             - then:
-                [Return expr: true]
+                [Return expr: true, cast: false]
                     [Binop type: AddInt, cast: None]
                         [Variable index: 1, scope: Local]
                         [Int 2]
@@ -79,9 +79,9 @@ expect:
         - condition:
             [Bool true]
         - then:
-            [Return expr: true]
+            [Return expr: true, cast: false]
                 [Int 8]
-        [Return expr: true]
+        [Return expr: true, cast: false]
             [If cast: None, has else: true]
             - condition:
                 [Bool true]
@@ -92,7 +92,7 @@ expect:
                         [Bool true]
                     - then:
                         [Block pop count: 0, is_expr: true]
-                            [Return expr: true]
+                            [Return expr: true, cast: false]
                                 [Block pop count: 0, is_expr: true]
                                     [Int 1]
                     - else:
@@ -104,13 +104,13 @@ expect:
                         [Bool false]
                     - then:
                         [Block pop count: 0, is_expr: true]
-                            [Return expr: true]
+                            [Return expr: true, cast: false]
                                 [If cast: None, has else: true]
                                 - condition:
                                     [Bool true]
                                 - then:
                                     [Block pop count: 0, is_expr: true]
-                                        [Return expr: true]
+                                        [Return expr: true, cast: false]
                                             [Int 4]
                                 - else:
                                     [Int 3]

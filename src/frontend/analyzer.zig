@@ -3,26 +3,25 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
+
 const Interner = @import("../interner.zig").Interner;
-const TokenIndex = @import("ast.zig").TokenIndex;
-const Token = @import("lexer.zig").Token;
-const Span = @import("lexer.zig").Span;
+const GenReport = @import("../reporter.zig").GenReport;
+const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
+const BA = @import("builtins_analyzer.zig");
+const BuiltinAnalyzer = BA.BuiltinAnalyzer;
+const FnDeclaration = BA.FnDeclaration;
+const builtin_init = BA.init;
 const Node = @import("ast.zig").Node;
 const Rir = @import("rir.zig");
 const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
+const Span = @import("lexer.zig").Span;
+const Token = @import("lexer.zig").Token;
+const TokenIndex = @import("ast.zig").TokenIndex;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
-const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const GenReport = @import("../reporter.zig").GenReport;
-const BA = @import("builtins_analyzer.zig");
-const BuiltinAnalyzer = BA.BuiltinAnalyzer;
-const FnDeclaration = BA.FnDeclaration;
-const builtin_init = BA.init;
-
-// Re-export constants
 const Void = TypeSys.Void;
 const Null = TypeSys.Null;
 const Int = TypeSys.Int;
@@ -30,6 +29,7 @@ const Float = TypeSys.Float;
 const Bool = TypeSys.Bool;
 const Str = TypeSys.Str;
 
+// Re-export constants
 pub const TypeManager = struct {
     declared: std.AutoHashMap(usize, Type),
     type_infos: ArrayList(TypeInfo),
@@ -429,9 +429,9 @@ pub const Analyzer = struct {
                 try self.interner.intern(self.source_from_node(type_idx)),
             ) orelse
                 return self.err(
-                .{ .UndeclaredType = .{ .found = self.source_from_node(type_idx) } },
-                self.to_span(type_idx),
-            )
+                    .{ .UndeclaredType = .{ .found = self.source_from_node(type_idx) } },
+                    self.to_span(type_idx),
+                )
         else
             Void;
     }
@@ -470,7 +470,10 @@ pub const Analyzer = struct {
         // If: If,
         return switch (self.node_tags[node]) {
             .Bool, .Float, .Int, .Null, .String => true,
-            .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => self.is_pure(node + 1) and self.is_pure(node + 2),
+            .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
+                const lhs = self.is_pure(node + 1);
+                return lhs and self.is_pure(node + 2);
+            },
             .Grouping => self.is_pure(node + 1),
             .Unary => self.is_pure(node + 1),
             else => false,
@@ -1124,7 +1127,7 @@ pub const Analyzer = struct {
         // Switch back to locals before function call
         self.local_offset = local_offset_save;
 
-        const state = self.states.pop();
+        const state = self.states.pop().?;
 
         const return_kind: ReturnKind = if (state.returns)
             .Explicit
@@ -1344,22 +1347,33 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         var state = self.last_state();
 
-        if (!state.in_fn) {
-            return self.err(.ReturnOutsideFn, self.to_span(node));
-        }
+        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = .{
+            .value = false,
+            .cast = false,
+        } } }, node);
 
-        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = false } }, node);
+        const value_idx = self.node_idx;
 
         const return_type = if (self.node_tags[self.node_idx] != .Empty) blk: {
-            self.instructions.items(.data)[idx].Return = true;
+            self.instructions.items(.data)[idx].Return.value = true;
             break :blk try self.analyze_node(self.node_idx);
         } else blk: {
             self.node_idx += 1;
             break :blk Void;
         };
 
+        // We check after to advance node idx
+        if (!state.in_fn) {
+            return self.err(.ReturnOutsideFn, self.to_span(node));
+        }
+
         if (state.fn_type != return_type) {
-            return self.err(
+            if (TypeSys.get_value(state.fn_type) == Float and
+                TypeSys.get_value(return_type) == Int)
+            {
+                self.instructions.items(.data)[idx].Return.cast = true;
+                _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
+            } else return self.err(
                 .{ .IncompatibleFnType = .{
                     .expect = self.get_type_name(state.fn_type),
                     .found = self.get_type_name(return_type),
@@ -1369,7 +1383,7 @@ pub const Analyzer = struct {
         }
 
         state.returns = true;
-        return return_type;
+        return state.fn_type;
     }
 
     fn string(self: *Self, node: Node.Index) !Type {

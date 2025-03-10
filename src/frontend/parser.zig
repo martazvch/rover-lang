@@ -1,18 +1,20 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const tracy = @import("tracy");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
+
+const tracy = @import("tracy");
+
+const GenReport = @import("../reporter.zig").GenReport;
 const Ast = @import("ast.zig");
 const Node = Ast.Node;
 const NullNode = Ast.NullNode;
 const TokenIndex = Ast.TokenIndex;
-const GenReport = @import("../reporter.zig").GenReport;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
-const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
+const Token = @import("lexer.zig").Token;
 
 pub const Parser = struct {
     source: []const u8,
@@ -211,6 +213,8 @@ pub const Parser = struct {
             return self.fn_declaration();
         } else if (self.match(.Var)) {
             return self.var_declaration();
+        } else if (self.match(.Return)) {
+            return self.return_expr();
         } else if (self.match(.Underscore)) {
             return self.discard();
         } else if (self.match(.Use)) {
@@ -275,6 +279,18 @@ pub const Parser = struct {
         _ = try self.block_expr();
 
         _ = try self.add_node(.{ .tag = .FnDeclEnd });
+
+        return idx;
+    }
+
+    fn return_expr(self: *Self) Error!Node.Index {
+        const tk = self.token_idx - 1;
+        const idx = self.add_node(.{ .tag = .Return, .main = tk });
+
+        _ = if (self.check(.NewLine) or self.check(.RightBrace))
+            try self.add_node(Node.Empty)
+        else
+            try self.parse_precedence_expr(0);
 
         return idx;
     }
@@ -576,7 +592,6 @@ pub const Parser = struct {
             .LeftBrace => self.block_expr(),
             .If => self.if_expr(),
             .Minus, .Not => self.unary_expr(),
-            .Return => self.return_expr(),
             else => self.parse_primary_expr(),
         };
 
@@ -648,18 +663,6 @@ pub const Parser = struct {
         const idx = self.add_node(.{ .tag = .Unary, .main = op });
         self.advance();
         _ = try self.parse_expr();
-
-        return idx;
-    }
-
-    fn return_expr(self: *Self) Error!Node.Index {
-        const tk = self.token_idx - 1;
-        const idx = self.add_node(.{ .tag = .Return, .main = tk });
-
-        _ = if (self.check(.NewLine) or self.check(.RightBrace))
-            try self.add_node(Node.Empty)
-        else
-            try self.parse_precedence_expr(0);
 
         return idx;
     }

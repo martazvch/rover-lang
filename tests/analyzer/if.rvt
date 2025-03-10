@@ -211,7 +211,7 @@ expect:
         - condition:
             [Bool true]
         - then:
-            [Return expr: true]
+            [Return expr: true, cast: false]
                 [Int 1]
         [Int 2]
     [Discard]

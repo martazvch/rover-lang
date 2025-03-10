@@ -146,13 +146,19 @@ const Tester = struct {
 
                 try self.run_stage_tests(.compiler);
                 success = self.report(.compiler) or success;
-                try self.run_vm_tests();
-            },
-            .vm => try self.run_vm_tests(),
-            else => |s| try self.run_stage_tests(s),
-        }
 
-        success = self.report(stage);
+                try self.run_vm_tests();
+                success = self.report(.vm);
+            },
+            .vm => {
+                try self.run_vm_tests();
+                success = self.report(.vm);
+            },
+            else => |s| {
+                try self.run_stage_tests(s);
+                success = self.report(stage);
+            },
+        }
 
         return success;
     }

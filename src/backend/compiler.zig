@@ -528,8 +528,10 @@ const Compiler = struct {
         const start = self.get_start();
         self.manager.instr_idx += 1;
 
-        if (data) {
+        if (data.value) {
             try self.compile_instr();
+            if (data.cast) try self.compile_instr();
+
             try self.write_op(.Return, start);
         } else try self.write_op(.NakedReturn, start);
     }

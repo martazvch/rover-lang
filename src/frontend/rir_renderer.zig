@@ -339,11 +339,12 @@ pub const RirRenderer = struct {
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Return expr: {}]\n", .{data});
+        try writer.print("[Return expr: {}, cast: {}]\n", .{ data.value, data.cast });
 
-        if (data) {
+        if (data.value) {
             self.indent_level += 1;
             try self.parse_instr(self.instr_idx);
+            if (data.cast) try self.parse_instr(self.instr_idx);
             self.indent_level -= 1;
         }
     }

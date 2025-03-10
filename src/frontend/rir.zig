@@ -46,7 +46,7 @@ pub const Instruction = struct {
         If: If,
         Imported: Imported,
         Int: i64,
-        Return: bool,
+        Return: Return,
         Unary: Unary,
         Use: u64,
         VarDecl: VarDecl,
@@ -101,6 +101,7 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { Then, Else, None };
     };
     pub const Imported = struct { index: u64, variable: Variable };
+    pub const Return = struct { value: bool, cast: bool };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,

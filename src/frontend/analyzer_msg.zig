@@ -161,8 +161,8 @@ pub const AnalyzerMsg = union(enum) {
             .NonVoidWhile => writer.writeAll("use '_' to ignore the value or modify the body"),
             .NoMain => writer.writeAll("add a 'main' function that will be called automatically at execution"),
             .ReturnOutsideFn => writer.writeAll(
-                "return statements are only allow to exit a function's body." ++
-                    "If in loops, use 'break' otherwise remove the return",
+                "return statements are only allow to exit a function's body. " ++
+                    "In loops, use 'break' otherwise remove the return",
             ),
             .TooManyLocals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
             .TooManyTypes => writer.writeAll(

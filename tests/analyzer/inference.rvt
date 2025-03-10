@@ -53,7 +53,7 @@ fn main() {
 // No errors
 expect:
 [Fn declaration get_bool, index: 0, scope: Global, return kind: Explicit]
-    [Return expr: true]
+    [Return expr: true, cast: false]
         [Bool true]
 [Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
     [Variable declaration index: 1, scope: Local]

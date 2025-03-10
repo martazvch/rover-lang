@@ -1,0 +1,22 @@
+// Tests return statement
+
+code:
+return
+return 56
+
+expect:
+[Return]
+[Return
+    [Int literal 56]
+]
+
+================
+
+code:
+return return
+
+error:
+ExpectExpr, return
+
+================
+

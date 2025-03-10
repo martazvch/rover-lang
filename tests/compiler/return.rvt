@@ -1,0 +1,41 @@
+// Tests return statement
+
+code:
+fn add() { return }
+fn sub() -> int { return 5 }
+fn mul(a: int) -> float { return a * sub() }
+fn main() {}
+
+expect:
+-- add --
+OP_NAKED_RETURN
+
+-- sub --
+OP_CONSTANT index 0, value 5
+OP_RETURN
+
+-- mul --
+OP_GET_LOCAL index 1
+OP_GET_GLOBAL index 1
+OP_CALL index 0
+OP_MULTIPLY_INT
+OP_CAST_TO_FLOAT
+OP_RETURN
+
+-- main --
+OP_NAKED_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+OP_CONSTANT index 1, value <fn sub>
+OP_DEFINE_GLOBAL index 1
+OP_CONSTANT index 2, value <fn mul>
+OP_DEFINE_GLOBAL index 2
+OP_CONSTANT index 3, value <fn main>
+OP_DEFINE_GLOBAL index 3
+OP_GET_GLOBAL index 3
+OP_CALL index 0
+
+================
+
