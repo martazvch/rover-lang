@@ -5,7 +5,6 @@ const Allocator = std.mem.Allocator;
 const clap = @import("clap");
 const run = @import("pipeline.zig").run;
 const ReplPipeline = @import("pipeline.zig").ReplPipeline;
-// const tracy = @import("tracy");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

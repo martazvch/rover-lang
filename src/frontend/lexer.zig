@@ -223,8 +223,8 @@ pub const Lexer = struct {
         return .{
             .source = undefined,
             .index = 0,
-            .tokens = MultiArrayList(Token){},
-            .errs = ArrayList(LexerReport).init(allocator),
+            .tokens = .{},
+            .errs = .init(allocator),
             .allocator = allocator,
         };
     }

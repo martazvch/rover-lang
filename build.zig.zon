@@ -27,10 +27,6 @@
             .url = "https://github.com/Hejsil/zig-clap/archive/refs/tags/0.10.0.tar.gz",
             .hash = "clap-0.10.0-oBajB434AQBDh-Ei3YtoKIRxZacVPF1iSwp3IX_ZB8f0",
         },
-        // .tracy = .{
-        //     .url = "https://github.com/martazvch/zig-tracy/archive/916593dec80f63de83dd000ec52d69ad3e6467be.tar.gz",
-        //     .hash = "12204df258ca4cdcc5f37e96cb5044f52c7985948470d729228904e806794689d2c9",
-        // },
     },
     .fingerprint = 0xcdb9275d7bcae6a9,
     .paths = .{

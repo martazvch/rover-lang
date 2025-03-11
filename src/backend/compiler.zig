@@ -52,7 +52,7 @@ pub const CompilationManager = struct {
             .vm = vm,
             .natives = natives,
             .compiler = undefined,
-            .errs = ArrayList(CompilerReport).init(vm.allocator),
+            .errs = .init(vm.allocator),
             .interner = interner,
             .instr_tags = instr_tags,
             .instr_data = instr_data,
@@ -149,6 +149,7 @@ const Compiler = struct {
     }
 
     fn emit_constant(self: *Self, value: Value, offset: usize) !void {
+        // TODO: error
         self.write_op_and_byte(.Constant, try self.get_chunk().write_constant(value), offset) catch |err| {
             std.debug.print("Too many constants in chunk\n", .{});
             return err;

@@ -6,8 +6,6 @@ const ArrayList = std.ArrayList;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 
-const tracy = @import("tracy");
-
 const GenReport = @import("../reporter.zig").GenReport;
 const Ast = @import("ast.zig");
 const Node = Ast.Node;

@@ -40,8 +40,8 @@ pub const TypeManager = struct {
 
     pub fn init(allocator: Allocator) Self {
         return .{
-            .declared = AutoHashMap(usize, Type).init(allocator),
-            .type_infos = ArrayList(TypeInfo).init(allocator),
+            .declared = .init(allocator),
+            .type_infos = .init(allocator),
         };
     }
 
@@ -78,13 +78,7 @@ pub const TypeManager = struct {
     }
 
     /// Declares a new type built with `kind` and `extra` parameters and add the informations
-    pub fn declare(
-        self: *Self,
-        name: usize,
-        kind: TypeSys.Kind,
-        extra: TypeSys.Extra,
-        info: TypeInfo,
-    ) !TypeSys.Type {
+    pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) !TypeSys.Type {
         const count = self.type_infos.items.len;
 
         // Error
@@ -179,15 +173,15 @@ pub const Analyzer = struct {
         self.arena = std.heap.ArenaAllocator.init(allocator);
         self.allocator = self.arena.allocator();
 
-        self.instructions = MultiArrayList(Instruction){};
-        self.warns = ArrayList(AnalyzerReport).init(self.allocator);
-        self.errs = ArrayList(AnalyzerReport).init(self.allocator);
-        self.globals = ArrayList(Variable).init(self.allocator);
-        self.locals = ArrayList(Variable).init(self.allocator);
+        self.instructions = .{};
+        self.warns = .init(self.allocator);
+        self.errs = .init(self.allocator);
+        self.globals = .init(self.allocator);
+        self.locals = .init(self.allocator);
         self.node_idx = 0;
         self.scope_depth = 0;
 
-        self.states = ArrayList(State).init(self.allocator);
+        self.states = .init(self.allocator);
         self.main = null;
         self.local_offset = 0;
         self.type_manager = TypeManager.init(self.allocator);
@@ -217,7 +211,6 @@ pub const Analyzer = struct {
         source: []const u8,
         tokens: *const MultiArrayList(Token),
         nodes: *const MultiArrayList(Node),
-        // ends: []const usize,
     ) !void {
         self.source = source;
         self.token_tags = tokens.items(.tag);
@@ -226,8 +219,6 @@ pub const Analyzer = struct {
         self.node_mains = nodes.items(.main);
         self.node_data = nodes.items(.data);
         self.node_ends = nodes.items(.end);
-
-        // self.ends = ends;
 
         // HACK: to protect a -1 access
         try self.states.append(.{});
@@ -258,7 +249,6 @@ pub const Analyzer = struct {
         else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
     }
 
-    // TODO: move to other file
     fn to_span(self: *const Self, node: Node.Index) Span {
         return switch (self.node_tags[node]) {
             .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
@@ -462,7 +452,6 @@ pub const Analyzer = struct {
 
     fn is_pure(self: *const Self, node: Node.Index) bool {
         // TODO: manage those
-        // Block: Block,
         // FnCall: FnCall,
         // Identifier: Identifier,
         // If: If,
