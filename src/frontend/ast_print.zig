@@ -1,10 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
 const Ast = @import("ast.zig");
 const Node = @import("ast.zig").Node;
-const Token = @import("lexer.zig").Token;
-const Span = @import("lexer.zig").Span;
 const ParserReport = @import("parser.zig").Parser.ParserReport;
+const Span = @import("lexer.zig").Span;
+const Token = @import("lexer.zig").Token;
 
 pub const AstPrinter = struct {
     source: [:0]const u8,
@@ -114,7 +115,6 @@ pub const AstPrinter = struct {
             .Use => self.use_stmt(),
             .VarDecl => self.var_decl(),
             .While => self.while_stmt(),
-            .FnCallEnd, .FnDeclEnd => unreachable,
         };
     }
 
@@ -210,8 +210,6 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
-        // Skips the FnCallEnd
-        self.node_idx += 1;
     }
 
     fn fn_decl(self: *Self) Error!void {
@@ -259,8 +257,6 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
-        // Skips the FnDeclEnd
-        self.node_idx += 1;
     }
 
     fn parameter(self: *Self) Error!void {

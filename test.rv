@@ -1,4 +1,9 @@
+use std._test1
+
 fn main() {
-    {5}
-    print "unused"
+    print _cast_i2f(12)
+
+    {
+        print _cast_f2i(true, 5)
+    }
 }

@@ -30,12 +30,12 @@ expect:
 ================
 
 code:
-var a = 2 + 5 - 7.6
+var a = 2.3 + 5.5 - 7.6
 var b = a
 
 fn main() {}
 
 error:
-UnpureGlobal
+UnpureInGlobal
 
 ================

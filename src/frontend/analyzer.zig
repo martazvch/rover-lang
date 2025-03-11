@@ -126,6 +126,7 @@ pub const Analyzer = struct {
     node_tags: []const Node.Tag,
     node_mains: []const TokenIndex,
     node_data: []const usize,
+    node_ends: []const Node.Index,
     node_idx: usize,
 
     instructions: MultiArrayList(Instruction),
@@ -141,9 +142,6 @@ pub const Analyzer = struct {
     states: ArrayList(State),
     type_manager: TypeManager,
     interner: Interner,
-
-    starts: []const usize,
-    start_idx: usize,
 
     arena: std.heap.ArenaAllocator,
     allocator: Allocator,
@@ -195,8 +193,6 @@ pub const Analyzer = struct {
         self.type_manager = TypeManager.init(self.allocator);
         self.interner = Interner.init(self.allocator);
 
-        self.start_idx = 0;
-
         // We reserve slot 0 for 'main'
         _ = try self.interner.intern("main");
         // Slot 1 for std
@@ -210,7 +206,6 @@ pub const Analyzer = struct {
         self.node_idx = 0;
         self.scope_depth = 0;
         self.local_offset = 0;
-        self.start_idx = 0;
     }
 
     pub fn deinit(self: *Self) void {
@@ -222,7 +217,7 @@ pub const Analyzer = struct {
         source: []const u8,
         tokens: *const MultiArrayList(Token),
         nodes: *const MultiArrayList(Node),
-        starts: []const usize,
+        // ends: []const usize,
     ) !void {
         self.source = source;
         self.token_tags = tokens.items(.tag);
@@ -230,20 +225,21 @@ pub const Analyzer = struct {
         self.node_tags = nodes.items(.tag);
         self.node_mains = nodes.items(.main);
         self.node_data = nodes.items(.data);
+        self.node_ends = nodes.items(.end);
 
-        self.starts = starts;
+        // self.ends = ends;
 
         // HACK: to protect a -1 access
         try self.states.append(.{});
 
-        while (self.node_idx < self.node_data.len) : (self.start_idx += 1) {
+        while (self.node_idx < self.node_data.len) {
             const start = self.node_idx;
 
             const node_type = self.analyze_node(self.node_idx) catch |e| {
                 switch (e) {
                     // If it's our own error, we continue
                     error.Err => {
-                        self.node_idx = self.starts[self.start_idx + 1];
+                        self.node_idx = self.node_ends[start];
                         continue;
                     },
                     error.TooManyTypes => return self.err(.TooManyTypes, self.to_span(self.node_idx)),
@@ -291,7 +287,7 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
-            .Link => self.token_spans[self.node_data[node]],
+            .Link => self.to_span(self.node_data[node]),
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -316,7 +312,7 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
             },
             .While => self.token_spans[self.node_mains[node]],
-            .FnCallEnd, .FnDeclEnd, .MultiVarDecl => unreachable,
+            .MultiVarDecl => unreachable,
         };
     }
 
@@ -355,22 +351,6 @@ pub const Analyzer = struct {
 
     fn last_state(self: *Self) *State {
         return &self.states.items[self.states.items.len - 1];
-    }
-
-    /// Skips until it reaches the `to` node tag
-    fn skip(self: *Self, to: Node.Tag) void {
-        const opening: Node.Tag = if (to == .FnCallEnd) .FnCall else .FnDecl;
-        var left: usize = 0;
-
-        while (self.node_idx < self.node_tags.len) {
-            if (self.node_tags[self.node_idx] == opening) left += 1;
-
-            if (self.node_tags[self.node_idx] == to) {
-                self.node_idx += 1;
-
-                if (left == 0) break;
-            } else self.node_idx += 1;
-        }
     }
 
     /// Unincrement scope depth, discards all locals and return the number
@@ -470,6 +450,11 @@ pub const Analyzer = struct {
             const index = self.locals.items.len - self.local_offset;
             variable.index = index;
 
+            if (index > 255) {
+                // -3 because we are past the variable and its type and value
+                return self.err(.TooManyLocals, self.to_span(self.node_idx - 3));
+            }
+
             try self.locals.append(variable);
             return .{ .index = @intCast(index), .scope = .Local };
         }
@@ -482,22 +467,31 @@ pub const Analyzer = struct {
         // Identifier: Identifier,
         // If: If,
         return switch (self.node_tags[node]) {
-            .Bool, .Float, .Int, .Null, .String, .FnDecl => true,
+            // Skips assign node and identifier
+            .Assignment => self.is_pure(node + 2),
+            .Bool, .Float, .Int, .Null, .String, .FnDecl, .Use => true,
             .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
                 const lhs = self.is_pure(node + 1);
                 return lhs and self.is_pure(node + 2);
             },
             .Grouping => self.is_pure(node + 1),
             .Unary => self.is_pure(node + 1),
-            // Skips type
-            .VarDecl => self.is_pure(node + 2),
+            // Checks the value
+            .VarDecl => if (self.node_tags[node + 2] == .Empty)
+                true
+            else
+                self.is_pure(node + 2),
             else => false,
         };
     }
 
     fn analyze_node(self: *Self, node: Node.Index) Error!Type {
         if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
-            return self.err(.UnpureInGlobal, self.to_span(node));
+            // TODO: add block, not allowed to have local scopes in global scope
+            return if (self.node_tags[node] == .Return)
+                self.err(.ReturnOutsideFn, self.to_span(node))
+            else
+                self.err(.UnpureInGlobal, self.to_span(node));
         }
 
         var final: Type = Void;
@@ -532,7 +526,7 @@ pub const Analyzer = struct {
             .Use => try self.use(node),
             .VarDecl => try self.var_decl(node),
             .While => try self.while_stmt(node),
-            .FnCallEnd, .FnDeclEnd, .Parameter, .Type => unreachable,
+            .Parameter, .Type => unreachable,
         }
 
         return final;
@@ -552,11 +546,7 @@ pub const Analyzer = struct {
 
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
-                // In case of failure, skips the value
-                const assigne = self.resolve_identifier(assigne_idx, false) catch |e| {
-                    _ = self.analyze_node(self.node_idx) catch {};
-                    return e;
-                };
+                const assigne = try self.resolve_identifier(assigne_idx, false);
 
                 const value_idx = self.node_idx;
                 const value_type = try self.analyze_node(value_idx);
@@ -606,13 +596,7 @@ pub const Analyzer = struct {
                 } };
             },
             // Later, manage member, pointer, ...
-            else => {
-                // Skips the assigne
-                _ = self.analyze_node(assigne_idx) catch {};
-                // Skips the value
-                _ = self.analyze_node(self.node_idx) catch {};
-                return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
-            },
+            else => return self.err(.InvalidAssignTarget, self.to_span(assigne_idx)),
         }
     }
 
@@ -858,7 +842,6 @@ pub const Analyzer = struct {
         }
 
         const count = try self.end_scope();
-        if (count > 255) return self.err(.TooManyLocals, self.to_span(self.node_idx));
 
         self.instructions.items(.data)[idx] = .{ .Block = .{
             .length = length,
@@ -905,7 +888,6 @@ pub const Analyzer = struct {
     }
 
     fn fn_call(self: *Self, node: Node.Index) Error!Type {
-        errdefer self.skip(.FnCallEnd);
         const arity = self.node_data[node];
         self.node_idx += 1;
 
@@ -951,9 +933,6 @@ pub const Analyzer = struct {
             }
         }
 
-        // Skips the FnCallEnd
-        self.node_idx += 1;
-
         return type_info.return_type;
     }
 
@@ -974,7 +953,6 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, node: Node.Index) Error!void {
-        errdefer self.skip(.FnDeclEnd);
         const name_idx = try self.interner.intern(self.source_from_node(node));
 
         if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
@@ -1104,6 +1082,7 @@ pub const Analyzer = struct {
             const typ = self.analyze_node(self.node_idx) catch |e| switch (e) {
                 error.Err => {
                     body_err = true;
+                    self.node_idx = self.node_ends[start];
                     continue;
                 },
                 else => return e,
@@ -1132,6 +1111,7 @@ pub const Analyzer = struct {
         }
 
         // We strip unused instructions for them not to be compiled
+        // TODO: test
         if (deadcode_start > 0)
             self.instructions.shrinkRetainingCapacity(deadcode_start);
 
@@ -1150,9 +1130,6 @@ pub const Analyzer = struct {
             .ImplicitVoid
         else
             .ImplicitValue;
-
-        // Skips the FnDeclEnd
-        self.node_idx += 1;
 
         self.instructions.items(.data)[fn_idx] = .{ .FnDecl = .{
             .body_len = length - deadcode_count,
@@ -1221,7 +1198,7 @@ pub const Analyzer = struct {
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
-        errdefer self.node_idx = self.node_data[node];
+        // errdefer self.node_idx = self.node_data[node];
 
         const idx = try self.add_instr(.{ .tag = .If, .data = undefined }, node);
         self.node_idx += 1;
@@ -1295,15 +1272,13 @@ pub const Analyzer = struct {
                         AnalyzerMsg.implicit_cast("else branch", "float"),
                         self.to_span(else_idx),
                     );
-                } else {
-                    return self.err(
-                        .{ .IncompatibleIfType = .{
-                            .found1 = self.get_type_name(then_type),
-                            .found2 = self.get_type_name(else_type),
-                        } },
-                        self.to_span(node),
-                    );
-                }
+                } else return self.err(
+                    .{ .IncompatibleIfType = .{
+                        .found1 = self.get_type_name(then_type),
+                        .found2 = self.get_type_name(else_type),
+                    } },
+                    self.to_span(node),
+                );
             }
         } else if (then_type != Void and !state.allow_partial) {
             // Skips the Empty
@@ -1516,8 +1491,7 @@ pub const Analyzer = struct {
     }
 
     fn var_decl(self: *Self, node: Node.Index) !void {
-        // In case we propagate an error, we advance the counter to avoid
-        // infinite loop
+        // Could be links due to multi variables declaration
         self.node_idx += 1;
         const type_idx = self.resolve_link(self.node_idx);
         self.node_idx += 1;
@@ -1526,11 +1500,7 @@ pub const Analyzer = struct {
         const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined }, node);
 
         const name = try self.interner.intern(self.source_from_node(node));
-        var checked_type = self.check_name_and_type(name, node, type_idx) catch |e| {
-            // Skips the value
-            _ = try self.analyze_node(self.node_idx);
-            return e;
-        };
+        var checked_type = try self.check_name_and_type(name, node, type_idx);
 
         var initialized = false;
         var cast = false;
@@ -1578,9 +1548,7 @@ pub const Analyzer = struct {
         self.instructions.items(.data)[idx] = .{ .VarDecl = .{ .variable = variable, .cast = cast } };
     }
 
-    fn while_stmt(self: *Self, node: Node.Index) Error!void {
-        errdefer self.node_idx = self.node_data[node];
-
+    fn while_stmt(self: *Self, _: Node.Index) Error!void {
         self.node_idx += 1;
         const cond_idx = self.node_idx;
         _ = try self.add_instr(.{ .tag = .While }, cond_idx);

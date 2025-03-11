@@ -1,16 +1,17 @@
 const std = @import("std");
+
 const Token = @import("lexer.zig").Token;
 
 pub const TokenIndex = usize;
-pub const NullNode = 0;
 
 pub const Node = struct {
     tag: Tag,
     main: TokenIndex = 0,
     data: usize = 0,
+    end: Node.Index = 0,
 
     pub const Index = usize;
-    pub const Empty: Node = .{
+    pub const empty: Node = .{
         .tag = .Empty,
     };
 
@@ -26,9 +27,7 @@ pub const Node = struct {
         Eq,
         Float,
         FnDecl,
-        FnDeclEnd,
         FnCall,
-        FnCallEnd,
         Ge,
         Gt,
         Grouping,

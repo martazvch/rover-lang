@@ -11,7 +11,6 @@ const tracy = @import("tracy");
 const GenReport = @import("../reporter.zig").GenReport;
 const Ast = @import("ast.zig");
 const Node = Ast.Node;
-const NullNode = Ast.NullNode;
 const TokenIndex = Ast.TokenIndex;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Span = @import("lexer.zig").Span;
@@ -26,7 +25,6 @@ pub const Parser = struct {
     token_spans: []const Span,
     token_idx: usize,
     nodes: MultiArrayList(Node),
-    mains: ArrayListUnmanaged(Node.Index),
     panic_mode: bool,
 
     const Self = @This();
@@ -46,7 +44,6 @@ pub const Parser = struct {
         self.errs = .init(self.allocator);
         self.token_idx = 0;
         self.panic_mode = false;
-        self.mains = ArrayListUnmanaged(usize).initCapacity(self.allocator, 0) catch @panic("OOM");
     }
 
     pub fn deinit(self: *Self) void {
@@ -125,6 +122,11 @@ pub const Parser = struct {
     fn add_node(self: *Self, node: Node) !Node.Index {
         try self.nodes.append(self.allocator, node);
         return self.nodes.len - 1;
+    }
+
+    fn finish_node(self: *Self, index: Node.Index) Node.Index {
+        self.nodes.items(.end)[index] = self.nodes.len;
+        return index;
     }
 
     fn skip_new_lines(self: *Self) void {
@@ -207,19 +209,20 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Self) Error!Node.Index {
-        if (self.match(.Fn)) {
-            return self.fn_declaration();
-        } else if (self.match(.Var)) {
-            return self.var_declaration();
-        } else if (self.match(.Return)) {
-            return self.return_expr();
-        } else if (self.match(.Underscore)) {
-            return self.discard();
-        } else if (self.match(.Use)) {
-            return self.use();
-        } else {
-            return self.statement();
-        }
+        const idx = try if (self.match(.Fn))
+            self.fn_declaration()
+        else if (self.match(.Var))
+            self.var_declaration()
+        else if (self.match(.Return))
+            self.return_expr()
+        else if (self.match(.Underscore))
+            self.discard()
+        else if (self.match(.Use))
+            self.use()
+        else
+            self.statement();
+
+        return self.finish_node(idx);
     }
 
     fn fn_declaration(self: *Self) Error!Node.Index {
@@ -229,8 +232,6 @@ pub const Parser = struct {
             .tag = .FnDecl,
             .main = self.token_idx - 1,
         });
-
-        try self.mains.append(self.allocator, idx);
 
         try self.expect(.LeftParen, .ExpectParenAfterFnName);
         self.skip_new_lines();
@@ -272,13 +273,11 @@ pub const Parser = struct {
         else if (self.check(.Identifier) or self.check(.Bool) or self.check(.IntKw) or self.check(.FloatKw))
             return self.error_at_current(.ExpectArrowBeforeFnType)
         else
-            try self.add_node(Node.Empty);
+            try self.add_node(.empty);
 
         self.skip_new_lines();
         try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
         _ = try self.block_expr();
-
-        _ = try self.add_node(.{ .tag = .FnDeclEnd });
 
         return idx;
     }
@@ -287,10 +286,8 @@ pub const Parser = struct {
         const tk = self.token_idx - 1;
         const idx = try self.add_node(.{ .tag = .Return, .main = tk });
 
-        try self.mains.append(self.allocator, idx);
-
         _ = if (self.check(.NewLine) or self.check(.RightBrace))
-            try self.add_node(Node.Empty)
+            try self.add_node(.empty)
         else
             try self.parse_precedence_expr(0);
 
@@ -308,14 +305,12 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
-        try self.mains.append(self.allocator, idx);
-
         _ = try self.parse_type();
 
         _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
         else
-            try self.add_node(Node.Empty);
+            try self.add_node(.empty);
 
         return idx;
     }
@@ -323,7 +318,6 @@ pub const Parser = struct {
     fn multi_var_decl(self: *Self) !Node.Index {
         const idx = try self.add_node(.{ .tag = .MultiVarDecl });
 
-        try self.mains.append(self.allocator, idx);
         _ = try self.add_node(.{ .tag = .VarDecl, .main = self.token_idx - 1 });
 
         var count: usize = 1;
@@ -341,7 +335,7 @@ pub const Parser = struct {
         const first_value = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
         else
-            try self.add_node(Node.Empty);
+            try self.add_node(.empty);
 
         count = 1;
 
@@ -381,7 +375,7 @@ pub const Parser = struct {
         else if (self.check(.Identifier))
             self.error_at_current(.ExpectColonBeforeType)
         else
-            try self.add_node(Node.Empty);
+            try self.add_node(.empty);
     }
 
     fn extract_type(self: *Self) Error!Node.Index {
@@ -439,7 +433,6 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
-        try self.mains.append(self.allocator, idx);
         _ = try self.parse_precedence_expr(0);
 
         return idx;
@@ -450,8 +443,6 @@ pub const Parser = struct {
             .tag = .Use,
             .main = self.token_idx - 1,
         });
-
-        try self.mains.append(self.allocator, idx);
 
         if (!self.check(.Identifier)) {
             return self.error_at_current(.{ .ExpectName = .{ .kind = "module" } });
@@ -483,8 +474,6 @@ pub const Parser = struct {
         } else {
             const assigne = try self.parse_precedence_expr(0);
 
-            try self.mains.append(self.allocator, assigne);
-
             if (self.match(.Equal)) {
                 return self.assignment(assigne);
             } else return assigne;
@@ -493,7 +482,6 @@ pub const Parser = struct {
 
     fn assignment(self: *Self, assigne: Node.Index) !Node.Index {
         // Converts the previous expression to an assignment
-        // const idx = self.nodes.len - 1;
         try self.nodes.insert(self.allocator, assigne, .{ .tag = .Assignment });
 
         _ = try self.parse_precedence_expr(0);
@@ -527,9 +515,6 @@ pub const Parser = struct {
         else
             return self.error_at_current(.{ .ExpectBraceOrDo = .{ .what = "while" } });
 
-        // We save in `data` the end of the while to be able to jump over it in later stages
-        self.nodes.items(.data)[idx] = self.nodes.len;
-
         return idx;
     }
 
@@ -561,7 +546,7 @@ pub const Parser = struct {
         const start_node = self.nodes.len;
 
         self.advance();
-        var node = try self.parse_expr();
+        const node = try self.parse_expr();
 
         var banned_prec: i8 = -1;
 
@@ -581,9 +566,6 @@ pub const Parser = struct {
                 .tag = next_rule.tag,
                 .main = start_tk,
             });
-
-            // Index of binop node
-            node = self.nodes.len - 2;
 
             // Here, we can safely use it
             self.advance();
@@ -661,11 +643,8 @@ pub const Parser = struct {
                 try self.declaration();
         } else {
             self.token_idx -= 1;
-            _ = try self.add_node(Node.Empty);
+            _ = try self.add_node(.empty);
         }
-
-        // We save in `data` the end of the node to be able to jump over it later
-        self.nodes.items(.data)[idx] = self.nodes.len;
 
         return idx;
     }
@@ -765,7 +744,6 @@ pub const Parser = struct {
         }
 
         try self.expect(.RightParen, .ExpectParenAfterFnArgs);
-        _ = try self.add_node(.{ .tag = .FnCallEnd });
 
         self.nodes.items(.data)[node] = arity;
     }

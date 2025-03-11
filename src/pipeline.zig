@@ -85,8 +85,9 @@ pub const ReplPipeline = struct {
         } else if (self.config.print_ast) try print_ast(self.allocator, source, &lexer, &parser);
 
         // Analyzer
-        try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes, parser.mains.items);
+        try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes);
         defer self.analyzer.reinit();
+
         // We don't keep errors/warnings from a prompt to another
         defer self.analyzer.errs.clearRetainingCapacity();
         defer self.analyzer.warns.clearRetainingCapacity();
@@ -176,7 +177,7 @@ pub fn run(allocator: Allocator, config: Config, filename: []const u8, source: [
     try analyzer.init(allocator, false);
     defer analyzer.deinit();
 
-    try analyzer.analyze(source, &lexer.tokens, &parser.nodes, parser.mains.items);
+    try analyzer.analyze(source, &lexer.tokens, &parser.nodes);
 
     // Analyzed Ast printer
     if (options.test_mode and config.print_ir) {

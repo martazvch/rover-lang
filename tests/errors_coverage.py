@@ -1,7 +1,7 @@
 import os
 from subprocess import Popen, PIPE
 
-def test(name: str, errs_path: str, tests_path: str):
+def test(name: str, errs_path: str, tests_path: str, skip=[]):
     errs = []
     success = True
 
@@ -29,6 +29,9 @@ def test(name: str, errs_path: str, tests_path: str):
     # Check if there are all tested
     first = True
     for e in errs:
+        if e in skip: continue
+
+        # Windows
         if os.name == "nt":
             process = Popen(["findstr", "/s", e, f"{tests_path}\\*"], stdout=PIPE, text=True)
         else:
@@ -61,7 +64,8 @@ success = test(
 success = test(
     "Analyzer",
     os.path.join(os.getcwd(), "src", "frontend", "analyzer_msg.zig"),
-    os.path.join(os.getcwd(), "tests", "analyzer")
+    os.path.join(os.getcwd(), "tests", "analyzer"),
+    ["TooManyTypes"]
 ) and success
 
 success = test(

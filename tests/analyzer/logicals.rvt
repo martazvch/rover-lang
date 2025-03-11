@@ -1,7 +1,6 @@
 // Tests variable declaration type
 
 code:
-
 fn main() {
     true and 1
     true and false or false and 5.6
