@@ -3,7 +3,7 @@ const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
 
-const config = @import("config");
+const options = @import("options");
 
 const Obj = @import("obj.zig").Obj;
 const Value = @import("values.zig").Value;
@@ -49,7 +49,7 @@ pub const Gc = struct {
     }
 
     // pub fn collect_garbage(self: *Self) Allocator.Error!void {
-    //     if (config.log_gc) {
+    //     if (options.log_gc) {
     //         print("\n-- GC begin\n", .{});
     //     }
     //
@@ -62,7 +62,7 @@ pub const Gc = struct {
     //
     //     self.next_gc = self.bytes_allocated * Gc.GROW_FACTOR;
     //
-    //     if (config.log_gc) {
+    //     if (options.log_gc) {
     //         print("-- GC end\n", .{});
     //         print("   collected {} bytes (from {} to {}), next at {}\n\n", .{ bytes_before - self.bytes_allocated, bytes_before, self.bytes_allocated, self.next_gc });
     //     }
@@ -99,7 +99,7 @@ pub const Gc = struct {
     // fn blacken_object(self: *Self, obj: *Obj) Allocator.Error!void {
     //     _ = self;
     //
-    //     if (config.log_gc) {
+    //     if (options.log_gc) {
     //         print("{*} blacken ", .{obj});
     //         obj.log();
     //         print("\n", .{});
@@ -175,7 +175,7 @@ pub const Gc = struct {
     //                 self.vm.objects = object;
     //             }
     //
-    //             if (config.log_gc) {
+    //             if (options.log_gc) {
     //                 print("{*} sweep\n", .{unreached});
     //             }
     //
@@ -193,7 +193,7 @@ pub const Gc = struct {
     //     if (obj) |o| {
     //         if (o.is_marked) return;
     //
-    //         if (config.log_gc) {
+    //         if (options.log_gc) {
     //             print("{*} mark ", .{o});
     //             if (o.kind == .Closure) print("closure ", .{});
     //             o.log();
@@ -224,7 +224,7 @@ pub const Gc = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
 
         self.bytes_allocated += len;
-        // if (self.active and (self.bytes_allocated > self.next_gc or config.STRESS_GC)) {
+        // if (self.active and (self.bytes_allocated > self.next_gc or options.STRESS_GC)) {
         // if (self.active and (self.bytes_allocated > self.next_gc)) {
         //     self.collect_garbage() catch return null;
         // }
@@ -235,9 +235,10 @@ pub const Gc = struct {
     pub fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
 
+        // TODO: can never shrink instead of expand?
         self.bytes_allocated += new_len - memory.len;
 
-        // if (self.active and (self.bytes_allocated > self.next_gc or config.STRESS_GC)) {
+        // if (self.active and (self.bytes_allocated > self.next_gc or options.STRESS_GC)) {
         // if (self.active and (self.bytes_allocated > self.next_gc)) {
         //     self.collect_garbage() catch return false;
         // }
@@ -249,9 +250,12 @@ pub const Gc = struct {
     pub fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
 
-        self.bytes_allocated += new_len - memory.len;
+        if (new_len >= memory.len)
+            self.bytes_allocated += new_len - memory.len
+        else
+            self.bytes_allocated -= memory.len - new_len;
 
-        // if (self.active and (self.bytes_allocated > self.next_gc or config.STRESS_GC)) {
+        // if (self.active and (self.bytes_allocated > self.next_gc or options.STRESS_GC)) {
         // if (self.active and (self.bytes_allocated > self.next_gc)) {
         //     self.collect_garbage() catch return false;
         // }

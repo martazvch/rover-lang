@@ -1,9 +1,3 @@
-use std._test1
-
 fn main() {
-    print _cast_i2f(12)
-
-    {
-        print _cast_f2i(true, 5)
-    }
+    print 1
 }

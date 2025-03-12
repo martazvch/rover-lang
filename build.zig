@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) !void {
     const clap = b.dependency("clap", .{});
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addImport("rover-std", rover_std_mod);
-    exe.root_module.addOptions("config", options);
+    exe.root_module.addOptions("options", options);
 
     b.installArtifact(exe);
 
@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) !void {
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
     exe_check.root_module.addImport("rover-std", rover_std_mod);
-    exe_check.root_module.addOptions("config", options);
+    exe_check.root_module.addOptions("options", options);
 
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&exe_check.step);

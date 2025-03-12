@@ -29,19 +29,22 @@ pub const Parser = struct {
     const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
 
     pub const ParserReport = GenReport(ParserMsg);
+    pub const empty: Self = .{
+        .source = undefined,
+        .errs = undefined,
+        .arena = undefined,
+        .allocator = undefined,
+        .token_tags = undefined,
+        .token_spans = undefined,
+        .token_idx = 0,
+        .nodes = .{},
+        .panic_mode = false,
+    };
 
-    /// Initialize an instance of Parser. Use it as:
-    /// ```
-    /// var parser: Parser = undefined;
-    /// parser.init(allocator);
-    /// ```
     pub fn init(self: *Self, allocator: Allocator) void {
         self.arena = .init(allocator);
         self.allocator = self.arena.allocator();
-        self.nodes = .{};
         self.errs = .init(self.allocator);
-        self.token_idx = 0;
-        self.panic_mode = false;
     }
 
     pub fn deinit(self: *Self) void {

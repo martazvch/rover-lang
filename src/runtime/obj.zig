@@ -2,7 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
-const config = @import("config");
+const options = @import("options");
 const Vm = @import("vm.zig").Vm;
 const Value = @import("values.zig").Value;
 const Chunk = @import("../backend/chunk.zig").Chunk;
@@ -38,7 +38,7 @@ pub const Obj = struct {
 
         vm.objects = &ptr.obj;
 
-        if (comptime config.log_gc) {
+        if (comptime options.log_gc) {
             std.debug.print("{*} allocate {} bytes  ", .{ ptr, @sizeOf(T) });
         }
 
@@ -122,7 +122,7 @@ pub const ObjString = struct {
         _ = try vm.strings.set(obj, Value.null_());
         _ = vm.stack.pop();
 
-        if (config.log_gc) {
+        if (options.log_gc) {
             print("{s}\n", .{str});
         }
 
@@ -192,7 +192,7 @@ pub const ObjFunction = struct {
         obj.name = name;
         // obj.upvalue_count = 0;
 
-        // if (config.LOG_GC) {
+        // if (options.LOG_GC) {
         //     const display_name = if (name) |n| n.chars else "";
         //     std.debug.print("{s}\n", .{display_name});
         // }
@@ -234,7 +234,7 @@ pub const ObjNativeFn = struct {
         const obj = try Obj.allocate(vm, Self, .NativeFn);
         obj.function = function;
 
-        // if (config.LOG_GC) std.debug.print("\n", .{});
+        // if (options.LOG_GC) std.debug.print("\n", .{});
 
         return obj;
     }

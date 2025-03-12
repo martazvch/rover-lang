@@ -243,6 +243,8 @@ pub const Analyzer = struct {
             }
         }
 
+        _ = self.states.pop();
+
         // In REPL mode, no need for main function
         if (self.repl)
             return
@@ -1314,9 +1316,7 @@ pub const Analyzer = struct {
         return Null;
     }
 
-    fn print(self: *Self, node: Node.Index) !void {
-        errdefer self.node_idx = self.node_data[node];
-
+    fn print(self: *Self, _: Node.Index) !void {
         _ = try self.add_instr(.{ .tag = .Print, .data = undefined }, self.node_idx);
         self.node_idx += 1;
         _ = try self.analyze_node(self.node_idx);

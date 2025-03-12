@@ -1,18 +1,22 @@
 const std = @import("std");
 const print = std.debug.print;
-const config = @import("config");
 const Allocator = std.mem.Allocator;
-const Stmt = @import("../frontend/ast.zig").Stmt;
-const Gc = @import("gc.zig").Gc;
-const Value = @import("values.zig").Value;
+
+const options = @import("options");
+
 const Chunk = @import("../backend/chunk.zig").Chunk;
 const OpCode = @import("../backend/chunk.zig").OpCode;
-const Table = @import("table.zig").Table;
+const Disassembler = @import("../backend/disassembler.zig").Disassembler;
+const Stmt = @import("../frontend/ast.zig").Stmt;
+const PipelineConf = @import("../pipeline.zig").Config;
+const Pipeline = @import("../pipeline.zig").Pipeline;
+const Gc = @import("gc.zig").Gc;
 const Obj = @import("obj.zig").Obj;
-const ObjString = @import("obj.zig").ObjString;
 const ObjFunction = @import("obj.zig").ObjFunction;
 const ObjNativeFn = @import("obj.zig").ObjNativeFn;
-const Disassembler = @import("../backend/disassembler.zig").Disassembler;
+const ObjString = @import("obj.zig").ObjString;
+const Table = @import("table.zig").Table;
+const Value = @import("values.zig").Value;
 
 // PERF: bench avec BoundedArray
 const Stack = struct {
@@ -22,12 +26,7 @@ const Stack = struct {
     const STACK_SIZE: u16 = @as(u16, FrameStack.FRAMES_MAX) * @as(u16, std.math.maxInt(u8));
     const Self = @This();
 
-    pub fn new() Self {
-        return .{
-            .values = undefined,
-            .top = undefined,
-        };
-    }
+    pub const empty: Self = .{ .values = undefined, .top = undefined };
 
     pub fn init(self: *Self) void {
         self.top = self.values[0..].ptr;
@@ -89,15 +88,11 @@ const FrameStack = struct {
     const Self = @This();
     const FRAMES_MAX: u8 = 64;
 
-    pub fn new() Self {
-        return .{
-            .frames = undefined,
-            .count = 0,
-        };
-    }
+    pub const empty: Self = .{ .frames = undefined, .count = 0 };
 };
 
 pub const Vm = struct {
+    pipeline: Pipeline,
     gc: Gc,
     stack: Stack,
     frame_stack: FrameStack,
@@ -105,47 +100,55 @@ pub const Vm = struct {
     allocator: Allocator,
     stdout: std.fs.File.Writer,
     strings: Table,
-    init_string: *ObjString,
     objects: ?*Obj,
     globals: [256]Value, // TODO: ArrayList or constant, not hard written
 
     const Self = @This();
     const Error = error{StackOverflow} || Allocator.Error;
 
-    pub fn new(allocator: Allocator) Self {
-        return .{
-            .gc = Gc.init(allocator),
-            .stack = Stack.new(),
-            .frame_stack = FrameStack.new(),
-            .ip = undefined,
-            .allocator = undefined,
-            .stdout = std.io.getStdOut().writer(),
-            .strings = undefined,
-            .init_string = undefined,
-            .objects = null,
-            .globals = undefined,
-        };
-    }
+    pub const Config = struct {
+        embedded: bool,
+        print_ast: bool,
+        print_bytecode: bool,
+        static_analyzis: bool,
+        print_ir: bool,
+    };
 
-    pub fn init(self: *Self, repl: bool) !void {
-        self.gc.link(self);
+    pub const empty: Self = .{
+        .pipeline = undefined,
+        .gc = undefined,
+        .stack = .empty,
+        .frame_stack = .empty,
+        .ip = undefined,
+        .allocator = undefined,
+        .stdout = std.io.getStdOut().writer(),
+        .strings = undefined,
+        .objects = null,
+        .globals = undefined,
+    };
+
+    pub fn init(self: *Self, allocator: Allocator, config: Config) !void {
+        // TODO: pass self instead of calling link after
+        self.gc = .init(allocator);
         self.allocator = self.gc.allocator();
+        self.gc.link(self);
+        try self.pipeline.init(self, config);
         self.stack.init();
-        self.strings = Table.init(self.allocator);
-        self.init_string = try ObjString.copy(self, "init");
+        self.strings = .init(self.allocator);
 
         // In REPL mode, we won't call the main function (there is not)
         // so we increment ourself the frame stack (discaring the first one)
         // but the count is coherent of what is expected below, for example
         // for function call we exit if the frame stack count == 1. In REPL
         // it would be always true
-        if (repl) self.frame_stack.count += 1;
+        if (config.embedded) self.frame_stack.count += 1;
     }
 
     pub fn deinit(self: *Self) void {
         self.gc.deinit();
         self.strings.deinit();
         self.free_objects();
+        self.pipeline.deinit();
     }
 
     fn free_objects(self: *Self) void {
@@ -157,7 +160,7 @@ pub const Vm = struct {
         }
     }
 
-    /// Returns the error gave in *kind* parameter and prints backtrace
+    /// Returns the error gave in `kind` parameter and prints backtrace
     fn err(self: *Self, kind: Error) Error {
         for (0..self.frame_stack.count) |i| {
             const idx = self.frame_stack.count - i - 1;
@@ -182,17 +185,45 @@ pub const Vm = struct {
         return addr1 - addr2;
     }
 
-    pub fn run(self: *Self, func: *ObjFunction) !void {
-        // Initialize with the global scope
+    pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
+        const func = self.pipeline.run(filename, source) catch |e| switch (e) {
+            error.ExitOnPrint => return,
+            else => return e,
+        };
         try self.call(func, 0);
         try self.execute();
+    }
+
+    pub fn repl_run(self: *Self) !void {
+        const stdin = std.io.getStdIn().reader();
+
+        // Keep all prompts because all of the pipeline uses []const u8 wich point
+        // to the user input. Needed for errors and interner
+        var prompts = std.ArrayList([]const u8).init(self.allocator);
+        defer prompts.deinit();
+
+        var input = std.ArrayList(u8).init(self.allocator);
+
+        _ = try self.stdout.write("\t\tRover language REPL\n");
+
+        while (true) {
+            _ = try self.stdout.write("\n> ");
+            try stdin.streamUntilDelimiter(input.writer(), '\n', null);
+
+            try input.append('\n');
+            try input.append(0);
+            const len = input.items.len - 1;
+            try prompts.append(try input.toOwnedSlice());
+
+            try self.run("stdin", prompts.items[prompts.items.len - 1][0..len :0]);
+        }
     }
 
     fn execute(self: *Self) !void {
         var frame = &self.frame_stack.frames[self.frame_stack.count - 1];
 
         while (true) {
-            if (comptime config.print_stack) {
+            if (comptime options.print_stack) {
                 print("          ", .{});
 
                 var value = self.stack.values[0..].ptr;
@@ -208,7 +239,7 @@ pub const Vm = struct {
                 print("\n", .{});
             }
 
-            if (comptime config.print_instr) {
+            if (comptime options.print_instr) {
                 var dis = Disassembler.init(&frame.function.chunk, self.allocator, .Normal);
                 defer dis.deinit();
                 _ = try dis.dis_instruction(self.instruction_nb(), self.stdout);
