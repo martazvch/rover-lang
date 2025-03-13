@@ -228,6 +228,7 @@ const Compiler = struct {
             .Binop => self.binop(),
             .Block => self.block(),
             .Bool => self.bool_instr(),
+            .Capture => {},
             .Cast => self.cast(),
             .Discard => self.discard(),
             .Float => self.float_instr(),

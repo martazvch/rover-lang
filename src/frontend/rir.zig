@@ -13,6 +13,7 @@ pub const Instruction = struct {
         Block,
         Bool,
         Cast,
+        Capture,
         Discard,
         Float,
         FnCall,
@@ -38,6 +39,7 @@ pub const Instruction = struct {
         Binop: Binop,
         Block: Block,
         Bool: bool,
+        Capture: usize,
         CastTo: Type,
         Float: f64,
         FnCall: FnCall,
@@ -109,7 +111,7 @@ pub const Instruction = struct {
         pub const Op = enum(u1) { Minus, Bang };
     };
     pub const VarDecl = struct { variable: Variable, cast: bool };
-    pub const Variable = packed struct { index: u62, scope: Scope };
+    pub const Variable = packed struct { index: u62, scope: Scope, captured: bool = false };
 };
 
 comptime {

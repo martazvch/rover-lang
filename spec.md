@@ -176,9 +176,9 @@ with the error:
 ```rust
 let maybe_err: int!ParserErr = parse()
 
-if maybe_err @ok_val {
+if maybe_err :: ok_val {
     print("Ok: {}", ok_val)
-} else @err {
+} else :: err {
     print("Got err {}", err)
 }
 ```
@@ -194,18 +194,18 @@ fn add() -> int!Err {}
 
 let res = add() iferr 5 // fallback value
 
-let res = add() iferr @err { // fallback value + error usage
+let res = add() iferr :: err { // fallback value + error usage
     print(err)
     5
 }
 
-let res = add() iferr @err { // custom handling + error propagation
+let res = add() iferr :: err { // custom handling + error propagation
     print("you really messed up")
     return err
 }
 
-let res = add() iferr @err when err { // with when, we match the error type
-    ParserErr.InvalidToken @tk => {
+let res = add() iferr :: err when err { // with when, we match the error type
+    ParserErr.InvalidToken :: tk => {
         print("got {}", tk.lexeme)
         5
     }
@@ -222,43 +222,45 @@ let res = add() ifnull 10
 
 ### Aliases
 
-A key feature is that you can alias in various place with "@"
-Invoking alias don't require using the "@" symbol, only for declaration
+A key feature is that you can alias in various place with "::"
+Invoking alias don't require using the "::" symbol, only for declaration
+(previoulsy it was `@` for the symbol)
 
 - Control flow:
 
 ```rust
-match get_pet().name @n {
+match get_pet().name :: n {
     "Rodrigo de la suerte" => print(fmt("I'm gonna kill you {}!", n))
     else => print("Who are you {}?", n)
 }
 
-when pet @p {
+when pet :: p {
     Cat => print(fmt("I'm gonna kill you {}!", p.cat_method()))
     else => print("What type are you {}?", p)
 }
 
 // Alias branches (mostly useful for errors' payload)
 when err { // with when, we match the error type
-    ParserErr.InvalidToken @tk => {
+    ParserErr.InvalidToken :: tk => {
         print("got {}", tk.lexeme)
         5
     }
     _ => return err
 }
 
-if nullable_res() @res { // custom alias for non-null value
+if nullable_res() :: res { // custom alias for non-null value
     print(res)
 }
 
-if failable_fn() @val { // custom alias for non-err value
+if failable_fn() :: val { // custom alias for non-err value
     print(val)
-} else @err {
+} else :: err {
     print("Error: {}", err) 
 }
 ```
 
-- Loop aliases are before loop keyword because otherwise:
+- Loop aliases are done with `@` before loop keyword so we can mix aliases and loop
+aliases without any confusion:
 
 ```rust
 @outter while true {
@@ -268,8 +270,8 @@ if failable_fn() @val { // custom alias for non-err value
 }
 
 let last = @outter loop {
-    while get_token() @tk {
-        if tk.kind == .Plus do break outter tk
+    while get_token() :: tk {
+        if tk.kind == .Plus do break @outter tk
     }
 }
 ```
@@ -285,10 +287,31 @@ Can unsafe collapse the nullable with: variable.?
 ```rust
 fn next() -> ?Token {}
 
-while next() @val {
+while next() :: val {
 
 }
 ```
+
+### Closure
+
+Closure exist as first class object in Rover. However, the way the variables are captured is once again explicit.
+User has to define which variables get captured with the `bind` keyword in function declaration like. Capture is
+done by reference but you can refer to outer scope variables, they will be copied.
+
+```rust
+var a = 1
+var b = 2
+
+fn print_later(bind b) {
+    print(a, b)
+}
+
+a = 4
+b = 9
+print_later() // expect: 1, 9
+```
+
+As we bind from a declared variable, we can infer type and not require it in function definition
 
 ### Trait
 
@@ -345,7 +368,7 @@ trait Add<T, R> {
 
 struct Vec2 { x, y: float }
 
-impl Add<int|float|Vec2 @T, Vec2> for Vec2 {
+impl Add<int|float|Vec2 :: T, Vec2> for Vec2 {
     fn add(self, other: T) -> Vec2 when T {
         int|float => Vec2 { x = self.x + other.x, y = self.y + other.y }
         Vec2 => Vec2 { x = self.x + other.x, y = self.y + other.y }

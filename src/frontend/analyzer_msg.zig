@@ -32,6 +32,7 @@ pub const AnalyzerMsg = union(enum) {
     VoidAssignment,
     VoidDiscard,
     VoidParam,
+    VoidPrint,
     WrongFnArgsCount: struct { expect: []const u8, found: []const u8 },
 
     const Self = @This();
@@ -78,6 +79,7 @@ pub const AnalyzerMsg = union(enum) {
             .VoidAssignment => writer.print("assigned value is of type 'void'", .{}),
             .VoidDiscard => writer.print("trying to discard a non value", .{}),
             .VoidParam => writer.print("function parameters can't be of 'void' type", .{}),
+            .VoidPrint => writer.writeAll("try to print a 'void' value"),
             .WrongFnArgsCount => |e| writer.print(
                 "expect {s} function arguments but found {s}",
                 .{ e.expect, e.found },
@@ -114,6 +116,7 @@ pub const AnalyzerMsg = union(enum) {
             .VoidAssignment => writer.writeAll("this expression produces no value"),
             .VoidDiscard => writer.writeAll("this expression produces no value"),
             .VoidParam => writer.writeAll("this parameter"),
+            .VoidPrint => writer.writeAll("this expression is of type 'void'"),
             .WrongFnArgsCount => writer.writeAll("this call"),
         };
     }
@@ -181,6 +184,7 @@ pub const AnalyzerMsg = union(enum) {
             .UnusedValue => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
             .VoidAssignment => writer.writeAll("consider returning a value from expression or remove assignment"),
             .VoidParam => writer.writeAll("use a any other type than 'void' or remove parameter"),
+            .VoidPrint => writer.writeAll("use a any other expression's type than 'void'"),
             .WrongFnArgsCount => writer.writeAll("refer to the function's definition to correct the call"),
         };
     }

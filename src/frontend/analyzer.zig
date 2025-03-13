@@ -145,15 +145,15 @@ pub const Analyzer = struct {
     const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
 
     // Representation of a variable. Index is the declaration order
-    // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct. On passerait
-    // de 48 à 47 bits, mais bon il y a padding
-    // Voir si possible de faire autrement que de stocker le nom des vars
+    // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct.
+    // See a better way to stock variables?
     const Variable = struct {
         index: usize = 0,
         typ: Type = Void,
         depth: usize,
         name: usize,
         initialized: bool = false,
+        captured: bool = false,
     };
 
     const State = struct {
@@ -165,6 +165,8 @@ pub const Analyzer = struct {
         fn_type: Type = Void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
+        /// Allow to capture variables outside of function's frame
+        allow_capture: bool = false,
     };
 
     pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -537,6 +539,7 @@ pub const Analyzer = struct {
 
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
+                // TODO: check if this is a function's parameter (there are constant by defninition)
                 const assigne = try self.resolve_identifier(assigne_idx, false);
 
                 const value_idx = self.node_idx;
@@ -986,6 +989,7 @@ pub const Analyzer = struct {
 
         // Skips function's node
         self.node_idx += 1;
+        // TODO: ArrayList avec init capacity de 50?
         var params_type: [256]Type = undefined;
 
         for (0..arity) |i| {
@@ -1038,7 +1042,7 @@ pub const Analyzer = struct {
         // ------
         //  Body
         // ------
-        try self.states.append(.{ .in_fn = true, .fn_type = return_type });
+        try self.states.append(.{ .in_fn = true, .fn_type = return_type, .allow_capture = true });
         const prev_state = self.last_state();
 
         self.scope_depth += 1;
@@ -1139,6 +1143,8 @@ pub const Analyzer = struct {
         return variable;
     }
 
+    /// Checks if a variable is in local scope, enclosing scope or global scope. Check if its state
+    /// is `initialized`, otherwise return an error.
     fn resolve_identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         self.node_idx += 1;
         const name = self.source_from_node(node);
@@ -1147,10 +1153,12 @@ pub const Analyzer = struct {
         // We first check in locals
         if (self.locals.items.len > 0) {
             var idx = self.locals.items.len;
+            const end = if (self.last_state().allow_capture) 0 else self.local_offset;
 
             // while (idx > 0) : (idx -= 1) {
             // NOTE: for now, can't see outside function's frame
-            while (idx > self.local_offset) : (idx -= 1) {
+            // while (idx > self.local_offset) : (idx -= 1) {
+            while (idx > end) : (idx -= 1) {
                 const local = &self.locals.items[idx - 1];
 
                 if (name_idx == local.name) {
@@ -1188,9 +1196,32 @@ pub const Analyzer = struct {
         );
     }
 
-    fn if_expr(self: *Self, node: Node.Index) Error!Type {
-        // errdefer self.node_idx = self.node_data[node];
+    fn check_capture(self: *Self, variable: *Variable) void {
+        // TODO: function's scope is 2 level above current I think
+        // Or use function's locals frame?
+        if (self.scope_depth < 2) return;
 
+        if (variable.depth <= self.scope_depth - 2 and !variable.captured) {
+            variable.captured = true;
+
+            var idx: usize = self.instructions.len - 1;
+            const tags = self.instructions.items(.tag);
+
+            while (idx > 0) : (idx -= 1) {
+                if (tags[idx] == .VarDecl) {
+                    // self.instructions.items(.data)[idx].VarDecl.heap = true;
+                    // Transform the variable scope to 'Heap' or 'Captured' and replace
+                    // its index by the number of already captured values? And access at
+                    // runtime to all captured values in an array? Array created by th Vm
+                    // when encountering a vardecl with heap true
+                    // BUT: how do we free the upvalues if we can't know which functions
+                    // reference them? And when there are no more
+                }
+            }
+        }
+    }
+
+    fn if_expr(self: *Self, node: Node.Index) Error!Type {
         const idx = try self.add_instr(.{ .tag = .If, .data = undefined }, node);
         self.node_idx += 1;
         var data: Instruction.If = .{ .cast = .None, .has_else = false };
@@ -1319,7 +1350,11 @@ pub const Analyzer = struct {
     fn print(self: *Self, _: Node.Index) !void {
         _ = try self.add_instr(.{ .tag = .Print, .data = undefined }, self.node_idx);
         self.node_idx += 1;
-        _ = try self.analyze_node(self.node_idx);
+        const expr_idx = self.node_idx;
+        const typ = try self.analyze_node(self.node_idx);
+
+        if (typ == Void)
+            return self.err(.VoidPrint, self.to_span(expr_idx));
     }
 
     fn return_expr(self: *Self, node: Node.Index) Error!Type {

@@ -1,0 +1,14 @@
+// Purity
+
+code:
+fn b() {}
+
+fn main() {
+    print b()
+}
+
+error:
+VoidPrint
+
+================
+

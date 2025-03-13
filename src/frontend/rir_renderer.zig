@@ -91,12 +91,12 @@ pub const RirRenderer = struct {
     }
 
     fn parse_instr(self: *Self, index: usize) !void {
-        // try switch (self.instructions[index]) {
         try switch (self.instr_tags[index]) {
             .Assignment => self.assignment(index),
             .Binop => self.binop(index),
             .Block => self.block(index),
             .Bool => self.bool_instr(index),
+            .Capture => {},
             .Cast => self.cast(index),
             .Discard => self.discard(),
             .Float => self.float_instr(index),
