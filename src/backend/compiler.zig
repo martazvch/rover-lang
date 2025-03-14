@@ -1,22 +1,23 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
-const Vm = @import("../runtime/vm.zig").Vm;
-const Chunk = @import("chunk.zig").Chunk;
-const OpCode = @import("chunk.zig").OpCode;
-const GenReport = @import("../reporter.zig").GenReport;
-const Value = @import("../runtime/values.zig").Value;
-const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const ObjString = @import("../runtime/obj.zig").ObjString;
-const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
-const ObjNativeFn = @import("../runtime/obj.zig").ObjNativeFn;
+
 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
-const NativeFn = @import("../std/meta.zig").NativeFn;
 const Rir = @import("../frontend/rir.zig");
 const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
 const Interner = @import("../interner.zig").Interner;
+const GenReport = @import("../reporter.zig").GenReport;
+const ObjString = @import("../runtime/obj.zig").ObjString;
+const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
+const ObjNativeFn = @import("../runtime/obj.zig").ObjNativeFn;
+const Value = @import("../runtime/values.zig").Value;
+const Vm = @import("../runtime/vm.zig").Vm;
+const NativeFn = @import("../std/meta.zig").NativeFn;
+const Chunk = @import("chunk.zig").Chunk;
+const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
+const OpCode = @import("chunk.zig").OpCode;
 
 pub const CompilationManager = struct {
     vm: *Vm,
@@ -247,6 +248,7 @@ const Compiler = struct {
             .Unary => self.unary(),
             .Use => self.use(),
             .VarDecl => self.var_decl(),
+            .VarDeclHeap => self.var_decl(),
             .While => self.while_instr(),
         };
     }
@@ -455,7 +457,8 @@ const Compiler = struct {
     }
 
     fn identifier(self: *Self) !void {
-        const data = self.get_data().Variable;
+        const decl_idx = self.get_data().Id;
+        const data = self.manager.instr_data[decl_idx].VarDecl.variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now

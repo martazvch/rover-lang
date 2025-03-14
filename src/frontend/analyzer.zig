@@ -98,7 +98,6 @@ pub const TypeManager = struct {
         return self.builtins.declarations.get(name);
     }
 
-    // NOTE:
     // Used only in error mode, no need for performance. If used in
     // performance path, maybe use a ArrayHashMap to retreive with
     // index (as type == index) but every thing else is slow?
@@ -130,6 +129,7 @@ pub const Analyzer = struct {
     globals: ArrayList(Variable),
     locals: ArrayList(Variable),
     scope_depth: usize,
+    heap_count: usize,
     /// Offset updated at each fn call, emulate the frame pointer at runtime
     local_offset: usize,
     main: ?Node.Index,
@@ -144,14 +144,12 @@ pub const Analyzer = struct {
     const Self = @This();
     const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
 
-    // Representation of a variable. Index is the declaration order
-    // NOTE: use depth: isize = -1 as uninit? Saves a bool in struct.
-    // See a better way to stock variables?
     const Variable = struct {
         index: usize = 0,
         typ: Type = Void,
         depth: usize,
         name: usize,
+        decl: usize = 0,
         initialized: bool = false,
         captured: bool = false,
     };
@@ -182,6 +180,7 @@ pub const Analyzer = struct {
         self.locals = .init(self.allocator);
         self.node_idx = 0;
         self.scope_depth = 0;
+        self.heap_count = 0;
 
         self.states = .init(self.allocator);
         self.main = null;
@@ -424,10 +423,12 @@ pub const Analyzer = struct {
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
-    fn declare_variable(self: *Self, name: usize, typ: Type, initialized: bool) !Instruction.Variable {
+    fn declare_variable(self: *Self, name: usize, typ: Type, initialized: bool, decl_idx: usize) !Instruction.Variable {
+        // We put the current number of instruction for the declaration index
         var variable: Variable = .{
             .name = name,
             .typ = typ,
+            .decl = decl_idx,
             .depth = self.scope_depth,
             .initialized = initialized,
         };
@@ -964,7 +965,7 @@ pub const Analyzer = struct {
         // We declare before body for recursion. We need to correct type to check those recursions
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
-        const fn_var = try self.declare_variable(name_idx, fn_type, true);
+        const fn_var = try self.declare_variable(name_idx, fn_type, true, fn_idx);
 
         _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } }, node);
 
@@ -1022,7 +1023,7 @@ pub const Analyzer = struct {
                 return self.err(.VoidParam, self.to_span(self.node_idx - 1));
             }
 
-            _ = try self.declare_variable(param_idx, param_type, true);
+            _ = try self.declare_variable(param_idx, param_type, true, self.node_idx);
             params_type[i] = param_type;
 
             // Skips param's type
@@ -1135,10 +1136,8 @@ pub const Analyzer = struct {
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         const variable = try self.resolve_identifier(node, initialized);
 
-        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = .{
-            .scope = if (variable.depth > 0) .Local else .Global,
-            .index = @intCast(variable.index),
-        } } }, node);
+        self.check_capture(variable);
+        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Id = variable.decl } }, node);
 
         return variable;
     }
@@ -1196,9 +1195,8 @@ pub const Analyzer = struct {
         );
     }
 
+    /// Check if the variable needs to be captured and captures it if so
     fn check_capture(self: *Self, variable: *Variable) void {
-        // TODO: function's scope is 2 level above current I think
-        // Or use function's locals frame?
         if (self.scope_depth < 2) return;
 
         if (variable.depth <= self.scope_depth - 2 and !variable.captured) {
@@ -1206,19 +1204,17 @@ pub const Analyzer = struct {
 
             var idx: usize = self.instructions.len - 1;
             const tags = self.instructions.items(.tag);
+            const data = self.instructions.items(.data);
 
             while (idx > 0) : (idx -= 1) {
-                if (tags[idx] == .VarDecl) {
-                    // self.instructions.items(.data)[idx].VarDecl.heap = true;
-                    // Transform the variable scope to 'Heap' or 'Captured' and replace
-                    // its index by the number of already captured values? And access at
-                    // runtime to all captured values in an array? Array created by th Vm
-                    // when encountering a vardecl with heap true
-                    // BUT: how do we free the upvalues if we can't know which functions
-                    // reference them? And when there are no more
+                if (tags[idx] == .VarDecl and data[idx].VarDecl.variable.index == variable.index) {
+                    self.instructions.items(.tag)[idx] = .VarDeclHeap;
+                    return;
                 }
             }
         }
+
+        unreachable;
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
@@ -1480,7 +1476,7 @@ pub const Analyzer = struct {
                         // Declare the type and additional informations
                         const typ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
                         // Declare the variable
-                        const variable = try self.declare_variable(name_idx, typ, true);
+                        const variable = try self.declare_variable(name_idx, typ, true, self.node_idx);
 
                         _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
                             .index = func.index,
@@ -1568,7 +1564,7 @@ pub const Analyzer = struct {
             self.node_idx += 1;
         }
 
-        const variable = try self.declare_variable(name, checked_type, initialized);
+        const variable = try self.declare_variable(name, checked_type, initialized, idx);
         self.instructions.items(.data)[idx] = .{ .VarDecl = .{ .variable = variable, .cast = cast } };
     }
 

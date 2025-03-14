@@ -31,6 +31,7 @@ pub const Instruction = struct {
         Unary,
         Use,
         VarDecl,
+        VarDeclHeap,
         While,
     };
 
@@ -111,7 +112,7 @@ pub const Instruction = struct {
         pub const Op = enum(u1) { Minus, Bang };
     };
     pub const VarDecl = struct { variable: Variable, cast: bool };
-    pub const Variable = packed struct { index: u62, scope: Scope, captured: bool = false };
+    pub const Variable = packed struct { index: u62, scope: Scope };
 };
 
 comptime {

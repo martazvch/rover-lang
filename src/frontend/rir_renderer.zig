@@ -125,7 +125,8 @@ pub const RirRenderer = struct {
             .String => self.string_instr(index),
             .Unary => self.unary(index),
             .Use => self.use(index),
-            .VarDecl => self.var_decl(index),
+            .VarDecl => self.var_decl(index, false),
+            .VarDeclHeap => self.var_decl(index, true),
             .While => self.while_instr(),
         };
     }
@@ -273,7 +274,8 @@ pub const RirRenderer = struct {
     }
 
     fn identifier(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].Variable;
+        const decl_idx = self.instr_data[instr].Id;
+        const data = self.instr_data[decl_idx].VarDecl.variable;
 
         try self.indent();
         var writer = self.tree.writer();
@@ -387,13 +389,15 @@ pub const RirRenderer = struct {
         }
     }
 
-    fn var_decl(self: *Self, instr: usize) Error!void {
+    fn var_decl(self: *Self, instr: usize, heap: bool) Error!void {
         const data = self.instr_data[instr].VarDecl;
         var writer = self.tree.writer();
 
         try self.indent();
-        try writer.print("[Variable declaration index: {}, scope: {s}]\n", .{
-            data.variable.index, @tagName(data.variable.scope),
+        try writer.print("[{s}ariable declaration index: {}, scope: {s}]\n", .{
+            if (heap) "Heap v" else "V",
+            data.variable.index,
+            @tagName(data.variable.scope),
         });
 
         self.indent_level += 1;

@@ -1,26 +1,7 @@
 fn main() {
     var a = 1
 
-    // fn b(bind a) {}
-    fn d(a: int) {
-        var b
-        print b
+    fn capture() {
+        print a
     }
-
-    print d(a)
 }
-
-
-// var x = "global"
-// 
-// fn outer() {
-//     var x = "outer"
-// 
-//     fn inner() { print x }
-// 
-//     inner()
-// }
-// 
-// fn main() {
-//     outer()
-// }
