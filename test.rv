@@ -1,7 +1,17 @@
 fn main() {
-    var a = 1
+    {
+        use std._test1
+        print _cast_f2i(false, 3.)
+    }
+    {
+        var tmp = 1
+        use std._test1
+        print _cast_i2f(56)
+    }
 
-    fn capture() {
-        print a
+    // reimport locally
+    use std._test1
+    {
+        use std._test1
     }
 }

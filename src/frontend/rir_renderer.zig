@@ -2,13 +2,14 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
-const Instruction = @import("rir.zig").Instruction;
-const Ast = @import("ast.zig");
-const Node = @import("ast.zig").Node;
-const Token = @import("lexer.zig").Token;
-const Span = @import("lexer.zig").Span;
+
 const Interner = @import("../interner.zig").Interner;
 const AnalyzerReport = @import("analyzer.zig").Analyzer.AnalyzerReport;
+const Ast = @import("ast.zig");
+const Instruction = @import("rir.zig").Instruction;
+const Node = @import("ast.zig").Node;
+const Span = @import("lexer.zig").Span;
+const Token = @import("lexer.zig").Token;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 
@@ -103,7 +104,8 @@ pub const RirRenderer = struct {
             .FnCall => self.fn_call(index),
             .FnDecl => self.fn_declaration(index),
             .FnName => unreachable,
-            .Identifier => self.identifier(index),
+            .Identifier => self.identifier(index, false),
+            .IdentifierId => self.identifier(index, true),
             .If => self.if_instr(index),
             .Imported => unreachable,
             .Int => self.int_instr(index),
@@ -256,7 +258,7 @@ pub const RirRenderer = struct {
 
         const fn_name = self.interner.get_key(self.instr_data[self.instr_idx].Id).?;
         self.instr_idx += 1;
-        const fn_var = self.instr_data[self.instr_idx].Variable;
+        const fn_var = self.instr_data[self.instr_idx].VarDecl.variable;
         self.instr_idx += 1;
 
         try self.indent();
@@ -273,9 +275,11 @@ pub const RirRenderer = struct {
         self.indent_level -= 1;
     }
 
-    fn identifier(self: *Self, instr: usize) Error!void {
-        const decl_idx = self.instr_data[instr].Id;
-        const data = self.instr_data[decl_idx].VarDecl.variable;
+    fn identifier(self: *Self, instr: usize, is_id: bool) Error!void {
+        const data = if (is_id)
+            self.instr_data[self.instr_data[instr].Id].VarDecl.variable
+        else
+            self.instr_data[instr].Variable;
 
         try self.indent();
         var writer = self.tree.writer();
@@ -394,10 +398,10 @@ pub const RirRenderer = struct {
         var writer = self.tree.writer();
 
         try self.indent();
-        try writer.print("[{s}ariable declaration index: {}, scope: {s}]\n", .{
-            if (heap) "Heap v" else "V",
+        try writer.print("[Variable declaration index: {}, scope: {s}{s}]\n", .{
             data.variable.index,
             @tagName(data.variable.scope),
+            if (heap) ", heap" else "",
         });
 
         self.indent_level += 1;

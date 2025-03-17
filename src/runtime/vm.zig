@@ -121,7 +121,7 @@ pub const Vm = struct {
         .frame_stack = .empty,
         .ip = undefined,
         .allocator = undefined,
-        .stdout = std.io.getStdOut().writer(),
+        .stdout = undefined,
         .strings = undefined,
         .objects = null,
         .globals = undefined,
@@ -131,6 +131,7 @@ pub const Vm = struct {
         // TODO: pass self instead of calling link after
         self.gc = .init(allocator);
         self.allocator = self.gc.allocator();
+        self.stdout = std.io.getStdOut().writer();
         self.gc.link(self);
         try self.pipeline.init(self, config);
         self.stack.init();

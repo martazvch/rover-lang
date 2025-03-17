@@ -20,6 +20,7 @@ pub const Instruction = struct {
         FnDecl,
         FnName,
         Identifier,
+        IdentifierId,
         If,
         Imported,
         Int,

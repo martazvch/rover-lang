@@ -236,7 +236,8 @@ const Compiler = struct {
             .FnCall => self.fn_call(),
             .FnDecl => self.fn_decl(),
             .FnName => unreachable,
-            .Identifier => self.identifier(),
+            .Identifier => self.identifier(false),
+            .IdentifierId => self.identifier(true),
             .Imported => unreachable,
             .Int => self.int_instr(),
             .If => self.if_instr(),
@@ -415,7 +416,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
         const fn_name = self.manager.interner.get_key(self.get_data().Id).?;
         self.manager.instr_idx += 1;
-        const fn_var = self.get_data().Variable;
+        const fn_var = self.get_data().VarDecl.variable;
         self.manager.instr_idx += 1;
 
         try self.compile_function(.Fn, fn_name, data);
@@ -456,9 +457,11 @@ const Compiler = struct {
         try self.emit_constant(Value.obj(func.as_obj()), 0);
     }
 
-    fn identifier(self: *Self) !void {
-        const decl_idx = self.get_data().Id;
-        const data = self.manager.instr_data[decl_idx].VarDecl.variable;
+    fn identifier(self: *Self, is_id: bool) !void {
+        const data = if (is_id)
+            self.manager.instr_data[self.get_data().Id].VarDecl.variable
+        else
+            self.get_data().Variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now

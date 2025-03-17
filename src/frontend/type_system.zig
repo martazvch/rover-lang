@@ -12,6 +12,7 @@ pub const HashMap: Kind = 5;
 pub const Nullable: Kind = 6;
 pub const Ptr: Kind = 7;
 pub const Error: Kind = 8;
+pub const Param: Kind = 9;
 
 // 4 next bits are for extra infos:
 pub const Extra = u4;
@@ -32,33 +33,40 @@ pub fn create(kind: Kind, extra: Extra, value: Value) Type {
 }
 
 /// Get a type kind, discarding extra and value information bits
-pub fn get_kind(type_: Type) Kind {
-    return @as(Kind, @intCast(type_ >> 28));
+pub fn get_kind(typ: Type) Kind {
+    return @as(Kind, @intCast(typ >> 28));
+}
+
+/// Get a type kind, discarding extra and value information bits
+pub fn set_kind(typ: Type, kind: Kind) Type {
+    // Looking for the 28 last bits = 7 hexa numbers
+    const erased = typ & 0xfffffff;
+    return (@as(Type, kind) << 28) | erased;
 }
 
 // We shift to get the last 8bits. After, we want the first 4bits
 //  value: x x x x  x x x x
 //  mask:  0 0 0 0  1 1 1 1  -> 15 -> 0xf
 /// Get extra information bits about a type
-pub fn get_extra(type_: Type) Extra {
-    return @as(Extra, @intCast(@as(u8, @intCast(type_ >> 24)) & 0x0f));
+pub fn get_extra(typ: Type) Extra {
+    return @as(Extra, @intCast(@as(u8, @intCast(typ >> 24)) & 0xf));
 }
 
 // Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
 // all to one and mask it
 /// Extract the value bits associated to a type
-pub fn get_value(type_: Type) Value {
-    return @as(Value, @intCast(type_ & 0xffffff));
+pub fn get_value(typ: Type) Value {
+    return @as(Value, @intCast(typ & 0xffffff));
 }
 
 /// Checks if a type is of a certain kind
-pub fn is(type_: Type, kind: Kind) bool {
-    return get_kind(type_) == kind;
+pub fn is(typ: Type, kind: Kind) bool {
+    return get_kind(typ) == kind;
 }
 
 /// Checks if a type is a builtin one, regardless of the kind
-pub fn is_builtin(type_: Type) bool {
-    const extra = get_extra(type_);
+pub fn is_builtin(typ: Type) bool {
+    const extra = get_extra(typ);
     return extra == Builtin;
 }
 

@@ -152,6 +152,9 @@ pub const Analyzer = struct {
         decl: usize = 0,
         initialized: bool = false,
         captured: bool = false,
+        kind: Kind = .normal,
+
+        pub const Kind = enum { normal, param, import };
     };
 
     const State = struct {
@@ -423,7 +426,14 @@ pub const Analyzer = struct {
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
-    fn declare_variable(self: *Self, name: usize, typ: Type, initialized: bool, decl_idx: usize) !Instruction.Variable {
+    fn declare_variable(
+        self: *Self,
+        name: usize,
+        typ: Type,
+        initialized: bool,
+        decl_idx: usize,
+        kind: Variable.Kind,
+    ) !Instruction.Variable {
         // We put the current number of instruction for the declaration index
         var variable: Variable = .{
             .name = name,
@@ -431,6 +441,7 @@ pub const Analyzer = struct {
             .decl = decl_idx,
             .depth = self.scope_depth,
             .initialized = initialized,
+            .kind = kind,
         };
 
         // Add the variable to the correct data structure
@@ -965,9 +976,9 @@ pub const Analyzer = struct {
         // We declare before body for recursion. We need to correct type to check those recursions
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
-        const fn_var = try self.declare_variable(name_idx, fn_type, true, fn_idx);
+        const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .normal);
 
-        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Variable = fn_var } }, node);
+        _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
 
         self.scope_depth += 1;
         errdefer self.scope_depth -= 1;
@@ -1023,7 +1034,9 @@ pub const Analyzer = struct {
                 return self.err(.VoidParam, self.to_span(self.node_idx - 1));
             }
 
-            _ = try self.declare_variable(param_idx, param_type, true, self.node_idx);
+            // const final_type = TypeSys.set_kind(param_type, TypeSys.Param);
+            // _ = try self.declare_variable(param_idx, final_type, true, self.node_idx);
+            _ = try self.declare_variable(param_idx, param_type, true, self.node_idx, .param);
             params_type[i] = param_type;
 
             // Skips param's type
@@ -1136,8 +1149,18 @@ pub const Analyzer = struct {
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         const variable = try self.resolve_identifier(node, initialized);
 
-        self.check_capture(variable);
-        _ = try self.add_instr(.{ .tag = .Identifier, .data = .{ .Id = variable.decl } }, node);
+        if (variable.kind == .param or variable.kind == .import) {
+            _ = try self.add_instr(
+                .{ .tag = .Identifier, .data = .{ .Variable = .{
+                    .index = @intCast(variable.index),
+                    .scope = if (variable.depth > 0) .Local else .Global,
+                } } },
+                node,
+            );
+        } else {
+            self.check_capture(variable);
+            _ = try self.add_instr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
+        }
 
         return variable;
     }
@@ -1197,7 +1220,8 @@ pub const Analyzer = struct {
 
     /// Check if the variable needs to be captured and captures it if so
     fn check_capture(self: *Self, variable: *Variable) void {
-        if (self.scope_depth < 2) return;
+        // If outside a function or this is a global variable, we don't capture it
+        if (self.scope_depth < 2 or variable.depth == 0) return;
 
         if (variable.depth <= self.scope_depth - 2 and !variable.captured) {
             variable.captured = true;
@@ -1213,8 +1237,6 @@ pub const Analyzer = struct {
                 }
             }
         }
-
-        unreachable;
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
@@ -1476,7 +1498,7 @@ pub const Analyzer = struct {
                         // Declare the type and additional informations
                         const typ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
                         // Declare the variable
-                        const variable = try self.declare_variable(name_idx, typ, true, self.node_idx);
+                        const variable = try self.declare_variable(name_idx, typ, true, self.node_idx, .import);
 
                         _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
                             .index = func.index,
@@ -1564,7 +1586,7 @@ pub const Analyzer = struct {
             self.node_idx += 1;
         }
 
-        const variable = try self.declare_variable(name, checked_type, initialized, idx);
+        const variable = try self.declare_variable(name, checked_type, initialized, idx, .normal);
         self.instructions.items(.data)[idx] = .{ .VarDecl = .{ .variable = variable, .cast = cast } };
     }
 
