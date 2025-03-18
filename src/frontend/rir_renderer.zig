@@ -97,7 +97,6 @@ pub const RirRenderer = struct {
             .Binop => self.binop(index),
             .Block => self.block(index),
             .Bool => self.bool_instr(index),
-            .Capture => {},
             .Cast => self.cast(index),
             .Discard => self.discard(),
             .Float => self.float_instr(index),

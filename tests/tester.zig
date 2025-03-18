@@ -1,15 +1,16 @@
 const std = @import("std");
 const testing = std.testing;
-const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-// const allocator = std.testing.allocator;
-// const test_config = @import("test_config");
 const eql = std.mem.eql;
 const fields = std.meta.fields;
+const builtin = @import("builtin");
+
 const clap = @import("clap");
 
+// const allocator = std.testing.allocator;
+// const test_config = @import("test_config");
 const Stage = enum { all, parser, analyzer, compiler, vm };
 
 pub fn main() !u8 {
@@ -190,7 +191,7 @@ const Tester = struct {
         var base_walker = try test_dir.walk(self.allocator);
         defer base_walker.deinit();
 
-        while (try base_walker.next()) |*item| {
+        file: while (try base_walker.next()) |*item| {
             if (std.mem.endsWith(u8, item.path, ".rv")) {
                 const file_path = try std.fs.path.join(self.allocator, &[_][]const u8{
                     "tests", "vm", item.path,
@@ -238,12 +239,16 @@ const Tester = struct {
                         _ = split.next();
                         const exp = split.next().?;
 
-                        const got = got_expects.next().?;
+                        const got = got_expects.next() orelse {
+                            print("Error unwrapping 'expects' from test file: {s}\n", .{item.basename});
+                            continue :file;
+                        };
+
                         std.testing.expect(std.mem.eql(u8, got, exp)) catch |e| {
                             try self.diags.append(.{
                                 .file_name = try self.allocator.dupe(u8, item.path),
                                 .err_name = @errorName(e),
-                                .line = i,
+                                .line = i + 1,
                                 .expect = try self.allocator.dupe(u8, exp),
                                 .got = try self.allocator.dupe(u8, got),
                             });

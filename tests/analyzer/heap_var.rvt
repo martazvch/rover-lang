@@ -1,0 +1,79 @@
+// Heap variables
+
+// Note: when declaring a heap variable, the locals list doesn't change,
+// because it would be to costy to back patch each local declaration after
+// we see that we need to capture the variable.
+// Instead, it's on the compiler side that we add a 'tombstone' value on the
+// stack to keep it synchronized with the analyzer's work.
+// It's normal that local's index increases as if heap variable were on the stack
+
+// Near scope capture
+
+code:
+fn main() {
+    var a: int = 3
+
+    fn capture() { print a }
+}
+
+expect:
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 0, scope: Local, heap]
+        [Int 3]
+
+    [Fn declaration capture, index: 2, scope: Local, return kind: ImplicitVoid]
+        [Print]
+            [Variable index: 0, scope: Local]
+
+================
+
+// Far scope capture
+
+code:
+fn main() {
+    var first = 1
+    var a: int = 3
+    var b = true
+    var last = 9
+
+    fn nested() {
+        var mach
+        var mach2 = a
+
+        fn nested2() {
+            var mach3
+
+            fn capture() { print b }
+        }
+    }
+}
+
+expect:
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 1, scope: Local]
+        [Int 1]
+    [Variable declaration index: 0, scope: Local, heap]
+        [Int 3]
+    [Variable declaration index: 1, scope: Local, heap]
+        [Bool true]
+    [Variable declaration index: 4, scope: Local]
+        [Int 9]
+
+    [Fn declaration nested, index: 5, scope: Local, return kind: ImplicitVoid]
+        [Variable declaration index: 1, scope: Local]
+            [Null]
+        [Variable declaration index: 2, scope: Local]
+            [Variable index: 0, scope: Local]
+
+        [Fn declaration nested2, index: 3, scope: Local, return kind: ImplicitVoid]
+            [Variable declaration index: 1, scope: Local]
+                [Null]
+
+            [Fn declaration capture, index: 2, scope: Local, return kind: ImplicitVoid]
+                [Print]
+                    [Variable index: 1, scope: Local]
+
+================
+
+
+

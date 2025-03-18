@@ -129,9 +129,9 @@ pub const Analyzer = struct {
     globals: ArrayList(Variable),
     locals: ArrayList(Variable),
     scope_depth: usize,
-    heap_count: usize,
     /// Offset updated at each fn call, emulate the frame pointer at runtime
     local_offset: usize,
+    heap_count: usize,
     main: ?Node.Index,
     states: ArrayList(State),
     type_manager: TypeManager,
@@ -166,8 +166,8 @@ pub const Analyzer = struct {
         fn_type: Type = Void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
-        /// Allow to capture variables outside of function's frame
-        allow_capture: bool = false,
+        // Allow to capture variables outside of function's frame
+        // allow_capture: bool = false,
     };
 
     pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -1056,7 +1056,8 @@ pub const Analyzer = struct {
         // ------
         //  Body
         // ------
-        try self.states.append(.{ .in_fn = true, .fn_type = return_type, .allow_capture = true });
+        // try self.states.append(.{ .in_fn = true, .fn_type = return_type, .allow_capture = true });
+        try self.states.append(.{ .in_fn = true, .fn_type = return_type });
         const prev_state = self.last_state();
 
         self.scope_depth += 1;
@@ -1175,7 +1176,9 @@ pub const Analyzer = struct {
         // We first check in locals
         if (self.locals.items.len > 0) {
             var idx = self.locals.items.len;
-            const end = if (self.last_state().allow_capture) 0 else self.local_offset;
+            // TODO: do we really want the allow capture? Why not always?
+            // const end = if (self.last_state().allow_capture) 0 else self.local_offset;
+            const end = 0;
 
             // while (idx > 0) : (idx -= 1) {
             // NOTE: for now, can't see outside function's frame
@@ -1220,23 +1223,15 @@ pub const Analyzer = struct {
 
     /// Check if the variable needs to be captured and captures it if so
     fn check_capture(self: *Self, variable: *Variable) void {
-        // If outside a function or this is a global variable, we don't capture it
-        if (self.scope_depth < 2 or variable.depth == 0) return;
+        // If it's a global variable or if it's been declared in current function's frame
+        // or already captured, return
+        if (variable.depth == 0 or variable.index >= self.local_offset or variable.captured) return;
 
-        if (variable.depth <= self.scope_depth - 2 and !variable.captured) {
-            variable.captured = true;
-
-            var idx: usize = self.instructions.len - 1;
-            const tags = self.instructions.items(.tag);
-            const data = self.instructions.items(.data);
-
-            while (idx > 0) : (idx -= 1) {
-                if (tags[idx] == .VarDecl and data[idx].VarDecl.variable.index == variable.index) {
-                    self.instructions.items(.tag)[idx] = .VarDeclHeap;
-                    return;
-                }
-            }
-        }
+        variable.captured = true;
+        // TODO: protect the cast?
+        self.instructions.items(.tag)[variable.decl] = .VarDeclHeap;
+        self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
+        self.heap_count += 1;
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
@@ -1539,7 +1534,7 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const value_idx = self.resolve_link(self.node_idx);
 
-        const idx = try self.add_instr(.{ .tag = .VarDecl, .data = undefined }, node);
+        const idx = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = undefined } }, node);
 
         const name = try self.interner.intern(self.source_from_node(node));
         var checked_type = try self.check_name_and_type(name, node, type_idx);

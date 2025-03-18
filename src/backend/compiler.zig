@@ -28,11 +28,12 @@ pub const CompilationManager = struct {
     instr_tags: []const Instruction.Tag,
     instr_data: []const Instruction.Data,
     instr_starts: []const usize,
-    instr_idx: usize,
+    instr_idx: usize = 0,
     render_mode: Disassembler.RenderMode,
     main: usize,
-    main_index: ?u8,
+    main_index: ?u8 = null,
     repl: bool,
+    heap_count: usize = 0,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -58,10 +59,8 @@ pub const CompilationManager = struct {
             .instr_tags = instr_tags,
             .instr_data = instr_data,
             .instr_starts = instr_starts,
-            .instr_idx = 0,
             .render_mode = render_mode,
             .main = main,
-            .main_index = null,
             .repl = repl,
         };
     }
@@ -78,6 +77,10 @@ pub const CompilationManager = struct {
         }
 
         if (!self.repl) {
+            // We init the heap variables into the Vm
+            // NOTE: maybe return the count as we return the function and let the Vm allocate?
+            self.vm.heap_vars = try self.vm.allocator.alloc(Value, self.heap_count);
+
             // Insert a call to main with arity of 0 for now
             try self.compiler.write_op_and_byte(
                 .GetGlobal,
@@ -160,12 +163,12 @@ const Compiler = struct {
     /// Declare the variable based on informations coming from Analyzer. Declares
     /// either in global scope or do nothing, as for local it's already living
     /// on the stack
-    fn define_variable(self: *Self, infos: Instruction.Variable, offset: usize) !void {
-        // BUG: Protect the cast, we can't have more than 256 variable to lookup
-        // for now
-        if (infos.scope == .Global) {
-            try self.write_op_and_byte(.DefineGlobal, @intCast(infos.index), offset);
-        }
+    fn define_variable(self: *Self, infos: Instruction.Variable, heap: bool, offset: usize) !void {
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
+        if (infos.scope == .Global)
+            try self.write_op_and_byte(.DefineGlobal, @intCast(infos.index), offset)
+        else if (heap)
+            try self.write_op_and_byte(.DefineHeapVar, @intCast(infos.index), offset);
     }
 
     fn emit_jump(self: *Self, kind: OpCode, offset: usize) !usize {
@@ -229,7 +232,6 @@ const Compiler = struct {
             .Binop => self.binop(),
             .Block => self.block(),
             .Bool => self.bool_instr(),
-            .Capture => {},
             .Cast => self.cast(),
             .Discard => self.discard(),
             .Float => self.float_instr(),
@@ -248,8 +250,8 @@ const Compiler = struct {
             .String => self.string_instr(),
             .Unary => self.unary(),
             .Use => self.use(),
-            .VarDecl => self.var_decl(),
-            .VarDeclHeap => self.var_decl(),
+            .VarDecl => self.var_decl(false),
+            .VarDeclHeap => self.var_decl(true),
             .While => self.while_instr(),
         };
     }
@@ -420,7 +422,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         try self.compile_function(.Fn, fn_name, data);
-        try self.define_variable(fn_var, 0);
+        try self.define_variable(fn_var, false, 0);
 
         // Check for main function
         if (idx == self.manager.main) {
@@ -458,15 +460,19 @@ const Compiler = struct {
     }
 
     fn identifier(self: *Self, is_id: bool) !void {
-        const data = if (is_id)
-            self.manager.instr_data[self.get_data().Id].VarDecl.variable
-        else
-            self.get_data().Variable;
+        const data, const is_heap = if (is_id) blk: {
+            const id = self.get_data().Id;
+
+            break :blk .{
+                self.manager.instr_data[id].VarDecl.variable,
+                self.manager.instr_tags[id] == .VarDeclHeap,
+            };
+        } else .{ self.get_data().Variable, false };
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (data.scope == .Global) .GetGlobal else .GetLocal,
+            if (is_heap) .GetHeap else if (data.scope == .Global) .GetGlobal else .GetLocal,
             @intCast(data.index),
             self.get_start(),
         );
@@ -594,11 +600,11 @@ const Compiler = struct {
                 ),
                 start,
             );
-            try self.define_variable(imported.variable, start);
+            try self.define_variable(imported.variable, false, start);
         }
     }
 
-    fn var_decl(self: *Self) !void {
+    fn var_decl(self: *Self, is_heap: bool) !void {
         const start = self.get_start();
         const data = self.get_data().VarDecl;
         self.manager.instr_idx += 1;
@@ -612,7 +618,16 @@ const Compiler = struct {
             if (data.cast) try self.compile_instr();
         }
 
-        try self.define_variable(data.variable, start);
+        try self.define_variable(data.variable, is_heap, start);
+
+        if (is_heap) {
+            self.manager.heap_count += 1;
+            // We place a 'tombstone' value here because during static analyzis,
+            // the locals list is synchronized to all following declaration. Instead of
+            // back patching all locals declaration past a heap variable, we make the
+            // compiler place a tombstone.
+            try self.write_op(.Null, start);
+        }
     }
 
     fn while_instr(self: *Self) Error!void {

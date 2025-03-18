@@ -13,7 +13,6 @@ pub const Instruction = struct {
         Block,
         Bool,
         Cast,
-        Capture,
         Discard,
         Float,
         FnCall,

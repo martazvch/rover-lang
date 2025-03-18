@@ -102,6 +102,7 @@ pub const Vm = struct {
     strings: Table,
     objects: ?*Obj,
     globals: [256]Value, // TODO: ArrayList or constant, not hard written
+    heap_vars: []Value,
 
     const Self = @This();
     const Error = error{StackOverflow} || Allocator.Error;
@@ -125,6 +126,7 @@ pub const Vm = struct {
         .strings = undefined,
         .objects = null,
         .globals = undefined,
+        .heap_vars = undefined,
     };
 
     pub fn init(self: *Self, allocator: Allocator, config: Config) !void {
@@ -146,6 +148,7 @@ pub const Vm = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.allocator.free(self.heap_vars);
         self.gc.deinit();
         self.strings.deinit();
         self.free_objects();
@@ -195,6 +198,7 @@ pub const Vm = struct {
         try self.execute();
     }
 
+    // TODO: put outside of VM, in another module
     pub fn repl_run(self: *Self) !void {
         const stdin = std.io.getStdIn().reader();
 
@@ -260,6 +264,10 @@ pub const Vm = struct {
                 },
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
                 .Constant => self.stack.push(frame.read_constant()),
+                .DefineHeapVar => {
+                    const idx = frame.read_byte();
+                    self.heap_vars[idx] = self.stack.pop();
+                },
                 .DefineGlobal => {
                     const idx = frame.read_byte();
                     self.globals[idx] = self.stack.pop();
@@ -288,6 +296,7 @@ pub const Vm = struct {
                 },
                 // Compiler bug: https://github.com/ziglang/zig/issues/13938
                 .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
+                .GetHeap => self.stack.push((self.heap_vars)[frame.read_byte()]),
                 .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
                 .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
