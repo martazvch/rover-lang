@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const clap = @import("clap");
-const Vm = @import("runtime/vm.zig").Vm;
+pub const Vm = @import("runtime/vm.zig").Vm;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

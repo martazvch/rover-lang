@@ -18,7 +18,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe_mod = b.createModule(.{
+    const rover_mod = b.addModule("rover", .{
         .optimize = optimize,
         .target = target,
         .root_source_file = b.path("src/main.zig"),
@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) !void {
 
     const exe = b.addExecutable(.{
         .name = "rover",
-        .root_module = exe_mod,
+        .root_module = rover_mod,
     });
 
     const rover_std_mod = b.createModule(.{
@@ -57,7 +57,7 @@ pub fn build(b: *std.Build) !void {
     // --------
     const exe_check = b.addExecutable(.{
         .name = "foo",
-        .root_module = exe_mod,
+        .root_module = rover_mod,
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
     exe_check.root_module.addImport("rover-std", rover_std_mod);
