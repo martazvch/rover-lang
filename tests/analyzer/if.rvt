@@ -203,7 +203,6 @@ fn main() {
     _ = add()
 }
 
-
 expect:
 [Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Fn declaration add, index: 1, scope: Local, return kind: ImplicitValue]

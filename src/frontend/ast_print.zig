@@ -8,6 +8,7 @@ const Span = @import("lexer.zig").Span;
 const Token = @import("lexer.zig").Token;
 
 pub const AstPrinter = struct {
+    allocator: Allocator,
     source: [:0]const u8,
     token_tags: []const Token.Tag,
     token_spans: []const Span,
@@ -36,6 +37,7 @@ pub const AstPrinter = struct {
         errs: []const ParserReport,
     ) Self {
         return .{
+            .allocator = allocator,
             .source = source,
             .token_tags = token_tags,
             .token_spans = token_spans,
@@ -412,7 +414,10 @@ pub const AstPrinter = struct {
     }
 
     fn get_type(self: *Self, index: Node.Index) []const u8 {
-        if (self.node_tags[index] == .Empty) return "void";
+        if (self.node_tags[index] == .Empty)
+            return "void"
+        else if (self.token_tags[self.node_mains[index]] == .Fn)
+            return self.get_fn_type(index) catch @panic("OOM");
 
         return switch (self.node_tags[index]) {
             .Link => return self.get_type(self.node_data[index]),
@@ -421,6 +426,26 @@ pub const AstPrinter = struct {
             },
             else => unreachable,
         };
+    }
+
+    fn get_fn_type(self: *Self, index: Node.Index) ![]const u8 {
+        var res: std.ArrayListUnmanaged(u8) = .{};
+        var writer = res.writer(self.allocator);
+        try writer.writeAll("fn (");
+        const arity = self.node_data[index];
+        self.node_idx += 1;
+
+        for (0..arity) |i| {
+            try writer.print("{s}{s}", .{
+                self.get_type(self.node_idx),
+                if (i < arity - 1) ", " else "",
+            });
+            self.node_idx += 1;
+        }
+        try writer.print(") -> {s}", .{self.get_type(self.node_idx)});
+
+        // We intentionaly don't skip return's type, it will be done by the caller
+        return try res.toOwnedSlice(self.allocator);
     }
 
     fn use_stmt(self: *Self) !void {

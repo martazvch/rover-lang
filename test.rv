@@ -1,10 +1,7 @@
 fn main() {
-    fn factory() {
-        fn product() {
-            print 5
-        }
-
-        return product
+    fn add() -> int {
+        if true do return 1
+        2
     }
+    _ = add()
 }
-

@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 
@@ -292,8 +293,13 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.to_span(node + 1).end,
             },
-            //TODO: real span with return's expression
-            .Return => self.token_spans[self.node_mains[node]],
+            .Return => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = if (self.node_tags[node + 1] == .Empty)
+                    self.token_spans[self.node_mains[node]].end
+                else
+                    self.to_span(node + 1).end,
+            },
             .Type => self.token_spans[self.node_mains[node]],
             .Unary => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -313,8 +319,31 @@ pub const Analyzer = struct {
     }
 
     fn get_type_name(self: *const Self, typ: Type) []const u8 {
-        const idx = self.type_manager.idx(typ);
-        return self.interner.get_key(idx).?;
+        if (TypeSys.is(typ, TypeSys.Fn)) {
+            return self.get_fn_type_name(typ) catch @panic("OOM");
+        } else {
+            const idx = self.type_manager.idx(typ);
+            return self.interner.get_key(idx).?;
+        }
+    }
+
+    fn get_fn_type_name(self: *const Self, typ: Type) ![]const u8 {
+        const value = TypeSys.get_value(typ);
+        const decl = self.type_manager.type_infos.items[value].Fn;
+
+        var res: std.ArrayListUnmanaged(u8) = .{};
+        var writer = res.writer(self.allocator);
+        try writer.writeAll("fn (");
+
+        for (0..decl.arity) |i| {
+            try writer.print("{s}{s}", .{
+                self.interner.get_key(decl.params[i]).?,
+                if (i < decl.arity - 1) ", " else "",
+            });
+        }
+        try writer.print(") -> {s}", .{self.get_type_name(decl.return_type)});
+
+        return try res.toOwnedSlice(self.allocator);
     }
 
     /// Adds a new instruction and add it's `start` field and returns its index.
@@ -413,16 +442,58 @@ pub const Analyzer = struct {
             );
         }
 
-        return if (self.node_tags[type_idx] != .Empty)
+        // Function type are not declared in advance, so we declare it and return it's index
+        if (self.node_tags[type_idx] != .Empty and self.token_tags[self.node_mains[type_idx]] == .Fn) {
+            return self.create_anonymus_fn_type(type_idx);
+        }
+
+        return try self.check_and_get_type(type_idx);
+    }
+
+    /// Checks that the node is a declared type and return it's value. If node is
+    /// `empty`, returns `null`
+    fn check_and_get_type(self: *Self, idx: Node.Index) !Type {
+        return if (self.node_tags[idx] != .Empty)
             self.type_manager.declared.get(
-                try self.interner.intern(self.source_from_node(type_idx)),
+                try self.interner.intern(self.source_from_node(idx)),
             ) orelse
                 return self.err(
-                    .{ .UndeclaredType = .{ .found = self.source_from_node(type_idx) } },
-                    self.to_span(type_idx),
+                    .{ .UndeclaredType = .{ .found = self.source_from_node(idx) } },
+                    self.to_span(idx),
                 )
         else
             Void;
+    }
+
+    /// Creates a type for an anonymous function, like the one defined in return types
+    /// of functions
+    fn create_anonymus_fn_type(self: *Self, idx: Node.Index) !Type {
+        const arity = self.node_data[idx];
+
+        const type_idx = try self.type_manager.reserve_info();
+        var params_type: [256]Type = undefined;
+        const start = idx + 1;
+
+        for (0..arity) |i| {
+            const param_type = try self.check_and_get_type(start + i);
+
+            if (param_type == Void) {
+                return self.err(.VoidParam, self.to_span(start + i));
+            }
+
+            params_type[i] = param_type;
+        }
+
+        // Set all the informations now that we have every thing
+        self.type_manager.set_info(type_idx, .{
+            .Fn = .{
+                .arity = arity,
+                .params = params_type,
+                .return_type = try self.check_and_get_type(start + arity),
+            },
+        });
+
+        return TypeSys.create(TypeSys.Fn, 0, type_idx);
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
@@ -908,6 +979,7 @@ pub const Analyzer = struct {
         } } }, node);
 
         // Resolve the callee
+        // TODO: error: can only call functions?
         const type_value = try self.expect_type_kind(self.node_idx, TypeSys.Fn);
         const type_info = self.type_manager.type_infos.items[type_value].Fn;
 
@@ -978,7 +1050,7 @@ pub const Analyzer = struct {
         // We add function's name for runtime access
         _ = try self.add_instr(.{ .tag = .FnName, .data = .{ .Id = name_idx } }, node);
 
-        // We declare before body for recursion. We need to correct type to check those recursions
+        // We declare before body for recursion and before parameters to put it as the first local
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
         const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .normal);
@@ -1039,8 +1111,6 @@ pub const Analyzer = struct {
                 return self.err(.VoidParam, self.to_span(self.node_idx - 1));
             }
 
-            // const final_type = TypeSys.set_kind(param_type, TypeSys.Param);
-            // _ = try self.declare_variable(param_idx, final_type, true, self.node_idx);
             _ = try self.declare_variable(param_idx, param_type, true, self.node_idx, .param);
             params_type[i] = param_type;
 
@@ -1055,8 +1125,13 @@ pub const Analyzer = struct {
             .return_type = return_type,
         } });
 
-        // We skip the return type, it has already been analyzed
-        self.node_idx += 1;
+        // We skip the return type, it has already been analyzed.
+        // Two cases: `Empty` because function defined with implicit void, otherwise we loop in case
+        // the return type is composed of several ones
+        if (self.node_tags[self.node_idx] == .Empty)
+            self.node_idx += 1
+        else while (self.node_tags[self.node_idx] == .Type)
+            self.node_idx += 1;
 
         // ------
         //  Body
@@ -1113,7 +1188,7 @@ pub const Analyzer = struct {
             }
         }
 
-        if (!body_err and body_type != return_type) {
+        if (!body_err and body_type != return_type and !self.check_equal_fn_types(body_type, return_type)) {
             return self.err(
                 .{ .IncompatibleFnType = .{
                     .expect = self.get_type_name(return_type),
@@ -1150,6 +1225,29 @@ pub const Analyzer = struct {
             .body_len = length - deadcode_count,
             .return_kind = return_kind,
         } };
+    }
+
+    /// Checks if two function types are equal. Functions' type depend on the index
+    /// where their infos are in the type manager, so they could be the same type
+    /// but with different indices. This is due to anonymus function type (like return
+    /// types in function definitions)
+    fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
+        if (t1 == t2) return true;
+        if (!TypeSys.is(t1, TypeSys.Fn) or !TypeSys.is(t2, TypeSys.Fn)) return false;
+
+        const v1 = TypeSys.get_value(t1);
+        const infos1 = self.type_manager.type_infos.items[v1].Fn;
+
+        const v2 = TypeSys.get_value(t2);
+        const infos2 = self.type_manager.type_infos.items[v2].Fn;
+
+        if (infos1.arity == infos2.arity and infos1.return_type == infos2.return_type) {
+            for (0..infos1.arity) |i| {
+                if (infos1.params[i] != infos2.params[i]) return false;
+            }
+        }
+
+        return true;
     }
 
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
@@ -1400,7 +1498,7 @@ pub const Analyzer = struct {
             return self.err(.ReturnOutsideFn, self.to_span(node));
         }
 
-        if (state.fn_type != return_type) {
+        if (!self.check_equal_fn_types(state.fn_type, return_type)) {
             if (TypeSys.get_value(state.fn_type) == Float and
                 TypeSys.get_value(return_type) == Int)
             {

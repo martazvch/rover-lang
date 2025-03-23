@@ -256,7 +256,7 @@ pub const Parser = struct {
             });
 
             try self.expect(.Colon, .MissingFnParamType);
-            _ = try self.extract_type();
+            _ = try self.parse_type();
 
             arity += 1;
 
@@ -270,7 +270,7 @@ pub const Parser = struct {
         self.nodes.items(.data)[idx] = arity;
 
         _ = if (self.match(.SmallArrow))
-            try self.extract_type()
+            try self.parse_type()
         else if (self.check(.Identifier) or self.check(.Bool) or self.check(.IntKw) or self.check(.FloatKw))
             return self.error_at_current(.ExpectArrowBeforeFnType)
         else
@@ -306,7 +306,7 @@ pub const Parser = struct {
             .main = self.token_idx - 1,
         });
 
-        _ = try self.parse_type();
+        _ = try self.expect_type_or_empty();
 
         _ = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
@@ -331,7 +331,7 @@ pub const Parser = struct {
         }
         self.nodes.items(.main)[idx] = count;
 
-        const type_idx = try self.parse_type();
+        const type_idx = try self.expect_type_or_empty();
 
         const first_value = if (self.match(.Equal))
             try self.parse_precedence_expr(0)
@@ -369,17 +369,18 @@ pub const Parser = struct {
         return idx;
     }
 
-    /// Expects and declare a type. If none, declare an empty one
-    fn parse_type(self: *Self) Error!Node.Index {
+    /// Expects a type after ':'. If no colon, declares an empty type
+    fn expect_type_or_empty(self: *Self) Error!Node.Index {
         return if (self.match(.Colon))
-            try self.extract_type()
+            try self.parse_type()
         else if (self.check(.Identifier))
             self.error_at_current(.ExpectColonBeforeType)
         else
             try self.add_node(.empty);
     }
 
-    fn extract_type(self: *Self) Error!Node.Index {
+    /// Parses a type. It assumes you know that a type is expected at this place
+    fn parse_type(self: *Self) Error!Node.Index {
         if (self.match(.FloatKw) or
             self.match(.IntKw) or
             self.match(.StrKw) or
@@ -387,41 +388,30 @@ pub const Parser = struct {
             self.match(.Identifier))
         {
             return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
-            // } else if (self.match(.Fn)) {
-            //     const start = self.prev().span.start;
-            //     try self.expect(.LeftParen, .ExpectParenAfterFnName);
-            //
-            //     var param_types = ArrayList(SourceSlice).init(self.allocator);
-            //
-            //     while (!self.check(.RightParen)) {
-            //         if (self.check(.Eof)) {
-            //             return self.error_at_prev(.ExpectParenAfterFnParams);
-            //         }
-            //         // Parse parameters type
-            //         try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
-            //         // try param_types.append(try self.parse_type());
-            //
-            //         if (!self.match(.Comma)) break;
-            //     }
-            //
-            //     try self.expect(.RightParen, .ExpectParenAfterFnParams);
-            //
-            //     // const return_type: ?Type = if (self.match(.SmallArrow))
-            //     //     try self.parse_type()
-            //     // else if (self.check(.Identifier))
-            //     //     return self.error_at_current(.ExpectArrowBeforeFnType)
-            //     // else
-            //     //     null;
-            //
-            //     return .{
-            //         .Function = .{
-            //             .params = try param_types.toOwnedSlice(),
-            //             // .return_type = return_type,
-            //             .return_type = null,
-            //             .start = start,
-            //             // .span = .{ .start = start, .end = self.prev().span.end },
-            //         },
-            //     };
+        } else if (self.match(.Fn)) {
+            const idx = try self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
+            try self.expect(.LeftParen, .ExpectParenAfterFnName);
+
+            var arity: usize = 0;
+            while (!self.check(.RightParen) and !self.check(.Eof)) {
+                // Parse parameters type
+                _ = try self.parse_type();
+                arity += 1;
+
+                if (!self.match(.Comma)) break;
+            }
+
+            self.nodes.items(.data)[idx] = arity;
+            try self.expect(.RightParen, .ExpectParenAfterFnParams);
+
+            _ = if (self.match(.SmallArrow))
+                try self.parse_type()
+            else if (self.check(.Identifier))
+                return self.error_at_current(.ExpectArrowBeforeFnType)
+            else
+                try self.add_node(.empty);
+
+            return idx;
         } else {
             return self.error_at_current(.ExpectTypeName);
         }
