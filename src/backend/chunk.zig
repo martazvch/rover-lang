@@ -51,6 +51,7 @@ pub const OpCode = enum(u8) {
     Return,
     ScopeReturn,
     SetGlobal,
+    SetHeap,
     SetLocal,
     StrCat,
     StrMulL,

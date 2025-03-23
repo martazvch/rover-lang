@@ -1,5 +1,6 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
+const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 
 const Disassembler = @import("../backend/disassembler.zig").Disassembler;
@@ -44,7 +45,7 @@ pub const CompilationManager = struct {
         natives: []const NativeFn,
         interner: *const Interner,
         instr_start: usize,
-        instructions: *const std.MultiArrayList(Instruction),
+        instructions: *const MultiArrayList(Instruction),
         render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
@@ -161,13 +162,13 @@ const Compiler = struct {
     }
 
     /// Declare the variable based on informations coming from Analyzer. Declares
-    /// either in global scope or do nothing, as for local it's already living
+    /// either in global scope or heap, as for local it's already living
     /// on the stack
-    fn define_variable(self: *Self, infos: Instruction.Variable, heap: bool, offset: usize) !void {
+    fn define_variable(self: *Self, infos: Instruction.Variable, offset: usize) !void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         if (infos.scope == .Global)
             try self.write_op_and_byte(.DefineGlobal, @intCast(infos.index), offset)
-        else if (heap)
+        else if (infos.scope == .Heap)
             try self.write_op_and_byte(.DefineHeapVar, @intCast(infos.index), offset);
     }
 
@@ -250,8 +251,7 @@ const Compiler = struct {
             .String => self.string_instr(),
             .Unary => self.unary(),
             .Use => self.use(),
-            .VarDecl => self.var_decl(false),
-            .VarDeclHeap => self.var_decl(true),
+            .VarDecl => self.var_decl(),
             .While => self.while_instr(),
         };
     }
@@ -269,7 +269,12 @@ const Compiler = struct {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (data.variable.scope == .Global) .SetGlobal else .SetLocal,
+            if (data.variable.scope == .Global)
+                .SetGlobal
+            else if (data.variable.scope == .Heap)
+                .SetHeap
+            else
+                .SetLocal,
             @intCast(data.variable.index),
             start,
         );
@@ -422,7 +427,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         try self.compile_function(.Fn, fn_name, data);
-        try self.define_variable(fn_var, false, 0);
+        try self.define_variable(fn_var, 0);
 
         // Check for main function
         if (idx == self.manager.main) {
@@ -460,19 +465,15 @@ const Compiler = struct {
     }
 
     fn identifier(self: *Self, is_id: bool) !void {
-        const data, const is_heap = if (is_id) blk: {
+        const data = if (is_id) blk: {
             const id = self.get_data().Id;
-
-            break :blk .{
-                self.manager.instr_data[id].VarDecl.variable,
-                self.manager.instr_tags[id] == .VarDeclHeap,
-            };
-        } else .{ self.get_data().Variable, false };
+            break :blk self.manager.instr_data[id].VarDecl.variable;
+        } else self.get_data().Variable;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (is_heap) .GetHeap else if (data.scope == .Global) .GetGlobal else .GetLocal,
+            if (data.scope == .Heap) .GetHeap else if (data.scope == .Global) .GetGlobal else .GetLocal,
             @intCast(data.index),
             self.get_start(),
         );
@@ -600,11 +601,11 @@ const Compiler = struct {
                 ),
                 start,
             );
-            try self.define_variable(imported.variable, false, start);
+            try self.define_variable(imported.variable, start);
         }
     }
 
-    fn var_decl(self: *Self, is_heap: bool) !void {
+    fn var_decl(self: *Self) !void {
         const start = self.get_start();
         const data = self.get_data().VarDecl;
         self.manager.instr_idx += 1;
@@ -618,9 +619,9 @@ const Compiler = struct {
             if (data.cast) try self.compile_instr();
         }
 
-        try self.define_variable(data.variable, is_heap, start);
+        try self.define_variable(data.variable, start);
 
-        if (is_heap) {
+        if (data.variable.scope == .Heap) {
             self.manager.heap_count += 1;
             // We place a 'tombstone' value here because during static analyzis,
             // the locals list is synchronized to all following declaration. Instead of

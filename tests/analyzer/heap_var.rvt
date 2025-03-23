@@ -18,12 +18,12 @@ fn main() {
 
 expect:
 [Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
-    [Variable declaration index: 0, scope: Local, heap]
+    [Variable declaration index: 0, scope: Heap]
         [Int 3]
 
     [Fn declaration capture, index: 2, scope: Local, return kind: ImplicitVoid]
         [Print]
-            [Variable index: 0, scope: Local]
+            [Variable index: 0, scope: Heap]
 
 ================
 
@@ -52,9 +52,9 @@ expect:
 [Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Variable declaration index: 1, scope: Local]
         [Int 1]
-    [Variable declaration index: 0, scope: Local, heap]
+    [Variable declaration index: 0, scope: Heap]
         [Int 3]
-    [Variable declaration index: 1, scope: Local, heap]
+    [Variable declaration index: 1, scope: Heap]
         [Bool true]
     [Variable declaration index: 4, scope: Local]
         [Int 9]
@@ -63,7 +63,7 @@ expect:
         [Variable declaration index: 1, scope: Local]
             [Null]
         [Variable declaration index: 2, scope: Local]
-            [Variable index: 0, scope: Local]
+            [Variable index: 0, scope: Heap]
 
         [Fn declaration nested2, index: 3, scope: Local, return kind: ImplicitVoid]
             [Variable declaration index: 1, scope: Local]
@@ -71,9 +71,32 @@ expect:
 
             [Fn declaration capture, index: 2, scope: Local, return kind: ImplicitVoid]
                 [Print]
-                    [Variable index: 1, scope: Local]
+                    [Variable index: 1, scope: Heap]
 
 ================
 
+// Assignment
 
+code:
+fn main() {
+    var a = 1
+
+    fn capture() { print a }
+
+    a = 2
+}
+
+expect:
+[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
+    [Variable declaration index: 0, scope: Heap]
+        [Int 1]
+
+    [Fn declaration capture, index: 2, scope: Local, return kind: ImplicitVoid]
+        [Print]
+            [Variable index: 0, scope: Heap]
+
+    [Assignment index: 0, scope: Heap]
+        [Int 2]
+
+================
 

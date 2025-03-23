@@ -1,11 +1,10 @@
 fn main() {
-    var a = 1
+    fn factory() {
+        fn product() {
+            print 5
+        }
 
-    fn p() {
-        print a
+        return product
     }
-
-    p()
-    a = 4
-    p()
 }
+

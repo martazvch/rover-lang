@@ -296,7 +296,7 @@ pub const Vm = struct {
                 },
                 // Compiler bug: https://github.com/ziglang/zig/issues/13938
                 .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
-                .GetHeap => self.stack.push((self.heap_vars)[frame.read_byte()]),
+                .GetHeap => self.stack.push(self.heap_vars[frame.read_byte()]),
                 .GetLocal => self.stack.push(frame.slots[frame.read_byte()]),
                 .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
                 .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
@@ -403,6 +403,7 @@ pub const Vm = struct {
                     self.stack.push(res);
                 },
                 .SetGlobal => self.globals[frame.read_byte()] = self.stack.pop(),
+                .SetHeap => self.heap_vars[frame.read_byte()] = self.stack.pop(),
                 .SetLocal => frame.slots[frame.read_byte()] = self.stack.pop(),
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),

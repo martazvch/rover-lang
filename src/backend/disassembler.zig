@@ -128,6 +128,7 @@ pub const Disassembler = struct {
             .Return => self.simple_instruction("OP_RETURN", offset, writer),
             .ScopeReturn => self.index_instruction("OP_SCOPE_RETURN", offset, writer),
             .SetGlobal => self.index_instruction("OP_SET_GLOBAL", offset, writer),
+            .SetHeap => self.index_instruction("OP_SET_HEAP", offset, writer),
             .SetLocal => self.index_instruction("OP_SET_LOCAL", offset, writer),
             // .SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
             // .SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),

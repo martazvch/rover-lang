@@ -126,7 +126,6 @@ pub const Pipeline = struct {
         }
 
         // Compiler
-        // const slice = self.analyzer.instructions.slice();
         var compiler = CompilationManager.init(
             self.vm,
             self.analyzer.type_manager.builtins.functions,

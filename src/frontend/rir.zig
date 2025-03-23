@@ -1,4 +1,4 @@
-pub const Scope = enum(u2) { Builtin, Global, Local };
+pub const Scope = enum(u2) { Builtin, Global, Heap, Local };
 pub const Type = enum(u2) { Float, Int };
 pub const ReturnKind = enum(u2) { Explicit, ImplicitValue, ImplicitVoid };
 
@@ -31,7 +31,6 @@ pub const Instruction = struct {
         Unary,
         Use,
         VarDecl,
-        VarDeclHeap,
         While,
     };
 

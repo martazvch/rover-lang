@@ -1,0 +1,10 @@
+fn main() {
+    var a = 1
+
+    fn capture() { print a }
+
+    capture() // expect: 1
+    a = 2
+    capture() // expect: 2
+}
+

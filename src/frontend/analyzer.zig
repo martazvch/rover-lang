@@ -596,7 +596,12 @@ pub const Analyzer = struct {
                 self.instructions.items(.data)[idx] = .{ .Assignment = .{
                     .variable = .{
                         .index = @intCast(assigne.index),
-                        .scope = if (assigne.depth > 0) .Local else .Global,
+                        .scope = if (assigne.captured)
+                            .Heap
+                        else if (assigne.depth > 0)
+                            .Local
+                        else
+                            .Global,
                     },
                     .cast = cast,
                 } };
@@ -1228,8 +1233,9 @@ pub const Analyzer = struct {
         if (variable.index >= self.local_offset or variable.depth == 0 or variable.captured) return;
 
         variable.captured = true;
+        variable.index = self.heap_count;
+        self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .Heap;
         // TODO: protect the cast?
-        self.instructions.items(.tag)[variable.decl] = .VarDeclHeap;
         self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
         self.heap_count += 1;
     }
