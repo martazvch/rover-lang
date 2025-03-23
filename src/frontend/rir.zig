@@ -5,7 +5,7 @@ pub const ReturnKind = enum(u2) { Explicit, ImplicitValue, ImplicitVoid };
 pub const Instruction = struct {
     tag: Tag,
     data: Data = undefined,
-    start: usize = 0,
+    offset: usize = 0,
 
     pub const Tag = enum(u8) {
         Assignment,

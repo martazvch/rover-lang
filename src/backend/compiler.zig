@@ -27,8 +27,8 @@ pub const CompilationManager = struct {
     interner: *const Interner,
     instr_tags: []const Instruction.Tag,
     instr_data: []const Instruction.Data,
-    instr_starts: []const usize,
-    instr_idx: usize = 0,
+    instr_offsets: []const usize,
+    instr_idx: usize,
     render_mode: Disassembler.RenderMode,
     main: usize,
     main_index: ?u8 = null,
@@ -43,9 +43,8 @@ pub const CompilationManager = struct {
         vm: *Vm,
         natives: []const NativeFn,
         interner: *const Interner,
-        instr_tags: []const Instruction.Tag,
-        instr_data: []const Instruction.Data,
-        instr_starts: []const usize,
+        instr_start: usize,
+        instructions: *const std.MultiArrayList(Instruction),
         render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
@@ -56,9 +55,10 @@ pub const CompilationManager = struct {
             .compiler = undefined,
             .errs = .init(vm.allocator),
             .interner = interner,
-            .instr_tags = instr_tags,
-            .instr_data = instr_data,
-            .instr_starts = instr_starts,
+            .instr_tags = instructions.items(.tag),
+            .instr_data = instructions.items(.data),
+            .instr_offsets = instructions.items(.offset),
+            .instr_idx = instr_start,
             .render_mode = render_mode,
             .main = main,
             .repl = repl,
@@ -133,7 +133,7 @@ const Compiler = struct {
     }
 
     inline fn get_start(self: *const Self) usize {
-        return self.manager.instr_starts[self.manager.instr_idx];
+        return self.manager.instr_offsets[self.manager.instr_idx];
     }
 
     /// Writes an OpCode to the current chunk
@@ -446,12 +446,12 @@ const Compiler = struct {
         if (data.return_kind == .ImplicitValue) {
             try compiler.write_op(
                 .Return,
-                self.manager.instr_starts[self.manager.instr_idx - 1],
+                self.manager.instr_offsets[self.manager.instr_idx - 1],
             );
         } else if (data.return_kind == .ImplicitVoid) {
             try compiler.write_op(
                 .NakedReturn,
-                self.manager.instr_starts[self.manager.instr_idx - 1],
+                self.manager.instr_offsets[self.manager.instr_idx - 1],
             );
         }
 

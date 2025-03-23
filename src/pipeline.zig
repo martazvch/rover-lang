@@ -126,14 +126,13 @@ pub const Pipeline = struct {
         }
 
         // Compiler
-        const slice = self.analyzer.instructions.slice();
+        // const slice = self.analyzer.instructions.slice();
         var compiler = CompilationManager.init(
             self.vm,
             self.analyzer.type_manager.builtins.functions,
             &self.analyzer.interner,
-            slice.items(.tag)[self.instr_count..],
-            slice.items(.data)[self.instr_count..],
-            slice.items(.start)[self.instr_count..],
+            self.instr_count,
+            &self.analyzer.instructions,
             if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .None,
             if (self.config.embedded) 0 else self.analyzer.main.?,
             self.config.embedded,

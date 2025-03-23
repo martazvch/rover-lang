@@ -322,7 +322,7 @@ pub const Analyzer = struct {
         try self.instructions.append(self.allocator, .{
             .tag = instr.tag,
             .data = instr.data,
-            .start = self.token_spans[self.node_mains[main]].start,
+            .offset = self.token_spans[self.node_mains[main]].start,
         });
         return self.instructions.len - 1;
     }
@@ -1225,7 +1225,7 @@ pub const Analyzer = struct {
     fn check_capture(self: *Self, variable: *Variable) void {
         // If it's a global variable or if it's been declared in current function's frame
         // or already captured, return
-        if (variable.depth == 0 or variable.index >= self.local_offset or variable.captured) return;
+        if (variable.index >= self.local_offset or variable.depth == 0 or variable.captured) return;
 
         variable.captured = true;
         // TODO: protect the cast?
@@ -1467,7 +1467,7 @@ pub const Analyzer = struct {
         if (name == 1) {
             // TODO: For now, il allows to keep synchronized the different arrays of
             // nodes/instructions
-            _ = try self.add_instr(.{ .tag = .Null, .data = undefined, .start = 0 }, 0);
+            _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, 0);
 
             // TODO: support real imports
             if (self.node_data[node] > 2) @panic("Use statements can't import more than std + one module");
