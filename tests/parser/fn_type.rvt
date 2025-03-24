@@ -1,0 +1,47 @@
+// Function types
+
+code:
+fn factory() -> fn() -> void { }
+
+expect:
+[Fn declaration factory, type fn() -> void, arity 0
+    params:
+    body:
+        [Block]
+]
+
+================
+
+code:
+fn factory(arg: float) -> fn(float, bool) -> float { }
+
+expect:
+[Fn declaration factory, type fn(float, bool) -> float, arity 1
+    params:
+        arg, type float
+    body:
+        [Block]
+]
+
+================
+
+code:
+fn factory(arg: fn() -> int) -> int { }
+
+expect:
+[Fn declaration factory, type int, arity 1
+    params:
+        arg, type fn() -> int
+    body:
+        [Block]
+]
+
+================
+
+code:
+fn factory(arg: float) -> fn(float, bool) float { }
+
+error:
+ExpectArrowBeforeFnType
+
+================

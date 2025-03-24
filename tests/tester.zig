@@ -356,12 +356,6 @@ const Tester = struct {
                 ) catch {
                     self.diags.items[self.diags.items.len - 1].file_name = try self.allocator.dupe(u8, entry.basename);
                     self.diags.items[self.diags.items.len - 1].test_id = test_count + 1;
-
-                    // var buf: [250]u8 = undefined;
-                    // const written = try std.fmt.bufPrint(&buf, "failed_{s}_test_{}.rv", .{ entry.basename, test_count });
-                    // const failed_file = try std.fs.cwd().createFile(written, .{});
-                    // try failed_file.writeAll(code.items[0 .. code.items.len - 1]);
-                    // failed_file.close();
                 };
 
                 code.clearRetainingCapacity();
@@ -386,13 +380,7 @@ const Tester = struct {
         }
     }
 
-    pub fn run_test(
-        self: *Self,
-        dir: *std.fs.Dir,
-        stage: Stage,
-        exp: []const u8,
-        config: []const u8,
-    ) !void {
+    pub fn run_test(self: *Self, dir: *std.fs.Dir, stage: Stage, exp: []const u8, config: []const u8) !void {
         const argv = if (std.mem.eql(u8, config, "static-analyzis"))
             &[_][]const u8{
                 self.exe_path,

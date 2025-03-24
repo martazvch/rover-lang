@@ -51,6 +51,5 @@ pub const Node = struct {
         Use,
         VarDecl,
         While,
-        Link,
     };
 };

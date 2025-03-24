@@ -1,0 +1,102 @@
+// Function types
+
+// No errors
+code:
+fn factory() -> fn() -> void {
+    fn capture() {}
+
+    return capture
+}
+
+fn factory3() -> fn() -> int {
+    fn capture() -> int { return 4 }
+
+    return capture
+}
+
+fn factory4(arg: float) -> fn(float, bool) -> float {
+    fn capture(value: float, cond: bool) -> float { return arg }
+
+    return capture
+}
+
+fn main() {}
+
+expect:
+[Fn declaration factory, index: 0, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 1, scope: Local, return kind: ImplicitVoid]
+    [Return expr: true, cast: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration factory3, index: 1, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 1, scope: Local, return kind: Explicit]
+        [Return expr: true, cast: false]
+            [Int 4]
+    [Return expr: true, cast: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration factory4, index: 2, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 2, scope: Local, return kind: Explicit]
+        [Return expr: true, cast: false]
+            [Variable index: 1, scope: Local]
+    [Return expr: true, cast: false]
+        [Variable index: 2, scope: Local]
+
+[Fn declaration main, index: 3, scope: Global, return kind: ImplicitVoid]
+
+================
+
+// Argument function
+
+code:
+fn factory(arg: fn() -> int) -> int {
+    arg()
+}
+
+fn main() {}
+
+expect:
+[Fn declaration factory, index: 0, scope: Global, return kind: ImplicitValue]
+    [Fn call arity: 0, builtin: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration main, index: 1, scope: Global, return kind: ImplicitVoid]
+
+================
+
+// Errors
+
+code:
+fn factory2() -> fn() -> int {
+    fn capture() -> bool { return false }
+
+    return capture
+}
+
+fn factory3() -> fn() -> int {
+    fn capture() -> int { return 4 }
+
+    return 5
+}
+
+fn main() {}
+
+error:
+IncompatibleFnType, fn() -> int, fn() -> bool
+IncompatibleFnType, fn() -> int, int
+
+================
+
+// Argument error
+
+code:
+fn factory(arg: fn() -> int) -> bool {
+    arg()
+}
+
+fn main() {}
+
+error:
+IncompatibleFnType, bool, int
+
+================

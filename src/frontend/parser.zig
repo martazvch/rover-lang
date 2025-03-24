@@ -344,18 +344,17 @@ pub const Parser = struct {
         if (!self.check(.Comma)) {
             for (variables.items) |var_idx| {
                 _ = try self.add_node(.{ .tag = .VarDecl, .main = var_idx });
-                _ = try self.add_node(.{ .tag = .Link, .data = type_idx });
-                _ = try self.add_node(.{ .tag = .Link, .data = first_value });
+                _ = try self.add_node(self.nodes.get(type_idx));
+                _ = try self.add_node(self.nodes.get(first_value));
             }
         } else while (self.match(.Comma)) : (count += 1) {
-            // assert(count - 1 < variables.items.len);
             if (count > variables.items.len) {
                 count -= 1;
                 break;
             }
 
             _ = try self.add_node(.{ .tag = .VarDecl, .main = variables.items[count - 1] });
-            _ = try self.add_node(.{ .tag = .Link, .data = type_idx });
+            _ = try self.add_node(self.nodes.get(type_idx));
             _ = try self.parse_precedence_expr(0);
         }
 
@@ -381,12 +380,7 @@ pub const Parser = struct {
 
     /// Parses a type. It assumes you know that a type is expected at this place
     fn parse_type(self: *Self) Error!Node.Index {
-        if (self.match(.FloatKw) or
-            self.match(.IntKw) or
-            self.match(.StrKw) or
-            self.match(.Bool) or
-            self.match(.Identifier))
-        {
+        if (self.is_ident_or_type()) {
             return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
         } else if (self.match(.Fn)) {
             const idx = try self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
@@ -406,7 +400,7 @@ pub const Parser = struct {
 
             _ = if (self.match(.SmallArrow))
                 try self.parse_type()
-            else if (self.check(.Identifier))
+            else if (self.is_ident_or_type())
                 return self.error_at_current(.ExpectArrowBeforeFnType)
             else
                 try self.add_node(.empty);
@@ -415,6 +409,17 @@ pub const Parser = struct {
         } else {
             return self.error_at_current(.ExpectTypeName);
         }
+    }
+
+    fn is_ident_or_type(self: *Self) bool {
+        return if (self.match(.Identifier) or
+            self.match(.FloatKw) or
+            self.match(.IntKw) or
+            self.match(.StrKw) or
+            self.match(.Bool))
+            true
+        else
+            false;
     }
 
     fn discard(self: *Self) !Node.Index {

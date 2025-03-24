@@ -19,6 +19,7 @@ pub const AstPrinter = struct {
     node_idx: usize,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
+    // sandbox: std.ArrayList(u8),
 
     const indent_size: u8 = 4;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -48,11 +49,13 @@ pub const AstPrinter = struct {
             .node_idx = 0,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
+            // .sandbox = std.ArrayList(u8).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
+        // self.sandbox.deinit();
     }
 
     pub fn display(self: *const Self) !void {
@@ -99,13 +102,6 @@ pub const AstPrinter = struct {
             .Identifier => self.literal("Identifier"),
             .If => self.if_expr(),
             .Int => self.literal("Int literal"),
-            .Link => {
-                const start = self.node_idx;
-                self.node_idx = self.node_data[index];
-                try self.parse_node(self.node_idx);
-                // Past the link
-                self.node_idx = start + 1;
-            },
             .MultiVarDecl => self.multi_var_decl(),
             .Null => self.null_(),
             .Parameter => self.parameter(),
@@ -220,43 +216,40 @@ pub const AstPrinter = struct {
 
         const name = self.node_idx;
         const arity = self.node_data[self.node_idx];
-
         self.node_idx += 1;
-        // x2 because each param is composed of 2 nodes: Param + Type
-        const return_idx = self.node_idx + arity * 2;
 
-        try writer.print(
-            "[Fn declaration {s}, type {s}, arity {}\n",
-            .{
-                self.source_from_tk(name),
-                self.get_type(return_idx),
-                arity,
-            },
-        );
+        const save_writer = self.tree;
+        self.tree = std.ArrayList(u8).init(self.allocator);
 
         self.indent_level += 1;
         try self.indent();
         try self.tree.appendSlice("params:\n");
         self.indent_level += 1;
-
         for (0..arity) |_| {
             try self.parse_node(self.node_idx);
-            // We manually increment because the type parsing
-            // doesn't do it
-            self.node_idx += 1;
         }
-
-        // Skips the return type
-        self.node_idx += 1;
         self.indent_level -= 1;
+
+        const res = try self.tree.toOwnedSlice();
+        self.tree = save_writer;
+
+        try writer.print(
+            "[Fn declaration {s}, type {s}, arity {}\n",
+            .{
+                self.source_from_tk(name),
+                self.get_type(self.node_idx),
+                arity,
+            },
+        );
+
+        try self.tree.appendSlice(res);
 
         try self.indent();
         try self.tree.appendSlice("body:\n");
         self.indent_level += 1;
         try self.parse_node(self.node_idx);
-        self.indent_level -= 1;
+        self.indent_level -= 2;
 
-        self.indent_level -= 1;
         try self.indent();
         try self.tree.appendSlice("]\n");
     }
@@ -376,13 +369,6 @@ pub const AstPrinter = struct {
         self.indent_level -= 1;
     }
 
-    fn link_to_empty(self: *const Self, index: Node.Index) bool {
-        if (self.node_tags[index] == .Link)
-            return self.node_tags[self.node_data[index]] == .Empty;
-
-        return false;
-    }
-
     fn var_decl(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
@@ -398,9 +384,8 @@ pub const AstPrinter = struct {
         );
 
         self.indent_level += 1;
-        self.node_idx += 1;
 
-        if (self.node_tags[self.node_idx] != .Empty and !self.link_to_empty(self.node_idx)) {
+        if (self.node_tags[self.node_idx] != .Empty) {
             try self.parse_node(self.node_idx);
         } else {
             try self.indent();
@@ -414,16 +399,16 @@ pub const AstPrinter = struct {
     }
 
     fn get_type(self: *Self, index: Node.Index) []const u8 {
-        if (self.node_tags[index] == .Empty)
-            return "void"
-        else if (self.token_tags[self.node_mains[index]] == .Fn)
+        if (self.node_tags[index] == .Empty) {
+            self.node_idx += 1;
+            return "void";
+        } else if (self.token_tags[self.node_mains[index]] == .Fn)
             return self.get_fn_type(index) catch @panic("OOM");
 
+        defer self.node_idx += 1;
+
         return switch (self.node_tags[index]) {
-            .Link => return self.get_type(self.node_data[index]),
-            .Type => {
-                return self.source_from_tk(index);
-            },
+            .Type => return self.source_from_tk(index),
             else => unreachable,
         };
     }
@@ -431,7 +416,7 @@ pub const AstPrinter = struct {
     fn get_fn_type(self: *Self, index: Node.Index) ![]const u8 {
         var res: std.ArrayListUnmanaged(u8) = .{};
         var writer = res.writer(self.allocator);
-        try writer.writeAll("fn (");
+        try writer.writeAll("fn(");
         const arity = self.node_data[index];
         self.node_idx += 1;
 
@@ -440,11 +425,9 @@ pub const AstPrinter = struct {
                 self.get_type(self.node_idx),
                 if (i < arity - 1) ", " else "",
             });
-            self.node_idx += 1;
         }
         try writer.print(") -> {s}", .{self.get_type(self.node_idx)});
 
-        // We intentionaly don't skip return's type, it will be done by the caller
         return try res.toOwnedSlice(self.allocator);
     }
 

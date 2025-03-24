@@ -1,8 +1,10 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
+
 const clap = @import("clap");
+
 pub const Vm = @import("runtime/vm.zig").Vm;
 
 pub fn main() !void {

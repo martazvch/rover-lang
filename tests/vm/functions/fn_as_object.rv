@@ -2,6 +2,14 @@ fn add(a: int, b: int) -> int {
     a + b
 }
 
+fn called(arg1: int, arg2: bool) -> int {
+    if arg2 { arg1 } else 45
+}
+
+fn call(func: fn(int, bool) -> int, arg1: int, arg2: bool) -> int {
+    func(arg1, arg2)
+}
+
 fn main() {
     var f = add
     var name = "theprimeagen"
@@ -21,4 +29,7 @@ fn main() {
     var arg2 = 2.5
 
     print f2(arg1, arg2) // expect: 6.5
+
+    // Function as parameter
+    print call(called, 75, true) // expect: 75
 }

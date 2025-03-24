@@ -20,12 +20,14 @@ pub const Builtin = 0;
 
 // 24 other allow 16777215 different types
 pub const Value = u24;
-pub const Void: Value = 0;
-pub const Null: Value = 1;
-pub const Int: Value = 2;
-pub const Float: Value = 3;
-pub const Bool: Value = 4;
-pub const Str: Value = 5;
+
+// Constants
+pub const Void: Type = 0;
+pub const Null: Type = 1;
+pub const Int: Type = 2;
+pub const Float: Type = 3;
+pub const Bool: Type = 4;
+pub const Str: Type = 5;
 
 /// Creates a type from kind and value information
 pub fn create(kind: Kind, extra: Extra, value: Value) Type {

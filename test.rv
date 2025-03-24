@@ -1,7 +1,12 @@
+fn called(arg1: int, arg2: bool) -> int {
+    if arg2 { arg1 } else 45
+}
+
+fn call(func: fn(int, bool) -> int, arg1: int, arg2: bool) -> int {
+    func(arg1, arg2)
+}
+
 fn main() {
-    fn add() -> int {
-        if true do return 1
-        2
-    }
-    _ = add()
+    // Function as parameter
+    print call(called, 75, true) // expect: 75
 }

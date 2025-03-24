@@ -167,8 +167,6 @@ pub const Analyzer = struct {
         fn_type: Type = Void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
-        // Allow to capture variables outside of function's frame
-        // allow_capture: bool = false,
     };
 
     pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -276,7 +274,6 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
             .Empty => self.to_span(node - 1),
-            // TODO: real spans, here we underline only the function's name
             .FnDecl => self.token_spans[self.node_mains[node]],
             .FnCall => self.token_spans[self.node_mains[node + 1]],
             .Grouping => .{
@@ -284,7 +281,6 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
-            .Link => self.to_span(self.node_data[node]),
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -333,7 +329,7 @@ pub const Analyzer = struct {
 
         var res: std.ArrayListUnmanaged(u8) = .{};
         var writer = res.writer(self.allocator);
-        try writer.writeAll("fn (");
+        try writer.writeAll("fn(");
 
         for (0..decl.arity) |i| {
             try writer.print("{s}{s}", .{
@@ -426,40 +422,37 @@ pub const Analyzer = struct {
         return false;
     }
 
-    /// Checks if an identifier already exists in current scope and if it's type exists
-    /// Returns the type of the variable, void if none provided
-    fn check_name_and_type(
-        self: *Self,
-        name: usize,
-        name_idx: Node.Index,
-        type_idx: Node.Index,
-    ) !Type {
-        // Name check
+    fn check_name(self: *Self) !usize {
+        const name = try self.interner.intern(self.source_from_node(self.node_idx));
+
         if (self.ident_in_scope(name)) {
             return self.err(
                 .{ .AlreadyDeclared = .{ .name = self.interner.get_key(name).? } },
-                self.to_span(name_idx),
+                self.to_span(self.node_idx),
             );
         }
 
-        // Function type are not declared in advance, so we declare it and return it's index
-        if (self.node_tags[type_idx] != .Empty and self.token_tags[self.node_mains[type_idx]] == .Fn) {
-            return self.create_anonymus_fn_type(type_idx);
-        }
-
-        return try self.check_and_get_type(type_idx);
+        self.node_idx += 1;
+        return name;
     }
 
     /// Checks that the node is a declared type and return it's value. If node is
     /// `empty`, returns `null`
-    fn check_and_get_type(self: *Self, idx: Node.Index) !Type {
-        return if (self.node_tags[idx] != .Empty)
+    fn check_and_get_type(self: *Self) Error!Type {
+        // Function type are not declared in advance, so we declare it and return it's index
+        if (self.node_tags[self.node_idx] != .Empty and self.token_tags[self.node_mains[self.node_idx]] == .Fn) {
+            return self.create_anonymus_fn_type();
+        }
+
+        defer self.node_idx += 1;
+
+        return if (self.node_tags[self.node_idx] != .Empty)
             self.type_manager.declared.get(
-                try self.interner.intern(self.source_from_node(idx)),
+                try self.interner.intern(self.source_from_node(self.node_idx)),
             ) orelse
                 return self.err(
-                    .{ .UndeclaredType = .{ .found = self.source_from_node(idx) } },
-                    self.to_span(idx),
+                    .{ .UndeclaredType = .{ .found = self.source_from_node(self.node_idx) } },
+                    self.to_span(self.node_idx),
                 )
         else
             Void;
@@ -467,18 +460,18 @@ pub const Analyzer = struct {
 
     /// Creates a type for an anonymous function, like the one defined in return types
     /// of functions
-    fn create_anonymus_fn_type(self: *Self, idx: Node.Index) !Type {
-        const arity = self.node_data[idx];
+    fn create_anonymus_fn_type(self: *Self) Error!Type {
+        const arity = self.node_data[self.node_idx];
+        self.node_idx += 1;
 
         const type_idx = try self.type_manager.reserve_info();
         var params_type: [256]Type = undefined;
-        const start = idx + 1;
 
         for (0..arity) |i| {
-            const param_type = try self.check_and_get_type(start + i);
+            const param_type = try self.check_and_get_type();
 
             if (param_type == Void) {
-                return self.err(.VoidParam, self.to_span(start + i));
+                return self.err(.VoidParam, self.to_span(self.node_idx));
             }
 
             params_type[i] = param_type;
@@ -489,7 +482,7 @@ pub const Analyzer = struct {
             .Fn = .{
                 .arity = arity,
                 .params = params_type,
-                .return_type = try self.check_and_get_type(start + arity),
+                .return_type = try self.check_and_get_type(),
             },
         });
 
@@ -589,10 +582,6 @@ pub const Analyzer = struct {
             .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
-            .Link => {
-                self.node_idx += 1;
-                final = try self.analyze_node(self.node_data[node]);
-            },
             .MultiVarDecl => try self.multi_var_decl(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(node),
@@ -996,7 +985,7 @@ pub const Analyzer = struct {
             const arg_idx = self.node_idx;
             const arg_type = try self.analyze_node(arg_idx);
 
-            if (arg_type != type_info.params[i]) {
+            if (arg_type != type_info.params[i] and !self.check_equal_fn_types(arg_type, type_info.params[i])) {
                 // If it's an implicit cast between int and float, save the
                 // argument indices for compiler. Otherwise, error
                 if (type_info.params[i] == Float and arg_type == Int) {
@@ -1036,7 +1025,7 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, node: Node.Index) Error!void {
-        const name_idx = try self.interner.intern(self.source_from_node(node));
+        const name_idx = try self.check_name();
 
         if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
             self.main = self.instructions.len;
@@ -1044,9 +1033,7 @@ pub const Analyzer = struct {
 
         // Check in current scope
         const arity = self.node_data[node];
-        const return_type = try self.check_name_and_type(name_idx, node, node + 1 + arity * 2);
         const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined }, node);
-
         // We add function's name for runtime access
         _ = try self.add_instr(.{ .tag = .FnName, .data = .{ .Id = name_idx } }, node);
 
@@ -1058,7 +1045,6 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
 
         self.scope_depth += 1;
-        errdefer self.scope_depth -= 1;
 
         // Stores the previous offset
         const local_offset_save = self.local_offset;
@@ -1069,79 +1055,53 @@ pub const Analyzer = struct {
 
         // We add a empty variable to anticipate the function it self on the stack
         // it's the returned address for the function
-        try self.locals.append(.{
-            .depth = self.scope_depth,
-            .name = name_idx,
-            .typ = fn_type,
-            .initialized = true,
-        });
+        try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true });
 
-        // Skips function's node
-        self.node_idx += 1;
         // TODO: ArrayList avec init capacity de 50?
         var params_type: [256]Type = undefined;
 
         for (0..arity) |i| {
+            errdefer self.scope_depth -= 1;
+            const decl = self.node_idx;
+
             // Check on parameter
-            const param_idx = try self.interner.intern(self.source_from_node(self.node_idx));
-
-            // Skips param's name
-            self.node_idx += 1;
-
-            const param_type = self.check_name_and_type(
-                param_idx,
-                self.node_idx - 1,
-                self.node_idx,
-            ) catch |e| switch (e) {
-                error.Err => {
-                    // We replace the error with a more explicit one for parameters
-                    if (self.errs.items[self.errs.items.len - 1].report == .AlreadyDeclared) {
-                        self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
-                            .{ .DuplicateParam = .{ .name = self.source_from_node(self.node_idx - 1) } },
-                            self.to_span(self.node_idx - 1),
-                        );
-                    }
-
-                    return e;
-                },
-                else => return e,
+            const param_idx = self.check_name() catch |e| {
+                self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
+                    .{ .DuplicateParam = .{ .name = self.source_from_node(decl) } },
+                    self.to_span(decl),
+                );
+                return e;
             };
 
+            const param_type = try self.check_and_get_type();
+
             if (param_type == Void) {
-                return self.err(.VoidParam, self.to_span(self.node_idx - 1));
+                return self.err(.VoidParam, self.to_span(decl));
             }
 
-            _ = try self.declare_variable(param_idx, param_type, true, self.node_idx, .param);
+            _ = try self.declare_variable(param_idx, param_type, true, decl, .param);
             params_type[i] = param_type;
-
-            // Skips param's type
-            self.node_idx += 1;
         }
 
-        // Set all the informations now that we have every thing
+        const return_type = self.check_and_get_type() catch |e| {
+            _ = try self.end_scope();
+            return e;
+        };
+
         self.type_manager.set_info(type_idx, .{ .Fn = .{
             .arity = arity,
             .params = params_type,
             .return_type = return_type,
         } });
 
-        // We skip the return type, it has already been analyzed.
-        // Two cases: `Empty` because function defined with implicit void, otherwise we loop in case
-        // the return type is composed of several ones
-        if (self.node_tags[self.node_idx] == .Empty)
-            self.node_idx += 1
-        else while (self.node_tags[self.node_idx] == .Type)
-            self.node_idx += 1;
-
         // ------
         //  Body
         // ------
-        // try self.states.append(.{ .in_fn = true, .fn_type = return_type, .allow_capture = true });
         try self.states.append(.{ .in_fn = true, .fn_type = return_type });
         const prev_state = self.last_state();
 
         self.scope_depth += 1;
-        errdefer self.scope_depth -= 1;
+        errdefer self.scope_depth -= 2;
 
         const block_idx = self.node_idx;
         const length = self.node_data[block_idx];
@@ -1245,9 +1205,11 @@ pub const Analyzer = struct {
             for (0..infos1.arity) |i| {
                 if (infos1.params[i] != infos2.params[i]) return false;
             }
+
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
@@ -1279,14 +1241,8 @@ pub const Analyzer = struct {
         // We first check in locals
         if (self.locals.items.len > 0) {
             var idx = self.locals.items.len;
-            // TODO: do we really want the allow capture? Why not always?
-            // const end = if (self.last_state().allow_capture) 0 else self.local_offset;
-            const end = 0;
 
-            // while (idx > 0) : (idx -= 1) {
-            // NOTE: for now, can't see outside function's frame
-            // while (idx > self.local_offset) : (idx -= 1) {
-            while (idx > end) : (idx -= 1) {
+            while (idx > 0) : (idx -= 1) {
                 const local = &self.locals.items[idx - 1];
 
                 if (name_idx == local.name) {
@@ -1499,9 +1455,7 @@ pub const Analyzer = struct {
         }
 
         if (!self.check_equal_fn_types(state.fn_type, return_type)) {
-            if (TypeSys.get_value(state.fn_type) == Float and
-                TypeSys.get_value(return_type) == Int)
-            {
+            if (state.fn_type == Float and return_type == Int) {
                 self.instructions.items(.data)[idx].Return.cast = true;
                 _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
             } else return self.err(
@@ -1624,24 +1578,13 @@ pub const Analyzer = struct {
         );
     }
 
-    fn resolve_link(self: *const Self, node: Node.Index) Node.Index {
-        return if (self.node_tags[node] == .Link)
-            self.node_data[node]
-        else
-            node;
-    }
-
     fn var_decl(self: *Self, node: Node.Index) !void {
-        // Could be links due to multi variables declaration
-        self.node_idx += 1;
-        const type_idx = self.resolve_link(self.node_idx);
-        self.node_idx += 1;
-        const value_idx = self.resolve_link(self.node_idx);
+        const name = try self.check_name();
+        const type_idx = self.node_idx;
+        var checked_type = try self.check_and_get_type();
+        const value_idx = self.node_idx;
 
         const idx = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = undefined } }, node);
-
-        const name = try self.interner.intern(self.source_from_node(node));
-        var checked_type = try self.check_name_and_type(name, node, type_idx);
 
         var initialized = false;
         var cast = false;

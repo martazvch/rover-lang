@@ -1,9 +1,10 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const assert = std.debug.assert;
 const Writer = std.fs.File.Writer;
+const builtin = @import("builtin");
+
 const Span = @import("frontend/lexer.zig").Span;
 
 const BoxChar = enum {
@@ -160,7 +161,9 @@ pub fn GenReporter(comptime Report: type) type {
 
                 // Looking for current line where it occured and buffers the previous one
                 // for context
-                while (true) {
+                while (true) : (current += 1) {
+                    if (current >= self.source.len) break;
+
                     if (self.source[current] == '\n') {
                         if (current >= report.start) break;
 
@@ -174,8 +177,6 @@ pub fn GenReporter(comptime Report: type) type {
                         // Skip the \n
                         line_start = current + 1;
                     }
-
-                    current += 1;
                 }
 
                 // Line index start to 1
