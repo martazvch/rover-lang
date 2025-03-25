@@ -1025,6 +1025,14 @@ pub const Analyzer = struct {
     }
 
     fn fn_declaration(self: *Self, node: Node.Index) Error!void {
+        const save_local_offset = self.local_offset;
+        const save_scope_depth = self.scope_depth;
+
+        errdefer {
+            self.local_offset = save_local_offset;
+            self.scope_depth = save_scope_depth;
+        }
+
         const name_idx = try self.check_name();
 
         if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
@@ -1045,13 +1053,7 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
 
         self.scope_depth += 1;
-
-        // Stores the previous offset
-        const local_offset_save = self.local_offset;
         self.local_offset = self.locals.items.len;
-
-        // Switch back to locals before function call
-        errdefer self.local_offset = local_offset_save;
 
         // We add a empty variable to anticipate the function it self on the stack
         // it's the returned address for the function
@@ -1061,7 +1063,6 @@ pub const Analyzer = struct {
         var params_type: [256]Type = undefined;
 
         for (0..arity) |i| {
-            errdefer self.scope_depth -= 1;
             const decl = self.node_idx;
 
             // Check on parameter
@@ -1083,10 +1084,7 @@ pub const Analyzer = struct {
             params_type[i] = param_type;
         }
 
-        const return_type = self.check_and_get_type() catch |e| {
-            _ = try self.end_scope();
-            return e;
-        };
+        const return_type = try self.check_and_get_type();
 
         self.type_manager.set_info(type_idx, .{ .Fn = .{
             .arity = arity,
@@ -1101,8 +1099,6 @@ pub const Analyzer = struct {
         const prev_state = self.last_state();
 
         self.scope_depth += 1;
-        errdefer self.scope_depth -= 2;
-
         const block_idx = self.node_idx;
         const length = self.node_data[block_idx];
 
@@ -1170,7 +1166,7 @@ pub const Analyzer = struct {
         _ = try self.end_scope();
 
         // Switch back to locals before function call
-        self.local_offset = local_offset_save;
+        self.local_offset = save_local_offset;
 
         const state = self.states.pop().?;
 
