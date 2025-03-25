@@ -83,11 +83,13 @@ pub fn build(b: *std.Build) !void {
     });
 
     tester_exe.root_module.addImport("clap", clap.module("clap"));
-    b.installArtifact(tester_exe);
-
+    const install_tester = b.addInstallArtifact(tester_exe, .{});
     const run_tester = b.addRunArtifact(tester_exe);
-    run_tester.step.dependOn(b.getInstallStep());
+    run_tester.step.dependOn(&install_tester.step);
     test_step.dependOn(&run_tester.step);
+
+    // run_tester.step.dependOn(test_step);
+    // test_step.dependOn(&run_tester.step);
 
     if (b.args) |args|
         run_tester.addArgs(args)
