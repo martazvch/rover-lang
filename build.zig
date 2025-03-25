@@ -86,6 +86,7 @@ pub fn build(b: *std.Build) !void {
     const install_tester = b.addInstallArtifact(tester_exe, .{});
     const run_tester = b.addRunArtifact(tester_exe);
     run_tester.step.dependOn(&install_tester.step);
+    run_tester.step.dependOn(b.getInstallStep());
     test_step.dependOn(&run_tester.step);
 
     if (b.args) |args|
