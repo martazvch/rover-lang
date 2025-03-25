@@ -88,9 +88,6 @@ pub fn build(b: *std.Build) !void {
     run_tester.step.dependOn(&install_tester.step);
     test_step.dependOn(&run_tester.step);
 
-    // run_tester.step.dependOn(test_step);
-    // test_step.dependOn(&run_tester.step);
-
     if (b.args) |args|
         run_tester.addArgs(args)
     else
