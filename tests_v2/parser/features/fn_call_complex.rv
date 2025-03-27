@@ -1,0 +1,5 @@
+add({1 + add(2,3)}, if true do 8 else 24)
+
+{get_fn()}()
+
+add()()

@@ -1,0 +1,49 @@
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+    [Identifier arg2]
+    [Identifier arg3]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+    [Identifier arg2]
+    [Identifier arg3]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+]
+[Fn call
+    callee:
+    [Identifier f]
+    args:
+    [Identifier arg1]
+    [Identifier arg2]
+    [Identifier arg3]
+]
+

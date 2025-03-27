@@ -1,0 +1,32 @@
+fn add() {}
+fn add(arg1: int){}
+fn add(arg1:int,) {
+
+}
+fn add(
+    arg1: int
+) {}
+fn add(
+    arg1: int) {}
+fn add(
+    arg1: int,
+)
+{
+
+}
+
+fn add(param1: int, param2: Person,) {}
+
+// Multiline body + no args
+fn _ad() -> int {
+    var tmp = 5
+}
+
+// Multiline parameters + body on new line
+fn foo(
+    p1: int,
+    p2: Creation,
+) -> Promise
+{}
+
+

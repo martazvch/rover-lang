@@ -1,0 +1,19 @@
+[Fn declaration factory, type fn() -> void, arity 0
+    params:
+    body:
+        [Block]
+]
+
+[Fn declaration factory, type fn(float, bool) -> float, arity 1
+    params:
+        arg, type float
+    body:
+        [Block]
+]
+
+[Fn declaration factory, type int, arity 1
+    params:
+        arg, type fn() -> int
+    body:
+        [Block]
+]

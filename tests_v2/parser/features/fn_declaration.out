@@ -1,0 +1,62 @@
+[Fn declaration add, type void, arity 0
+    params:
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+[Fn declaration add, type void, arity 1
+    params:
+        arg1, type int
+    body:
+        [Block]
+]
+
+[Fn declaration add, type void, arity 2
+    params:
+        param1, type int
+        param2, type Person
+    body:
+        [Block]
+]
+
+[Fn declaration _ad, type int, arity 0
+    params:
+    body:
+        [Block]
+            [Var declaration tmp, type void, value
+                [Int literal 5]
+            ]
+]
+
+[Fn declaration foo, type Promise, arity 2
+    params:
+        p1, type int
+        p2, type Creation
+    body:
+        [Block]
+]
+
+

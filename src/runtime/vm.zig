@@ -113,6 +113,14 @@ pub const Vm = struct {
         print_bytecode: bool,
         static_analyzis: bool,
         print_ir: bool,
+
+        pub const default: Config = .{
+            .embedded = false,
+            .print_ast = false,
+            .print_bytecode = false,
+            .static_analyzis = false,
+            .print_ir = false,
+        };
     };
 
     pub const empty: Self = .{

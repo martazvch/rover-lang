@@ -1,0 +1,2 @@
+fn factory(arg: float) -> fn(float, bool) float { }
+

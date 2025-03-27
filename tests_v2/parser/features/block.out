@@ -1,0 +1,20 @@
+[Block]
+    [Int literal 5]
+
+[Block]
+    [Var declaration a, type void, value
+        none
+    ]
+
+[Block]
+    [Var declaration a, type void, value
+        none
+    ]
+    [Assignment
+        assigne:
+        [Identifier a]
+        value:
+        [Binop +]
+            [Int literal 1]
+            [Int literal 56]
+    ]

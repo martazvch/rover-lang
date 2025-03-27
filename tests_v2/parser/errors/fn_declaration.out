@@ -1,0 +1,10 @@
+ExpectFnName
+ExpectParenAfterFnName
+ExpectName, parameter
+ExpectName, parameter
+MissingFnParamType
+ExpectParenAfterFnParams
+ExpectArrowBeforeFnType
+ExpectBraceBeforeFnBody
+TooManyFnArgs, parameter
+

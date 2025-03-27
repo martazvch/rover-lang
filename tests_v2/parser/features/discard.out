@@ -1,0 +1,18 @@
+[Discard
+    [If
+        condition:
+        [Bool literal true]
+        then body:
+        [Int literal 5]
+        else body:
+        [Int literal 10]
+    ]
+]
+[Discard
+    [Int literal 56]
+]
+[Discard
+    [Block]
+        [Int literal 5]
+]
+

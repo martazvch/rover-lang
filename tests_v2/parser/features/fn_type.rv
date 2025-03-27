@@ -1,0 +1,6 @@
+fn factory() -> fn() -> void { }
+
+fn factory(arg: float) -> fn(float, bool) -> float { }
+
+fn factory(arg: fn() -> int) -> int { }
+
