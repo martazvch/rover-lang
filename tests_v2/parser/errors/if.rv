@@ -1,0 +1,4 @@
+if true 
+if true {} else = // '=' to avoid having a \n
+if true do print "ok" }
+

@@ -1,0 +1,16 @@
+// Global
+fn add(a: int) {}
+fn mul(a: int, b: float, c: float, d: bool, e: str) {}
+
+fn main() {
+    add(2)
+
+    // Local
+    fn sub(a: int) {}
+    sub(2)
+
+    // Arg cast
+    fn div(a: float, b: int, c: float, d: float, e: str) {}
+    div(2, 3, 45, 67., "yup")
+    mul(2, 3, 45, true, "yup")
+}

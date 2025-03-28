@@ -1,0 +1,3 @@
+IncompatibleFnType, bool, int
+IncompatibleFnType, fn() -> int, fn() -> bool
+IncompatibleFnType, fn() -> int, int

@@ -1,0 +1,41 @@
+fn main() {
+    // First error, retuns an int
+    var a = if true { return 1 } else 4
+    // Second, same with str
+    var b = if false do 5 else return "oui"
+
+    // If without else in non-partial context
+    var c = if true do 6
+
+    fn func(a: int, b: float) -> int {
+        // Returns b, which is a float
+        print if true do "str" else return b
+
+        var tmp: str = if true do return a + 2 else {
+            var local = 56.4
+            if false do "champ"
+        }
+
+        return if true {
+            if true {
+                return { 1. }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3
+            } else 8
+        }
+    }
+
+    fn func2() -> int {
+        return if true {
+            if true {
+                return { 1 }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3.6
+            } else 8
+        }
+    }
+}

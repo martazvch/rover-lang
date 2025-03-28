@@ -1,0 +1,24 @@
+[Fn declaration factory, index: 0, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 1, scope: Local, return kind: ImplicitVoid]
+    [Return expr: true, cast: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration factory1, index: 1, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 1, scope: Local, return kind: Explicit]
+        [Return expr: true, cast: false]
+            [Int 4]
+    [Return expr: true, cast: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration factory2, index: 2, scope: Global, return kind: Explicit]
+    [Fn declaration capture, index: 2, scope: Local, return kind: Explicit]
+        [Return expr: true, cast: false]
+            [Variable index: 1, scope: Local]
+    [Return expr: true, cast: false]
+        [Variable index: 2, scope: Local]
+
+[Fn declaration factory3, index: 3, scope: Global, return kind: ImplicitValue]
+    [Fn call arity: 0, builtin: false]
+        [Variable index: 1, scope: Local]
+
+[Fn declaration main, index: 4, scope: Global, return kind: ImplicitVoid]

@@ -1,0 +1,5 @@
+VoidParam
+DuplicateParam, arg1
+IncompatibleFnType, int, bool
+IncompatibleFnType, void, int
+AlreadyDeclared, bis

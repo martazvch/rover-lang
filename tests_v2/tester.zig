@@ -2,10 +2,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const print = std.debug.print;
-const builtin = @import("builtin");
 const eql = std.mem.eql;
+const builtin = @import("builtin");
 
 const clap = @import("clap");
+
 const Stage = enum { all, parser, analyzer, compiler, vm };
 
 pub fn main() !u8 {
@@ -54,7 +55,7 @@ pub fn main() !u8 {
 
     var tester = Tester.init(allocator, exe_path, diff);
     defer tester.deinit();
-    const success = try tester.run(res.args.stage orelse .parser);
+    const success = try tester.run(res.args.stage orelse .analyzer);
 
     return if (success) 0 else 1;
 }
@@ -188,7 +189,10 @@ const Tester = struct {
         // std.debug.print("Output file: {s}\n", .{output_file});
         // const output = std.fs.path.join(allocator, entry.path, entry.basename);
 
-        const argv = &[_][]const u8{ self.exe_path, entry.basename, stage_to_opt(stage) };
+        const argv = if (eql(u8, category, "warnings"))
+            &[_][]const u8{ self.exe_path, entry.basename, stage_to_opt(stage), "-s" }
+        else
+            &[_][]const u8{ self.exe_path, entry.basename, stage_to_opt(stage) };
 
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const path = try std.os.getFdPath(dir.fd, &buf);
@@ -201,7 +205,7 @@ const Tester = struct {
             .cwd = path,
             .argv = argv,
         }) catch |e| {
-            try self.diags.append(.{ .err_name = @errorName(e), .category = category });
+            print("Error launching rover process: {s}, argv: {s}\n", .{ @errorName(e), argv });
             return e;
         };
         defer self.allocator.free(res.stdout);
@@ -211,9 +215,7 @@ const Tester = struct {
         defer self.allocator.free(got);
 
         const file = dir.openFile(output_file, .{ .mode = .read_only }) catch |err| {
-            // var buf: [500]u8 = undefined;
-            _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, output_file });
-            print("{s}", .{buf});
+            print("Error: {s}, unable to open file at: {s}\n", .{ @errorName(err), output_file });
             std.process.exit(0);
         };
         defer file.close();
@@ -232,7 +234,7 @@ const Tester = struct {
             // std.debug.print("Got: --{s}--\n", .{got});
             try self.diags.append(.{
                 .category = category,
-                .diff = try self.colorized_dif(expect, got),
+                .diff = try self.colorized_dif(clean_expect, got),
                 .file_name = try self.allocator.dupe(u8, entry.basename),
             });
             return e;

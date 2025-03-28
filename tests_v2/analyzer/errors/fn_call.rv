@@ -1,0 +1,10 @@
+fn add(arg1: str) {}
+fn sub(arg1: float, args2: bool) {}
+
+
+fn main() {
+    add(1)
+    add(1, 2)
+    sub("true")
+    var a = add("hoy")
+}

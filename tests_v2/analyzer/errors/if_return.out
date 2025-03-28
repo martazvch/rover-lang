@@ -1,0 +1,17 @@
+IncompatibleFnType, void, int
+IncompatibleFnType, void, str
+
+// Partial if
+MissingElseClause, int
+
+// func return
+IncompatibleFnType, int, float
+
+// Partial if for tmp
+MissingElseClause, str
+
+// Nested if
+IncompatibleFnType, int, float
+
+// Func 2, very nested type error
+IncompatibleFnType, int, float

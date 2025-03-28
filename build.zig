@@ -111,10 +111,11 @@ pub fn build(b: *std.Build) !void {
     });
 
     testerv2_exe.root_module.addImport("clap", clap.module("clap"));
-    testerv2_exe.root_module.addImport("rover", rover_mod);
+    // testerv2_exe.root_module.addImport("rover", rover_mod);
     const install_testerv2 = b.addInstallArtifact(testerv2_exe, .{});
     const run_testerv2 = b.addRunArtifact(testerv2_exe);
     run_testerv2.step.dependOn(&install_testerv2.step);
+    run_testerv2.step.dependOn(b.getInstallStep());
     test_stepv2.dependOn(&run_testerv2.step);
 
     // if (b.args) |args|

@@ -46,8 +46,6 @@ InvalidAssignType, int, float
 ================
 
 code:
-// Declare local 0, declare local 1, use local 0 in binop
-// assign to local 1, returns local 0, defines global 0
 fn main() {
     var a: int = {
         var nb = 7

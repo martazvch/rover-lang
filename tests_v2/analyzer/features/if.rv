@@ -1,0 +1,38 @@
+fn main() {
+    var res = if true do 4 else 5.6
+    var res2 = if true {
+        5.6
+    } else 4
+
+    var res3 = if true {
+        8.7
+    } else if true {
+        6
+    } else { 4 }
+
+    _ = if true { "ok" } else "ko"
+    _ = if true do "ok"  else "ko"
+    _ = if true do false  else { true }
+
+    _ = if true {
+        var tmp = 5.5
+        var adder = 8.7
+        tmp + adder
+    } else 4
+
+    _ = if {
+        var tmp = true
+        var noise = 1
+        tmp
+    } do 1.5 else {4}
+
+    _ = if {
+        if true do true else false
+    } do 1 else {4.5}
+
+    fn add() -> int {
+        if true do return 1
+        2
+    }
+    _ = add()
+}

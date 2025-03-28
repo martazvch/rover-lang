@@ -1,26 +1,3 @@
-// If epxressions
-
-// Extras
-
-code:
-fn main() {
-    var res = if true do 4 else 5.6
-    var res2 = if true {
-        5.6
-    } else 4
-
-    var res3 = if true {
-        8.7
-    } else if true {
-        6
-    } else { 4 }
-
-    _ = if true { "ok" } else "ko"
-    _ = if true do "ok"  else "ko"
-    _ = if true do false  else { true }
-}
-
-expect:
 [Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Variable declaration index: 1, scope: Local]
         [If cast: Then, has else: true]
@@ -83,79 +60,37 @@ expect:
             [Block pop count: 0, is_expr: true]
                 [Bool true]
 
-================
-
-code:
-fn main() {
-    _ = if true {
-        var tmp = 5.5
-        var adder = 8.7
-        tmp + adder
-    } else 4
-}
-
-
-expect:
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Discard]
         [If cast: Else, has else: true]
         - condition:
             [Bool true]
         - then:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 1, scope: Local]
+                [Variable declaration index: 4, scope: Local]
                     [Float 5.5]
-                [Variable declaration index: 2, scope: Local]
+                [Variable declaration index: 5, scope: Local]
                     [Float 8.7]
                 [Binop type: AddFloat, cast: None]
-                    [Variable index: 1, scope: Local]
-                    [Variable index: 2, scope: Local]
+                    [Variable index: 4, scope: Local]
+                    [Variable index: 5, scope: Local]
         - else:
             [Int 4]
 
-================
-
-// Condition as block
-
-code:
-fn main() {
-    _ = if {
-        var tmp = true
-        var noise = 1
-        tmp
-    } do 1.5 else {4}
-}
-
-
-expect:
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Discard]
         [If cast: Else, has else: true]
         - condition:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 1, scope: Local]
+                [Variable declaration index: 4, scope: Local]
                     [Bool true]
-                [Variable declaration index: 2, scope: Local]
+                [Variable declaration index: 5, scope: Local]
                     [Int 1]
-                [Variable index: 1, scope: Local]
+                [Variable index: 4, scope: Local]
         - then:
             [Float 1.5]
         - else:
             [Block pop count: 0, is_expr: true]
                 [Int 4]
 
-================
-
-code:
-fn main() {
-    _ = if {
-        if true do true else false
-    } do 1 else {4.5}
-}
-
-
-expect:
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
     [Discard]
         [If cast: Then, has else: true]
         - condition:
@@ -173,39 +108,7 @@ expect:
             [Block pop count: 0, is_expr: true]
                 [Float 4.5]
 
-================
-
-// Non bool condition
-
-code:
-fn main() {
-    _ = if {
-        var tmp = 62
-        tmp
-    } do 1.5 else {4}
-}
-
-
-error:
-NonBoolCond, if, int
-ImplicitCast, else branch, float
-
-================
-
-// Partial return value
-
-code:
-fn main() {
-    fn add() -> int {
-        if true do return 1
-        2
-    }
-    _ = add()
-}
-
-expect:
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
-    [Fn declaration add, index: 1, scope: Local, return kind: ImplicitValue]
+    [Fn declaration add, index: 4, scope: Local, return kind: ImplicitValue]
         [If cast: None, has else: false]
         - condition:
             [Bool true]
@@ -215,78 +118,4 @@ expect:
         [Int 2]
     [Discard]
         [Fn call arity: 0, builtin: false]
-            [Variable index: 1, scope: Local]
-
-================
-
-// Missing else
-code:
-fn main() {
-    var res = if true {1}
-    var res = if true do -5.5
-}
-
-error:
-MissingElseClause, int
-MissingElseClause, float
-
-================
-
-// Incompatible types warnings
-
-config:
-static-analyzis
-
-code:
-fn main() {
-    var res = if true {1} else {5.6}
-    var res1 = if true {1.5} else {5*2}
-}
-
-error:
-ImplicitCast, then branch, float
-ImplicitCast, else branch, float
-
-================
-
-// Incompatible types errors
-
-code:
-fn main() {
-    var res = if true {1} else {"pipou"}
-    var res1 = if true {} else {
-        56. / 3.5
-    }
-
-    var res2 = if true do 1+2 else if false { 4.1 } else "dragon"
-
-    var res3 = if (true) {
-        24 / 2
-    } else if (true) do 5
-    else {
-        "you know"
-    }
-}
-
-error:
-IncompatibleIfType, int, str
-IncompatibleIfType, void, float
-IncompatibleIfType, float, str
-IncompatibleIfType, int, str
-
-================
-
-// Non expression if return a value
-
-code:
-fn main() {
-    if true do 1 else 2
-    if false {5.1} else 4.2
-}
-
-error:
-UnusedValue
-IncompatibleFnType, void, float
-
-================
-
+            [Variable index: 4, scope: Local]

@@ -1,0 +1,8 @@
+fn main() {
+    var a: int = {
+        var nb = 7
+        var c = 56
+        c = nb - 5
+        nb
+    }
+}

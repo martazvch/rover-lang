@@ -1,0 +1,38 @@
+[Fn declaration add, index: 0, scope: Global, return kind: ImplicitVoid]
+[Fn declaration mul, index: 1, scope: Global, return kind: ImplicitVoid]
+
+[Fn declaration main, index: 2, scope: Global, return kind: ImplicitVoid]
+    [Fn call arity: 1, builtin: false]
+        [Variable index: 0, scope: Global]
+        - args:
+        [Int 2]
+
+    // Local
+    [Fn declaration sub, index: 1, scope: Local, return kind: ImplicitVoid]
+    [Fn call arity: 1, builtin: false]
+        [Variable index: 1, scope: Local]
+        - args:
+        [Int 2]
+
+    // Arg cast
+    [Fn declaration div, index: 2, scope: Local, return kind: ImplicitVoid]
+    [Fn call arity: 5, builtin: false]
+        [Variable index: 2, scope: Local]
+        - args:
+        [Int 2]
+        [Cast to Float]
+        [Int 3]
+        [Int 45]
+        [Cast to Float]
+        [Float 67]
+        [String yup]
+    [Fn call arity: 5, builtin: false]
+        [Variable index: 1, scope: Global]
+        - args:
+        [Int 2]
+        [Int 3]
+        [Cast to Float]
+        [Int 45]
+        [Cast to Float]
+        [Bool true]
+        [String yup]

@@ -1,0 +1,28 @@
+// Global
+fn add(a: int) {}
+
+fn main() {
+    // Local
+    {
+        fn another_bool(a: int, b: str) -> bool {
+            var tmp = 5
+            true or false
+        }
+    }
+
+    // Nested
+    fn add1(a:int, b:float) {
+        fn sub(a:int) -> str {
+            print a
+            "yes"
+        }
+
+        _ = sub(1)
+    }
+}
+
+// Return kinds
+fn add1() { return }
+fn add2() -> int { 5 }
+fn add3()  {  }
+fn add4() -> int { return 5 }

@@ -1,0 +1,14 @@
+fn main() {}
+fn add1(arg1: void) {}
+fn add2(arg1: int, arg1: float) {}
+
+fn add3() -> int {
+    true
+}
+
+fn add4() {
+    1+1
+}
+
+fn bis() {}
+fn bis() {}

@@ -1,0 +1,38 @@
+// Note: when declaring a heap variable, the locals list doesn't change,
+// because it would be to costy to back patch each local declaration after
+// we see that we need to capture the variable.
+// Instead, it's on the compiler side that we add a 'tombstone' value on the
+// stack to keep it synchronized with the analyzer's work.
+// It's normal that local's index increases as if heap variable were on the stack
+
+
+fn main() {
+    // Near scope capture
+    var a: int = 3
+
+    fn capture() { print a }
+
+    // Far scope capture
+    var first = 1
+    var c: int = 3
+    var b = true
+    var last = 9
+
+    fn nested() {
+        var mach
+        var mach2 = c
+
+        fn nested2() {
+            var mach3
+
+            fn capture1() { print b }
+        }
+    }
+
+    // Assignment
+    var d = 1
+
+    fn capture2() { print d }
+
+    d = 2
+}

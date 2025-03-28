@@ -1,0 +1,17 @@
+fn factory(arg: fn() -> int) -> bool {
+    arg()
+}
+
+fn factory2() -> fn() -> int {
+    fn capture() -> bool { return false }
+
+    return capture
+}
+
+fn factory3() -> fn() -> int {
+    fn capture() -> int { return 4 }
+
+    return 5
+}
+
+fn main() {}

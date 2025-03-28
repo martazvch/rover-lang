@@ -1,0 +1,7 @@
+fn main() {
+    _ = 1 + 2.
+    _ = 5.6 + 4
+    _ = "steak" * 3
+    _ = 5 * "house"
+    _ = "juicy " + "orange"
+}

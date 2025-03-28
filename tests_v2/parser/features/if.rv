@@ -1,0 +1,48 @@
+if true { print "ok" }
+if true {
+    print "ok"
+}
+
+if true
+{
+    print "ok"
+}
+else print "ko"
+
+if true {
+    print "ok" } else {
+    print "ko" }
+
+
+// Condition as block
+
+if {
+    print "in cond"
+    false
+}{
+    print "ok"
+}
+
+
+// Do syntaxe
+
+if true do print "ok"
+
+if true do print "ok"
+else print "ko"
+
+if true do print "ok"
+else { print "ko" }
+
+
+// Else if
+
+if true do print "ok"
+else if true do print "elseif"
+else print "ko"
+
+
+// If as expression
+
+var _res = if true do 5 else 10
+

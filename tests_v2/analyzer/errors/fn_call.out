@@ -1,0 +1,4 @@
+TypeMismatch, str, int
+WrongFnArgsCount, 1, 2
+WrongFnArgsCount, 2, 1
+VoidAssignment

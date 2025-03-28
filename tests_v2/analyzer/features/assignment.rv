@@ -1,0 +1,27 @@
+var noval
+noval = 1
+
+var noval_type : float
+noval_type = .7
+
+var noval_binop
+noval_binop = 12/-.7
+
+var noval_binop_typed: float
+noval_binop_typed = 1/2
+
+// Implicit cast
+var noval2: float
+noval2 = 1
+
+// Locals
+fn main() {
+    var noval: float
+    noval = 1
+
+    {
+        var noval = 1
+        print noval
+    }
+    print noval
+}

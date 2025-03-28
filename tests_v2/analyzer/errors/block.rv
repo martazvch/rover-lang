@@ -1,0 +1,21 @@
+fn main() {
+    // Void assignment
+    var noval = {
+        var integer = 1
+    }
+
+    var void_post_assign
+    void_post_assign = {
+        _ = 3 + 4
+        var empty
+    }
+
+    // Unused value
+    {5}
+
+    // Invalid type
+    var a: int = {
+        var nb = 7.5
+        nb
+    }
+}

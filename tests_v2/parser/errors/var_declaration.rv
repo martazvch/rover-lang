@@ -1,0 +1,5 @@
+var
+var : House
+var home House
+var home : 12+4
+var home : House = var a

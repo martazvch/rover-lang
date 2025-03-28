@@ -1140,7 +1140,8 @@ pub const Analyzer = struct {
             // If last expression produced a value and that it wasn't the last one and it
             // wasn't a return, error
             if (body_type != Void and i != length - 1 and !prev_state.returns) {
-                return self.err(.UnusedValue, self.to_span(start));
+                // return self.err(.UnusedValue, self.to_span(start));
+                self.err(.UnusedValue, self.to_span(start)) catch {};
             }
         }
 
