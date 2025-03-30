@@ -7,10 +7,6 @@ fn main() {
     var res = if true {1}
     var res2 = if true do -5.5
 
-    var res = if true {1} else {5.6}
-    var res1 = if true {1.5} else {5*2}
-
-
     var res3 = if true {1} else {"pipou"}
     var res4 = if true {} else {
         56. / 3.5
@@ -25,7 +21,9 @@ fn main() {
         "you know"
     }
 
-
     if true do 1 else 2 
     if false {5.1} else 4.2
+
+    var res = if true {1} else {5.6}
+    var res1 = if true {1.5} else {5*2}
 }

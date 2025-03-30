@@ -1,11 +1,12 @@
 NonBoolCond, if, int
 MissingElseClause, int
 MissingElseClause, float
-ImplicitCast, then branch, float
-ImplicitCast, else branch, float
 IncompatibleIfType, int, str
 IncompatibleIfType, void, float
 IncompatibleIfType, float, str
 IncompatibleIfType, int, str
 UnusedValue
-IncompatibleFnType, void, float
+UnusedValue
+ImplicitCast, else branch, float
+ImplicitCast, then branch, float
+ImplicitCast, else branch, float
