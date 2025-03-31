@@ -69,57 +69,28 @@ pub fn build(b: *std.Build) !void {
     // -------
     //  Tests
     // -------
-    const test_step = b.step("test", "Run unit tests");
 
-    // Tester
-    const tester_mod = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("tests/tester.zig"),
-    });
-    const tester_exe = b.addExecutable(.{
-        .name = "rover-tester",
-        .root_module = tester_mod,
-    });
-
-    tester_exe.root_module.addImport("clap", clap.module("clap"));
-    const install_tester = b.addInstallArtifact(tester_exe, .{});
-    const run_tester = b.addRunArtifact(tester_exe);
-    run_tester.step.dependOn(&install_tester.step);
-    run_tester.step.dependOn(b.getInstallStep());
-    test_step.dependOn(&run_tester.step);
-
-    if (b.args) |args|
-        run_tester.addArgs(args)
-    else
-        run_tester.addArg("--stage=all");
-
-    // ----------
-    //  Tests v2
-    // ----------
-
-    const test_stepv2 = b.step("tests_v2", "Run new tests");
+    const test_stepv2 = b.step("test", "Run new tests");
 
     const testerv2_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("tests_v2/tester.zig"),
+        .root_source_file = b.path("tests/tester.zig"),
     });
     const testerv2_exe = b.addExecutable(.{
-        .name = "rover-tester-v2",
+        .name = "rover-tester",
         .root_module = testerv2_mod,
     });
 
     testerv2_exe.root_module.addImport("clap", clap.module("clap"));
-    // testerv2_exe.root_module.addImport("rover", rover_mod);
     const install_testerv2 = b.addInstallArtifact(testerv2_exe, .{});
     const run_testerv2 = b.addRunArtifact(testerv2_exe);
     run_testerv2.step.dependOn(&install_testerv2.step);
     run_testerv2.step.dependOn(b.getInstallStep());
     test_stepv2.dependOn(&run_testerv2.step);
 
-    // if (b.args) |args|
-    //     run_testerv2.addArgs(args)
-    // else
-    //     run_testerv2.addArg("--stage=all");
+    if (b.args) |args|
+        run_testerv2.addArgs(args)
+    else
+        run_testerv2.addArg("--stage=all");
 }

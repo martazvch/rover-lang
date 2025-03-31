@@ -1,0 +1,9 @@
+fn sub() -> bool { false }
+
+fn main() {
+    var a, b = 1 * (56 - 2), sub()
+    // Here b has been infered as bool
+    b = 5
+
+    var c, d: int = 1 * (56 - 2), sub()
+}

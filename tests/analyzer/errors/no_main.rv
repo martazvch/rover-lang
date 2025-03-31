@@ -1,0 +1,2 @@
+var main = 1
+fn add(a: int, b: int) {}

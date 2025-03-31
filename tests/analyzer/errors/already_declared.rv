@@ -1,0 +1,6 @@
+fn main() {
+    {
+        var loc1 = "local"
+        var loc1 = " var"
+    }
+}

@@ -1,0 +1,15 @@
+var a = 7.5 // float
+var b: float = 1.2
+var res = true // bool
+
+fn get_bool() -> bool { return true }
+
+fn main() {
+    // No cast here, it recognized 2 floats
+    print a + b
+    // Only bool allowed here
+    print not res
+
+    var bo = get_bool() // infered as bool
+    print not bo // 'not' only allowed with booleans
+}

@@ -1,0 +1,5 @@
+fn main() {
+    _ = -6.7
+    _ = not not true
+    _ = --5
+}

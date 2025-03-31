@@ -1,0 +1,4 @@
+NonBoolCond, while, int
+NonBoolCond, while, str
+NonVoidWhile, str
+NonVoidWhile, int

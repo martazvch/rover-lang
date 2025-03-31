@@ -1,0 +1,10 @@
+use std.blender
+use ctd.blender
+
+fn main() {
+    {
+        use std.time
+    }
+
+    print clock()
+}

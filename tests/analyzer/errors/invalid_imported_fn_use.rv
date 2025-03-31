@@ -1,0 +1,13 @@
+use std._test1
+
+fn main() {
+    _cast_i2f(4.5)
+
+    var res: bool = _cast_i2f(4)
+
+    fn return_bool() -> bool {
+        _cast_f2i(true, 2.)
+    }
+
+    _cast_f2i(true, "ok")
+}

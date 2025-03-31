@@ -1,0 +1,22 @@
+-- add1 --
+OP_CONSTANT index 0, value 1
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 3
+OP_ADD_INT
+OP_GET_LOCAL index 2
+OP_RETURN
+
+-- main --
+OP_CONSTANT index 0, value <fn add1>
+OP_GET_LOCAL index 1
+OP_CONSTANT index 1, value 1
+OP_CONSTANT index 2, value 2
+OP_CALL index 2
+OP_POP
+OP_NAKED_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn main>
+OP_DEFINE_GLOBAL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0

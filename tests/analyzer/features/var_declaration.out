@@ -1,0 +1,23 @@
+[Variable declaration index: 0, scope: Global]
+    [Int 0]
+[Variable declaration index: 1, scope: Global]
+    [Bool true]
+[Variable declaration index: 2, scope: Global]
+    [Float 56.7]
+
+[Variable declaration index: 3, scope: Global]
+    [Binop type: DivInt, cast: None]
+        [Int 12]
+        [Int 34]
+
+[Variable declaration index: 4, scope: Global]
+    [Binop type: DivInt, cast: None]
+        [Int 12]
+        [Int 34]
+    [Cast to Float]
+[Variable declaration index: 5, scope: Global]
+    [Binop type: DivFloat, cast: Rhs]
+        [Float 4]
+        [Int 3]
+
+[Fn declaration main, index: 6, scope: Global, return kind: ImplicitVoid]

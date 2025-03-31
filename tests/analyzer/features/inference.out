@@ -1,0 +1,27 @@
+[Variable declaration index: 0, scope: Global]
+    [Float 7.5]
+[Variable declaration index: 1, scope: Global]
+    [Float 1.2]
+[Variable declaration index: 2, scope: Global]
+    [Bool true]
+
+[Fn declaration get_bool, index: 3, scope: Global, return kind: Explicit]
+    [Return expr: true, cast: false]
+        [Bool true]
+
+[Fn declaration main, index: 4, scope: Global, return kind: ImplicitVoid]
+    [Print]
+        [Binop type: AddFloat, cast: None]
+            [Variable index: 0, scope: Global]
+            [Variable index: 1, scope: Global]
+
+    [Print]
+        [Unary Bang]
+            [Variable index: 2, scope: Global]
+
+    [Variable declaration index: 1, scope: Local]
+        [Fn call arity: 0, builtin: false]
+            [Variable index: 3, scope: Global]
+    [Print]
+        [Unary Bang]
+            [Variable index: 1, scope: Local]

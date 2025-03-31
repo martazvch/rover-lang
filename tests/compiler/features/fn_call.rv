@@ -1,0 +1,27 @@
+// Empty
+fn add() {}
+// With args
+fn add1(arg1: int, arg2: float,) {}
+
+// Return kinds
+fn add2(arg1: int, arg2: float,) -> float {
+    arg2
+}
+fn add3(arg1: str) -> str {
+    return arg1
+}
+fn add4() {
+    return
+}
+
+// Body and args
+fn add5(arg1: int, arg2: float,) -> float {
+    var tmp = 1
+    var local = arg1 + tmp
+    arg2
+}
+
+fn main() {
+    add()
+    add1(1, 2.5)
+}

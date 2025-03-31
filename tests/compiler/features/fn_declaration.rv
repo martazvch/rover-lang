@@ -1,0 +1,11 @@
+fn add() {}
+fn mul(a:int) {}
+fn sub(a:int, b: float) -> int {
+    5
+}
+
+fn main() {
+    {
+        fn div() {}
+    }
+}

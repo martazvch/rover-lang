@@ -1,0 +1,12 @@
+InvalidArithmetic, bool
+InvalidArithmetic, null
+InvalidArithmetic, str
+
+InvalidArithmetic, null
+InvalidArithmetic, bool
+InvalidArithmetic, str
+
+InvalidComparison, int, bool
+InvalidComparison, str, bool
+InvalidComparison, bool, float
+InvalidComparison, int, str

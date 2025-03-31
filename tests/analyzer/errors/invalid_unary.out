@@ -1,0 +1,3 @@
+InvalidArithmetic, bool
+InvalidArithmetic, null
+InvalidUnary, float

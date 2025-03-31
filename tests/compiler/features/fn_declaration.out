@@ -1,0 +1,32 @@
+-- add --
+OP_NAKED_RETURN
+
+-- mul --
+OP_NAKED_RETURN
+
+-- sub --
+OP_CONSTANT index 0, value 5
+OP_RETURN
+
+-- div --
+OP_NAKED_RETURN
+
+-- main --
+OP_CONSTANT index 0, value <fn div>
+OP_POP
+OP_NAKED_RETURN
+
+-- Global scope --
+OP_CONSTANT index 0, value <fn add>
+OP_DEFINE_GLOBAL index 0
+
+OP_CONSTANT index 1, value <fn mul>
+OP_DEFINE_GLOBAL index 1
+
+OP_CONSTANT index 2, value <fn sub>
+OP_DEFINE_GLOBAL index 2
+
+OP_CONSTANT index 3, value <fn main>
+OP_DEFINE_GLOBAL index 3
+OP_GET_GLOBAL index 3
+OP_CALL index 0

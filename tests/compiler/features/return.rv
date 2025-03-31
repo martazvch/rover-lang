@@ -1,0 +1,4 @@
+fn add() { return }
+fn sub() -> int { return 5 }
+fn mul(a: int) -> float { return a * sub() }
+fn main() {}

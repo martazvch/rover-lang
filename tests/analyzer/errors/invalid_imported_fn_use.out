@@ -1,0 +1,4 @@
+TypeMismatch, int, float
+InvalidAssignType, bool, float
+IncompatibleFnType, bool, int
+TypeMismatch, float, str

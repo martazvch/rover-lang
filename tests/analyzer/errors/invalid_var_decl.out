@@ -1,0 +1,10 @@
+InvalidAssignType, int, float
+InvalidAssignType, float, str
+InvalidAssignType, bool, int
+InvalidAssignType, str, int
+
+UndeclaredType, floa
+UndeclaredType, Int
+UndeclaredType, House
+
+AlreadyDeclared, declared

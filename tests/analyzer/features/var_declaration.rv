@@ -1,0 +1,10 @@
+var a = 0
+var b = true
+var c = 56.7
+
+var d = 12 / 34
+
+var e: float = 12 / 34
+var f: float = 4. / 3
+
+fn main() {}

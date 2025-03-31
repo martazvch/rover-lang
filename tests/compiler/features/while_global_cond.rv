@@ -1,0 +1,8 @@
+var i = 0
+
+fn main() {
+    while i<4 {
+        print i
+        i = i + 1
+    }
+}

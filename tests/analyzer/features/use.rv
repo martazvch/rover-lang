@@ -1,0 +1,25 @@
+use std._test1
+
+fn main() {
+    print _cast_i2f(12)
+
+    {
+        print _cast_f2i(true, 5)
+    }
+
+    {
+        use std._test1
+        print _cast_f2i(false, 3.)
+    }
+    {
+        var tmp = 1
+        use std._test1
+        print _cast_i2f(56)
+    }
+
+    // reimport locally
+    use std._test1
+    {
+        use std._test1
+    }
+}

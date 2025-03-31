@@ -1,0 +1,25 @@
+// Note:
+//  - each jump count as 3 OP (the jump + 2x8bits jump value)
+//  - OP count begins at 0
+//  - we jump just after the other JUMP (on the POP) to exit the then branch
+
+fn main() {
+    if true do print "yes"
+
+    if true and false { print "yes" }
+
+    if true and false { print "yes" } else { print "no" }
+
+    var a = if true {1} else {2}
+
+    var b = if { true } do 5 + 6 else {
+        1
+    }
+
+    var c = if { not true } { 5 + 6 } else {
+        var tmp = 1
+        print tmp
+        tmp = 5
+        a + b + tmp
+    }
+}
