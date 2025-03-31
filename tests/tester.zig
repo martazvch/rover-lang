@@ -252,9 +252,10 @@ const Tester = struct {
             if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " "), "//")) continue;
 
             // If after removing the \r there is only spaces, we skip it
-            if (std.mem.trimRight(u8, std.mem.trimRight(u8, line, "\r"), " ").len == 0) continue;
+            const trimmed = std.mem.trimRight(u8, line, "\r");
+            if (std.mem.trimRight(u8, trimmed, " ").len == 0) continue;
 
-            try res.appendSlice(line);
+            try res.appendSlice(trimmed);
             try res.append('\n');
         }
 
