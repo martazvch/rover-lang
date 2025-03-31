@@ -21,9 +21,6 @@ pub fn parse() void {
         .{ .Int = 1 },
     };
 
-    const wrapped: NativeWrap(add) = .{};
-    std.debug.print("Called: {}\n", .{wrapped.call(stack)});
-
     const wrapped_add: NativeWrap(add) = .{};
 
     const container: Container = .{
