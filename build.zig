@@ -69,9 +69,9 @@ pub fn build(b: *std.Build) !void {
     // -------
     //  Tests
     // -------
+    const test_step = b.step("test", "Run unit tests");
 
-    const test_step = b.step("test", "Run tests");
-
+    // Tester
     const tester_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,

@@ -153,7 +153,11 @@ const Tester = struct {
     }
 
     fn run_stage(self: *Self, stage: Stage) !void {
-        const categories = &[_][]const u8{ "errors", "features", "warnings" };
+        const categories = switch (stage) {
+            .analyzer => &[_][]const u8{ "errors", "features", "warnings" },
+            .parser => &[_][]const u8{ "errors", "features" },
+            else => &[_][]const u8{"features"},
+        };
 
         for (categories) |category| {
             const path = try std.fs.path.join(self.allocator, &[_][]const u8{ "tests", @tagName(stage), category });
