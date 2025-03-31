@@ -34,7 +34,7 @@ const Str = TypeSys.Str;
 pub const TypeManager = struct {
     declared: std.AutoHashMap(usize, Type),
     type_infos: ArrayList(TypeInfo),
-    builtins: BuiltinAnalyzer = builtin_init(),
+    natives: BuiltinAnalyzer = builtin_init(),
 
     const Self = @This();
     const Error = error{TooManyTypes} || std.fmt.BufPrintError || Allocator.Error;
@@ -93,10 +93,10 @@ pub const TypeManager = struct {
         return typ;
     }
 
-    /// Use builtins function whose informations are gathered at compile time. Import the
+    /// Use natives function whose informations are gathered at compile time. Import the
     /// informations among other declared types
-    pub fn import_builtins(self: *Self, name: []const u8) !?std.StaticStringMap(FnDeclaration) {
-        return self.builtins.declarations.get(name);
+    pub fn import_natives(self: *Self, name: []const u8) !?std.StaticStringMap(FnDeclaration) {
+        return self.natives.declarations.get(name);
     }
 
     // Used only in error mode, no need for performance. If used in
@@ -1529,7 +1529,7 @@ pub const Analyzer = struct {
 
             // 1 less because we parsed "std"
             for (0..self.node_data[node] - 1) |_| {
-                if (try self.type_manager.import_builtins(self.source_from_node(self.node_idx))) |module| {
+                if (try self.type_manager.import_natives(self.source_from_node(self.node_idx))) |module| {
                     const all_fn_names = module.keys();
 
                     for (all_fn_names) |fn_name| {

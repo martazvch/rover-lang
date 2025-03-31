@@ -128,7 +128,7 @@ pub const Pipeline = struct {
         // Compiler
         var compiler = CompilationManager.init(
             self.vm,
-            self.analyzer.type_manager.builtins.functions,
+            self.analyzer.type_manager.natives.functions,
             &self.analyzer.interner,
             self.instr_count,
             &self.analyzer.instructions,

@@ -5,9 +5,15 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
+const std_parser = @import("std_parser.zig");
+
 pub const Vm = @import("runtime/vm.zig").Vm;
 
 pub fn main() !void {
+    std_parser.parse();
+
+    std.process.exit(0);
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const status = gpa.deinit();
