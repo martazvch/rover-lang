@@ -4,6 +4,7 @@ var globalGet
 fn set_vars() {
     var a = "init"
 
+    // Here, assignment refers to heap variable
     fn set() { a = "updated" }
     fn get() { print a }
 

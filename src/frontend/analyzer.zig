@@ -607,12 +607,13 @@ pub const Analyzer = struct {
         var cast = false;
 
         const assigne_idx = self.node_idx;
-        const idx = try self.add_instr(.{ .tag = .Assignment, .data = undefined }, assigne_idx);
+        const idx = try self.add_instr(.{ .tag = .Assignment }, assigne_idx);
 
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
                 // TODO: check if this is a function's parameter (there are constant by defninition)
-                const assigne = try self.resolve_identifier(assigne_idx, false);
+                // const assigne = try self.resolve_identifier(assigne_idx, false);
+                const assigne = try self.identifier(assigne_idx, false);
 
                 const value_idx = self.node_idx;
                 const value_type = try self.analyze_node(value_idx);
@@ -653,18 +654,7 @@ pub const Analyzer = struct {
 
                 if (!assigne.initialized) assigne.initialized = true;
 
-                self.instructions.items(.data)[idx] = .{ .Assignment = .{
-                    .variable = .{
-                        .index = @intCast(assigne.index),
-                        .scope = if (assigne.captured)
-                            .Heap
-                        else if (assigne.depth > 0)
-                            .Local
-                        else
-                            .Global,
-                    },
-                    .cast = cast,
-                } };
+                self.instructions.items(.data)[idx] = .{ .Assignment = .{ .cast = cast } };
             },
             // Later, manage member, pointer, ...
             else => return self.err(.InvalidAssignTarget, self.to_span(assigne_idx)),

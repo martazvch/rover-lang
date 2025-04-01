@@ -92,7 +92,7 @@ pub const Instruction = struct {
         };
     };
 
-    pub const Assignment = struct { variable: Variable, cast: bool };
+    pub const Assignment = struct { cast: bool };
     pub const Block = packed struct { length: usize, pop_count: u8, is_expr: bool };
     pub const FnCall = struct { arity: u8, builtin: bool };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };

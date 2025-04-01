@@ -257,25 +257,33 @@ const Compiler = struct {
     }
 
     fn assignment(self: *Self) Error!void {
-        const data = self.get_data().Assignment;
+        const assign_data = self.get_data().Assignment;
         const start = self.get_start();
-        self.manager.instr_idx += 1;
+        const data_idx = self.manager.instr_idx + 1;
 
+        const data = if (self.manager.instr_tags[data_idx] == .IdentifierId)
+            self.manager.instr_data[self.manager.instr_data[data_idx].Id].VarDecl.variable
+        else
+            self.manager.instr_data[data_idx].Variable;
+
+        self.manager.instr_idx += 2;
+
+        // Value
         try self.compile_instr();
 
         // We cast the value on top of stack if needed
-        if (data.cast) try self.compile_instr();
+        if (assign_data.cast) try self.compile_instr();
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (data.variable.scope == .Global)
+            if (data.scope == .Global)
                 .SetGlobal
-            else if (data.variable.scope == .Heap)
+            else if (data.scope == .Heap)
                 .SetHeap
             else
                 .SetLocal,
-            @intCast(data.variable.index),
+            @intCast(data.index),
             start,
         );
     }

@@ -132,19 +132,25 @@ pub const RirRenderer = struct {
     }
 
     fn assignment(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].Assignment;
+        const assign_data = self.instr_data[instr].Assignment;
+        self.instr_idx += 1;
+
+        const data = if (self.instr_tags[instr + 1] == .IdentifierId)
+            self.instr_data[self.instr_data[instr + 1].Id].VarDecl.variable
+        else
+            self.instr_data[instr + 1].Variable;
 
         var writer = self.tree.writer();
         try self.indent();
         try writer.print("[Assignment index: {}, scope: {s}]\n", .{
-            data.variable.index, @tagName(data.variable.scope),
+            data.index, @tagName(data.scope),
         });
 
         self.instr_idx += 1;
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
 
-        if (data.cast) try self.parse_instr(self.instr_idx);
+        if (assign_data.cast) try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 

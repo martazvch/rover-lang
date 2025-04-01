@@ -1,0 +1,42 @@
+-- set --
+OP_CONSTANT index 0, value "updated"
+OP_SET_HEAP index 0
+OP_NAKED_RETURN
+
+-- get --
+OP_GET_HEAP index 0
+OP_PRINT
+OP_NAKED_RETURN
+
+-- set_vars --
+OP_CONSTANT index 0, value "init"
+OP_DEFINE_HEAP_VAR index 0
+OP_NULL
+OP_CONSTANT index 1, value <fn set>
+OP_CONSTANT index 2, value <fn get>
+OP_GET_LOCAL index 2
+OP_SET_GLOBAL index 0
+OP_GET_LOCAL index 3
+OP_SET_GLOBAL index 1
+OP_NAKED_RETURN
+
+-- main --
+OP_GET_GLOBAL index 2
+OP_CALL index 0
+OP_GET_GLOBAL index 0
+OP_CALL index 0
+OP_GET_GLOBAL index 1
+OP_CALL index 0
+OP_NAKED_RETURN
+
+-- Global scope --
+OP_NULL
+OP_DEFINE_GLOBAL index 0
+OP_NULL
+OP_DEFINE_GLOBAL index 1
+OP_CONSTANT index 0, value <fn set_vars>
+OP_DEFINE_GLOBAL index 2
+OP_CONSTANT index 1, value <fn main>
+OP_DEFINE_GLOBAL index 3
+OP_GET_GLOBAL index 3
+OP_CALL index 0
