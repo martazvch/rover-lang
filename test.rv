@@ -1,19 +1,4 @@
-var globalSet
-var globalGet
-
-fn set_vars() {
-    var a = "init"
-
-    fn set() { a = "updated" }
-    fn get() { print a }
-
-    globalSet = set
-    globalGet = get
-}
-
-fn main() {
-    set_vars()
-
-    globalSet()
-    globalGet()
-}
+fn add() { return }
+fn sub() -> int { return 5 }
+fn mul(a: int) -> float { return a * sub() }
+fn main() {}

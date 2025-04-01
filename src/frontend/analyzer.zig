@@ -1020,6 +1020,13 @@ pub const Analyzer = struct {
 
         errdefer {
             self.local_offset = save_local_offset;
+
+            if (self.scope_depth > save_scope_depth) {
+                for (0..self.scope_depth - save_scope_depth) |_| {
+                    _ = self.end_scope() catch @panic("OOM");
+                }
+            }
+
             self.scope_depth = save_scope_depth;
         }
 
@@ -1203,6 +1210,7 @@ pub const Analyzer = struct {
         const variable = try self.resolve_identifier(node, initialized);
 
         if (variable.kind == .param or variable.kind == .import) {
+            // Params and imports aren't declared so we can't reference them, they just live on stack
             _ = try self.add_instr(
                 .{ .tag = .Identifier, .data = .{ .Variable = .{
                     .index = @intCast(variable.index),

@@ -1,3 +1,13 @@
+fn outer() {
+    var x = "outside"
+
+    fn inner() {
+        print x
+    }
+
+    inner()
+}
+
 fn main() {
     var a = 1
 
@@ -6,5 +16,7 @@ fn main() {
     capture() // expect: 1
     a = 2
     capture() // expect: 2
+
+    outer()
 }
 
