@@ -1,4 +1,15 @@
-fn add() { return }
-fn sub() -> int { return 5 }
-fn mul(a: int) -> float { return a * sub() }
-fn main() {}
+// Binary operations with scalar types
+
+// Ints
+
+fn add(a: int, b: int) -> int { a + b }
+
+fn main() {
+
+    // Strings
+    print "Tom is " + "poor" // expect: "Tom is poor"
+
+    // Functions call
+    print -20 / add(5, 5) // expect: -2
+
+}

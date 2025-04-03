@@ -52,7 +52,6 @@ const Stack = struct {
 };
 
 const CallFrame = struct {
-    // closure: *ObjClosure,
     function: *ObjFunction,
     ip: [*]u8,
     slots: [*]Value,
@@ -98,6 +97,7 @@ pub const Vm = struct {
     frame_stack: FrameStack,
     ip: [*]u8,
     allocator: Allocator,
+    gc_alloc: Allocator,
     stdout: std.fs.File.Writer,
     strings: Table,
     objects: ?*Obj,
@@ -126,6 +126,7 @@ pub const Vm = struct {
     pub const empty: Self = .{
         .pipeline = undefined,
         .gc = undefined,
+        .gc_alloc = undefined,
         .stack = .empty,
         .frame_stack = .empty,
         .ip = undefined,
@@ -138,9 +139,11 @@ pub const Vm = struct {
     };
 
     pub fn init(self: *Self, allocator: Allocator, config: Config) !void {
+        self.allocator = allocator;
         // TODO: pass self instead of calling link after
+        // TODO: pass an ObjectPoolAlloc?
         self.gc = .init(allocator);
-        self.allocator = self.gc.allocator();
+        self.gc_alloc = self.gc.allocator();
         self.stdout = std.io.getStdOut().writer();
         self.gc.link(self);
         try self.pipeline.init(self, config);
@@ -203,6 +206,7 @@ pub const Vm = struct {
             else => return e,
         };
         try self.call(func, 0);
+        self.gc.active = true;
         try self.execute();
     }
 
@@ -433,7 +437,7 @@ pub const Vm = struct {
         const s2 = self.stack.peek_ref(0).Obj.as(ObjString);
         const s1 = self.stack.peek_ref(1).Obj.as(ObjString);
 
-        const res = try self.allocator.alloc(u8, s1.chars.len + s2.chars.len);
+        const res = try self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len);
         @memcpy(res[0..s1.chars.len], s1.chars);
         @memcpy(res[s1.chars.len..], s2.chars);
 
@@ -447,7 +451,7 @@ pub const Vm = struct {
     fn str_mul(self: *Self, str: *const ObjString, factor: i64) !void {
         // BUG: Check if factor is positive
         const f = @as(usize, @intCast(factor));
-        const res = try self.allocator.alloc(u8, str.chars.len * f);
+        const res = try self.gc_alloc.alloc(u8, str.chars.len * f);
         for (0..f) |i| {
             @memcpy(res[i * str.chars.len .. (i + 1) * str.chars.len], str.chars);
         }

@@ -15,21 +15,19 @@ pub const Obj = struct {
 
     const ObjKind = enum {
         // BoundMethod,
-        // Closure,
         Fn,
         // Instance,
         // Iter,
         NativeFn,
         String,
         // Struct,
-        // UpValue,
     };
 
     pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
         comptime assert(@hasField(T, "obj"));
         comptime assert(@hasDecl(T, "as_obj"));
 
-        const ptr = try vm.allocator.create(T);
+        const ptr = try vm.gc_alloc.create(T);
         ptr.obj = .{
             .kind = kind,
             .next = vm.objects,
@@ -39,20 +37,18 @@ pub const Obj = struct {
         vm.objects = &ptr.obj;
 
         if (comptime options.log_gc) {
-            std.debug.print("{*} allocate {} bytes  ", .{ ptr, @sizeOf(T) });
+            std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
         }
 
         return ptr;
     }
 
-    // NOTE: lots of repetition...
     pub fn destroy(self: *Obj, vm: *Vm) void {
         switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
-            // .Closure => self.as(ObjClosure).deinit(vm.allocator),
             .Fn => {
                 const function = self.as(ObjFunction);
-                function.deinit(vm.allocator);
+                function.deinit(vm.gc_alloc);
             },
             // .Instance => {
             //     const instance = self.as(ObjInstance);
@@ -64,16 +60,12 @@ pub const Obj = struct {
             // },
             .NativeFn => {
                 const function = self.as(ObjNativeFn);
-                function.deinit(vm.allocator);
+                function.deinit(vm.gc_alloc);
             },
-            .String => self.as(ObjString).deinit(vm.allocator),
+            .String => self.as(ObjString).deinit(vm.gc_alloc),
             // .Struct => {
             //     const structure = self.as(ObjStruct);
             //     structure.deinit(vm.allocator);
-            // },
-            // .UpValue => {
-            //     const upval = self.as(ObjUpValue);
-            //     upval.deinit(vm.allocator);
             // },
         }
     }
@@ -97,8 +89,23 @@ pub const Obj = struct {
             .NativeFn => writer.print("<native fn>", .{}),
             .String => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
             // .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
-            // .UpValue => writer.print("upvalue", .{}),
         };
+    }
+
+    pub fn log(self: *Obj) void {
+        switch (self.kind) {
+            // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
+            // .Closure => self.as(ObjClosure).function.print(writer),
+            .Fn => self.as(ObjFunction).log(),
+            // .Instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
+            // .Iter => {
+            //     const iter = self.as(ObjIter);
+            //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
+            // },
+            .NativeFn => std.debug.print("<native fn>", .{}),
+            .String => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
+            // .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+        }
     }
 };
 
@@ -135,8 +142,15 @@ pub const ObjString = struct {
 
         if (interned) |i| return i;
 
-        const chars = try vm.allocator.alloc(u8, str.len);
+        const chars = try vm.gc_alloc.alloc(u8, str.len);
         @memcpy(chars, str);
+
+        if (options.log_gc) {
+            std.debug.print(
+                "{*} allocate {} bytes for copying: {s}\n",
+                .{ chars.ptr, chars.len, chars },
+            );
+        }
 
         return ObjString.create(vm, chars, hash);
     }
@@ -148,7 +162,7 @@ pub const ObjString = struct {
         const interned = vm.strings.find_string(str, hash);
 
         if (interned) |i| {
-            vm.allocator.free(str);
+            vm.gc_alloc.free(str);
             return i;
         }
 
@@ -180,7 +194,6 @@ pub const ObjFunction = struct {
     arity: u8,
     chunk: Chunk,
     name: ?*ObjString,
-    // upvalue_count: u8,
 
     const Self = @This();
 
@@ -190,12 +203,11 @@ pub const ObjFunction = struct {
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
-        // obj.upvalue_count = 0;
 
-        // if (options.LOG_GC) {
-        //     const display_name = if (name) |n| n.chars else "";
-        //     std.debug.print("{s}\n", .{display_name});
-        // }
+        if (options.log_gc) {
+            const display_name = if (name) |n| n.chars else "";
+            std.debug.print("{s}\n", .{display_name});
+        }
 
         return obj;
     }
@@ -213,7 +225,7 @@ pub const ObjFunction = struct {
     }
 
     pub fn log(self: *const Self) void {
-        std.debug.print("<fn {s}>", .{self.name orelse "script"});
+        std.debug.print("<fn {s}>", .{if (self.name) |n| n.chars else "script"});
     }
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
@@ -234,7 +246,9 @@ pub const ObjNativeFn = struct {
         const obj = try Obj.allocate(vm, Self, .NativeFn);
         obj.function = function;
 
-        // if (options.LOG_GC) std.debug.print("\n", .{});
+        if (options.log_gc) {
+            std.debug.print("native fn\n", .{});
+        }
 
         return obj;
     }

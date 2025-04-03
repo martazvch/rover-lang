@@ -12,6 +12,9 @@ pub fn build(b: *std.Build) !void {
     const log_gc = b.option(bool, "log-gc", "logs each GC actions (alloc and free)") orelse false;
     options.addOption(bool, "log_gc", log_gc);
 
+    const stress_gc = b.option(bool, "stress-gc", "logs each GC actions (alloc, free, mark, sweep, ...)") orelse false;
+    options.addOption(bool, "stress_gc", stress_gc);
+
     const test_mode = b.option(bool, "test-mode", "Compiles in test mode to enable certain behaviors") orelse false;
     options.addOption(bool, "test_mode", test_mode);
 

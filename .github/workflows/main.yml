@@ -26,7 +26,7 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
       - name: build and test
-        run: zig build -Dtest-mode test
+        run: zig build -Dstress-gc -Dtest-mode test
   err-coverage:
     runs-on: macos-latest
     steps:

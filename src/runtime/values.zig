@@ -36,6 +36,13 @@ pub const Value = union(enum) {
         self.Bool = !self.Bool;
     }
 
+    pub fn as_obj(self: *const Value) ?*Obj {
+        return switch (self.*) {
+            .Obj => |v| v,
+            else => null,
+        };
+    }
+
     pub fn print(self: *const Value, writer: anytype) !void {
         try switch (self.*) {
             .Bool => |v| writer.print("{}", .{v}),
