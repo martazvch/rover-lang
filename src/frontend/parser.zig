@@ -214,6 +214,8 @@ pub const Parser = struct {
             self.fn_declaration()
         else if (self.match(.Var))
             self.var_declaration()
+        else if (self.match(.Struct))
+            self.struct_declaration()
         else if (self.match(.Return))
             self.return_expr()
         else if (self.match(.Underscore))
@@ -292,6 +294,17 @@ pub const Parser = struct {
         else
             try self.parse_precedence_expr(0);
 
+        return idx;
+    }
+
+    fn struct_declaration(self: *Self) !Node.Index {
+        try self.expect(.Identifier, .ExpectStructName);
+        try self.expect(.LeftBrace, .ExpectBraceBeforeStructBody);
+
+        const idx = try self.add_node(.{
+            .tag = .StructDecl,
+            .main = self.token_idx - 2,
+        });
         return idx;
     }
 

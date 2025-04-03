@@ -155,7 +155,7 @@ pub const Analyzer = struct {
         captured: bool = false,
         kind: Kind = .normal,
 
-        pub const Kind = enum { normal, param, import };
+        pub const Kind = enum { normal, func, param, import };
     };
 
     const State = struct {
@@ -296,6 +296,7 @@ pub const Analyzer = struct {
                 else
                     self.to_span(node + 1).end,
             },
+            .StructDecl => unreachable,
             .Type => self.token_spans[self.node_mains[node]],
             .Unary => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -587,6 +588,7 @@ pub const Analyzer = struct {
             .Print => try self.print(node),
             .Return => final = try self.return_expr(node),
             .String => final = try self.string(node),
+            .StructDecl => unreachable,
             .Unary => final = try self.unary(node),
             .Use => try self.use(node),
             .VarDecl => try self.var_decl(node),
@@ -1045,7 +1047,7 @@ pub const Analyzer = struct {
         // We declare before body for recursion and before parameters to put it as the first local
         const type_idx = try self.type_manager.reserve_info();
         const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
-        const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .normal);
+        const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .func);
 
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
 
@@ -1054,7 +1056,7 @@ pub const Analyzer = struct {
 
         // We add a empty variable to anticipate the function it self on the stack
         // it's the returned address for the function
-        try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true });
+        try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true, .kind = .func });
 
         // TODO: ArrayList avec init capacity de 50?
         var params_type: [256]Type = undefined;
@@ -1209,7 +1211,7 @@ pub const Analyzer = struct {
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         const variable = try self.resolve_identifier(node, initialized);
 
-        if (variable.kind == .param or variable.kind == .import) {
+        if (variable.kind == .param or variable.kind == .func or variable.kind == .import) {
             // Params and imports aren't declared so we can't reference them, they just live on stack
             _ = try self.add_instr(
                 .{ .tag = .Identifier, .data = .{ .Variable = .{

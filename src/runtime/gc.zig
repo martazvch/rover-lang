@@ -10,7 +10,7 @@ const Value = @import("values.zig").Value;
 const Vm = @import("vm.zig").Vm;
 
 const ObjFunction = @import("obj.zig").ObjFunction;
-// const ObjStruct = @import("obj.zig").ObjStruct;
+const ObjStruct = @import("obj.zig").ObjStruct;
 // const ObjInstance = @import("obj.zig").ObjInstance;
 // const ObjBoundMethod = @import("obj.zig").ObjBoundMethod;
 // const Table = @import("table.zig").Table;
@@ -114,11 +114,11 @@ pub const Gc = struct {
             //     try self.mark_object(instance.parent.name.as_obj());
             //     try self.mark_table(&instance.fields);
             // },
-            // .Struct => {
-            //     const structure = obj.as(ObjStruct);
-            //     try self.mark_object(structure.name.as_obj());
-            //     try self.mark_table(&structure.methods);
-            // },
+            .Struct => {
+                const structure = obj.as(ObjStruct);
+                try self.mark_object(structure.name.as_obj());
+                // try self.mark_table(&structure.methods);
+            },
             // .NativeFn, .String, .Iter => {},
             .NativeFn, .String => {},
         }

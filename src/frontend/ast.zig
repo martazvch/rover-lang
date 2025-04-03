@@ -45,6 +45,7 @@ pub const Node = struct {
         Print,
         Return,
         String,
+        StructDecl,
         Sub,
         Type,
         Unary,

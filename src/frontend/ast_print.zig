@@ -108,6 +108,7 @@ pub const AstPrinter = struct {
             .Print => self.print_stmt(),
             .Return => self.return_expr(),
             .String => self.literal("String literal"),
+            .StructDecl => {},
             .Type => unreachable,
             .Unary => self.unary_expr(),
             .Use => self.use_stmt(),

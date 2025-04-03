@@ -20,7 +20,7 @@ pub const Obj = struct {
         // Iter,
         NativeFn,
         String,
-        // Struct,
+        Struct,
     };
 
     pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
@@ -63,10 +63,10 @@ pub const Obj = struct {
                 function.deinit(vm.gc_alloc);
             },
             .String => self.as(ObjString).deinit(vm.gc_alloc),
-            // .Struct => {
-            //     const structure = self.as(ObjStruct);
-            //     structure.deinit(vm.allocator);
-            // },
+            .Struct => {
+                const structure = self.as(ObjStruct);
+                structure.deinit(vm.gc_alloc);
+            },
         }
     }
 
@@ -88,7 +88,7 @@ pub const Obj = struct {
             // },
             .NativeFn => writer.print("<native fn>", .{}),
             .String => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
-            // .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+            .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
         };
     }
 
@@ -104,7 +104,7 @@ pub const Obj = struct {
             // },
             .NativeFn => std.debug.print("<native fn>", .{}),
             .String => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
-            // .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+            .Struct => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
         }
     }
 };
@@ -259,5 +259,32 @@ pub const ObjNativeFn = struct {
 
     pub fn as_obj(self: *ObjNativeFn) *Obj {
         return &self.obj;
+    }
+};
+
+pub const ObjStruct = struct {
+    obj: Obj,
+    name: *ObjString,
+    // methods: Table,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, name: *ObjString) Allocator.Error!*Self {
+        const obj = try Obj.allocate(vm, Self, .Struct);
+        obj.name = name;
+        // obj.methods = Table.init(vm.allocator);
+
+        if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
+
+        return obj;
+    }
+
+    pub fn as_obj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        // self.methods.deinit();
+        allocator.destroy(self);
     }
 };
