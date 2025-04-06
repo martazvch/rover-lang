@@ -441,7 +441,7 @@ pub const AstPrinter = struct {
             self.node_idx += 1;
             return "void";
         } else if (self.token_tags[self.node_mains[index]] == .Fn)
-            return self.get_fn_type(index) catch @panic("OOM");
+            return self.get_fn_type(index) catch @panic("oom");
 
         defer self.node_idx += 1;
 

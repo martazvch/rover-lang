@@ -1,0 +1,5 @@
+struct Foo {
+    fn bar(self: int) {}
+    fn buz(a: int, self) {}
+}
+

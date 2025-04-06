@@ -48,6 +48,8 @@ pub const Node = struct {
         self,
         String,
         StructDecl,
+        // struct_init,
+        // field_assign,
         Sub,
         Type,
         Unary,

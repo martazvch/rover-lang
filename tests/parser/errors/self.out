@@ -1,0 +1,4 @@
+TypedSelf
+SelfAsNonFirstParam
+// Because of how synchronize works in parser
+ExpectExpr, }

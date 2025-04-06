@@ -1,3 +1,6 @@
 ExpectStructName
 ExpectBraceBeforeStructBody
+ExpectFnInStructBody
+// Because how synchronize works in parser
+ExpectExpr, }
 ExpectBraceAfterStructBody

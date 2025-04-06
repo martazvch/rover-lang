@@ -72,6 +72,11 @@ pub const TypeManager = struct {
         self.type_infos.items[index] = info;
     }
 
+    /// Adds a type linked associated with the name
+    pub fn add_type(self: *Self, name: usize, typ: Type) !void {
+        try self.declared.put(name, typ);
+    }
+
     /// Declares a new type built with `kind` and `extra` parameters and add the informations
     pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) !TypeSys.Type {
         const count = self.type_infos.items.len;
@@ -198,7 +203,7 @@ pub const Analyzer = struct {
         self.main_interned = try self.interner.intern("main");
         self.std_interned = try self.interner.intern("std");
         self.self_interned = try self.interner.intern("self");
-        self.init_interned = try self.interner.intern("self");
+        self.init_interned = try self.interner.intern("init");
 
         try self.type_manager.init_builtins(&self.interner);
         self.repl = repl;
@@ -322,7 +327,7 @@ pub const Analyzer = struct {
 
     fn get_type_name(self: *const Self, typ: Type) []const u8 {
         if (TypeSys.is(typ, .func)) {
-            return self.get_fn_type_name(typ) catch @panic("OOM");
+            return self.get_fn_type_name(typ) catch @panic("oom");
         } else {
             const idx = self.type_manager.idx(typ);
             return self.interner.get_key(idx).?;
@@ -968,17 +973,13 @@ pub const Analyzer = struct {
         const infos = if (TypeSys.is(callee_type, .func))
             self.type_manager.type_infos.items[TypeSys.get_value(callee_type)].func
         else if (TypeSys.is(callee_type, .@"struct")) blk: {
-            const init_idx = self.type_manager.type_infos.items[TypeSys.get_value(callee_type)].@"struct".init;
+            const val = TypeSys.get_value(callee_type);
+            const init_idx = self.type_manager.type_infos.items[val].@"struct".init;
 
             if (init_idx) |i| {
                 break :blk self.type_manager.type_infos.items[i].func;
-
-                // TODO: error if call but no `init`
-            } else unreachable;
-        } else {
-            // TODO: error
-            unreachable;
-        };
+            } else return self.err(.StructCallButNoInit, self.to_span(node));
+        } else return self.err(.InvalidCallTarget, self.to_span(node));
 
         if (infos.arity != arity) {
             return self.err(
@@ -1046,7 +1047,7 @@ pub const Analyzer = struct {
 
             if (self.scope_depth > save_scope_depth) {
                 for (0..self.scope_depth - save_scope_depth) |_| {
-                    _ = self.end_scope() catch @panic("OOM");
+                    _ = self.end_scope() catch @panic("oom");
                 }
             }
 
@@ -1095,6 +1096,10 @@ pub const Analyzer = struct {
                 return self.err(.SelfOutsideStruct, self.to_span(self.node_idx));
             }
 
+            if (name_idx == self.init_interned) {
+                return self.err(.SelfInInit, self.to_span(self.node_idx));
+            }
+
             params_type[0] = .self;
             param_start = 1;
             self.node_idx += 1;
@@ -1122,7 +1127,13 @@ pub const Analyzer = struct {
             params_type[i] = param_type;
         }
 
+        const return_type_idx = self.node_idx;
         const return_type = try self.check_and_get_type();
+
+        if (name_idx == self.init_interned and return_type != .self) {
+            return self.err(.NonSelfInitReturn, self.to_span(return_type_idx));
+        }
+
         self.state.fn_type = return_type;
 
         self.type_manager.set_info(type_idx, .{ .func = .{
@@ -1511,7 +1522,6 @@ pub const Analyzer = struct {
     }
 
     fn structure(self: *Self, node: Node.Index) !Type {
-        std.debug.print("Name: {s}\n", .{self.source_from_node(node)});
         const name = try self.interner.intern(self.source_from_node(node));
         self.node_idx += 1;
 
@@ -1525,10 +1535,12 @@ pub const Analyzer = struct {
         const struct_var = try self.declare_variable(name, struct_type, true, self.instructions.len, .@"struct");
 
         const struct_idx = try self.add_instr(.{ .tag = .StructDecl, .data = .{ .StructDecl = .{} } }, node);
-        _ = struct_idx;
         // We add function's name for runtime access
         _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name } }, node);
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
+
+        self.scope_depth += 1;
+        errdefer _ = self.end_scope() catch @panic("oom");
 
         var infos: TypeSys.StructInfo = .{ .functions = .{} };
 
@@ -1559,7 +1571,11 @@ pub const Analyzer = struct {
 
         self.state.in_struct = false;
         const type_info: TypeInfo = .{ .@"struct" = infos };
-        _ = try self.type_manager.declare(name, .@"struct", .none, type_info);
+        self.type_manager.set_info(type_idx, type_info);
+        try self.type_manager.add_type(name, struct_type);
+
+        _ = try self.end_scope();
+        _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
 
         return .void;
     }
