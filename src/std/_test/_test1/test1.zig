@@ -1,6 +1,5 @@
 const std = @import("std");
 const Value = @import("../../../runtime/values.zig").Value;
-const TypeSys = @import("../../../frontend/type_system.zig");
 const Meta = @import("../../meta.zig");
 const NativeFn = Meta.NativeFn;
 const NativeFnMeta = Meta.NativeFnMeta;
@@ -12,8 +11,8 @@ pub const meta = ModuleMeta{
 
 // Casts float to int
 pub const _cast_i2f = NativeFnMeta{
-    .params = &.{TypeSys.Int},
-    .return_type = TypeSys.Float,
+    .params = &.{.int},
+    .return_type = .float,
     .function = __cast_i2f,
 };
 
@@ -23,8 +22,8 @@ pub fn __cast_i2f(values: []const Value) Value {
 
 // Casts int to float with useless extra arg
 pub const _cast_f2i = NativeFnMeta{
-    .params = &.{ TypeSys.Bool, TypeSys.Float },
-    .return_type = TypeSys.Int,
+    .params = &.{ .bool, .float },
+    .return_type = .int,
     .function = __cast_f2i,
 };
 

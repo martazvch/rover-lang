@@ -36,6 +36,7 @@ pub const Node = struct {
         Int,
         Le,
         Lt,
+        // MembersDecl,
         Mul,
         MultiVarDecl,
         Ne,

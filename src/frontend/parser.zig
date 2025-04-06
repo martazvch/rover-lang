@@ -305,6 +305,9 @@ pub const Parser = struct {
             .tag = .StructDecl,
             .main = self.token_idx - 2,
         });
+
+        try self.expect(.RightBrace, .ExpectBraceAfterStructBody);
+
         return idx;
     }
 

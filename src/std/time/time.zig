@@ -1,6 +1,5 @@
 const std = @import("std");
 const Value = @import("../../runtime/values.zig").Value;
-const TypeSys = @import("../../frontend/type_system.zig");
 const Meta = @import("../meta.zig");
 const NativeFn = Meta.NativeFn;
 const NativeFnMeta = Meta.NativeFnMeta;
@@ -13,7 +12,7 @@ pub const meta = ModuleMeta{
 // Clock
 pub const clock = NativeFnMeta{
     .params = &.{},
-    .return_type = TypeSys.Float,
+    .return_type = .float,
     .function = _clock,
 };
 

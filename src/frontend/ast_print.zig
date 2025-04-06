@@ -19,7 +19,6 @@ pub const AstPrinter = struct {
     node_idx: usize,
     indent_level: u8 = 0,
     tree: std.ArrayList(u8),
-    // sandbox: std.ArrayList(u8),
 
     const indent_size: u8 = 4;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -49,13 +48,11 @@ pub const AstPrinter = struct {
             .node_idx = 0,
             .indent_level = 0,
             .tree = std.ArrayList(u8).init(allocator),
-            // .sandbox = std.ArrayList(u8).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.tree.deinit();
-        // self.sandbox.deinit();
     }
 
     pub fn display(self: *const Self) !void {
@@ -108,7 +105,7 @@ pub const AstPrinter = struct {
             .Print => self.print_stmt(),
             .Return => self.return_expr(),
             .String => self.literal("String literal"),
-            .StructDecl => {},
+            .StructDecl => self.structure(),
             .Type => unreachable,
             .Unary => self.unary_expr(),
             .Use => self.use_stmt(),
@@ -356,6 +353,20 @@ pub const AstPrinter = struct {
             try self.indent();
         } else self.node_idx += 1;
 
+        try self.tree.appendSlice("]\n");
+    }
+
+    fn structure(self: *Self) Error!void {
+        try self.indent();
+        var writer = self.tree.writer();
+
+        // Advance to type
+        try writer.print(
+            "[Structure declaration {s}\n",
+            .{self.source_from_tk(self.node_idx)},
+        );
+
+        self.node_idx += 1;
         try self.tree.appendSlice("]\n");
     }
 

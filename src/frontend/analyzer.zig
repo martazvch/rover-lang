@@ -23,12 +23,6 @@ const TokenIndex = @import("ast.zig").TokenIndex;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
-const Void = TypeSys.Void;
-const Null = TypeSys.Null;
-const Int = TypeSys.Int;
-const Float = TypeSys.Float;
-const Bool = TypeSys.Bool;
-const Str = TypeSys.Str;
 
 // Re-export constants
 pub const TypeManager = struct {
@@ -47,12 +41,12 @@ pub const TypeManager = struct {
     }
 
     pub fn init_builtins(self: *Self, interner: *Interner) !void {
-        try self.declared.put(try interner.intern("void"), Void);
-        try self.declared.put(try interner.intern("null"), Null);
-        try self.declared.put(try interner.intern("bool"), Bool);
-        try self.declared.put(try interner.intern("float"), Float);
-        try self.declared.put(try interner.intern("int"), Int);
-        try self.declared.put(try interner.intern("str"), Str);
+        try self.declared.put(try interner.intern("void"), .void);
+        try self.declared.put(try interner.intern("null"), .null);
+        try self.declared.put(try interner.intern("bool"), .bool);
+        try self.declared.put(try interner.intern("float"), .float);
+        try self.declared.put(try interner.intern("int"), .int);
+        try self.declared.put(try interner.intern("str"), .str);
     }
 
     pub fn deinit(self: *Self) void {
@@ -93,15 +87,18 @@ pub const TypeManager = struct {
         return typ;
     }
 
+    /// Checks if the type has already been declared
+    pub fn is_declared(self: *const Self, typ: usize) bool {
+        return self.declared.get(typ) != null;
+    }
+
     /// Use natives function whose informations are gathered at compile time. Import the
     /// informations among other declared types
     pub fn import_natives(self: *Self, name: []const u8) !?std.StaticStringMap(FnDeclaration) {
         return self.natives.declarations.get(name);
     }
 
-    // Used only in error mode, no need for performance. If used in
-    // performance path, maybe use a ArrayHashMap to retreive with
-    // index (as type == index) but every thing else is slow?
+    /// Used only in error mode, no need for performance. If used in performance path
     pub fn idx(self: *const Self, typ: Type) usize {
         var iter = self.declared.iterator();
         while (iter.next()) |entry| {
@@ -147,15 +144,15 @@ pub const Analyzer = struct {
 
     const Variable = struct {
         index: usize = 0,
-        typ: Type = Void,
+        typ: Type = .void,
         depth: usize,
         name: usize,
         decl: usize = 0,
         initialized: bool = false,
         captured: bool = false,
-        kind: Kind = .normal,
+        kind: Tag = .normal,
 
-        pub const Kind = enum { normal, func, param, import };
+        pub const Tag = enum { normal, func, param, import };
     };
 
     const State = struct {
@@ -164,7 +161,7 @@ pub const Analyzer = struct {
         /// In a function
         in_fn: bool = false,
         /// Current function's type
-        fn_type: Type = Void,
+        fn_type: Type = .void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
     };
@@ -241,7 +238,7 @@ pub const Analyzer = struct {
                 }
             };
 
-            if (node_type != Void) {
+            if (node_type != .void) {
                 self.err(.UnusedValue, self.to_span(start)) catch {};
             }
         }
@@ -296,7 +293,7 @@ pub const Analyzer = struct {
                 else
                     self.to_span(node + 1).end,
             },
-            .StructDecl => unreachable,
+            .StructDecl => self.token_spans[self.node_mains[node]],
             .Type => self.token_spans[self.node_mains[node]],
             .Unary => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -316,7 +313,7 @@ pub const Analyzer = struct {
     }
 
     fn get_type_name(self: *const Self, typ: Type) []const u8 {
-        if (TypeSys.is(typ, TypeSys.Fn)) {
+        if (TypeSys.is(typ, .@"fn")) {
             return self.get_fn_type_name(typ) catch @panic("OOM");
         } else {
             const idx = self.type_manager.idx(typ);
@@ -334,7 +331,7 @@ pub const Analyzer = struct {
 
         for (0..decl.arity) |i| {
             try writer.print("{s}{s}", .{
-                self.interner.get_key(decl.params[i]).?,
+                self.interner.get_key(decl.params[i].to_idx()).?,
                 if (i < decl.arity - 1) ", " else "",
             });
         }
@@ -354,7 +351,7 @@ pub const Analyzer = struct {
     }
 
     fn is_numeric(t: Type) bool {
-        return t == Int or t == Float;
+        return t == .int or t == .float;
     }
 
     fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
@@ -456,7 +453,7 @@ pub const Analyzer = struct {
                     self.to_span(self.node_idx),
                 )
         else
-            Void;
+            .void;
     }
 
     /// Creates a type for an anonymous function, like the one defined in return types
@@ -471,7 +468,7 @@ pub const Analyzer = struct {
         for (0..arity) |i| {
             const param_type = try self.check_and_get_type();
 
-            if (param_type == Void) {
+            if (param_type == .void) {
                 return self.err(.VoidParam, self.to_span(self.node_idx));
             }
 
@@ -487,7 +484,7 @@ pub const Analyzer = struct {
             },
         });
 
-        return TypeSys.create(TypeSys.Fn, 0, type_idx);
+        return TypeSys.create(.@"fn", .none, type_idx);
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
@@ -497,7 +494,7 @@ pub const Analyzer = struct {
         typ: Type,
         initialized: bool,
         decl_idx: usize,
-        kind: Variable.Kind,
+        kind: Variable.Tag,
     ) !Instruction.Variable {
         // We put the current number of instruction for the declaration index
         var variable: Variable = .{
@@ -539,7 +536,7 @@ pub const Analyzer = struct {
         return switch (self.node_tags[node]) {
             // Skips assign node and identifier
             .Assignment => self.is_pure(node + 2),
-            .Bool, .Float, .Int, .Null, .String, .FnDecl, .Use => true,
+            .Bool, .Float, .Int, .Null, .String, .FnDecl, .StructDecl, .Use => true,
             .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
                 const lhs = self.is_pure(node + 1);
                 return lhs and self.is_pure(node + 2);
@@ -564,7 +561,7 @@ pub const Analyzer = struct {
                 self.err(.UnpureInGlobal, self.to_span(node));
         }
 
-        var final: Type = Void;
+        var final: Type = .void;
 
         switch (self.node_tags[node]) {
             .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => final = try self.binop(node),
@@ -588,7 +585,7 @@ pub const Analyzer = struct {
             .Print => try self.print(node),
             .Return => final = try self.return_expr(node),
             .String => final = try self.string(node),
-            .StructDecl => unreachable,
+            .StructDecl => final = try self.structure(node),
             .Unary => final = try self.unary(node),
             .Use => try self.use(node),
             .VarDecl => try self.var_decl(node),
@@ -621,23 +618,23 @@ pub const Analyzer = struct {
                 const value_type = try self.analyze_node(value_idx);
 
                 // For now, we can assign only to scalar variables
-                if (TypeSys.get_kind(assigne.typ) != TypeSys.Var) {
+                if (TypeSys.get_kind(assigne.typ) != .@"var") {
                     return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
                 }
 
                 // Restore state
                 state.allow_partial = last;
 
-                if (value_type == Void) {
+                if (value_type == .void) {
                     return self.err(.VoidAssignment, self.to_span(value_idx));
                 }
 
                 // If type is unknown, we update it
-                if (assigne.typ == Void) {
+                if (assigne.typ == .void) {
                     assigne.typ = value_type;
                 } else if (assigne.typ != value_type) {
                     // One case in wich we can coerce; int -> float
-                    if (assigne.typ == Float and value_type == Int) {
+                    if (assigne.typ == .float and value_type == .int) {
                         cast = true;
                         _ = try self.add_instr(
                             .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
@@ -677,17 +674,17 @@ pub const Analyzer = struct {
         var res = lhs;
 
         // String operations
-        if (op == .Add and lhs == Str and rhs == Str) {
+        if (op == .Add and lhs == .str and rhs == .str) {
             self.instructions.items(.data)[idx] = .{ .Binop = .{ .op = .AddStr } };
-            return Str;
+            return .str;
         } else if (op == .Mul) {
-            if ((lhs == Str and rhs == Int) or (lhs == Int and rhs == Str)) {
+            if ((lhs == .str and rhs == .int) or (lhs == .int and rhs == .str)) {
                 self.instructions.items(.data)[idx] = .{ .Binop = .{
-                    .cast = if (rhs == Int) .Rhs else .Lhs,
+                    .cast = if (rhs == .int) .Rhs else .Lhs,
                     .op = .MulStr,
                 } };
 
-                return Str;
+                return .str;
             }
         }
 
@@ -725,10 +722,10 @@ pub const Analyzer = struct {
                 }
 
                 switch (lhs) {
-                    Float => {
+                    .float => {
                         switch (rhs) {
-                            Float => {},
-                            Int => {
+                            .float => {},
+                            .int => {
                                 try self.warn(
                                     AnalyzerMsg.implicit_cast("right hand side", self.get_type_name(lhs)),
                                     self.to_span(rhs_index),
@@ -739,18 +736,18 @@ pub const Analyzer = struct {
                             else => unreachable,
                         }
                     },
-                    Int => {
+                    .int => {
                         switch (rhs) {
-                            Float => {
+                            .float => {
                                 try self.warn(
                                     AnalyzerMsg.implicit_cast("left hand side", self.get_type_name(rhs)),
                                     self.to_span(lhs_index),
                                 );
 
                                 data.cast = .Lhs;
-                                res = Float;
+                                res = .float;
                             },
-                            Int => switch (op) {
+                            .int => switch (op) {
                                 .Add => data.op = .AddInt,
                                 .Div => data.op = .DivInt,
                                 .Mul => data.op = .MulInt,
@@ -767,15 +764,15 @@ pub const Analyzer = struct {
                 // TODO: Error handling for non int, float and str
                 switch (op) {
                     .Eq => data.op = switch (lhs) {
-                        Bool => .EqBool,
-                        Float => .EqFloat,
-                        Int => .EqInt,
+                        .bool => .EqBool,
+                        .float => .EqFloat,
+                        .int => .EqInt,
                         else => .EqStr,
                     },
                     .Ne => data.op = switch (lhs) {
-                        Bool => .NeBool,
-                        Float => .NeFloat,
-                        Int => .NeInt,
+                        .bool => .NeBool,
+                        .float => .NeFloat,
+                        .int => .NeInt,
                         else => .NeStr,
                     },
                     else => unreachable,
@@ -784,8 +781,8 @@ pub const Analyzer = struct {
                 // If different value types
                 if (lhs != rhs) {
                     // Check for implicit casts
-                    if ((lhs == Int and rhs == Float) or (lhs == Float and rhs == Int)) {
-                        if (lhs == Int) {
+                    if ((lhs == .int and rhs == .float) or (lhs == .float and rhs == .int)) {
+                        if (lhs == .int) {
                             data.cast = .Lhs;
 
                             try self.warn(.FloatEqualCast, self.to_span(lhs_index));
@@ -811,12 +808,12 @@ pub const Analyzer = struct {
                     }
                 } else {
                     // Check for unsafe float comparisons or int comparison
-                    if (lhs == Float) {
+                    if (lhs == .float) {
                         try self.warn(.FloatEqual, self.to_span(node));
                     }
                 }
 
-                res = Bool;
+                res = .bool;
             },
             .Ge, .Gt, .Le, .Lt => {
                 switch (op) {
@@ -828,10 +825,10 @@ pub const Analyzer = struct {
                 }
 
                 switch (lhs) {
-                    Float => {
+                    .float => {
                         switch (rhs) {
-                            Float => try self.warn(.FloatEqual, self.to_span(node)),
-                            Int => {
+                            .float => try self.warn(.FloatEqual, self.to_span(node)),
+                            .int => {
                                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
 
                                 data.cast = .Rhs;
@@ -839,14 +836,14 @@ pub const Analyzer = struct {
                             else => unreachable,
                         }
                     },
-                    Int => {
+                    .int => {
                         switch (rhs) {
-                            Float => {
+                            .float => {
                                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
 
                                 data.cast = .Lhs;
                             },
-                            Int => switch (op) {
+                            .int => switch (op) {
                                 .Ge => data.op = .GeInt,
                                 .Gt => data.op = .GtInt,
                                 .Le => data.op = .LeInt,
@@ -859,15 +856,15 @@ pub const Analyzer = struct {
                     else => unreachable,
                 }
 
-                res = Bool;
+                res = .bool;
             },
             // Logical binop
             .And, .Or => {
-                if (lhs != Bool) return self.err(.{ .InvalidLogical = .{
+                if (lhs != .bool) return self.err(.{ .InvalidLogical = .{
                     .found = self.get_type_name(lhs),
                 } }, self.to_span(lhs_index));
 
-                if (rhs != Bool) return self.err(.{ .InvalidLogical = .{
+                if (rhs != .bool) return self.err(.{ .InvalidLogical = .{
                     .found = self.get_type_name(rhs),
                 } }, self.to_span(rhs_index));
 
@@ -893,13 +890,13 @@ pub const Analyzer = struct {
 
         const idx = try self.add_instr(.{ .tag = .Block, .data = undefined }, node);
 
-        var final: Type = Void;
+        var final: Type = .void;
         self.node_idx += 1;
 
         for (0..length) |i| {
             final = try self.analyze_node(self.node_idx);
 
-            if (final != Void and i != length - 1) {
+            if (final != .void and i != length - 1) {
                 return self.err(.UnusedValue, self.to_span(self.node_idx));
             }
         }
@@ -909,7 +906,7 @@ pub const Analyzer = struct {
         self.instructions.items(.data)[idx] = .{ .Block = .{
             .length = length,
             .pop_count = @intCast(count),
-            .is_expr = if (final != Void) true else false,
+            .is_expr = if (final != .void) true else false,
         } };
 
         return final;
@@ -922,7 +919,7 @@ pub const Analyzer = struct {
 
         self.node_idx += 1;
 
-        return Bool;
+        return .bool;
     }
 
     fn discard(self: *Self, node: Node.Index) !void {
@@ -931,7 +928,7 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const discarded = try self.analyze_node(self.node_idx);
 
-        if (discarded == Void) return self.err(.VoidDiscard, self.to_span(node + 1));
+        if (discarded == .void) return self.err(.VoidDiscard, self.to_span(node + 1));
     }
 
     fn float_lit(self: *Self, node: Node.Index) !Type {
@@ -947,7 +944,7 @@ pub const Analyzer = struct {
         );
         self.node_idx += 1;
 
-        return Float;
+        return .float;
     }
 
     fn fn_call(self: *Self, node: Node.Index) Error!Type {
@@ -961,7 +958,7 @@ pub const Analyzer = struct {
 
         // Resolve the callee
         // TODO: error: can only call functions?
-        const type_value = try self.expect_type_kind(self.node_idx, TypeSys.Fn);
+        const type_value = try self.expect_type_kind(self.node_idx, .@"fn");
         const type_info = self.type_manager.type_infos.items[type_value].Fn;
 
         if (type_info.arity != arity) {
@@ -980,7 +977,7 @@ pub const Analyzer = struct {
             if (arg_type != type_info.params[i] and !self.check_equal_fn_types(arg_type, type_info.params[i])) {
                 // If it's an implicit cast between int and float, save the
                 // argument indices for compiler. Otherwise, error
-                if (type_info.params[i] == Float and arg_type == Int) {
+                if (type_info.params[i] == .float and arg_type == .int) {
                     _ = try self.add_instr(
                         .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
                         arg_idx,
@@ -1046,7 +1043,7 @@ pub const Analyzer = struct {
 
         // We declare before body for recursion and before parameters to put it as the first local
         const type_idx = try self.type_manager.reserve_info();
-        const fn_type = TypeSys.create(TypeSys.Fn, 0, type_idx);
+        const fn_type = TypeSys.create(.@"fn", .none, type_idx);
         const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .func);
 
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
@@ -1075,7 +1072,7 @@ pub const Analyzer = struct {
 
             const param_type = try self.check_and_get_type();
 
-            if (param_type == Void) {
+            if (param_type == .void) {
                 return self.err(.VoidParam, self.to_span(decl));
             }
 
@@ -1105,7 +1102,7 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         var start = self.node_idx;
         var body_err = false;
-        var body_type: Type = Void;
+        var body_type: Type = .void;
         var deadcode_start: usize = 0;
         var deadcode_count: usize = 0;
 
@@ -1138,7 +1135,7 @@ pub const Analyzer = struct {
 
             // If last expression produced a value and that it wasn't the last one and it
             // wasn't a return, error
-            if (body_type != Void and i != length - 1 and !prev_state.returns) {
+            if (body_type != .void and i != length - 1 and !prev_state.returns) {
                 // return self.err(.UnusedValue, self.to_span(start));
                 self.err(.UnusedValue, self.to_span(start)) catch {};
             }
@@ -1172,7 +1169,7 @@ pub const Analyzer = struct {
 
         const return_kind: ReturnKind = if (state.returns)
             .Explicit
-        else if (body_type == Void)
+        else if (body_type == .void)
             .ImplicitVoid
         else
             .ImplicitValue;
@@ -1189,7 +1186,7 @@ pub const Analyzer = struct {
     /// types in function definitions)
     fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
         if (t1 == t2) return true;
-        if (!TypeSys.is(t1, TypeSys.Fn) or !TypeSys.is(t2, TypeSys.Fn)) return false;
+        if (!TypeSys.is(t1, .@"fn") or !TypeSys.is(t2, .@"fn")) return false;
 
         const v1 = TypeSys.get_value(t1);
         const infos1 = self.type_manager.type_infos.items[v1].Fn;
@@ -1300,7 +1297,7 @@ pub const Analyzer = struct {
         const cond_type = try self.analyze_node(self.node_idx);
 
         // We can continue to analyze if the condition isn't a bool
-        if (cond_type != Bool) self.err(
+        if (cond_type != .bool) self.err(
             .{ .NonBoolCond = .{
                 .what = "if",
                 .found = self.get_type_name(cond_type),
@@ -1324,10 +1321,10 @@ pub const Analyzer = struct {
             state.returns = false;
             then_return = true;
             // As we exit scope, we don't return any type
-            final_type = Void;
+            final_type = .void;
         }
 
-        var else_type: Type = Void;
+        var else_type: Type = .void;
         const else_idx = self.node_idx;
 
         if (self.node_tags[else_idx] != .Empty) {
@@ -1348,14 +1345,14 @@ pub const Analyzer = struct {
             // Type coherence. If branches don't exit scope and branches have
             // diffrent types
             if (!then_return and !else_return and then_type != else_type) {
-                if (then_type == Int and else_type == Float) {
+                if (then_type == .int and else_type == .float) {
                     data.cast = .Then;
 
                     try self.warn(
                         AnalyzerMsg.implicit_cast("then branch", "float"),
                         self.to_span(then_idx),
                     );
-                } else if (then_type == Float and else_type == Int) {
+                } else if (then_type == .float and else_type == .int) {
                     data.cast = .Else;
 
                     // Safe unsafe access, if there is a non void type
@@ -1372,7 +1369,7 @@ pub const Analyzer = struct {
                     self.to_span(node),
                 );
             }
-        } else if (then_type != Void and !state.allow_partial) {
+        } else if (then_type != .void and !state.allow_partial) {
             // Skips the Empty
             self.node_idx += 1;
 
@@ -1397,7 +1394,7 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .Int, .data = .{ .Int = value } }, node);
         self.node_idx += 1;
 
-        return Int;
+        return .int;
     }
 
     fn multi_var_decl(self: *Self, node: Node.Index) !void {
@@ -1414,7 +1411,7 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, self.node_idx);
         self.node_idx += 1;
 
-        return Null;
+        return .null;
     }
 
     fn print(self: *Self, _: Node.Index) !void {
@@ -1423,7 +1420,7 @@ pub const Analyzer = struct {
         const expr_idx = self.node_idx;
         const typ = try self.analyze_node(self.node_idx);
 
-        if (typ == Void)
+        if (typ == .void)
             return self.err(.VoidPrint, self.to_span(expr_idx));
     }
 
@@ -1443,7 +1440,7 @@ pub const Analyzer = struct {
             break :blk try self.analyze_node(self.node_idx);
         } else blk: {
             self.node_idx += 1;
-            break :blk Void;
+            break :blk .void;
         };
 
         // We check after to advance node idx
@@ -1452,7 +1449,7 @@ pub const Analyzer = struct {
         }
 
         if (!self.check_equal_fn_types(state.fn_type, return_type)) {
-            if (state.fn_type == Float and return_type == Int) {
+            if (state.fn_type == .float and return_type == .int) {
                 self.instructions.items(.data)[idx].Return.cast = true;
                 _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
             } else return self.err(
@@ -1475,7 +1472,20 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .String, .data = .{ .Id = value } }, node);
         self.node_idx += 1;
 
-        return Str;
+        return .str;
+    }
+
+    fn structure(self: *Self, node: Node.Index) !Type {
+        const name = try self.interner.intern(self.source_from_node(node));
+        self.node_idx += 1;
+
+        if (self.type_manager.is_declared(name)) {
+            return self.err(.{ .AlreadyDeclaredStruct = .{.name = self.source_from_node(node)} }, self.to_span(node));
+        }
+
+        _ = try self.type_manager.declare(name, .@"struct", .none, .{.struct_info = .{}});
+
+        return .void;
     }
 
     fn unary(self: *Self, node: Node.Index) Error!Type {
@@ -1491,19 +1501,19 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const rhs = try self.analyze_node(self.node_idx);
 
-        if (op == .Not and rhs != Bool) {
+        if (op == .Not and rhs != .bool) {
             return self.err(
                 .{ .InvalidUnary = .{ .found = self.get_type_name(rhs) } },
                 self.to_span(node),
             );
-        } else if (op == .Minus and rhs != Int and rhs != Float) {
+        } else if (op == .Minus and rhs != .int and rhs != .float) {
             return self.err(
                 AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
                 self.to_span(node),
             );
         }
 
-        if (rhs == Int) self.instructions.items(.data)[idx].Unary.typ = .Int;
+        if (rhs == .int) self.instructions.items(.data)[idx].Unary.typ = .Int;
 
         return rhs;
     }
@@ -1546,7 +1556,7 @@ pub const Analyzer = struct {
                         } };
 
                         // Declare the type and additional informations
-                        const typ = try self.type_manager.declare(name_idx, TypeSys.Fn, TypeSys.Builtin, info);
+                        const typ = try self.type_manager.declare(name_idx, .@"fn", .builtin, info);
                         // Declare the variable
                         const variable = try self.declare_variable(name_idx, typ, true, self.node_idx, .import);
 
@@ -1595,17 +1605,17 @@ pub const Analyzer = struct {
             state.allow_partial = last;
 
             // Void assignment check
-            if (value_type == Void) {
+            if (value_type == .void) {
                 return self.err(.VoidAssignment, self.to_span(value_idx));
             }
 
             // If no type declared, we infer the value type
-            if (checked_type == Void) {
+            if (checked_type == .void) {
                 checked_type = value_type;
                 // Else, we check for coherence
             } else if (checked_type != value_type) {
                 // One case in wich we can coerce, int -> float
-                if (checked_type == Float and value_type == Int) {
+                if (checked_type == .float and value_type == .int) {
                     cast = true;
                     _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, type_idx);
                 } else {
@@ -1635,7 +1645,7 @@ pub const Analyzer = struct {
         _ = try self.add_instr(.{ .tag = .While }, cond_idx);
         const cond_type = try self.analyze_node(cond_idx);
 
-        if (cond_type != Bool) return self.err(
+        if (cond_type != .bool) return self.err(
             .{ .NonBoolCond = .{
                 .what = "while",
                 .found = self.get_type_name(cond_type),
@@ -1646,7 +1656,7 @@ pub const Analyzer = struct {
         const body_idx = self.node_idx;
         const body_type = try self.analyze_node(body_idx);
 
-        if (body_type != Void) return self.err(
+        if (body_type != .void) return self.err(
             .{ .NonVoidWhile = .{
                 .found = self.get_type_name(body_type),
             } },

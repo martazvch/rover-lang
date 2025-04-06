@@ -1,49 +1,84 @@
 // Types are 32 bits long
-pub const Type = u32;
+const TypeSize = u32;
+pub const Type = enum(TypeSize) {
+    void,
+    null,
+    int,
+    float,
+    bool,
+    str,
+    _,
+
+    pub fn to_idx(self: Type) usize {
+        return @as(usize, @intFromEnum(self));
+    }
+
+    pub fn from_idx(index: usize) Type {
+        return @enumFromInt(index);
+    }
+};
 
 // 4 first bits (16 values) are for:
-pub const Kind = u4;
-pub const Var: Kind = 0;
-pub const Fn: Kind = 1;
-pub const Array: Kind = 2;
-pub const Tuple: Kind = 3;
-pub const Enum: Kind = 4;
-pub const HashMap: Kind = 5;
-pub const Nullable: Kind = 6;
-pub const Ptr: Kind = 7;
-pub const Error: Kind = 8;
-pub const Param: Kind = 9;
+const KindSize = u4;
+pub const Kind = enum(KindSize) {
+    @"var",
+    @"fn",
+    array,
+    tuple,
+    @"enum",
+    map,
+    nullable,
+    ptr,
+    @"error",
+    param,
+    @"struct",
+    _,
+
+    pub fn to_idx(self: Kind) usize {
+        return @as(usize, @intFromEnum(self));
+    }
+
+    pub fn from_idx(index: usize) Kind {
+        return @enumFromInt(index);
+    }
+};
 
 // 4 next bits are for extra infos:
-pub const Extra = u4;
-pub const Builtin = 0;
+const ExtraSize = u4;
+pub const Extra = enum(u4) {
+    none,
+    builtin,
+    _,
+
+    pub fn to_idx(self: Extra) usize {
+        return @as(usize, @intFromEnum(self));
+    }
+
+    pub fn from_idx(index: usize) Extra {
+        return @enumFromInt(index);
+    }
+};
 
 // 24 other allow 16777215 different types
 pub const Value = u24;
 
-// Constants
-pub const Void: Type = 0;
-pub const Null: Type = 1;
-pub const Int: Type = 2;
-pub const Float: Type = 3;
-pub const Bool: Type = 4;
-pub const Str: Type = 5;
-
 /// Creates a type from kind and value information
 pub fn create(kind: Kind, extra: Extra, value: Value) Type {
-    return @as(Type, kind) << 28 | @as(Type, extra) << 24 | value;
+    const tmp: u32 = @intCast(kind.to_idx());
+    const tmp2: u32 = @intCast(extra.to_idx());
+    return @enumFromInt(tmp << 28 | tmp2 << 24 | value);
 }
 
 /// Get a type kind, discarding extra and value information bits
 pub fn get_kind(typ: Type) Kind {
-    return @as(Kind, @intCast(typ >> 28));
+    return @enumFromInt(typ.to_idx() >> 28);
 }
 
 /// Get a type kind, discarding extra and value information bits
 pub fn set_kind(typ: Type, kind: Kind) Type {
     // Looking for the 28 last bits = 7 hexa numbers
-    const erased = typ & 0xfffffff;
-    return (@as(Type, kind) << 28) | erased;
+    const erased = typ.to_idx() & 0xfffffff;
+    return @enumFromInt((@as(TypeSize, kind.to_idx()) << 28) | erased);
 }
 
 // We shift to get the last 8bits. After, we want the first 4bits
@@ -51,14 +86,14 @@ pub fn set_kind(typ: Type, kind: Kind) Type {
 //  mask:  0 0 0 0  1 1 1 1  -> 15 -> 0xf
 /// Get extra information bits about a type
 pub fn get_extra(typ: Type) Extra {
-    return @as(Extra, @intCast(@as(u8, @intCast(typ >> 24)) & 0xf));
+    return @enumFromInt(@as(u8, @intCast(typ.to_idx() >> 24)) & 0xf);
 }
 
 // Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
 // all to one and mask it
 /// Extract the value bits associated to a type
 pub fn get_value(typ: Type) Value {
-    return @as(Value, @intCast(typ & 0xffffff));
+    return @as(Value, @intCast(typ.to_idx() & 0xffffff));
 }
 
 /// Checks if a type is of a certain kind
@@ -69,12 +104,13 @@ pub fn is(typ: Type, kind: Kind) bool {
 /// Checks if a type is a builtin one, regardless of the kind
 pub fn is_builtin(typ: Type) bool {
     const extra = get_extra(typ);
-    return extra == Builtin;
+    return extra == .builtin;
 }
 
 // Custom types
 pub const TypeInfo = union(enum) {
     Fn: FnInfo,
+    struct_info: StructInfo,
 };
 
 pub const FnInfo = struct {
@@ -84,36 +120,31 @@ pub const FnInfo = struct {
     builtin: bool = false,
 };
 
+pub const StructInfo = struct {};
+
 pub fn str_kind(kind: Kind) []const u8 {
     return switch (kind) {
-        0 => "variable",
-        1 => "function",
-        2 => "array",
-        3 => "tuple",
-        4 => "enum",
-        5 => "hashmap",
-        6 => "nullable",
-        7 => "pointer",
-        8 => "error",
-        else => unreachable,
+        .@"var" => "variable",
+        .@"fn" => "function",
+        else => |k| @tagName(k),
     };
 }
 
 test "types" {
     const expect = @import("std").testing.expect;
-    const var1 = Int;
-    const var2 = Str;
+    const var1: Type = .int;
+    const var2: Type = .str;
 
-    try expect(is(var1, Var));
-    try expect(!is(var2, Fn));
+    try expect(is(var1, .@"var"));
+    try expect(!is(var2, .@"fn"));
 
-    const str = create(Var, 0, Str);
-    try expect(str == Str);
-    try expect(is(str, Var));
-    try expect(get_value(str) == Str);
+    const str = create(.@"var", 0, .str);
+    try expect(str == .str);
+    try expect(is(str, .@"var"));
+    try expect(get_value(str) == .str);
 
-    const func = create(Fn, Builtin, 16777214);
-    try expect(is(func, Fn));
+    const func = create(.@"fn", .builtin, 16777214);
+    try expect(is(func, .@"fn"));
     try expect(is_builtin(func));
     try expect(get_value(func) == 16777214);
 }

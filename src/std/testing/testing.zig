@@ -1,6 +1,5 @@
 const std = @import("std");
 const Value = @import("../../runtime/values.zig").Value;
-const TypeSys = @import("../../frontend/type_system.zig");
 const Meta = @import("../meta.zig");
 const NativeFn = Meta.NativeFn;
 const NativeFnMeta = Meta.NativeFnMeta;
@@ -12,8 +11,8 @@ pub const meta = ModuleMeta{
 
 // Assert
 pub const assert = NativeFnMeta{
-    .params = &.{TypeSys.Bool},
-    .return_type = TypeSys.Bool,
+    .params = &.{.bool},
+    .return_type = .bool,
     .function = _assert,
 };
 
@@ -23,8 +22,8 @@ pub fn _assert(values: []const Value) Value {
 
 // Equal ints
 pub const eql_int = NativeFnMeta{
-    .params = &.{ TypeSys.Int, TypeSys.Int },
-    .return_type = TypeSys.Bool,
+    .params = &.{ .int, .int },
+    .return_type = .bool,
     .function = _eql_int,
 };
 
