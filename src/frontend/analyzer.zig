@@ -14,7 +14,6 @@ const FnDeclaration = BA.FnDeclaration;
 const builtin_init = BA.init;
 const Node = @import("ast.zig").Node;
 const Rir = @import("rir.zig");
-const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
 const Span = @import("lexer.zig").Span;
@@ -47,6 +46,7 @@ pub const TypeManager = struct {
         try self.declared.put(try interner.intern("float"), .float);
         try self.declared.put(try interner.intern("int"), .int);
         try self.declared.put(try interner.intern("str"), .str);
+        try self.declared.put(try interner.intern("Self"), .self);
     }
 
     pub fn deinit(self: *Self) void {
@@ -131,9 +131,14 @@ pub const Analyzer = struct {
     local_offset: usize,
     heap_count: usize,
     main: ?Node.Index,
-    states: ArrayList(State),
+    state: State,
     type_manager: TypeManager,
     interner: Interner,
+
+    main_interned: usize,
+    std_interned: usize,
+    self_interned: usize,
+    init_interned: usize,
 
     arena: std.heap.ArenaAllocator,
     allocator: Allocator,
@@ -152,7 +157,7 @@ pub const Analyzer = struct {
         captured: bool = false,
         kind: Tag = .normal,
 
-        pub const Tag = enum { normal, func, param, import };
+        pub const Tag = enum { normal, func, param, import, @"struct" };
     };
 
     const State = struct {
@@ -164,6 +169,8 @@ pub const Analyzer = struct {
         fn_type: Type = .void,
         /// Flag to tell if last statement returned from scope
         returns: bool = false,
+        /// In a structure
+        in_struct: bool = false,
     };
 
     pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -181,16 +188,18 @@ pub const Analyzer = struct {
         self.scope_depth = 0;
         self.heap_count = 0;
 
-        self.states = .init(self.allocator);
+        // self.states = .init(self.allocator);
+        self.state = .{};
         self.main = null;
         self.local_offset = 0;
         self.type_manager = TypeManager.init(self.allocator);
         self.interner = Interner.init(self.allocator);
 
-        // We reserve slot 0 for 'main'
-        _ = try self.interner.intern("main");
-        // Slot 1 for std
-        _ = try self.interner.intern("std");
+        self.main_interned = try self.interner.intern("main");
+        self.std_interned = try self.interner.intern("std");
+        self.self_interned = try self.interner.intern("self");
+        self.init_interned = try self.interner.intern("self");
+
         try self.type_manager.init_builtins(&self.interner);
         self.repl = repl;
     }
@@ -221,7 +230,7 @@ pub const Analyzer = struct {
         self.node_ends = nodes.items(.end);
 
         // HACK: to protect a -1 access
-        try self.states.append(.{});
+        // try self.states.append(.{});
 
         while (self.node_idx < self.node_data.len) {
             const start = self.node_idx;
@@ -243,7 +252,7 @@ pub const Analyzer = struct {
             }
         }
 
-        _ = self.states.pop();
+        // _ = self.states.pop();
 
         // In REPL mode, no need for main function
         if (self.repl)
@@ -272,7 +281,7 @@ pub const Analyzer = struct {
             },
             .Empty => self.to_span(node - 1),
             .FnDecl => self.token_spans[self.node_mains[node]],
-            .FnCall => self.token_spans[self.node_mains[node + 1]],
+            .call => self.token_spans[self.node_mains[node + 1]],
             .Grouping => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_data[node]].end,
@@ -293,8 +302,7 @@ pub const Analyzer = struct {
                 else
                     self.to_span(node + 1).end,
             },
-            .StructDecl => self.token_spans[self.node_mains[node]],
-            .Type => self.token_spans[self.node_mains[node]],
+            .self, .StructDecl, .Type => self.token_spans[self.node_mains[node]],
             .Unary => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -308,12 +316,12 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
             },
             .While => self.token_spans[self.node_mains[node]],
-            .MultiVarDecl => unreachable,
+            .MultiVarDecl, .count => unreachable,
         };
     }
 
     fn get_type_name(self: *const Self, typ: Type) []const u8 {
-        if (TypeSys.is(typ, .@"fn")) {
+        if (TypeSys.is(typ, .func)) {
             return self.get_fn_type_name(typ) catch @panic("OOM");
         } else {
             const idx = self.type_manager.idx(typ);
@@ -323,7 +331,7 @@ pub const Analyzer = struct {
 
     fn get_fn_type_name(self: *const Self, typ: Type) ![]const u8 {
         const value = TypeSys.get_value(typ);
-        const decl = self.type_manager.type_infos.items[value].Fn;
+        const decl = self.type_manager.type_infos.items[value].func;
 
         var res: std.ArrayListUnmanaged(u8) = .{};
         var writer = res.writer(self.allocator);
@@ -368,9 +376,9 @@ pub const Analyzer = struct {
         return self.source[span.start..span.end];
     }
 
-    fn last_state(self: *Self) *State {
-        return &self.states.items[self.states.items.len - 1];
-    }
+    // fn last_state(self: *Self) *State {
+    //     return &self.states.items[self.states.items.len - 1];
+    // }
 
     /// Unincrement scope depth, discards all locals and return the number
     /// of discarded locals
@@ -477,14 +485,14 @@ pub const Analyzer = struct {
 
         // Set all the informations now that we have every thing
         self.type_manager.set_info(type_idx, .{
-            .Fn = .{
+            .func = .{
                 .arity = arity,
                 .params = params_type,
                 .return_type = try self.check_and_get_type(),
             },
         });
 
-        return TypeSys.create(.@"fn", .none, type_idx);
+        return TypeSys.create(.func, .none, type_idx);
     }
 
     /// Declares a variable either in globals or in locals based on current scope depth
@@ -512,7 +520,7 @@ pub const Analyzer = struct {
             variable.index = index;
 
             try self.globals.append(variable);
-            return .{ .index = @intCast(index), .scope = .Global };
+            return .{ .index = @intCast(index), .scope = .global };
         } else {
             // Take function's frame into account
             const index = self.locals.items.len - self.local_offset;
@@ -524,13 +532,13 @@ pub const Analyzer = struct {
             }
 
             try self.locals.append(variable);
-            return .{ .index = @intCast(index), .scope = .Local };
+            return .{ .index = @intCast(index), .scope = .local };
         }
     }
 
     fn is_pure(self: *const Self, node: Node.Index) bool {
         // TODO: manage those
-        // FnCall: FnCall,
+        // call: call,
         // Identifier: Identifier,
         // If: If,
         return switch (self.node_tags[node]) {
@@ -571,7 +579,7 @@ pub const Analyzer = struct {
             .Discard => try self.discard(node),
             .Empty => self.node_idx += 1,
             .Float => final = try self.float_lit(node),
-            .FnCall => final = try self.fn_call(node),
+            .call => final = try self.call(node),
             .FnDecl => try self.fn_declaration(node),
             .Grouping => {
                 self.node_idx += 1;
@@ -590,17 +598,16 @@ pub const Analyzer = struct {
             .Use => try self.use(node),
             .VarDecl => try self.var_decl(node),
             .While => try self.while_stmt(node),
-            .Parameter, .Type => unreachable,
+            .Parameter, .self, .count, .Type => unreachable,
         }
 
         return final;
     }
 
     fn assignment(self: *Self, _: Node.Index) !void {
-        const state = self.last_state();
-        const last = state.allow_partial;
-        state.allow_partial = false;
-        errdefer state.allow_partial = last;
+        const last = self.state.allow_partial;
+        self.state.allow_partial = false;
+        errdefer self.state.allow_partial = last;
 
         self.node_idx += 1;
         var cast = false;
@@ -618,12 +625,12 @@ pub const Analyzer = struct {
                 const value_type = try self.analyze_node(value_idx);
 
                 // For now, we can assign only to scalar variables
-                if (TypeSys.get_kind(assigne.typ) != .@"var") {
+                if (TypeSys.get_kind(assigne.typ) != .variable) {
                     return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
                 }
 
                 // Restore state
-                state.allow_partial = last;
+                self.state.allow_partial = last;
 
                 if (value_type == .void) {
                     return self.err(.VoidAssignment, self.to_span(value_idx));
@@ -680,7 +687,7 @@ pub const Analyzer = struct {
         } else if (op == .Mul) {
             if ((lhs == .str and rhs == .int) or (lhs == .int and rhs == .str)) {
                 self.instructions.items(.data)[idx] = .{ .Binop = .{
-                    .cast = if (rhs == .int) .Rhs else .Lhs,
+                    .cast = if (rhs == .int) .rhs else .lhs,
                     .op = .MulStr,
                 } };
 
@@ -731,7 +738,7 @@ pub const Analyzer = struct {
                                     self.to_span(rhs_index),
                                 );
 
-                                data.cast = .Rhs;
+                                data.cast = .rhs;
                             },
                             else => unreachable,
                         }
@@ -744,7 +751,7 @@ pub const Analyzer = struct {
                                     self.to_span(lhs_index),
                                 );
 
-                                data.cast = .Lhs;
+                                data.cast = .lhs;
                                 res = .float;
                             },
                             .int => switch (op) {
@@ -783,11 +790,11 @@ pub const Analyzer = struct {
                     // Check for implicit casts
                     if ((lhs == .int and rhs == .float) or (lhs == .float and rhs == .int)) {
                         if (lhs == .int) {
-                            data.cast = .Lhs;
+                            data.cast = .lhs;
 
                             try self.warn(.FloatEqualCast, self.to_span(lhs_index));
                         } else {
-                            data.cast = .Rhs;
+                            data.cast = .rhs;
 
                             try self.warn(.FloatEqualCast, self.to_span(rhs_index));
                         }
@@ -831,7 +838,7 @@ pub const Analyzer = struct {
                             .int => {
                                 try self.warn(.FloatEqualCast, self.to_span(rhs_index));
 
-                                data.cast = .Rhs;
+                                data.cast = .rhs;
                             },
                             else => unreachable,
                         }
@@ -841,7 +848,7 @@ pub const Analyzer = struct {
                             .float => {
                                 try self.warn(.FloatEqualCast, self.to_span(lhs_index));
 
-                                data.cast = .Lhs;
+                                data.cast = .lhs;
                             },
                             .int => switch (op) {
                                 .Ge => data.op = .GeInt,
@@ -947,37 +954,53 @@ pub const Analyzer = struct {
         return .float;
     }
 
-    fn fn_call(self: *Self, node: Node.Index) Error!Type {
+    fn call(self: *Self, node: Node.Index) Error!Type {
         const arity = self.node_data[node];
         self.node_idx += 1;
 
-        const idx = try self.add_instr(.{ .tag = .FnCall, .data = .{ .FnCall = .{
+        const idx = try self.add_instr(.{ .tag = .call, .data = .{ .call = .{
             .arity = @intCast(arity),
             .builtin = undefined,
         } } }, node);
 
-        // Resolve the callee
-        // TODO: error: can only call functions?
-        const type_value = try self.expect_type_kind(self.node_idx, .@"fn");
-        const type_info = self.type_manager.type_infos.items[type_value].Fn;
+        const callee_type = try self.analyze_node(self.node_idx);
 
-        if (type_info.arity != arity) {
+        const infos = if (TypeSys.is(callee_type, .func))
+            self.type_manager.type_infos.items[TypeSys.get_value(callee_type)].func
+        else if (TypeSys.is(callee_type, .@"struct")) blk: {
+            const init_idx = self.type_manager.type_infos.items[TypeSys.get_value(callee_type)].@"struct".init;
+
+            if (init_idx) |i| {
+                break :blk self.type_manager.type_infos.items[i].func;
+
+                // TODO: error if call but no `init`
+            } else unreachable;
+        } else {
+            // TODO: error
+            unreachable;
+        };
+
+        if (infos.arity != arity) {
             return self.err(
-                try AnalyzerMsg.wrong_args_count(type_info.arity, arity),
+                try AnalyzerMsg.wrong_args_count(infos.arity, arity),
                 self.to_span(self.node_idx),
             );
         }
 
-        self.instructions.items(.data)[idx].FnCall.builtin = type_info.builtin;
+        return self.fn_call(idx, infos);
+    }
 
-        for (0..arity) |i| {
+    fn fn_call(self: *Self, instr: usize, infos: TypeSys.FnInfo) Error!Type {
+        self.instructions.items(.data)[instr].call.builtin = infos.builtin;
+
+        for (0..infos.arity) |i| {
             const arg_idx = self.node_idx;
             const arg_type = try self.analyze_node(arg_idx);
 
-            if (arg_type != type_info.params[i] and !self.check_equal_fn_types(arg_type, type_info.params[i])) {
+            if (arg_type != infos.params[i] and !self.check_equal_fn_types(arg_type, infos.params[i])) {
                 // If it's an implicit cast between int and float, save the
                 // argument indices for compiler. Otherwise, error
-                if (type_info.params[i] == .float and arg_type == .int) {
+                if (infos.params[i] == .float and arg_type == .int) {
                     _ = try self.add_instr(
                         .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
                         arg_idx,
@@ -985,7 +1008,7 @@ pub const Analyzer = struct {
                 } else {
                     return self.err(
                         .{ .TypeMismatch = .{
-                            .expect = self.get_type_name(type_info.params[i]),
+                            .expect = self.get_type_name(infos.params[i]),
                             .found = self.get_type_name(arg_type),
                         } },
                         self.to_span(arg_idx),
@@ -994,7 +1017,7 @@ pub const Analyzer = struct {
             }
         }
 
-        return type_info.return_type;
+        return infos.return_type;
     }
 
     /// Checks if an expression if of a certain type kind and returns the associated value or error
@@ -1016,6 +1039,7 @@ pub const Analyzer = struct {
     fn fn_declaration(self: *Self, node: Node.Index) Error!void {
         const save_local_offset = self.local_offset;
         const save_scope_depth = self.scope_depth;
+        const save_state = self.state;
 
         errdefer {
             self.local_offset = save_local_offset;
@@ -1027,11 +1051,12 @@ pub const Analyzer = struct {
             }
 
             self.scope_depth = save_scope_depth;
+            self.state = save_state;
         }
 
         const name_idx = try self.check_name();
 
-        if (self.main == null and self.scope_depth == 0 and name_idx == 0) {
+        if (self.main == null and self.scope_depth == 0 and name_idx == self.main_interned) {
             self.main = self.instructions.len;
         }
 
@@ -1039,11 +1064,11 @@ pub const Analyzer = struct {
         const arity = self.node_data[node];
         const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined }, node);
         // We add function's name for runtime access
-        _ = try self.add_instr(.{ .tag = .FnName, .data = .{ .Id = name_idx } }, node);
+        _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name_idx } }, node);
 
         // We declare before body for recursion and before parameters to put it as the first local
         const type_idx = try self.type_manager.reserve_info();
-        const fn_type = TypeSys.create(.@"fn", .none, type_idx);
+        const fn_type = TypeSys.create(.func, .none, type_idx);
         const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .func);
 
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
@@ -1051,17 +1076,34 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         self.local_offset = self.locals.items.len;
 
+        // We put back allow partial at the beginning of the function in case we are the last statement of an enclosing
+        // function, which has the effect of putting allow_partial to false
+        self.state.in_fn = true;
+        self.state.allow_partial = true;
+
         // We add a empty variable to anticipate the function it self on the stack
         // it's the returned address for the function
         try self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true, .kind = .func });
 
-        // TODO: ArrayList avec init capacity de 50?
+        // TODO: ArrayList with init capacity of arity
         var params_type: [256]Type = undefined;
+        var param_start: usize = 0;
 
-        for (0..arity) |i| {
+        // Self parameter
+        if (self.node_tags[self.node_idx] == .self) {
+            if (!self.state.in_struct) {
+                return self.err(.SelfOutsideStruct, self.to_span(self.node_idx));
+            }
+
+            params_type[0] = .self;
+            param_start = 1;
+            self.node_idx += 1;
+            _ = try self.declare_variable(2, .self, true, self.node_idx, .param);
+        }
+
+        for (param_start..arity) |i| {
             const decl = self.node_idx;
 
-            // Check on parameter
             const param_idx = self.check_name() catch |e| {
                 self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
                     .{ .DuplicateParam = .{ .name = self.source_from_node(decl) } },
@@ -1081,8 +1123,9 @@ pub const Analyzer = struct {
         }
 
         const return_type = try self.check_and_get_type();
+        self.state.fn_type = return_type;
 
-        self.type_manager.set_info(type_idx, .{ .Fn = .{
+        self.type_manager.set_info(type_idx, .{ .func = .{
             .arity = arity,
             .params = params_type,
             .return_type = return_type,
@@ -1091,9 +1134,6 @@ pub const Analyzer = struct {
         // ------
         //  Body
         // ------
-        try self.states.append(.{ .in_fn = true, .fn_type = return_type });
-        const prev_state = self.last_state();
-
         self.scope_depth += 1;
         const block_idx = self.node_idx;
         const length = self.node_data[block_idx];
@@ -1108,7 +1148,7 @@ pub const Analyzer = struct {
 
         for (0..length) |i| {
             // If previous statement returned, it's only dead code now
-            if (deadcode_start == 0 and prev_state.returns) {
+            if (deadcode_start == 0 and self.state.returns) {
                 try self.warn(.DeadCode, self.to_span(start));
                 deadcode_start = self.instructions.len;
                 deadcode_count = length - i;
@@ -1117,7 +1157,7 @@ pub const Analyzer = struct {
             // If last statement, we don't allow partial anymore (for return)
             // Usefull for 'if' for example, in this case we want all the branches
             // to return something
-            if (i == length - 1) prev_state.allow_partial = false;
+            if (i == length - 1) self.state.allow_partial = false;
 
             // We try to analyze the whole body
             start = self.node_idx;
@@ -1135,8 +1175,7 @@ pub const Analyzer = struct {
 
             // If last expression produced a value and that it wasn't the last one and it
             // wasn't a return, error
-            if (body_type != .void and i != length - 1 and !prev_state.returns) {
-                // return self.err(.UnusedValue, self.to_span(start));
+            if (body_type != .void and i != length - 1 and !self.state.returns) {
                 self.err(.UnusedValue, self.to_span(start)) catch {};
             }
         }
@@ -1165,14 +1204,14 @@ pub const Analyzer = struct {
         // Switch back to locals before function call
         self.local_offset = save_local_offset;
 
-        const state = self.states.pop().?;
-
-        const return_kind: ReturnKind = if (state.returns)
-            .Explicit
+        const return_kind: ReturnKind = if (self.state.returns)
+            .explicit
         else if (body_type == .void)
-            .ImplicitVoid
+            .implicit_void
         else
-            .ImplicitValue;
+            .implicit_value;
+
+        self.state = save_state;
 
         self.instructions.items(.data)[fn_idx] = .{ .FnDecl = .{
             .body_len = length - deadcode_count,
@@ -1186,13 +1225,13 @@ pub const Analyzer = struct {
     /// types in function definitions)
     fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
         if (t1 == t2) return true;
-        if (!TypeSys.is(t1, .@"fn") or !TypeSys.is(t2, .@"fn")) return false;
+        if (!TypeSys.is(t1, .func) or !TypeSys.is(t2, .func)) return false;
 
         const v1 = TypeSys.get_value(t1);
-        const infos1 = self.type_manager.type_infos.items[v1].Fn;
+        const infos1 = self.type_manager.type_infos.items[v1].func;
 
         const v2 = TypeSys.get_value(t2);
-        const infos2 = self.type_manager.type_infos.items[v2].Fn;
+        const infos2 = self.type_manager.type_infos.items[v2].func;
 
         if (infos1.arity == infos2.arity and infos1.return_type == infos2.return_type) {
             for (0..infos1.arity) |i| {
@@ -1208,18 +1247,18 @@ pub const Analyzer = struct {
     fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
         const variable = try self.resolve_identifier(node, initialized);
 
-        if (variable.kind == .param or variable.kind == .func or variable.kind == .import) {
+        if (variable.kind == .normal) {
+            self.check_capture(variable);
+            _ = try self.add_instr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
+        } else {
             // Params and imports aren't declared so we can't reference them, they just live on stack
             _ = try self.add_instr(
                 .{ .tag = .Identifier, .data = .{ .Variable = .{
                     .index = @intCast(variable.index),
-                    .scope = if (variable.depth > 0) .Local else .Global,
+                    .scope = if (variable.depth > 0) .local else .global,
                 } } },
                 node,
             );
-        } else {
-            self.check_capture(variable);
-            _ = try self.add_instr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
         }
 
         return variable;
@@ -1282,7 +1321,7 @@ pub const Analyzer = struct {
 
         variable.captured = true;
         variable.index = self.heap_count;
-        self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .Heap;
+        self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .heap;
         // TODO: protect the cast?
         self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
         self.heap_count += 1;
@@ -1291,7 +1330,7 @@ pub const Analyzer = struct {
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
         const idx = try self.add_instr(.{ .tag = .If, .data = undefined }, node);
         self.node_idx += 1;
-        var data: Instruction.If = .{ .cast = .None, .has_else = false };
+        var data: Instruction.If = .{ .cast = .none, .has_else = false };
 
         const cond_idx = self.node_idx;
         const cond_type = try self.analyze_node(self.node_idx);
@@ -1312,13 +1351,10 @@ pub const Analyzer = struct {
         const then_type = try self.analyze_node(self.node_idx);
         var final_type = then_type;
 
-        // State managment
-        const state = self.last_state();
-
         // If we hit a return, we transfert it first to the then branch
-        if (state.returns) {
+        if (self.state.returns) {
             // Reset return  for else branch
-            state.returns = false;
+            self.state.returns = false;
             then_return = true;
             // As we exit scope, we don't return any type
             final_type = .void;
@@ -1333,10 +1369,10 @@ pub const Analyzer = struct {
             else_type = try self.analyze_node(else_idx);
 
             // If it returns
-            if (state.returns) {
+            if (self.state.returns) {
                 else_return = true;
                 // If not then, unmark as globally returning from scope
-                if (!then_return) state.returns = false;
+                if (!then_return) self.state.returns = false;
             } else if (then_return) {
                 // If else only then branch returns, final_type becomes else branch
                 final_type = else_type;
@@ -1346,14 +1382,14 @@ pub const Analyzer = struct {
             // diffrent types
             if (!then_return and !else_return and then_type != else_type) {
                 if (then_type == .int and else_type == .float) {
-                    data.cast = .Then;
+                    data.cast = .then;
 
                     try self.warn(
                         AnalyzerMsg.implicit_cast("then branch", "float"),
                         self.to_span(then_idx),
                     );
                 } else if (then_type == .float and else_type == .int) {
-                    data.cast = .Else;
+                    data.cast = .@"else";
 
                     // Safe unsafe access, if there is a non void type
                     // there is an else body
@@ -1369,7 +1405,7 @@ pub const Analyzer = struct {
                     self.to_span(node),
                 );
             }
-        } else if (then_type != .void and !state.allow_partial) {
+        } else if (then_type != .void and !self.state.allow_partial) {
             // Skips the Empty
             self.node_idx += 1;
 
@@ -1426,7 +1462,6 @@ pub const Analyzer = struct {
 
     fn return_expr(self: *Self, node: Node.Index) Error!Type {
         self.node_idx += 1;
-        var state = self.last_state();
 
         const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = .{
             .value = false,
@@ -1444,25 +1479,25 @@ pub const Analyzer = struct {
         };
 
         // We check after to advance node idx
-        if (!state.in_fn) {
+        if (!self.state.in_fn) {
             return self.err(.ReturnOutsideFn, self.to_span(node));
         }
 
-        if (!self.check_equal_fn_types(state.fn_type, return_type)) {
-            if (state.fn_type == .float and return_type == .int) {
+        if (!self.check_equal_fn_types(self.state.fn_type, return_type)) {
+            if (self.state.fn_type == .float and return_type == .int) {
                 self.instructions.items(.data)[idx].Return.cast = true;
                 _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
             } else return self.err(
                 .{ .IncompatibleFnType = .{
-                    .expect = self.get_type_name(state.fn_type),
+                    .expect = self.get_type_name(self.state.fn_type),
                     .found = self.get_type_name(return_type),
                 } },
                 self.to_span(node),
             );
         }
 
-        state.returns = true;
-        return state.fn_type;
+        self.state.returns = true;
+        return self.state.fn_type;
     }
 
     fn string(self: *Self, node: Node.Index) !Type {
@@ -1476,14 +1511,55 @@ pub const Analyzer = struct {
     }
 
     fn structure(self: *Self, node: Node.Index) !Type {
+        std.debug.print("Name: {s}\n", .{self.source_from_node(node)});
         const name = try self.interner.intern(self.source_from_node(node));
         self.node_idx += 1;
 
         if (self.type_manager.is_declared(name)) {
-            return self.err(.{ .AlreadyDeclaredStruct = .{.name = self.source_from_node(node)} }, self.to_span(node));
+            return self.err(.{ .AlreadyDeclaredStruct = .{ .name = self.source_from_node(node) } }, self.to_span(node));
         }
 
-        _ = try self.type_manager.declare(name, .@"struct", .none, .{.struct_info = .{}});
+        // We forward declare for self referencing
+        const type_idx = try self.type_manager.reserve_info();
+        const struct_type = TypeSys.create(.@"struct", .none, type_idx);
+        const struct_var = try self.declare_variable(name, struct_type, true, self.instructions.len, .@"struct");
+
+        const struct_idx = try self.add_instr(.{ .tag = .StructDecl, .data = .{ .StructDecl = .{} } }, node);
+        _ = struct_idx;
+        // We add function's name for runtime access
+        _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name } }, node);
+        _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
+
+        var infos: TypeSys.StructInfo = .{ .functions = .{} };
+
+        const fields_count = self.node_data[self.node_idx];
+        self.node_idx += 1;
+
+        for (0..fields_count) |_| {
+            //
+        }
+
+        const func_count = self.node_data[self.node_idx];
+        try infos.functions.ensureTotalCapacity(self.allocator, @intCast(func_count));
+        self.node_idx += 1;
+
+        self.state.in_struct = true;
+
+        for (0..func_count) |_| {
+            const fn_name = try self.interner.intern(self.source_from_node(self.node_idx));
+            // Function's type infos will be the first added to the manager, even if types are created
+            // in function's body It's safe to save it from here
+            const func_idx = self.type_manager.type_infos.items.len;
+            try self.fn_declaration(self.node_idx);
+
+            if (fn_name == self.init_interned) {
+                infos.init = func_idx;
+            } else infos.functions.putAssumeCapacity(fn_name, func_idx);
+        }
+
+        self.state.in_struct = false;
+        const type_info: TypeInfo = .{ .@"struct" = infos };
+        _ = try self.type_manager.declare(name, .@"struct", .none, type_info);
 
         return .void;
     }
@@ -1493,7 +1569,7 @@ pub const Analyzer = struct {
         const idx = try self.add_instr(.{
             .tag = .Unary,
             .data = .{ .Unary = .{
-                .op = if (op == .Not) .Bang else .Minus,
+                .op = if (op == .Not) .bang else .minus,
                 .typ = .Float,
             } },
         }, node);
@@ -1506,7 +1582,7 @@ pub const Analyzer = struct {
                 .{ .InvalidUnary = .{ .found = self.get_type_name(rhs) } },
                 self.to_span(node),
             );
-        } else if (op == .Minus and rhs != .int and rhs != .float) {
+        } else if (op == .minus and rhs != .int and rhs != .float) {
             return self.err(
                 AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
                 self.to_span(node),
@@ -1529,7 +1605,7 @@ pub const Analyzer = struct {
 
         // For now, "std" is interned at initialization in slot 1
         self.node_idx += 1;
-        if (name == 1) {
+        if (name == self.std_interned) {
             // TODO: For now, il allows to keep synchronized the different arrays of
             // nodes/instructions
             _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, 0);
@@ -1548,7 +1624,7 @@ pub const Analyzer = struct {
                         // TODO: Error handling
                         const func = module.get(fn_name).?;
 
-                        const info: TypeInfo = .{ .Fn = .{
+                        const info: TypeInfo = .{ .func = .{
                             .arity = func.arity,
                             .params = func.params,
                             .return_type = func.return_type,
@@ -1556,7 +1632,7 @@ pub const Analyzer = struct {
                         } };
 
                         // Declare the type and additional informations
-                        const typ = try self.type_manager.declare(name_idx, .@"fn", .builtin, info);
+                        const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                         // Declare the variable
                         const variable = try self.declare_variable(name_idx, typ, true, self.node_idx, .import);
 
@@ -1597,12 +1673,11 @@ pub const Analyzer = struct {
         var cast = false;
 
         if (self.node_tags[value_idx] != .Empty) {
-            const state = self.last_state();
-            const last = state.allow_partial;
-            state.allow_partial = false;
+            const last = self.state.allow_partial;
+            self.state.allow_partial = false;
 
             const value_type = try self.analyze_node(value_idx);
-            state.allow_partial = last;
+            self.state.allow_partial = last;
 
             // Void assignment check
             if (value_type == .void) {

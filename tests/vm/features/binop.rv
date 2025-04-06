@@ -37,7 +37,7 @@ fn main() {
     // Functions call
     print -20 / add(5, 5) // expect: -2
 
-    // Local call
+    // local call
     fn sub(a: int, b: int) -> int { a - b }
     print 66 + sub(1, 7) // expect: 60
 }

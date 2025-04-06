@@ -15,12 +15,12 @@ pub const Obj = struct {
 
     const ObjKind = enum {
         // BoundMethod,
-        Fn,
-        // Instance,
+        func,
+        instance,
         // Iter,
-        NativeFn,
-        String,
-        Struct,
+        native_fn,
+        string,
+        @"struct",
     };
 
     pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
@@ -46,24 +46,24 @@ pub const Obj = struct {
     pub fn destroy(self: *Obj, vm: *Vm) void {
         switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
-            .Fn => {
+            .func => {
                 const function = self.as(ObjFunction);
                 function.deinit(vm.gc_alloc);
             },
-            // .Instance => {
-            //     const instance = self.as(ObjInstance);
-            //     instance.deinit(vm.allocator);
-            // },
+            .instance => {
+                const instance = self.as(ObjInstance);
+                instance.deinit(vm.gc_alloc);
+            },
             // .Iter => {
             //     const iter = self.as(ObjIter);
             //     vm.allocator.destroy(iter);
             // },
-            .NativeFn => {
+            .native_fn => {
                 const function = self.as(ObjNativeFn);
                 function.deinit(vm.gc_alloc);
             },
-            .String => self.as(ObjString).deinit(vm.gc_alloc),
-            .Struct => {
+            .string => self.as(ObjString).deinit(vm.gc_alloc),
+            .@"struct" => {
                 const structure = self.as(ObjStruct);
                 structure.deinit(vm.gc_alloc);
             },
@@ -80,15 +80,15 @@ pub const Obj = struct {
         try switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
             // .Closure => self.as(ObjClosure).function.print(writer),
-            .Fn => self.as(ObjFunction).print(writer),
-            // .Instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
+            .func => self.as(ObjFunction).print(writer),
+            .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
             // .Iter => {
             //     const iter = self.as(ObjIter);
             //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
             // },
-            .NativeFn => writer.print("<native fn>", .{}),
-            .String => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
-            .Struct => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+            .native_fn => writer.print("<native fn>", .{}),
+            .string => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
+            .@"struct" => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
         };
     }
 
@@ -96,15 +96,15 @@ pub const Obj = struct {
         switch (self.kind) {
             // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
             // .Closure => self.as(ObjClosure).function.print(writer),
-            .Fn => self.as(ObjFunction).log(),
-            // .Instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
+            .func => self.as(ObjFunction).log(),
+            .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
             // .Iter => {
             //     const iter = self.as(ObjIter);
             //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
             // },
-            .NativeFn => std.debug.print("<native fn>", .{}),
-            .String => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
-            .Struct => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+            .native_fn => std.debug.print("<native fn>", .{}),
+            .string => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
+            .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
         }
     }
 };
@@ -118,7 +118,7 @@ pub const ObjString = struct {
 
     // PERF: flexible array member: https://craftinginterpreters.com/strings.html#challenges
     fn create(vm: *Vm, str: []const u8, hash: u32) Allocator.Error!*ObjString {
-        var obj = try Obj.allocate(vm, Self, .String);
+        var obj = try Obj.allocate(vm, Self, .string);
         obj.chars = str;
         obj.hash = hash;
 
@@ -198,7 +198,7 @@ pub const ObjFunction = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: ?*ObjString) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .Fn);
+        const obj = try Obj.allocate(vm, Self, .func);
 
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
@@ -243,7 +243,7 @@ pub const ObjNativeFn = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, function: NativeFn) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .NativeFn);
+        const obj = try Obj.allocate(vm, Self, .native_fn);
         obj.function = function;
 
         if (options.log_gc) {
@@ -270,11 +270,39 @@ pub const ObjStruct = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: *ObjString) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .Struct);
+        const obj = try Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         // obj.methods = Table.init(vm.allocator);
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
+
+        return obj;
+    }
+
+    pub fn as_obj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        // self.methods.deinit();
+        allocator.destroy(self);
+    }
+};
+
+pub const ObjInstance = struct {
+    obj: Obj,
+    parent: *const ObjStruct,
+    fields: []const Value,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, parent: *ObjStruct) Allocator.Error!*Self {
+        const obj = try Obj.allocate(vm, Self, .instance);
+        obj.parent = parent;
+        // obj.methods = Table.init(vm.allocator);
+
+        if (options.log_gc)
+            std.debug.print("<instance of {s}>\n", .{parent.chars});
 
         return obj;
     }

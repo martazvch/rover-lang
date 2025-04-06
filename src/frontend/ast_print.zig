@@ -90,10 +90,11 @@ pub const AstPrinter = struct {
             .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
+            .count => unreachable,
             .Discard => self.discard(),
             .Empty => unreachable,
             .Float => self.literal("Float literal"),
-            .FnCall => self.fn_call(),
+            .call => self.fn_call(),
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
@@ -104,6 +105,7 @@ pub const AstPrinter = struct {
             .Parameter => self.parameter(),
             .Print => self.print_stmt(),
             .Return => self.return_expr(),
+            .self => unreachable,
             .String => self.literal("String literal"),
             .StructDecl => self.structure(),
             .Type => unreachable,
@@ -223,9 +225,15 @@ pub const AstPrinter = struct {
         try self.indent();
         try self.tree.appendSlice("params:\n");
         self.indent_level += 1;
-        for (0..arity) |_| {
-            try self.parse_node(self.node_idx);
+
+        for (0..arity) |i| {
+            if (i == 0 and self.node_tags[self.node_idx] == .self) {
+                try self.indent();
+                try self.tree.appendSlice("self\n");
+                self.node_idx += 1;
+            } else try self.parse_node(self.node_idx);
         }
+
         self.indent_level -= 1;
 
         const res = try self.tree.toOwnedSlice();
@@ -367,6 +375,24 @@ pub const AstPrinter = struct {
         );
 
         self.node_idx += 1;
+        self.indent_level += 1;
+
+        // Fields
+        const fields_count: usize = self.node_data[self.node_idx];
+        self.node_idx += 1;
+
+        for (0..fields_count) |_| {
+            //
+        }
+
+        const func_count: usize = self.node_data[self.node_idx];
+        self.node_idx += 1;
+
+        for (0..func_count) |_| {
+            try self.fn_decl();
+        }
+
+        self.indent_level -= 1;
         try self.tree.appendSlice("]\n");
     }
 

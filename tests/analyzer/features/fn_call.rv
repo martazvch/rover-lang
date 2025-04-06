@@ -1,11 +1,11 @@
-// Global
+// global
 fn add(a: int) {}
 fn mul(a: int, b: float, c: float, d: bool, e: str) {}
 
 fn main() {
     add(2)
 
-    // Local
+    // local
     fn sub(a: int) {}
     sub(2)
 

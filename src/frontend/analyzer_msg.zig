@@ -21,6 +21,7 @@ pub const AnalyzerMsg = union(enum) {
     NonVoidWhile: struct { found: []const u8 },
     NoMain,
     ReturnOutsideFn,
+    SelfOutsideStruct,
     TooManyLocals,
     TooManyTypes,
     TypeMismatch: struct { expect: []const u8, found: []const u8 },
@@ -66,6 +67,7 @@ pub const AnalyzerMsg = union(enum) {
             .NoMain => writer.print("no main function found", .{}),
             .MissingElseClause => writer.print("'if' may be missing in 'else' clause", .{}),
             .ReturnOutsideFn => writer.print("return outside of a function", .{}),
+            .SelfOutsideStruct => writer.writeAll("only structure's methods can refer to 'self'"),
             .TooManyLocals => writer.print("too many local variables, maximum is 255", .{}),
             .TooManyTypes => writer.print("too many types declared, maximum is 268435455", .{}),
             .TypeMismatch => |e| writer.print(
@@ -111,6 +113,7 @@ pub const AnalyzerMsg = union(enum) {
             .NoMain => writer.writeAll("in this file"),
             .MissingElseClause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .ReturnOutsideFn => writer.writeAll("here"),
+            .SelfOutsideStruct => writer.writeAll("here"),
             .TooManyLocals, .TooManyTypes => writer.writeAll("this is the exceding one"),
             .TypeMismatch => |e| writer.print("this expression is a '{s}'", .{e.found}),
             .UndeclaredType, .UndeclaredVar, .UseUninitVar => writer.writeAll("here"),
@@ -171,6 +174,7 @@ pub const AnalyzerMsg = union(enum) {
                 "return statements are only allow to exit a function's body. " ++
                     "In loops, use 'break' otherwise remove the return",
             ),
+            .SelfOutsideStruct => writer.writeAll("'self' is a reserved keyword. Use another paramter name"),
             .TooManyLocals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
             .TooManyTypes => writer.writeAll(
                 "it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code",

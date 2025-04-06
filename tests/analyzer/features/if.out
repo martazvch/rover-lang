@@ -1,14 +1,14 @@
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
-    [Variable declaration index: 1, scope: Local]
-        [If cast: Then, has else: true]
+[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [If cast: then, has else: true]
         - condition:
             [Bool true]
         - then:
             [Int 4]
         - else:
             [Float 5.6]
-    [Variable declaration index: 2, scope: Local]
-        [If cast: Else, has else: true]
+    [Variable declaration index: 2, scope: local]
+        [If cast: else, has else: true]
         - condition:
             [Bool true]
         - then:
@@ -16,15 +16,15 @@
                 [Float 5.6]
         - else:
             [Int 4]
-    [Variable declaration index: 3, scope: Local]
-        [If cast: Else, has else: true]
+    [Variable declaration index: 3, scope: local]
+        [If cast: else, has else: true]
         - condition:
             [Bool true]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Float 8.7]
         - else:
-            [If cast: None, has else: true]
+            [If cast: none, has else: true]
             - condition:
                 [Bool true]
             - then:
@@ -34,7 +34,7 @@
                 [Block pop count: 0, is_expr: true]
                     [Int 4]
     [Discard]
-        [If cast: None, has else: true]
+        [If cast: none, has else: true]
         - condition:
             [Bool true]
         - then:
@@ -43,7 +43,7 @@
         - else:
             [String ko]
     [Discard]
-        [If cast: None, has else: true]
+        [If cast: none, has else: true]
         - condition:
             [Bool true]
         - then:
@@ -51,7 +51,7 @@
         - else:
             [String ko]
     [Discard]
-        [If cast: None, has else: true]
+        [If cast: none, has else: true]
         - condition:
             [Bool true]
         - then:
@@ -61,30 +61,30 @@
                 [Bool true]
 
     [Discard]
-        [If cast: Else, has else: true]
+        [If cast: else, has else: true]
         - condition:
             [Bool true]
         - then:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 4, scope: Local]
+                [Variable declaration index: 4, scope: local]
                     [Float 5.5]
-                [Variable declaration index: 5, scope: Local]
+                [Variable declaration index: 5, scope: local]
                     [Float 8.7]
-                [Binop type: AddFloat, cast: None]
-                    [Variable index: 4, scope: Local]
-                    [Variable index: 5, scope: Local]
+                [Binop type: AddFloat, cast: none]
+                    [Variable index: 4, scope: local]
+                    [Variable index: 5, scope: local]
         - else:
             [Int 4]
 
     [Discard]
-        [If cast: Else, has else: true]
+        [If cast: else, has else: true]
         - condition:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 4, scope: Local]
+                [Variable declaration index: 4, scope: local]
                     [Bool true]
-                [Variable declaration index: 5, scope: Local]
+                [Variable declaration index: 5, scope: local]
                     [Int 1]
-                [Variable index: 4, scope: Local]
+                [Variable index: 4, scope: local]
         - then:
             [Float 1.5]
         - else:
@@ -92,10 +92,10 @@
                 [Int 4]
 
     [Discard]
-        [If cast: Then, has else: true]
+        [If cast: then, has else: true]
         - condition:
             [Block pop count: 0, is_expr: true]
-                [If cast: None, has else: true]
+                [If cast: none, has else: true]
                 - condition:
                     [Bool true]
                 - then:
@@ -108,8 +108,8 @@
             [Block pop count: 0, is_expr: true]
                 [Float 4.5]
 
-    [Fn declaration add, index: 4, scope: Local, return kind: ImplicitValue]
-        [If cast: None, has else: false]
+    [Fn declaration add, index: 4, scope: local, return kind: implicit_value]
+        [If cast: none, has else: false]
         - condition:
             [Bool true]
         - then:
@@ -118,4 +118,4 @@
         [Int 2]
     [Discard]
         [Fn call arity: 0, builtin: false]
-            [Variable index: 4, scope: Local]
+            [Variable index: 4, scope: local]

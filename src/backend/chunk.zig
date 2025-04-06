@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+
 const Value = @import("../runtime/values.zig").Value;
 
 pub const OpCode = enum(u8) {
@@ -18,7 +19,7 @@ pub const OpCode = enum(u8) {
     EqStr,
     ExitRepl,
     False,
-    FnCall,
+    call,
     GetGlobal,
     GetHeap,
     GetLocal,

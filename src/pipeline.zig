@@ -132,7 +132,7 @@ pub const Pipeline = struct {
             &self.analyzer.interner,
             self.instr_count,
             &self.analyzer.instructions,
-            if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .None,
+            if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
             if (self.config.embedded) 0 else self.analyzer.main.?,
             self.config.embedded,
         );

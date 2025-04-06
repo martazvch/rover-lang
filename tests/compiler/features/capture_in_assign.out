@@ -29,7 +29,7 @@ OP_GET_GLOBAL index 1
 OP_CALL index 0
 OP_NAKED_RETURN
 
--- Global scope --
+-- global scope --
 OP_NULL
 OP_DEFINE_GLOBAL index 0
 OP_NULL

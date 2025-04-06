@@ -1,0 +1,3 @@
+fn noooo(self, a: int) {}
+
+fn main() {}

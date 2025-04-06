@@ -32,10 +32,11 @@ to use manually the keyword
 
 ### Struct
 
-Structures fields can be explicitly marked as private "priv"
+Structures fields can be explicitly marked as private `priv`
 Methods that uses the instance must reference it with the "self" as first arg
-Methods that do not need "self" can be called on the type itself (allow defining
+Methods that do not need `self` can be called on the type itself (allow defining
 multiple constructor for example)
+The type `Self` if available to refer to the structure itself
 Struct can be constructed as:
 
 ```rust
@@ -43,14 +44,14 @@ struct Point {x, y: int}
 let p = Point { x = 1, y = 2 }
 ```
 
-They can have an "init" method thats called automatically on creation and allow
+They can have an `init` method thats called automatically on creation and allow
 the structor name to be called as a constructor
 
 ```rust
 struct Point {
     x, y: int
 
-    fn init(self, x, y)
+    fn init(x, y) Self {}
 }
 let p = Point(1, 2)
 ```
@@ -61,9 +62,18 @@ let p = Point(1, 2)
 
 ```rust
 struct Point { x: i64, y: i64 }
-let x = 5;
-let y = 10;
-let p = Point { x, y }; // instead of Point { x = x, y = y };
+let x = 5
+let y = 10
+let p = Point { x, y } // instead of Point { x = x, y = y };
+```
+
+- If variables of the same name are in scope, allow something like:
+
+```rust
+let x = 4
+let y = 10
+let pt = Point { ... }
+
 ```
 
 - Chaining type
@@ -80,8 +90,38 @@ all non-default value must have a match in args
 struct Point {
     x, y: i64
 
-    fn init(self, x, y)
+    fn init(x, y) Self {}
 }
+```
+
+- To sum up, all of this is supported:
+
+```rust
+struct Point {
+    x, y: int
+
+    fn init(x, y) Self {
+        .{ x, y }
+    }
+}
+
+fn main() {
+    var x, y = 5, 6
+
+    // Auto mapping
+    var pt = Point(...)
+
+    // Call to `init`
+    var pt = Point(x, y)
+
+    // No constructor
+    var pt = Point { x = x, y = y }
+
+    // No constructor shortcut
+    var pt = Point { x, y }
+
+    // No constructor shortcut++
+    var pt = Point {...}
 ```
 
 ### Macro

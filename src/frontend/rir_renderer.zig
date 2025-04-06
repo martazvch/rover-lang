@@ -100,9 +100,9 @@ pub const RirRenderer = struct {
             .Cast => self.cast(index),
             .Discard => self.discard(),
             .Float => self.float_instr(index),
-            .FnCall => self.fn_call(index),
+            .call => self.fn_call(index),
             .FnDecl => self.fn_declaration(index),
-            .FnName => unreachable,
+            .Name => unreachable,
             .Identifier => self.identifier(index, false),
             .IdentifierId => self.identifier(index, true),
             .If => self.if_instr(index),
@@ -124,6 +124,7 @@ pub const RirRenderer = struct {
             },
             .Return => self.return_instr(index),
             .String => self.string_instr(index),
+            .StructDecl => self.struct_decl(index),
             .Unary => self.unary(index),
             .Use => self.use(index),
             .VarDecl => self.var_decl(index),
@@ -228,7 +229,7 @@ pub const RirRenderer = struct {
     }
 
     fn fn_call(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].FnCall;
+        const data = self.instr_data[instr].call;
         self.instr_idx += 1;
 
         try self.indent();
@@ -365,6 +366,18 @@ pub const RirRenderer = struct {
 
         try self.indent();
         try writer.print("[String {s}]\n", .{self.interner.get_key(index).?});
+        self.instr_idx += 1;
+    }
+
+    fn struct_decl(self: *Self, instr: usize) Error!void {
+        var writer = self.tree.writer();
+        const index = self.instr_data[instr].StructDecl;
+        _ = index; // autofix
+        self.instr_idx += 1;
+        const name = self.instr_data[self.instr_idx].Id;
+
+        try self.indent();
+        try writer.print("[Structure declaration {s}]\n", .{self.interner.get_key(name).?});
         self.instr_idx += 1;
     }
 

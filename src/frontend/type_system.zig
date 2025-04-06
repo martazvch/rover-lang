@@ -1,3 +1,5 @@
+const std = @import("std");
+
 // Types are 32 bits long
 const TypeSize = u32;
 pub const Type = enum(TypeSize) {
@@ -7,6 +9,7 @@ pub const Type = enum(TypeSize) {
     float,
     bool,
     str,
+    self,
     _,
 
     pub fn to_idx(self: Type) usize {
@@ -21,8 +24,8 @@ pub const Type = enum(TypeSize) {
 // 4 first bits (16 values) are for:
 const KindSize = u4;
 pub const Kind = enum(KindSize) {
-    @"var",
-    @"fn",
+    variable,
+    func,
     array,
     tuple,
     @"enum",
@@ -109,10 +112,11 @@ pub fn is_builtin(typ: Type) bool {
 
 // Custom types
 pub const TypeInfo = union(enum) {
-    Fn: FnInfo,
-    struct_info: StructInfo,
+    func: FnInfo,
+    @"struct": StructInfo,
 };
 
+// TODO: slice instead of fixes size array
 pub const FnInfo = struct {
     arity: usize,
     params: [256]Type,
@@ -120,12 +124,14 @@ pub const FnInfo = struct {
     builtin: bool = false,
 };
 
-pub const StructInfo = struct {};
+pub const StructInfo = struct {
+    init: ?usize = null,
+    functions: std.AutoHashMapUnmanaged(usize, usize),
+};
 
 pub fn str_kind(kind: Kind) []const u8 {
     return switch (kind) {
-        .@"var" => "variable",
-        .@"fn" => "function",
+        .func => "function",
         else => |k| @tagName(k),
     };
 }
@@ -135,16 +141,16 @@ test "types" {
     const var1: Type = .int;
     const var2: Type = .str;
 
-    try expect(is(var1, .@"var"));
-    try expect(!is(var2, .@"fn"));
+    try expect(is(var1, .variable));
+    try expect(!is(var2, .func));
 
-    const str = create(.@"var", 0, .str);
+    const str = create(.variable, 0, .str);
     try expect(str == .str);
-    try expect(is(str, .@"var"));
+    try expect(is(str, .variable));
     try expect(get_value(str) == .str);
 
-    const func = create(.@"fn", .builtin, 16777214);
-    try expect(is(func, .@"fn"));
+    const func = create(.func, .builtin, 16777214);
+    try expect(is(func, .func));
     try expect(is_builtin(func));
     try expect(get_value(func) == 16777214);
 }

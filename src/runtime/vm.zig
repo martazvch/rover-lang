@@ -298,7 +298,7 @@ pub const Vm = struct {
                 .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
                 .False => self.stack.push(Value.bool_(false)),
-                .FnCall => {
+                .call => {
                     const args_count = frame.read_byte();
                     const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
                     try self.call(callee, args_count);

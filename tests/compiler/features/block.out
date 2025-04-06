@@ -33,7 +33,7 @@ OP_SCOPE_RETURN index 4
 
 OP_NAKED_RETURN
 
--- Global scope --
+-- global scope --
 OP_CONSTANT index 0, value <fn main>
 OP_DEFINE_GLOBAL index 0
 OP_GET_GLOBAL index 0

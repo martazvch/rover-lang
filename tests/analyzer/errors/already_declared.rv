@@ -1,3 +1,6 @@
+struct Name {}
+struct Name {}
+
 fn main() {
     {
         var loc1 = "local"

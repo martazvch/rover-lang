@@ -146,7 +146,13 @@ pub const Parser = struct {
         return self.error_at_current(error_kind);
     }
 
-    /// Expecy a specific type, otherwise it's an error and we enter
+    /// Expect a specific type, otherwise it's an error and we enter
+    /// *panic* mode. Error will mark the previous token
+    fn expect_or_err_at_prev(self: *Self, kind: Token.Tag, error_kind: ParserMsg) !void {
+        return self.expect_or_err_at_tk(kind, error_kind, self.token_idx - 1);
+    }
+
+    /// Expect a specific token tag, otherwise it's an error and we enter
     /// *panic* mode. Allow to pass a token to be marked as initial error
     /// (usefull for example when unclosed parenthesis, we give the first)
     fn expect_or_err_at_tk(
@@ -250,15 +256,22 @@ pub const Parser = struct {
                 .{ .TooManyFnArgs = .{ .what = "parameter" } },
             );
 
-            try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
+            if (self.match(.Self)) {
+                if (arity > 0) {
+                    return self.error_at_prev(.SelfAsNonFirstParam);
+                }
 
-            _ = try self.add_node(.{
-                .tag = .Parameter,
-                .main = self.token_idx - 1,
-            });
+                if (self.match(.Colon)) {
+                    return self.error_at_current(.TypedSelf);
+                }
 
-            try self.expect(.Colon, .MissingFnParamType);
-            _ = try self.parse_type();
+                _ = try self.add_node(.{ .tag = .self, .main = self.token_idx - 1 });
+            } else {
+                try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
+                _ = try self.add_node(.{ .tag = .Parameter, .main = self.token_idx - 1 });
+                try self.expect(.Colon, .MissingFnParamType);
+                _ = try self.parse_type();
+            }
 
             arity += 1;
 
@@ -299,14 +312,34 @@ pub const Parser = struct {
 
     fn struct_declaration(self: *Self) !Node.Index {
         try self.expect(.Identifier, .ExpectStructName);
-        try self.expect(.LeftBrace, .ExpectBraceBeforeStructBody);
+        const name_idx = self.token_idx - 1;
+        self.skip_new_lines();
+        try self.expect_or_err_at_prev(.LeftBrace, .ExpectBraceBeforeStructBody);
+        self.skip_new_lines();
 
         const idx = try self.add_node(.{
             .tag = .StructDecl,
-            .main = self.token_idx - 2,
+            .main = name_idx,
         });
 
-        try self.expect(.RightBrace, .ExpectBraceAfterStructBody);
+        // Fields
+        const fields = try self.add_node(.{ .tag = .count });
+        const fields_count: usize = 0;
+        self.nodes.items(.data)[fields] = fields_count;
+
+        // Functions
+        const func = try self.add_node(.{ .tag = .count });
+        var fn_count: usize = 0;
+
+        while (!self.check(.RightBrace) and !self.check(.Eof)) {
+            _ = try self.expect(.Fn, .ExpectFnInStructBody);
+            _ = try self.fn_declaration();
+            self.skip_new_lines();
+            fn_count += 1;
+        }
+        self.nodes.items(.data)[func] = fn_count;
+
+        try self.expect_or_err_at_prev(.RightBrace, .ExpectBraceAfterStructBody);
 
         return idx;
     }
@@ -530,7 +563,7 @@ pub const Parser = struct {
         return idx;
     }
 
-    const Assoc = enum { Left, None };
+    const Assoc = enum { Left, none };
 
     const Rule = struct { prec: i8, assoc: Assoc = .Left, tag: Node.Tag = .Empty };
 
@@ -538,15 +571,15 @@ pub const Parser = struct {
         .And = .{ .prec = 20, .tag = .And },
         .Or = .{ .prec = 20, .tag = .Or },
 
-        .EqualEqual = .{ .prec = 30, .assoc = .None, .tag = .Eq },
-        .BangEqual = .{ .prec = 30, .assoc = .None, .tag = .Ne },
+        .EqualEqual = .{ .prec = 30, .assoc = .none, .tag = .Eq },
+        .BangEqual = .{ .prec = 30, .assoc = .none, .tag = .Ne },
 
-        .Greater = .{ .prec = 40, .assoc = .None, .tag = .Gt },
-        .GreaterEqual = .{ .prec = 40, .assoc = .None, .tag = .Ge },
-        .Less = .{ .prec = 40, .assoc = .None, .tag = .Lt },
-        .LessEqual = .{ .prec = 40, .assoc = .None, .tag = .Le },
+        .Greater = .{ .prec = 40, .assoc = .none, .tag = .Gt },
+        .GreaterEqual = .{ .prec = 40, .assoc = .none, .tag = .Ge },
+        .Less = .{ .prec = 40, .assoc = .none, .tag = .Lt },
+        .LessEqual = .{ .prec = 40, .assoc = .none, .tag = .Le },
 
-        .Minus = .{ .prec = 60, .tag = .Sub },
+        .minus = .{ .prec = 60, .tag = .Sub },
         .Plus = .{ .prec = 60, .tag = .Add },
 
         .Slash = .{ .prec = 70, .tag = .Div },
@@ -583,7 +616,7 @@ pub const Parser = struct {
             self.advance();
             _ = try self.parse_precedence_expr(next_rule.prec + 1);
 
-            if (next_rule.assoc == .None) banned_prec = next_rule.prec;
+            if (next_rule.assoc == .none) banned_prec = next_rule.prec;
         }
 
         return node;
@@ -597,7 +630,7 @@ pub const Parser = struct {
         _ = try switch (self.token_tags[self.token_idx - 1]) {
             .LeftBrace => self.block_expr(),
             .If => self.if_expr(),
-            .Minus, .Not => self.unary_expr(),
+            .minus, .Not => self.unary_expr(),
             else => self.parse_primary_expr(),
         };
 
@@ -648,7 +681,7 @@ pub const Parser = struct {
         // If we dosen't match an else, we go back one token to be able
         // to match the rule "after each statement there is a new line"
         // tested in the main caller
-        if (self.match_and_skip(.Else)) {
+        if (self.match_and_skip(.@"else")) {
             _ = if (self.match_and_skip(.LeftBrace))
                 try self.block_expr()
             else
@@ -736,7 +769,7 @@ pub const Parser = struct {
 
     // Takes the callee expression as input and output the full function call expression
     fn finish_call(self: *Self, node: Node.Index) Error!void {
-        try self.nodes.insert(self.allocator, node, .{ .tag = .FnCall });
+        try self.nodes.insert(self.allocator, node, .{ .tag = .call });
 
         var arity: usize = 0;
 

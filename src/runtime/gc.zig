@@ -11,10 +11,8 @@ const Vm = @import("vm.zig").Vm;
 
 const ObjFunction = @import("obj.zig").ObjFunction;
 const ObjStruct = @import("obj.zig").ObjStruct;
-// const ObjInstance = @import("obj.zig").ObjInstance;
+const ObjInstance = @import("obj.zig").ObjInstance;
 // const ObjBoundMethod = @import("obj.zig").ObjBoundMethod;
-// const Table = @import("table.zig").Table;
-// const Compiler = @import("compiler.zig").Compiler;
 
 pub const Gc = struct {
     vm: *Vm,
@@ -57,7 +55,7 @@ pub const Gc = struct {
         try self.trace_reference();
         self.sweep();
 
-        self.next_gc = self.bytes_allocated * Gc.GROW_FACTOR;
+        self.next_gc = self.bytes_allocated * GROW_FACTOR;
 
         if (options.log_gc) {
             print("-- GC end\n", .{});
@@ -102,25 +100,25 @@ pub const Gc = struct {
             //     try self.mark_value(&bound.receiver);
             //     try self.mark_object(bound.method.as_obj());
             // },
-            .Fn => {
+            .func => {
                 const function = obj.as(ObjFunction);
                 if (function.name) |name| {
                     try self.mark_object(name.as_obj());
                 }
                 try self.mark_array(&function.chunk.constants);
             },
-            // .Instance => {
-            //     const instance = obj.as(ObjInstance);
-            //     try self.mark_object(instance.parent.name.as_obj());
-            //     try self.mark_table(&instance.fields);
-            // },
-            .Struct => {
+            .instance => {
+                const instance = obj.as(ObjInstance);
+                try self.mark_object(instance.parent.name.as_obj());
+                try self.mark_array(instance.fields);
+            },
+            .@"struct" => {
                 const structure = obj.as(ObjStruct);
                 try self.mark_object(structure.name.as_obj());
                 // try self.mark_table(&structure.methods);
             },
-            // .NativeFn, .String, .Iter => {},
-            .NativeFn, .String => {},
+            // .Iter => {},
+            .native_fn, .string => {},
         }
     }
 
@@ -154,8 +152,9 @@ pub const Gc = struct {
         }
     }
 
-    fn mark_value(self: *Self, value: *Value) Allocator.Error!void {
-        if (value.as_obj()) |obj| try self.mark_object(obj);
+    fn mark_value(self: *Self, value: *const Value) Allocator.Error!void {
+        if (value.as_obj()) |obj|
+            try self.mark_object(obj);
     }
 
     // pub because called once by the compiler
@@ -176,7 +175,7 @@ pub const Gc = struct {
     }
 
     // fn mark_array(self: *Self, array: *std.ArrayList(Value)) Allocator.Error!void {
-    fn mark_array(self: *Self, array: []Value) Allocator.Error!void {
+    fn mark_array(self: *Self, array: []const Value) Allocator.Error!void {
         for (array) |*value|
             try self.mark_value(value);
     }

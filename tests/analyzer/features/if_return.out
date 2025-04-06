@@ -1,6 +1,6 @@
-[Fn declaration main, index: 0, scope: Global, return kind: ImplicitVoid]
-    [Variable declaration index: 1, scope: Local]
-        [If cast: None, has else: true]
+[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [If cast: none, has else: true]
         - condition:
             [Bool true]
         - then:
@@ -8,51 +8,51 @@
                 [Return expr: false, cast: false]
         - else:
             [Int 4]
-    [Variable declaration index: 2, scope: Local]
-        [If cast: None, has else: true]
+    [Variable declaration index: 2, scope: local]
+        [If cast: none, has else: true]
         - condition:
             [Bool false]
         - then:
             [Int 5]
         - else:
             [Return expr: false, cast: false]
-    [Fn declaration func, index: 3, scope: Local, return kind: Explicit]
+    [Fn declaration func, index: 3, scope: local, return kind: explicit]
         [Print]
-            [If cast: None, has else: true]
+            [If cast: none, has else: true]
             - condition:
                 [Bool true]
             - then:
                 [String str]
             - else:
                 [Return expr: true, cast: false]
-                    [Variable index: 1, scope: Local]
-        [Variable declaration index: 2, scope: Local]
-            [If cast: None, has else: true]
+                    [Variable index: 1, scope: local]
+        [Variable declaration index: 2, scope: local]
+            [If cast: none, has else: true]
             - condition:
                 [Bool true]
             - then:
                 [Return expr: true, cast: false]
-                    [Binop type: AddInt, cast: None]
-                        [Variable index: 1, scope: Local]
+                    [Binop type: AddInt, cast: none]
+                        [Variable index: 1, scope: local]
                         [Int 2]
             - else:
                 [Block pop count: 1, is_expr: true]
-                    [Variable declaration index: 2, scope: Local]
+                    [Variable declaration index: 2, scope: local]
                         [Float 56.4]
                     [String champ]
-        [If cast: None, has else: false]
+        [If cast: none, has else: false]
         - condition:
             [Bool true]
         - then:
             [Return expr: true, cast: false]
                 [Int 8]
         [Return expr: true, cast: false]
-            [If cast: None, has else: true]
+            [If cast: none, has else: true]
             - condition:
                 [Bool true]
             - then:
                 [Block pop count: 0, is_expr: true]
-                    [If cast: None, has else: true]
+                    [If cast: none, has else: true]
                     - condition:
                         [Bool true]
                     - then:
@@ -64,13 +64,13 @@
                         [Int 5]
             - else:
                 [Block pop count: 0, is_expr: true]
-                    [If cast: None, has else: true]
+                    [If cast: none, has else: true]
                     - condition:
                         [Bool false]
                     - then:
                         [Block pop count: 0, is_expr: true]
                             [Return expr: true, cast: false]
-                                [If cast: None, has else: true]
+                                [If cast: none, has else: true]
                                 - condition:
                                     [Bool true]
                                 - then:

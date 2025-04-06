@@ -1,4 +1,29 @@
-struct Name {}
-struct Name {}
+fn main() {
+    // Only one path produces a value
+    var a = if true { return } else 4
+    var b = if false do 5 else return
 
-fn main() {}
+    fn func(a: int) -> int {
+        // Only one path generates a value, returns a value otherwise
+        print if true do "str" else return a
+
+        var tmp: str = if true do return a + 2 else {
+            var local = 56.4
+            "champ"
+        }
+
+        // If without else but not as last stmt
+        if true do return 8
+
+        return if true {
+            if true {
+                return { 1 }
+            } else 5
+        } else {
+            if false {
+                return if true { return 4 } else 3
+            } else 8
+        }
+    }
+}
+

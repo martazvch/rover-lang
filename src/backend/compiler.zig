@@ -13,6 +13,7 @@ const GenReport = @import("../reporter.zig").GenReport;
 const ObjString = @import("../runtime/obj.zig").ObjString;
 const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
 const ObjNativeFn = @import("../runtime/obj.zig").ObjNativeFn;
+const ObjStruct = @import("../runtime/obj.zig").ObjStruct;
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/vm.zig").Vm;
 const NativeFn = @import("../std/meta.zig").NativeFn;
@@ -71,7 +72,7 @@ pub const CompilationManager = struct {
     }
 
     pub fn compile(self: *Self) !*ObjFunction {
-        self.compiler = Compiler.init(self, null, .Global, "Global scope");
+        self.compiler = Compiler.init(self, null, .global, "global scope");
 
         while (self.instr_idx < self.instr_tags.len) {
             try self.compiler.compile_instr();
@@ -88,7 +89,7 @@ pub const CompilationManager = struct {
                 self.main_index.?,
                 0,
             );
-            try self.compiler.write_op_and_byte(.FnCall, 0, 0);
+            try self.compiler.write_op_and_byte(.call, 0, 0);
         } else {
             try self.compiler.get_chunk().write_op(.ExitRepl, 0);
         }
@@ -110,7 +111,7 @@ const Compiler = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     const FnKind = enum {
-        Global,
+        global,
         Fn,
         Method,
     };
@@ -166,9 +167,9 @@ const Compiler = struct {
     /// on the stack
     fn define_variable(self: *Self, infos: Instruction.Variable, offset: usize) !void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
-        if (infos.scope == .Global)
+        if (infos.scope == .global)
             try self.write_op_and_byte(.DefineGlobal, @intCast(infos.index), offset)
-        else if (infos.scope == .Heap)
+        else if (infos.scope == .heap)
             try self.write_op_and_byte(.DefineHeapVar, @intCast(infos.index), offset);
     }
 
@@ -215,7 +216,7 @@ const Compiler = struct {
 
     pub fn end(self: *Self) Error!*ObjFunction {
         // Disassembler
-        if (self.manager.render_mode != .None) {
+        if (self.manager.render_mode != .none) {
             var dis = Disassembler.init(&self.function.chunk, self.manager.vm.allocator, self.manager.render_mode);
             defer dis.deinit();
             dis.dis_chunk(if (self.function.name) |n| n.chars else "Script") catch unreachable;
@@ -236,9 +237,9 @@ const Compiler = struct {
             .Cast => self.cast(),
             .Discard => self.discard(),
             .Float => self.float_instr(),
-            .FnCall => self.fn_call(),
+            .call => self.fn_call(),
             .FnDecl => self.fn_decl(),
-            .FnName => unreachable,
+            .Name => unreachable,
             .Identifier => self.identifier(false),
             .IdentifierId => self.identifier(true),
             .Imported => unreachable,
@@ -249,6 +250,7 @@ const Compiler = struct {
             .Print => self.print_instr(),
             .Return => self.return_instr(),
             .String => self.string_instr(),
+            .StructDecl => self.struct_decl(),
             .Unary => self.unary(),
             .Use => self.use(),
             .VarDecl => self.var_decl(),
@@ -277,9 +279,9 @@ const Compiler = struct {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (data.scope == .Global)
+            if (data.scope == .global)
                 .SetGlobal
-            else if (data.scope == .Heap)
+            else if (data.scope == .heap)
                 .SetHeap
             else
                 .SetLocal,
@@ -297,10 +299,10 @@ const Compiler = struct {
         if (data.op == .And or data.op == .Or) return self.logical_binop(start, data);
 
         try self.compile_instr();
-        if (data.cast == .Lhs and data.op != .MulStr) try self.write_op(.CastToFloat, start);
+        if (data.cast == .lhs and data.op != .MulStr) try self.write_op(.CastToFloat, start);
 
         try self.compile_instr();
-        if (data.cast == .Rhs and data.op != .MulStr) try self.write_op(.CastToFloat, start);
+        if (data.cast == .rhs and data.op != .MulStr) try self.write_op(.CastToFloat, start);
 
         try self.write_op(
             switch (data.op) {
@@ -323,7 +325,7 @@ const Compiler = struct {
                 .LtInt => .LtInt,
                 .MulFloat => .MulFloat,
                 .MulInt => .MulInt,
-                .MulStr => if (data.cast == .Rhs) .StrMulR else .StrMulL,
+                .MulStr => if (data.cast == .rhs) .StrMulR else .StrMulL,
                 .NeBool => .NeBool,
                 .NeFloat => .NeFloat,
                 .NeInt => .NeInt,
@@ -402,7 +404,7 @@ const Compiler = struct {
     }
 
     fn fn_call(self: *Self) !void {
-        const data = self.get_data().FnCall;
+        const data = self.get_data().call;
         const start = self.get_start();
         self.manager.instr_idx += 1;
 
@@ -418,7 +420,7 @@ const Compiler = struct {
         }
 
         try self.write_op_and_byte(
-            if (data.builtin) .NativeFnCall else .FnCall,
+            if (data.builtin) .NativeFnCall else .call,
             data.arity,
             start,
         );
@@ -456,12 +458,12 @@ const Compiler = struct {
             try compiler.compile_instr();
         }
 
-        if (data.return_kind == .ImplicitValue) {
+        if (data.return_kind == .implicit_value) {
             try compiler.write_op(
                 .Return,
                 self.manager.instr_offsets[self.manager.instr_idx - 1],
             );
-        } else if (data.return_kind == .ImplicitVoid) {
+        } else if (data.return_kind == .implicit_void) {
             try compiler.write_op(
                 .NakedReturn,
                 self.manager.instr_offsets[self.manager.instr_idx - 1],
@@ -481,7 +483,7 @@ const Compiler = struct {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         try self.write_op_and_byte(
-            if (data.scope == .Heap) .GetHeap else if (data.scope == .Global) .GetGlobal else .GetLocal,
+            if (data.scope == .heap) .GetHeap else if (data.scope == .global) .GetGlobal else .GetLocal,
             @intCast(data.index),
             self.get_start(),
         );
@@ -506,7 +508,7 @@ const Compiler = struct {
 
         // Then body
         try self.compile_instr();
-        if (data.cast == .Then) try self.write_op(.CastToFloat, start);
+        if (data.cast == .then) try self.write_op(.CastToFloat, start);
 
         // Exits the if expression
         const else_jump = try self.emit_jump(.Jump, start);
@@ -519,7 +521,7 @@ const Compiler = struct {
         // Otherwise, we just patch the then_jump
         if (data.has_else) {
             try self.compile_instr();
-            if (data.cast == .Else) try self.write_op(.CastToFloat, start);
+            if (data.cast == .@"else") try self.write_op(.CastToFloat, start);
         }
 
         try self.patch_jump(else_jump);
@@ -570,6 +572,27 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
     }
 
+    fn struct_decl(self: *Self) !void {
+        const start = self.get_start();
+        const data = self.get_data().StructDecl;
+        _ = data; // autofix
+        self.manager.instr_idx += 1;
+        const name = self.get_data().Id;
+        self.manager.instr_idx += 1;
+        const struct_var = self.get_data().VarDecl;
+
+        try self.emit_constant(
+            Value.obj((try ObjStruct.create(
+                self.manager.vm,
+                try ObjString.copy(self.manager.vm, self.manager.interner.get_key(name).?),
+            )).as_obj()),
+            self.get_start(),
+        );
+        try self.define_variable(struct_var.variable, start);
+
+        self.manager.instr_idx += 1;
+    }
+
     fn unary(self: *Self) !void {
         const start = self.get_start();
         const data = self.get_data().Unary;
@@ -577,7 +600,7 @@ const Compiler = struct {
 
         try self.compile_instr();
 
-        if (data.op == .Minus) {
+        if (data.op == .minus) {
             try self.write_op(
                 if (data.typ == .Int) .NegateInt else .NegateFloat,
                 start,
@@ -629,7 +652,7 @@ const Compiler = struct {
 
         try self.define_variable(data.variable, start);
 
-        if (data.variable.scope == .Heap) {
+        if (data.variable.scope == .heap) {
             self.manager.heap_count += 1;
             // We place a 'tombstone' value here because during static analyzis,
             // the locals list is synchronized to all following declaration. Instead of

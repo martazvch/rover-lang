@@ -2,6 +2,8 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
+const expect = std.testing.expect;
+
 const GenReport = @import("../reporter.zig").GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
 
@@ -23,7 +25,7 @@ pub const Token = struct {
         .{ "as", .As },
         .{ "bool", .Bool },
         .{ "do", .Do },
-        .{ "else", .Else },
+        .{ "else", .@"else" },
         .{ "error", .Error },
         .{ "false", .False },
         .{ "float", .FloatKw },
@@ -50,7 +52,7 @@ pub const Token = struct {
     pub const Tag = enum {
         And,
         As,
-        Bang,
+        bang,
         BangEqual,
         Bool,
         Colon,
@@ -62,7 +64,7 @@ pub const Token = struct {
         DotDotDot,
         DotQuestionMark,
         DotStar,
-        Else,
+        @"else",
         Eof,
         Equal,
         EqualEqual,
@@ -84,7 +86,7 @@ pub const Token = struct {
         LeftParen,
         Less,
         LessEqual,
-        Minus,
+        minus,
         Modulo,
         NewLine,
         Not,
@@ -118,7 +120,7 @@ pub const Token = struct {
             return switch (self) {
                 .And => "and",
                 // .As => "as",
-                .Bang => "!",
+                .bang => "!",
                 .BangEqual => "!=",
                 // .Bool => "bool",
                 // .Colon => ":",
@@ -130,7 +132,7 @@ pub const Token = struct {
                 // .DotDotDot => "...",
                 // .DotQuestionMark => ".?",
                 // .DotStar => ".*",
-                // .Else => "else",
+                // .@"else" => "else",
                 // .Eof => "eof",
                 // .Equal => "=",
                 // .EqualEqual => "==",
@@ -152,7 +154,7 @@ pub const Token = struct {
                 // .LeftParen => "(",
                 .Less => "<",
                 .LessEqual => "<=",
-                .Minus => "-",
+                .minus => "-",
                 // .Modulo => "%",
                 // .NewLine => "newline",
                 .Not => "not",
@@ -203,7 +205,7 @@ pub const Lexer = struct {
     pub const LexerReport = GenReport(LexerMsg);
 
     const State = enum {
-        Bang,
+        bang,
         Comment,
         Dot,
         DotDot,
@@ -313,7 +315,7 @@ pub const Lexer = struct {
                         if (self.source[self.index] == '>') {
                             self.index += 1;
                             res.tag = .SmallArrow;
-                        } else res.tag = .Minus;
+                        } else res.tag = .minus;
                     },
                     '*' => {
                         res.tag = .Star;
@@ -326,7 +328,7 @@ pub const Lexer = struct {
                     },
                     '<' => continue :state .Less,
                     '>' => continue :state .Greater,
-                    '!' => continue :state .Bang,
+                    '!' => continue :state .bang,
                     '=' => continue :state .Equal,
                     '.' => continue :state .Dot,
                     '"' => {
@@ -380,7 +382,7 @@ pub const Lexer = struct {
                     },
                 }
             },
-            .Bang => {
+            .bang => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
@@ -388,7 +390,7 @@ pub const Lexer = struct {
                         res.tag = .BangEqual;
                         self.index += 1;
                     },
-                    else => res.tag = .Bang,
+                    else => res.tag = .bang,
                 }
             },
             .Comment => {
@@ -547,8 +549,6 @@ pub const Lexer = struct {
 // ------------
 //  Tests
 // ------------
-const expect = std.testing.expect;
-
 test "ident and strings" {
     var lexer = Lexer.init(std.testing.allocator);
     defer lexer.deinit();
@@ -600,8 +600,8 @@ test "tokens" {
 
     const res = [_]Token.Tag{
         .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
-        .Comma,        .Equal,      .Bang,      .Less,       .Greater, .LessEqual,
-        .GreaterEqual, .BangEqual,  .Plus,      .Minus,      .Star,    .Slash,
+        .Comma,        .Equal,      .bang,      .Less,       .Greater, .LessEqual,
+        .GreaterEqual, .BangEqual,  .Plus,      .minus,      .Star,    .Slash,
     };
 
     for (0..res.len) |i| {
@@ -619,7 +619,7 @@ test "keywords" {
     );
 
     const res = [_]Token.Tag{
-        .And,    .Else,    .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
+        .And,    .@"else", .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
         .Return, .NewLine, .Self,  .Struct, .True, .Var, .While, .Not,  .IntKw, .FloatKw,
         .StrKw,  .Do,      .Use,   .Eof,
     };
@@ -670,8 +670,8 @@ test "arrow" {
     try lexer.lex("- > -5> >- -< ->");
 
     const res = [_]Token.Tag{
-        .Minus, .Greater, .Minus,      .Int, .Greater, .Greater, .Minus,
-        .Minus, .Less,    .SmallArrow,
+        .minus, .Greater, .minus,      .Int, .Greater, .Greater, .minus,
+        .minus, .Less,    .SmallArrow,
     };
 
     for (0..res.len) |i| {

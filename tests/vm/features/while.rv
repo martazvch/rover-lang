@@ -1,4 +1,4 @@
-// Global
+// global
 var i = 0
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
         i = i + 1
     }
 
-    // Local with condition manipulation
+    // local with condition manipulation
     {
         var i = 3
         // expect: 3
@@ -26,7 +26,7 @@ fn main() {
         }
     }
 
-    // Local with stack manipulation
+    // local with stack manipulation
     var offset = 3
     {
         var i = 5

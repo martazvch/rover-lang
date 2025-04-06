@@ -13,11 +13,11 @@ fn main() {
     print sub // expect: <fn sub>
     print add // expect: <fn add>
 
-    // Local declaration
+    // local declaration
     {
         var local = 56-6
 
-        // Explicit return
+        // explicit return
         fn mul() -> str {
             return "mul"
         }

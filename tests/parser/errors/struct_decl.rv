@@ -1,0 +1,9 @@
+struct {}
+
+struct Foo
+    var a = 1
+
+
+struct Foo {
+    fn a() {}
+

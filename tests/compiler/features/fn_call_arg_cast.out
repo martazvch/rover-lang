@@ -24,7 +24,7 @@ OP_CALL index 3
 // Implicit return of main
 OP_NAKED_RETURN
 
--- Global scope --
+-- global scope --
 OP_CONSTANT index 0, value <fn sub>
 OP_DEFINE_GLOBAL index 0
 

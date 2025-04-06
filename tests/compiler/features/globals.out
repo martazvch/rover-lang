@@ -1,7 +1,7 @@
 -- main --
 OP_NAKED_RETURN
 
--- Global scope --
+-- global scope --
 OP_CONSTANT index 0, value 15.6
 OP_DEFINE_GLOBAL index 0
 

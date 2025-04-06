@@ -1,8 +1,8 @@
-// Global
+// global
 fn add(a: int) {}
 
 fn main() {
-    // Local
+    // local
     {
         fn another_bool(a: int, b: str) -> bool {
             var tmp = 5

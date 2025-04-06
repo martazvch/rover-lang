@@ -2,6 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
+
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 
@@ -11,7 +12,7 @@ pub const Disassembler = struct {
     render_mode: RenderMode,
 
     const Self = @This();
-    pub const RenderMode = enum { None, Normal, Test };
+    pub const RenderMode = enum { none, Normal, Test };
 
     pub fn init(chunk: *const Chunk, allocator: Allocator, render_mode: RenderMode) Self {
         return .{
@@ -90,7 +91,7 @@ pub const Disassembler = struct {
             .EqStr => self.simple_instruction("OP_EQUAL_STRING", offset, writer),
             .ExitRepl => self.simple_instruction("OP_EXIT_REPL", offset, writer),
             .False => self.simple_instruction("OP_FALSE", offset, writer),
-            .FnCall => self.index_instruction("OP_CALL", offset, writer),
+            .call => self.index_instruction("OP_CALL", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
             .GetGlobal => self.index_instruction("OP_GET_GLOBAL", offset, writer),
             .GetHeap => self.index_instruction("OP_GET_HEAP", offset, writer),

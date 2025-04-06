@@ -17,7 +17,7 @@ fn main() {
 
     print f(4, -9) // expect: -5
 
-    // Local function
+    // local function
     var arg1 = 9
 
     fn sub(a: int, b: float) -> float {

@@ -16,7 +16,7 @@ OP_CONSTANT index 0, value <fn div>
 OP_POP
 OP_NAKED_RETURN
 
--- Global scope --
+-- global scope --
 OP_CONSTANT index 0, value <fn add>
 OP_DEFINE_GLOBAL index 0
 
