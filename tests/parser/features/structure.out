@@ -15,3 +15,42 @@
             [Block]
     ]
 ]
+
+[Structure declaration Bar
+    fields:
+        name, type: int
+        age, type: str
+        life, type: float
+        parent, type: Human
+        number, value:
+            [Int literal 1234]
+        money, type: int, value:
+            [Int literal 120]
+
+]
+
+[Structure declaration Baz
+    fields:
+        name, type: int
+        parent, type: Human
+        number, value:
+            [Int literal 1234]
+        money, type: int, value:
+            [Int literal 120]
+
+    [Fn declaration bar, type void, arity 2
+        params:
+            self
+            a, type int
+        body:
+            [Block]
+                [Print]
+                    [Identifier a]
+    ]
+    [Fn declaration buz, type Self, arity 1
+        params:
+            c, type bool
+        body:
+            [Block]
+    ]
+]

@@ -1,4 +1,10 @@
 ExpectStructName
+MissingCommaAfterField
+ExpectFnInStructBody
+ExpectFieldTypeOrDefault
+ExpectFieldName
+// Because how synchronize works in parser
+ExpectExpr, }
 ExpectBraceBeforeStructBody
 ExpectFnInStructBody
 // Because how synchronize works in parser

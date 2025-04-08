@@ -90,11 +90,12 @@ pub const AstPrinter = struct {
             .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
+            .call => self.fn_call(),
             .count => unreachable,
             .Discard => self.discard(),
             .Empty => unreachable,
+            .field => unreachable,
             .Float => self.literal("Float literal"),
-            .call => self.fn_call(),
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
@@ -108,6 +109,7 @@ pub const AstPrinter = struct {
             .self => unreachable,
             .String => self.literal("String literal"),
             .StructDecl => self.structure(),
+            .struct_literal => self.struct_literal(),
             .Type => unreachable,
             .Unary => self.unary_expr(),
             .Use => self.use_stmt(),
@@ -381,8 +383,33 @@ pub const AstPrinter = struct {
         const fields_count: usize = self.node_data[self.node_idx];
         self.node_idx += 1;
 
-        for (0..fields_count) |_| {
-            //
+        if (fields_count > 0) {
+            try self.indent();
+            try self.tree.appendSlice("fields:\n");
+            self.indent_level += 1;
+
+            for (0..fields_count) |_| {
+                try self.indent();
+                try writer.print("{s}", .{self.source_from_tk(self.node_idx)});
+                self.node_idx += 1;
+
+                // Type
+                if (self.node_tags[self.node_idx] != .Empty) {
+                    try writer.print(", type: {s}", .{self.get_type(self.node_idx)});
+                } else self.node_idx += 1;
+
+                // Value
+                if (self.node_tags[self.node_idx] != .Empty) {
+                    try writer.writeAll(", value:\n");
+                    self.indent_level += 1;
+                    try self.parse_node(self.node_idx);
+                    self.indent_level -= 1;
+                } else self.node_idx += 1;
+
+                try self.tree.appendSlice("\n");
+            }
+
+            self.indent_level -= 1;
         }
 
         const func_count: usize = self.node_data[self.node_idx];
@@ -394,6 +421,49 @@ pub const AstPrinter = struct {
 
         self.indent_level -= 1;
         try self.tree.appendSlice("]\n");
+    }
+
+    fn struct_literal(self: *Self) Error!void {
+        try self.indent();
+        var writer = self.tree.writer();
+        const arity = self.node_data[self.node_idx];
+
+        self.node_idx += 1;
+        try writer.print("[Structure {s} literal{s}", .{
+            self.source_from_tk(self.node_idx),
+            if (arity > 0) "\n" else "",
+        });
+
+        self.indent_level += 1;
+        self.node_idx += 1;
+
+        for (0..arity) |_| {
+            try self.field_init();
+        }
+
+        self.indent_level -= 1;
+        try self.indent();
+        try self.tree.appendSlice("]\n");
+    }
+
+    fn field_init(self: *Self) !void {
+        var writer = self.tree.writer();
+
+        try self.indent();
+        try writer.print("field: {s}", .{self.source_from_tk(self.node_idx)});
+        self.node_idx += 1;
+
+        if (self.node_tags[self.node_idx] == .Empty) {
+            self.node_idx += 1;
+            try self.tree.appendSlice(", shorthand");
+        } else {
+            try self.tree.appendSlice("\n");
+            self.indent_level += 1;
+            _ = try self.parse_node(self.node_idx);
+            self.indent_level -= 1;
+        }
+
+        try self.tree.appendSlice("\n");
     }
 
     fn unary_expr(self: *Self) Error!void {

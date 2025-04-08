@@ -236,6 +236,7 @@ const Compiler = struct {
             .Bool => self.bool_instr(),
             .Cast => self.cast(),
             .Discard => self.discard(),
+            .field => unreachable,
             .Float => self.float_instr(),
             .call => self.fn_call(),
             .FnDecl => self.fn_decl(),

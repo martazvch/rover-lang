@@ -26,7 +26,7 @@ pub const Parser = struct {
     panic_mode: bool,
 
     const Self = @This();
-    const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
+    const Error = error{ err, StructInitWrongCtx } || Allocator.Error || std.fmt.ParseIntError;
 
     pub const ParserReport = GenReport(ParserMsg);
     pub const empty: Self = .{
@@ -324,7 +324,40 @@ pub const Parser = struct {
 
         // Fields
         const fields = try self.add_node(.{ .tag = .count });
-        const fields_count: usize = 0;
+        var fields_count: usize = 0;
+
+        // If at least one field
+        while (!self.check(.Fn) and !self.check(.RightBrace) and !self.check(.Eof)) {
+            var valid = false;
+            _ = try self.expect(.Identifier, .ExpectFieldName);
+            _ = try self.add_node(.{ .tag = .field, .main = self.token_idx - 1 });
+
+            if (self.match(.Colon)) {
+                _ = try self.parse_type();
+                valid = true;
+            } else _ = try self.add_node(.empty);
+
+            if (self.match(.Equal)) {
+                valid = true;
+                _ = try self.parse_precedence_expr(0);
+            } else _ = try self.add_node(.empty);
+
+            if (!valid) {
+                return self.error_at_current(.ExpectFieldTypeOrDefault);
+            }
+
+            fields_count += 1;
+
+            self.skip_new_lines();
+            if (!self.match(.Comma)) break;
+            self.skip_new_lines();
+        }
+
+        // If we are at an identifier, might be a missing comma between fields
+        if (self.check(.Identifier)) {
+            return self.error_at_prev(.MissingCommaAfterField);
+        }
+
         self.nodes.items(.data)[fields] = fields_count;
 
         // Functions
@@ -665,7 +698,6 @@ pub const Parser = struct {
         });
 
         _ = try self.parse_precedence_expr(0);
-
         self.skip_new_lines();
 
         // TODO: Warning for unnecessary 'do' if there is a block after
@@ -758,11 +790,13 @@ pub const Parser = struct {
         while (true) {
             if (self.match(.LeftParen)) {
                 try self.finish_call(node);
-                // } else if (self.match(.LeftBrace)) {
-                // try self.struct_initialization(node);
             } else if (self.match(.Dot)) {
-                // Member access
-                unreachable;
+                if (self.match(.LeftBrace)) {
+                    try self.struct_literal(node);
+                } else {
+                    // Member access
+                    unreachable;
+                }
             } else break;
         }
 
@@ -794,32 +828,35 @@ pub const Parser = struct {
         self.nodes.items(.data)[node] = arity;
     }
 
-    // fn struct_initialization(self: *Self, node: Node.Index) Error!void {
-    //     try self.nodes.insert(self.allocator, node, .{ .tag = .struct_init });
-    //     var arity: usize = 0;
-    //
-    //     // All the skip_lines cover the different syntaxes
-    //     while (!self.check(.RightBrace)) {
-    //         self.skip_new_lines();
-    //         if (self.check(.Eof)) return self.error_at_prev(.ExpectBraceAfterStructInit);
-    //
-    //         try self.add_node(.{ .tag = .field_assign });
-    //         _ = try self.parse_precedence_expr(0);
-    //
-    //         // Either: { x = 3 }  or { x }, if x is a local variable
-    //         if (self.match(.Equal)) {
-    //             _ = try self.parse_precedence_expr(0);
-    //         } else _ = try self.add_node(.emtpy);
-    //
-    //         arity += 1;
-    //
-    //         self.skip_new_lines();
-    //         if (!self.match(.Comma)) break;
-    //         self.skip_new_lines();
-    //     }
-    //
-    //     try self.expect(.RightParen, .ExpectParenAfterFnArgs);
-    //
-    //     self.nodes.items(.data)[node] = arity;
-    // }
+    fn struct_literal(self: *Self, node: Node.Index) Error!void {
+        try self.nodes.insert(self.allocator, node, .{ .tag = .struct_literal });
+        var arity: usize = 0;
+
+        // All the skip_lines cover the different syntaxes
+        while (!self.check(.RightBrace)) {
+            self.skip_new_lines();
+            if (self.check(.Eof)) return self.error_at_prev(.ExpectBraceAfterStructLit);
+
+            if (!self.match(.Identifier)) {
+                return self.error_at_current(.StructLitNonIdentField);
+            }
+
+            _ = try self.add_node(.{ .tag = .Identifier, .main = self.token_idx - 1 });
+
+            // Either: { x = 3 }  or { x }, if x is a local variable
+            if (self.match(.Equal)) {
+                _ = try self.parse_precedence_expr(0);
+            } else _ = try self.add_node(.empty);
+
+            arity += 1;
+
+            self.skip_new_lines();
+            if (!self.match(.Comma)) break;
+            self.skip_new_lines();
+        }
+
+        try self.expect(.RightBrace, .ExpectBraceAfterStructLit);
+
+        self.nodes.items(.data)[node] = arity;
+    }
 };

@@ -127,6 +127,12 @@ pub const FnInfo = struct {
 pub const StructInfo = struct {
     init: ?usize = null,
     functions: std.AutoHashMapUnmanaged(usize, usize),
+    fields: std.AutoHashMapUnmanaged(usize, FieldInfo),
+};
+
+pub const FieldInfo = struct {
+    type: Type,
+    default: bool,
 };
 
 pub fn str_kind(kind: Kind) []const u8 {

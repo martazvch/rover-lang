@@ -1,0 +1,22 @@
+[Structure A literal
+    field: x, shorthand
+    field: y, shorthand
+    field: z, shorthand
+]
+[Structure B literal]
+[Structure C literal
+    field: x
+        [Identifier x]
+
+    field: y, shorthand
+    field: z
+        [Binop +]
+            [Int literal 12]
+            [Fn call
+                callee:
+                [Identifier add]
+                args:
+            ]
+
+]
+

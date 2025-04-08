@@ -110,7 +110,7 @@ pub const AnalyzerMsg = union(enum) {
             .IncompatibleIfType, .UnpureInGlobal => writer.writeAll("this expression"),
             .InvalidArithmetic => writer.writeAll("expression is not a numeric type"),
             .InvalidAssignTarget => writer.writeAll("cannot assign to this expression"),
-            .InvalidCallTarget => writer.writeAll("this is neither a function neither a mathod"),
+            .InvalidCallTarget => writer.writeAll("this is neither a function neither a method"),
             .InvalidComparison => writer.writeAll("expressions have different types"),
             .InvalidLogical => |e| writer.print("this expression resolves to a '{s}'", .{e.found}),
             .InvalidUnary,

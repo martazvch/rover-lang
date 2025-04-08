@@ -1,9 +1,15 @@
-struct Name {
-    //fn init() -> Self {
+struct Foo {
+    name: int,
+    age: str,
+    life: float,
+    parent: Human,
 
-    //}
-}
+    number = 1234,
+    money: int = 120
 
-fn main() {
-   _ = 5() 
+   fn bar(self, a: int) {
+        print a
+    }
+
+    fn buz(c: bool) -> Self {} 
 }

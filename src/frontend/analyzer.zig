@@ -280,13 +280,14 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node]].start + 1,
             },
             .Bool, .Float, .Identifier, .Int, .Null, .String => self.token_spans[self.node_mains[node]],
+            .call => self.token_spans[self.node_mains[node + 1]],
             .Discard => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
             .Empty => self.to_span(node - 1),
+            .field => unreachable,
             .FnDecl => self.token_spans[self.node_mains[node]],
-            .call => self.token_spans[self.node_mains[node + 1]],
             .Grouping => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_data[node]].end,
@@ -308,6 +309,7 @@ pub const Analyzer = struct {
                     self.to_span(node + 1).end,
             },
             .self, .StructDecl, .Type => self.token_spans[self.node_mains[node]],
+            .struct_literal => unreachable,
             .Unary => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -448,7 +450,7 @@ pub const Analyzer = struct {
     }
 
     /// Checks that the node is a declared type and return it's value. If node is
-    /// `empty`, returns `null`
+    /// `empty`, returns `void`
     fn check_and_get_type(self: *Self) Error!Type {
         // Function type are not declared in advance, so we declare it and return it's index
         if (self.node_tags[self.node_idx] != .Empty and self.token_tags[self.node_mains[self.node_idx]] == .Fn) {
@@ -581,10 +583,11 @@ pub const Analyzer = struct {
             .Assignment => try self.assignment(node),
             .Block => final = try self.block(node),
             .Bool => final = try self.bool_lit(node),
+            .call => final = try self.call(node),
             .Discard => try self.discard(node),
             .Empty => self.node_idx += 1,
+            .field => unreachable,
             .Float => final = try self.float_lit(node),
-            .call => final = try self.call(node),
             .FnDecl => try self.fn_declaration(node),
             .Grouping => {
                 self.node_idx += 1;
@@ -599,6 +602,7 @@ pub const Analyzer = struct {
             .Return => final = try self.return_expr(node),
             .String => final = try self.string(node),
             .StructDecl => final = try self.structure(node),
+            .struct_literal => final = try self.struct_literal(node),
             .Unary => final = try self.unary(node),
             .Use => try self.use(node),
             .VarDecl => try self.var_decl(node),
@@ -1542,13 +1546,42 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer _ = self.end_scope() catch @panic("oom");
 
-        var infos: TypeSys.StructInfo = .{ .functions = .{} };
+        var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{} };
 
         const fields_count = self.node_data[self.node_idx];
+        try infos.fields.ensureTotalCapacity(self.allocator, @intCast(fields_count));
         self.node_idx += 1;
 
         for (0..fields_count) |_| {
-            //
+            var field_infos: TypeSys.FieldInfo = .{ .type = undefined, .default = false };
+            const field_idx = try self.add_instr(.{ .tag = .field, .data = .{ .field = false } }, self.node_idx);
+            const field_name = try self.interner.intern(self.source_from_node(node));
+
+            if (infos.fields.get(field_name) != null) {
+                // TODO: Error, already declared field
+                std.debug.print("Already declared field\n", .{});
+            }
+
+            const field_type: Type = try self.check_and_get_type();
+            self.node_idx += 1;
+
+            const field_value = if (self.node_tags[self.node_idx] != .Empty) blk: {
+                if (!self.is_pure(self.node_idx)) {
+                    std.debug.print("Unpure default value\n", .{});
+                    // TODO: error, non-constant default value
+                }
+
+                field_infos.default = true;
+                self.instructions.items(.data)[field_idx] = .{ .field = true };
+                break :blk try self.analyze_node(self.node_idx);
+            } else .void;
+
+            if (field_value != .void and field_value != field_type) {
+                // TODO: Error
+                std.debug.print("Wrong type default value\n", .{});
+            }
+
+            infos.fields.putAssumeCapacity(field_name, field_infos);
         }
 
         const func_count = self.node_data[self.node_idx];
@@ -1576,6 +1609,31 @@ pub const Analyzer = struct {
 
         _ = try self.end_scope();
         _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
+
+        return .void;
+    }
+
+    fn struct_literal(self: *Self, node: Node.Index) !Type {
+        _ = self; // autofix
+        _ = node; // autofix
+        // self.node_idx += 1;
+        // const decl = try self.resolve_identifier(self.node_idx, true);
+        // const arity = self.node_mains[self.node_idx];
+        // self.node_idx += 1;
+        //
+        //
+        // if (self.type_manager.declared.get(name)) |struct_type| {
+        //     const value = TypeSys.get_value(struct_type);
+        //     const infos = self.type_manager.type_infos.items[value].@"struct";
+        //
+        //     if (arity != infos.fields.size) {
+        //         // TODO: error
+        //     }
+        //
+        //     _ = try self.add_instr(.{ .tag = .struct_literal, .data = .{ .struct_init = .{ .index = 0, .arity = arity } } }, node);
+        // } else {
+        //     // TODO: error
+        // }
 
         return .void;
     }

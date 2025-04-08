@@ -101,6 +101,7 @@ pub const RirRenderer = struct {
             .Discard => self.discard(),
             .Float => self.float_instr(index),
             .call => self.fn_call(index),
+            .field => unreachable,
             .FnDecl => self.fn_declaration(index),
             .Name => unreachable,
             .Identifier => self.identifier(index, false),

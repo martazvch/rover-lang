@@ -1,14 +1,42 @@
+// No name
 struct {}
 
+// No comma
+struct Foo {
+    a: int
+    b: float
+}
+
+// Fields after methods
+struct Foo {
+    fn add() {}
+
+    age: int
+}
+
+// No type, no default
+struct Foo {
+    age
+}
+
+// No field or methods after field
+struct Foo {
+    age: int,
+    var a = 3
+}
+
+// No openning brace
 struct Foo
     var a = 1
 
+// Stuff after methods
 struct Foo {
     fn abc() {}
 
     var a = 1
 }
 
+// Missing closing brace
 struct Foo {
     fn a() {}
 

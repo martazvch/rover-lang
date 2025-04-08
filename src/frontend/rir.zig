@@ -14,6 +14,7 @@ pub const Instruction = struct {
         Bool,
         Cast,
         Discard,
+        field,
         Float,
         call,
         FnDecl,
@@ -42,6 +43,7 @@ pub const Instruction = struct {
         Bool: bool,
         Capture: usize,
         CastTo: Type,
+        field: bool, // presence of default value or not
         Float: f64,
         call: Call,
         FnDecl: FnDecl,
@@ -51,6 +53,7 @@ pub const Instruction = struct {
         Int: i64,
         Return: Return,
         StructDecl: StructDecl,
+        struct_init: StructInit,
         Unary: Unary,
         Use: u64,
         VarDecl: VarDecl,
@@ -107,6 +110,7 @@ pub const Instruction = struct {
     pub const Imported = struct { index: u64, variable: Variable };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct {};
+    pub const StructInit = struct { index: usize, arity: usize };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,
