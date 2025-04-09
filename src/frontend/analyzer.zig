@@ -163,6 +163,15 @@ pub const Analyzer = struct {
         kind: Tag = .normal,
 
         pub const Tag = enum { normal, func, param, import, @"struct" };
+
+        pub fn scope(self: *const Variable) Rir.Scope {
+            return if (self.captured) .heap else if (self.depth == 0) .global else .local;
+        }
+
+        /// Converts analyzer `Variable` representation to IR `Variable`
+        pub fn to_var(self: *const Variable) Instruction.Variable {
+            return .{ .index = @intCast(self.index), .scope = self.scope() };
+        }
     };
 
     const State = struct {
@@ -1267,6 +1276,7 @@ pub const Analyzer = struct {
             _ = try self.add_instr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
         } else {
             // Params and imports aren't declared so we can't reference them, they just live on stack
+            // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
             _ = try self.add_instr(
                 .{ .tag = .Identifier, .data = .{ .Variable = .{
                     .index = @intCast(variable.index),
@@ -1538,7 +1548,7 @@ pub const Analyzer = struct {
         const struct_type = TypeSys.create(.@"struct", .none, type_idx);
         const struct_var = try self.declare_variable(name, struct_type, true, self.instructions.len, .@"struct");
 
-        const struct_idx = try self.add_instr(.{ .tag = .StructDecl, .data = .{ .StructDecl = .{} } }, node);
+        const struct_idx = try self.add_instr(.{ .tag = .struct_decl, .data = undefined }, node);
         // We add function's name for runtime access
         _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name } }, node);
         _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
@@ -1546,43 +1556,60 @@ pub const Analyzer = struct {
         self.scope_depth += 1;
         errdefer _ = self.end_scope() catch @panic("oom");
 
-        var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{} };
+        var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{}, .default_value_fields = 0 };
 
         const fields_count = self.node_data[self.node_idx];
         try infos.fields.ensureTotalCapacity(self.allocator, @intCast(fields_count));
         self.node_idx += 1;
+        var default_value_fields: usize = 0;
 
-        for (0..fields_count) |_| {
-            var field_infos: TypeSys.FieldInfo = .{ .type = undefined, .default = false };
-            const field_idx = try self.add_instr(.{ .tag = .field, .data = .{ .field = false } }, self.node_idx);
-            const field_name = try self.interner.intern(self.source_from_node(node));
+        for (0..fields_count) |i| {
+            var field_infos: TypeSys.FieldInfo = .{ .type = undefined, .default = false, .idx = i };
+            const field_name = try self.interner.intern(self.source_from_node(self.node_idx));
+            self.node_idx += 1;
 
             if (infos.fields.get(field_name) != null) {
                 // TODO: Error, already declared field
                 std.debug.print("Already declared field\n", .{});
             }
 
-            const field_type: Type = try self.check_and_get_type();
-            self.node_idx += 1;
+            const field_type = if (self.node_tags[self.node_idx] != .Empty)
+                try self.check_and_get_type()
+            else blk: {
+                self.node_idx += 1;
+                break :blk .void;
+            };
 
-            const field_value = if (self.node_tags[self.node_idx] != .Empty) blk: {
-                if (!self.is_pure(self.node_idx)) {
-                    std.debug.print("Unpure default value\n", .{});
-                    // TODO: error, non-constant default value
+            const field_value_type = blk: {
+                if (self.node_tags[self.node_idx] != .Empty) {
+                    if (!self.is_pure(self.node_idx)) {
+                        std.debug.print("Unpure default value\n", .{});
+                        // TODO: error, non-constant default value
+                    }
+
+                    field_infos.default = true;
+                    default_value_fields += 1;
+
+                    _ = try self.add_instr(.{ .tag = .field, .data = .{ .field = i } }, self.node_idx);
+                    break :blk try self.analyze_node(self.node_idx);
+                } else {
+                    self.node_idx += 1;
+                    break :blk .void;
                 }
+            };
 
-                field_infos.default = true;
-                self.instructions.items(.data)[field_idx] = .{ .field = true };
-                break :blk try self.analyze_node(self.node_idx);
-            } else .void;
-
-            if (field_value != .void and field_value != field_type) {
+            if (field_value_type != .void and field_type != .void and field_value_type != field_type) {
                 // TODO: Error
                 std.debug.print("Wrong type default value\n", .{});
             }
 
+            // Fro mparsing, we know that there is either a type or default value. If no declared type, we take
+            // the one from the default value
+            field_infos.type = if (field_type == .void) field_value_type else field_type;
             infos.fields.putAssumeCapacity(field_name, field_infos);
         }
+
+        infos.default_value_fields = default_value_fields;
 
         const func_count = self.node_data[self.node_idx];
         try infos.functions.ensureTotalCapacity(self.allocator, @intCast(func_count));
@@ -1609,33 +1636,71 @@ pub const Analyzer = struct {
 
         _ = try self.end_scope();
         _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
+        self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
+            .default_fields = default_value_fields,
+            .func_count = func_count,
+        } };
 
         return .void;
     }
 
     fn struct_literal(self: *Self, node: Node.Index) !Type {
-        _ = self; // autofix
-        _ = node; // autofix
-        // self.node_idx += 1;
-        // const decl = try self.resolve_identifier(self.node_idx, true);
-        // const arity = self.node_mains[self.node_idx];
-        // self.node_idx += 1;
-        //
-        //
-        // if (self.type_manager.declared.get(name)) |struct_type| {
-        //     const value = TypeSys.get_value(struct_type);
-        //     const infos = self.type_manager.type_infos.items[value].@"struct";
-        //
-        //     if (arity != infos.fields.size) {
-        //         // TODO: error
-        //     }
-        //
-        //     _ = try self.add_instr(.{ .tag = .struct_literal, .data = .{ .struct_init = .{ .index = 0, .arity = arity } } }, node);
-        // } else {
-        //     // TODO: error
-        // }
+        const arity = self.node_data[self.node_idx];
+        self.node_idx += 1;
+        const decl = try self.resolve_identifier(self.node_idx, true);
 
-        return .void;
+        _ = try self.add_instr(.{
+            .tag = .struct_literal,
+            .data = .{ .struct_literal = .{ .variable = decl.to_var(), .arity = arity } },
+        }, node);
+
+        if (self.type_manager.declared.get(decl.name)) |struct_type| {
+            const value = TypeSys.get_value(struct_type);
+            const infos = self.type_manager.type_infos.items[value].@"struct";
+            var proto = infos.proto(self.allocator);
+            defer proto.deinit(self.allocator);
+
+            for (0..arity) |_| {
+                const field_name = try self.interner.intern(self.source_from_node(self.node_idx));
+
+                if (infos.fields.get(field_name)) |f| {
+                    proto.putAssumeCapacity(field_name, true);
+
+                    _ = f; // autofix
+                    // Syntax: { x } instead of { x = x }
+                    if (self.node_tags[self.node_idx + 1] == .Empty) {
+                        // We resolve the same identifier
+                        const field_decl = try self.resolve_identifier(self.node_idx, true);
+                        _ = field_decl; // autofix
+                        // Skips identifier + empty
+                        self.node_idx += 2;
+                    } else {
+                        self.node_idx += 1;
+                        _ = try self.analyze_node(self.node_idx);
+                    }
+                } else {
+                    // TODO: Error
+                    std.debug.print("Unknown structure field\n", .{});
+                }
+            }
+
+            if (arity != infos.fields.size) {
+                var kv = proto.iterator();
+                while (kv.next()) |entry| {
+                    if (!entry.value_ptr.*) {
+                        // TODO: Error for each non init field
+                        std.debug.print("Uninit filed: {s}\n", .{self.interner.get_key(entry.key_ptr.*).?});
+                    }
+                }
+            }
+
+            return decl.typ;
+        } else {
+            // TODO: error
+            std.debug.print("Unknown structure type\n", .{});
+
+            return .void;
+        }
     }
 
     fn unary(self: *Self, node: Node.Index) Error!Type {

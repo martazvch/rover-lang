@@ -128,9 +128,25 @@ pub const StructInfo = struct {
     init: ?usize = null,
     functions: std.AutoHashMapUnmanaged(usize, usize),
     fields: std.AutoHashMapUnmanaged(usize, FieldInfo),
+    default_value_fields: usize,
+
+    pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {
+        var res = std.AutoHashMapUnmanaged(usize, bool){};
+        res.ensureTotalCapacity(allocator, self.fields.capacity()) catch @panic("oom");
+
+        var kv = self.fields.iterator();
+        while (kv.next()) |entry| {
+            if (!entry.value_ptr.default) {
+                res.putAssumeCapacity(entry.key_ptr.*, false);
+            }
+        }
+
+        return res;
+    }
 };
 
 pub const FieldInfo = struct {
+    idx: usize,
     type: Type,
     default: bool,
 };

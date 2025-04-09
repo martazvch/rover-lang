@@ -12,11 +12,11 @@ pub const Instruction = struct {
         Binop,
         Block,
         Bool,
+        call,
         Cast,
         Discard,
         field,
         Float,
-        call,
         FnDecl,
         Name,
         Identifier,
@@ -29,7 +29,8 @@ pub const Instruction = struct {
         Print,
         Return,
         String,
-        StructDecl,
+        struct_decl,
+        struct_literal,
         Unary,
         Use,
         VarDecl,
@@ -41,19 +42,19 @@ pub const Instruction = struct {
         Binop: Binop,
         Block: Block,
         Bool: bool,
+        call: Call,
         Capture: usize,
         CastTo: Type,
-        field: bool, // presence of default value or not
+        field: usize,
         Float: f64,
-        call: Call,
         FnDecl: FnDecl,
         Id: usize,
         If: If,
         Imported: Imported,
         Int: i64,
         Return: Return,
-        StructDecl: StructDecl,
-        struct_init: StructInit,
+        struct_decl: StructDecl,
+        struct_literal: StructLiteral,
         Unary: Unary,
         Use: u64,
         VarDecl: VarDecl,
@@ -109,8 +110,8 @@ pub const Instruction = struct {
     };
     pub const Imported = struct { index: u64, variable: Variable };
     pub const Return = struct { value: bool, cast: bool };
-    pub const StructDecl = struct {};
-    pub const StructInit = struct { index: usize, arity: usize };
+    pub const StructDecl = struct { default_fields: usize, func_count: usize };
+    pub const StructLiteral = struct { variable: Variable, arity: usize };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,

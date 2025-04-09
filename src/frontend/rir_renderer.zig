@@ -125,7 +125,8 @@ pub const RirRenderer = struct {
             },
             .Return => self.return_instr(index),
             .String => self.string_instr(index),
-            .StructDecl => self.struct_decl(index),
+            .struct_decl => self.struct_decl(index),
+            .struct_literal => unreachable,
             .Unary => self.unary(index),
             .Use => self.use(index),
             .VarDecl => self.var_decl(index),
@@ -372,14 +373,40 @@ pub const RirRenderer = struct {
 
     fn struct_decl(self: *Self, instr: usize) Error!void {
         var writer = self.tree.writer();
-        const index = self.instr_data[instr].StructDecl;
-        _ = index; // autofix
+        const data = self.instr_data[instr].struct_decl;
         self.instr_idx += 1;
         const name = self.instr_data[self.instr_idx].Id;
+        self.instr_idx += 1;
+        const struct_var = self.instr_data[self.instr_idx].VarDecl.variable;
+        self.instr_idx += 1;
 
         try self.indent();
-        try writer.print("[Structure declaration {s}]\n", .{self.interner.get_key(name).?});
-        self.instr_idx += 1;
+        try writer.print("[Structure declaration {s}, index: {}, scope: {s}]\n", .{
+            self.interner.get_key(name).?,
+            struct_var.index,
+            @tagName(struct_var.scope),
+        });
+
+        self.indent_level += 1;
+
+        for (0..data.default_fields) |_| {
+            try self.indent();
+            const field_idx = self.instr_data[self.instr_idx].field;
+            try writer.print("[field {} default value\n", .{field_idx});
+            self.instr_idx += 1;
+
+            self.indent_level += 1;
+            try self.parse_instr(self.instr_idx);
+            self.indent_level -= 1;
+            try self.indent();
+            try self.tree.appendSlice("]\n");
+        }
+
+        for (0..data.func_count) |_| {
+            try self.parse_instr(self.instr_idx);
+        }
+
+        self.indent_level -= 1;
     }
 
     fn unary(self: *Self, instr: usize) Error!void {

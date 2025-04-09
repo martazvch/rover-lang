@@ -251,7 +251,8 @@ const Compiler = struct {
             .Print => self.print_instr(),
             .Return => self.return_instr(),
             .String => self.string_instr(),
-            .StructDecl => self.struct_decl(),
+            .struct_decl => self.struct_decl(),
+            .struct_literal => unreachable,
             .Unary => self.unary(),
             .Use => self.use(),
             .VarDecl => self.var_decl(),
@@ -575,7 +576,7 @@ const Compiler = struct {
 
     fn struct_decl(self: *Self) !void {
         const start = self.get_start();
-        const data = self.get_data().StructDecl;
+        const data = self.get_data().struct_decl;
         _ = data; // autofix
         self.manager.instr_idx += 1;
         const name = self.get_data().Id;
