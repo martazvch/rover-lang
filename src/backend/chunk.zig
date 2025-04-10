@@ -57,6 +57,7 @@ pub const OpCode = enum(u8) {
     StrCat,
     StrMulL,
     StrMulR,
+    struct_literal,
     SubFloat,
     SubInt,
     True,

@@ -13,8 +13,10 @@ const Pipeline = @import("../pipeline.zig").Pipeline;
 const Gc = @import("gc.zig").Gc;
 const Obj = @import("obj.zig").Obj;
 const ObjFunction = @import("obj.zig").ObjFunction;
+const ObjInstance = @import("obj.zig").ObjInstance;
 const ObjNativeFn = @import("obj.zig").ObjNativeFn;
 const ObjString = @import("obj.zig").ObjString;
+const ObjStruct = @import("obj.zig").ObjStruct;
 const Table = @import("table.zig").Table;
 const Value = @import("values.zig").Value;
 
@@ -274,6 +276,15 @@ pub const Vm = struct {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int += rhs;
                 },
+                .call => {
+                    const args_count = frame.read_byte();
+                    const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
+                    try self.call(callee, args_count);
+
+                    // If call success, we need to to set frame pointer back
+                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                },
+
                 .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
                 .Constant => self.stack.push(frame.read_constant()),
                 .DefineHeapVar => {
@@ -298,14 +309,6 @@ pub const Vm = struct {
                 .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
                 .False => self.stack.push(Value.bool_(false)),
-                .call => {
-                    const args_count = frame.read_byte();
-                    const callee = self.stack.peek_ref(args_count).Obj.as(ObjFunction);
-                    try self.call(callee, args_count);
-
-                    // If call success, we need to to set frame pointer back
-                    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
-                },
                 // Compiler bug: https://github.com/ziglang/zig/issues/13938
                 .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
                 .GetHeap => self.stack.push(self.heap_vars[frame.read_byte()]),
@@ -420,6 +423,28 @@ pub const Vm = struct {
                 .StrCat => try self.str_concat(),
                 .StrMulL => try self.str_mul(self.stack.peek_ref(0).Obj.as(ObjString), self.stack.peek_ref(1).Int),
                 .StrMulR => try self.str_mul(self.stack.peek_ref(1).Obj.as(ObjString), self.stack.peek_ref(0).Int),
+                .struct_literal => {
+                    const arity = frame.read_byte();
+                    const scope: OpCode = @enumFromInt(frame.read_byte());
+                    const idx = frame.read_byte();
+
+                    const structure = switch (scope) {
+                        .GetLocal => self.stack.peek_ref(idx).Obj.as(ObjStruct),
+                        .GetGlobal => self.globals[idx].Obj.as(ObjStruct),
+                        else => unreachable,
+                    };
+
+                    var instance = try ObjInstance.create(self, structure);
+
+                    // PERF: maybe encode index in a u16 and check if arity even, avoid read_byte() calls
+                    for (0..arity) |i| {
+                        const field_idx = frame.read_byte();
+                        instance.fields[field_idx] = self.stack.peek(arity - i - 1);
+                    }
+
+                    self.stack.top -= arity;
+                    self.stack.push(Value.obj(instance.as_obj()));
+                },
                 .SubFloat => {
                     const rhs = self.stack.pop().Float;
                     self.stack.peek_ref(0).Float -= rhs;
@@ -428,6 +453,7 @@ pub const Vm = struct {
                     const rhs = self.stack.pop().Int;
                     self.stack.peek_ref(0).Int -= rhs;
                 },
+                // PERF: we could avoid a function call here
                 .True => self.stack.push(Value.bool_(true)),
             }
         }

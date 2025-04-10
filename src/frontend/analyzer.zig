@@ -1637,6 +1637,7 @@ pub const Analyzer = struct {
         _ = try self.end_scope();
         _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
         self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
+            .fields_count = fields_count,
             .default_fields = default_value_fields,
             .func_count = func_count,
         } };
@@ -1665,15 +1666,14 @@ pub const Analyzer = struct {
 
                 if (infos.fields.get(field_name)) |f| {
                     proto.putAssumeCapacity(field_name, true);
+                    _ = try self.add_instr(.{ .tag = .field, .data = .{ .field = f.idx } }, self.node_idx);
 
-                    _ = f; // autofix
                     // Syntax: { x } instead of { x = x }
                     if (self.node_tags[self.node_idx + 1] == .Empty) {
                         // We resolve the same identifier
-                        const field_decl = try self.resolve_identifier(self.node_idx, true);
-                        _ = field_decl; // autofix
-                        // Skips identifier + empty
-                        self.node_idx += 2;
+                        _ = try self.identifier(self.node_idx, true);
+                        // Skips empty
+                        self.node_idx += 1;
                     } else {
                         self.node_idx += 1;
                         _ = try self.analyze_node(self.node_idx);
@@ -1684,7 +1684,7 @@ pub const Analyzer = struct {
                 }
             }
 
-            if (arity != infos.fields.size) {
+            if (arity != proto.size) {
                 var kv = proto.iterator();
                 while (kv.next()) |entry| {
                     if (!entry.value_ptr.*) {

@@ -40,7 +40,7 @@ pub const Disassembler = struct {
         }
     }
 
-    pub fn dis_instruction(self: *const Self, offset: usize, writer: anytype) !usize {
+    pub fn dis_instruction(self: *const Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
         if (self.render_mode == .Normal) try writer.print("{:0>4} ", .{offset});
 
         // if (offset > 0 and self.chunk.lines.items[offset] == self.chunk.lines.items[offset - 1]) {
@@ -137,6 +137,7 @@ pub const Disassembler = struct {
             .StrCat => self.simple_instruction("OP_STRING_CONCAT", offset, writer),
             .StrMulL => self.simple_instruction("OP_STRING_MUL_L", offset, writer),
             .StrMulR => self.simple_instruction("OP_STRING_MUL_R", offset, writer),
+            .struct_literal => self.struct_literal(offset, writer),
             .SubFloat => self.simple_instruction("OP_SUBTRACT_FLOAT", offset, writer),
             .SubInt => self.simple_instruction("OP_SUBTRACT_INT", offset, writer),
             .True => self.simple_instruction("OP_TRUE", offset, writer),
@@ -224,6 +225,25 @@ pub const Disassembler = struct {
         }
 
         return offset + 4;
+    }
+
+    fn struct_literal(self: *const Self, offset: usize, writer: anytype) !usize {
+        // Skips the struct_literal op
+        var local_offset = offset + 1;
+        const arity = self.chunk.code.items[local_offset];
+        try writer.print("{s:<24} arity {}\n", .{ "OP_STRUCT_LIT", arity });
+
+        local_offset += 1;
+
+        // Get the structure
+        local_offset = try self.dis_instruction(local_offset, writer);
+
+        // Each field assign
+        for (0..arity) |_| {
+            local_offset = try self.dis_instruction(local_offset, writer);
+        }
+
+        return local_offset;
     }
 
     fn invoke_instruction(

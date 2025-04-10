@@ -11,7 +11,7 @@ at the end of a scope being the returned value
 - Each control flow is an expression, all branches must return the same value:
    - If
    - Loop
-   - Switch
+   - Match
 - Regarding returned value:
     - If:
         - Each branch must return the same type unless exit scope
@@ -20,7 +20,7 @@ at the end of a scope being the returned value
         - Can be exited with a ```break``` statement with a value after or not
     - Loop:
         - Same as while
-    - Switch:
+    - Match:
         - Each branch must return the same type
 - While can't be an expression because of the fact that you may never enter the loop
 
@@ -41,7 +41,7 @@ Struct can be constructed as:
 
 ```rust
 struct Point {x, y: int}
-let p = Point { x = 1, y = 2 }
+let p = Point.{ x = 1, y = 2 }
 ```
 
 They can have an `init` method thats called automatically on creation and allow
@@ -51,7 +51,7 @@ the structor name to be called as a constructor
 struct Point {
     x, y: int
 
-    fn init(x, y) Self {}
+    fn init(x, y) -> Self {}
 }
 let p = Point(1, 2)
 ```
@@ -70,6 +70,7 @@ let p = Point { x, y } // instead of Point { x = x, y = y };
 - If variables of the same name are in scope, allow something like:
 
 ```rust
+struct Point { x: i64, y: i64 }
 let x = 4
 let y = 10
 let pt = Point { ... }
@@ -100,7 +101,7 @@ struct Point {
 struct Point {
     x, y: int
 
-    fn init(x, y) Self {
+    fn init(x, y: int) Self {
         .{ x, y }
     }
 }
@@ -288,7 +289,7 @@ when err { // with when, we match the error type
     _ => return err
 }
 
-if nullable_res() :: res { // custom alias for non-null value
+if a :: res { // custom alias for non-null value
     print(res)
 }
 
@@ -327,9 +328,7 @@ Can unsafe collapse the nullable with: variable.?
 ```rust
 fn next() -> ?Token {}
 
-while next() :: val {
-
-}
+while next() :: val { }
 ```
 
 ### Closure
@@ -372,7 +371,7 @@ Can alias too
 
 ```rust
 type Animal = Dog | Cat
-var pet = Dog {}
+var pet: Animal = Dog {}
 
 when pet {
     Dog => // here use pet as a Dog
@@ -501,7 +500,10 @@ res = lstrip(rstrip(split("str")))
 ```
 
 ```gleam
-let res = "str" |> string.strip() |> string.rstrip() |> string.lstrip()
+let res = "str"
+    |> string.strip()
+    |> string.rstrip()
+    |> string.lstrip()
 ```
 
 ## Debugger

@@ -162,6 +162,16 @@ const Compiler = struct {
         };
     }
 
+    /// Emits the corresponding `GetHeap`, `GetGlobal` or `GetLocal` with the correct index
+    fn emit_get_var(self: *Self, variable: Instruction.Variable, offset: usize) !void {
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
+        try self.write_op_and_byte(
+            if (variable.scope == .heap) .GetHeap else if (variable.scope == .global) .GetGlobal else .GetLocal,
+            @intCast(variable.index),
+            offset,
+        );
+    }
+
     /// Declare the variable based on informations coming from Analyzer. Declares
     /// either in global scope or heap, as for local it's already living
     /// on the stack
@@ -252,7 +262,7 @@ const Compiler = struct {
             .Return => self.return_instr(),
             .String => self.string_instr(),
             .struct_decl => self.struct_decl(),
-            .struct_literal => unreachable,
+            .struct_literal => self.struct_literal(),
             .Unary => self.unary(),
             .Use => self.use(),
             .VarDecl => self.var_decl(),
@@ -482,13 +492,7 @@ const Compiler = struct {
             break :blk self.manager.instr_data[id].VarDecl.variable;
         } else self.get_data().Variable;
 
-        // BUG: Protect the cast, we can't have more than 256 variable to lookup
-        // for now
-        try self.write_op_and_byte(
-            if (data.scope == .heap) .GetHeap else if (data.scope == .global) .GetGlobal else .GetLocal,
-            @intCast(data.index),
-            self.get_start(),
-        );
+        try self.emit_get_var(data, self.get_start());
         self.manager.instr_idx += 1;
     }
 
@@ -577,7 +581,6 @@ const Compiler = struct {
     fn struct_decl(self: *Self) !void {
         const start = self.get_start();
         const data = self.get_data().struct_decl;
-        _ = data; // autofix
         self.manager.instr_idx += 1;
         const name = self.get_data().Id;
         self.manager.instr_idx += 1;
@@ -587,12 +590,37 @@ const Compiler = struct {
             Value.obj((try ObjStruct.create(
                 self.manager.vm,
                 try ObjString.copy(self.manager.vm, self.manager.interner.get_key(name).?),
+                data.fields_count,
             )).as_obj()),
             self.get_start(),
         );
         try self.define_variable(struct_var.variable, start);
 
         self.manager.instr_idx += 1;
+    }
+
+    fn struct_literal(self: *Self) !void {
+        const start = self.get_start();
+        const data = self.get_data().struct_literal;
+        self.manager.instr_idx += 1;
+
+        var list: std.ArrayListUnmanaged(usize) = .{};
+        try list.ensureTotalCapacity(self.manager.vm.allocator, data.arity);
+        defer list.deinit(self.manager.vm.allocator);
+
+        for (0..data.arity) |_| {
+            const field_idx = self.get_data().field;
+            list.appendAssumeCapacity(field_idx);
+            self.manager.instr_idx += 1;
+            try self.compile_instr();
+        }
+
+        try self.write_op_and_byte(.struct_literal, @intCast(data.arity), start);
+        try self.emit_get_var(data.variable, start);
+
+        for (list.items) |field| {
+            try self.write_byte(@intCast(field), start);
+        }
     }
 
     fn unary(self: *Self) !void {

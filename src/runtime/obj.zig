@@ -2,11 +2,13 @@ const std = @import("std");
 const assert = std.debug.assert;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+
 const options = @import("options");
-const Vm = @import("vm.zig").Vm;
-const Value = @import("values.zig").Value;
+
 const Chunk = @import("../backend/chunk.zig").Chunk;
 const NativeFn = @import("../std/meta.zig").NativeFn;
+const Value = @import("values.zig").Value;
+const Vm = @import("vm.zig").Vm;
 
 pub const Obj = struct {
     kind: ObjKind,
@@ -265,13 +267,15 @@ pub const ObjNativeFn = struct {
 pub const ObjStruct = struct {
     obj: Obj,
     name: *ObjString,
+    field_count: usize,
     // methods: Table,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *ObjString) Allocator.Error!*Self {
+    pub fn create(vm: *Vm, name: *ObjString, field_count: usize) Allocator.Error!*Self {
         const obj = try Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
+        obj.field_count = field_count;
         // obj.methods = Table.init(vm.allocator);
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
@@ -292,13 +296,14 @@ pub const ObjStruct = struct {
 pub const ObjInstance = struct {
     obj: Obj,
     parent: *const ObjStruct,
-    fields: []const Value,
+    fields: []Value,
 
     const Self = @This();
 
     pub fn create(vm: *Vm, parent: *ObjStruct) Allocator.Error!*Self {
         const obj = try Obj.allocate(vm, Self, .instance);
         obj.parent = parent;
+        obj.fields = try vm.gc_alloc.alloc(Value, parent.field_count);
         // obj.methods = Table.init(vm.allocator);
 
         if (options.log_gc)
@@ -313,6 +318,7 @@ pub const ObjInstance = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         // self.methods.deinit();
+        allocator.free(self.fields);
         allocator.destroy(self);
     }
 };
