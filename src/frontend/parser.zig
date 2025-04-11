@@ -801,7 +801,7 @@ pub const Parser = struct {
                 if (self.match(.LeftBrace)) {
                     try self.struct_literal(node);
                 } else {
-                    try self.member(node);
+                    try self.field(node);
                 }
             } else break;
         }
@@ -834,8 +834,8 @@ pub const Parser = struct {
         self.nodes.items(.data)[node] = arity;
     }
 
-    fn member(self: *Self, node: Node.Index) Error!void {
-        try self.nodes.insert(self.allocator, node, .{ .tag = .member });
+    fn field(self: *Self, node: Node.Index) Error!void {
+        try self.nodes.insert(self.allocator, node, .{ .tag = .field });
         try self.expect(.Identifier, .ExpectNameAfterDot);
         _ = try self.literal(.Identifier);
     }

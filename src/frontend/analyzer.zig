@@ -290,14 +290,16 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
             .Empty => self.to_span(node - 1),
-            .field => unreachable,
+            .field => .{
+                .start = self.token_spans[self.node_mains[node]].start,
+                .end = self.token_spans[self.node_mains[node + 1]].end,
+            },
             .FnDecl => self.token_spans[self.node_mains[node]],
             .Grouping => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
-            .member => unreachable,
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -591,7 +593,7 @@ pub const Analyzer = struct {
             .call => final = try self.call(node),
             .Discard => try self.discard(node),
             .Empty => self.node_idx += 1,
-            .field => unreachable,
+            .field => final = try self.field(),
             .Float => final = try self.float_lit(node),
             .FnDecl => try self.fn_declaration(node),
             .Grouping => {
@@ -601,7 +603,6 @@ pub const Analyzer = struct {
             .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
-            .member => unreachable,
             .MultiVarDecl => try self.multi_var_decl(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(node),
@@ -942,31 +943,6 @@ pub const Analyzer = struct {
         return .bool;
     }
 
-    fn discard(self: *Self, node: Node.Index) !void {
-        _ = try self.add_instr(.{ .tag = .Discard, .data = undefined }, node);
-
-        self.node_idx += 1;
-        const discarded = try self.analyze_node(self.node_idx);
-
-        if (discarded == .void) return self.err(.VoidDiscard, self.to_span(node + 1));
-    }
-
-    fn float_lit(self: *Self, node: Node.Index) !Type {
-        const value = std.fmt.parseFloat(f64, self.source_from_node(node)) catch blk: {
-            // TODO: error handling, only one possible it's invalid char or too big
-            std.debug.print("Error parsing float\n", .{});
-            break :blk 0.0;
-        };
-
-        _ = try self.add_instr(
-            .{ .tag = .Float, .data = .{ .Float = value } },
-            node,
-        );
-        self.node_idx += 1;
-
-        return .float;
-    }
-
     fn call(self: *Self, node: Node.Index) Error!Type {
         const arity = self.node_data[node];
         self.node_idx += 1;
@@ -999,6 +975,36 @@ pub const Analyzer = struct {
         return self.fn_call(idx, infos);
     }
 
+    fn discard(self: *Self, node: Node.Index) !void {
+        _ = try self.add_instr(.{ .tag = .Discard }, node);
+
+        self.node_idx += 1;
+        const discarded = try self.analyze_node(self.node_idx);
+
+        if (discarded == .void) return self.err(.VoidDiscard, self.to_span(node + 1));
+    }
+
+    fn field(self: *Self) !Type {
+        _ = try self.add_instr(.{ .tag = .field }, self.node_idx);
+
+        return .void;
+    }
+
+    fn float_lit(self: *Self, node: Node.Index) !Type {
+        const value = std.fmt.parseFloat(f64, self.source_from_node(node)) catch blk: {
+            // TODO: error handling, only one possible it's invalid char or too big
+            std.debug.print("Error parsing float\n", .{});
+            break :blk 0.0;
+        };
+
+        _ = try self.add_instr(
+            .{ .tag = .Float, .data = .{ .Float = value } },
+            node,
+        );
+        self.node_idx += 1;
+
+        return .float;
+    }
     fn fn_call(self: *Self, instr: usize, infos: TypeSys.FnInfo) Error!Type {
         self.instructions.items(.data)[instr].call.builtin = infos.builtin;
 

@@ -94,14 +94,13 @@ pub const AstPrinter = struct {
             .count => unreachable,
             .Discard => self.discard(),
             .Empty => unreachable,
-            .field => unreachable,
+            .field => self.field(),
             .Float => self.literal("Float literal"),
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
             .If => self.if_expr(),
             .Int => self.literal("Int literal"),
-            .member => self.member(),
             .MultiVarDecl => self.multi_var_decl(),
             .Null => self.null_(),
             .Parameter => self.parameter(),
@@ -326,14 +325,14 @@ pub const AstPrinter = struct {
         self.node_idx += 1;
     }
 
-    fn member(self: *Self) Error!void {
+    fn field(self: *Self) Error!void {
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Member {s} of struct {s}]\n", .{
+            self.source_from_tk(self.node_idx + 2),
             self.source_from_tk(self.node_idx + 1),
-            self.source_from_tk(self.node_idx),
         });
-        self.node_idx += 2;
+        self.node_idx += 3;
     }
 
     fn multi_var_decl(self: *Self) Error!void {
