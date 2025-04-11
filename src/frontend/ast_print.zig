@@ -101,6 +101,7 @@ pub const AstPrinter = struct {
             .Identifier => self.literal("Identifier"),
             .If => self.if_expr(),
             .Int => self.literal("Int literal"),
+            .member => self.member(),
             .MultiVarDecl => self.multi_var_decl(),
             .Null => self.null_(),
             .Parameter => self.parameter(),
@@ -323,6 +324,16 @@ pub const AstPrinter = struct {
         var writer = self.tree.writer();
         try writer.print("[{s} {s}]\n", .{ text, self.source_from_tk(self.node_idx) });
         self.node_idx += 1;
+    }
+
+    fn member(self: *Self) Error!void {
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Member {s} of struct {s}]\n", .{
+            self.source_from_tk(self.node_idx + 1),
+            self.source_from_tk(self.node_idx),
+        });
+        self.node_idx += 2;
     }
 
     fn multi_var_decl(self: *Self) Error!void {

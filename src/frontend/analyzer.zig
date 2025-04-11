@@ -243,9 +243,6 @@ pub const Analyzer = struct {
         self.node_data = nodes.items(.data);
         self.node_ends = nodes.items(.end);
 
-        // HACK: to protect a -1 access
-        // try self.states.append(.{});
-
         while (self.node_idx < self.node_data.len) {
             const start = self.node_idx;
 
@@ -265,8 +262,6 @@ pub const Analyzer = struct {
                 self.err(.UnusedValue, self.to_span(start)) catch {};
             }
         }
-
-        // _ = self.states.pop();
 
         // In REPL mode, no need for main function
         if (self.repl)
@@ -302,6 +297,7 @@ pub const Analyzer = struct {
                 .end = self.token_spans[self.node_data[node]].end,
             },
             .If => self.token_spans[self.node_mains[node]],
+            .member => unreachable,
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
@@ -605,6 +601,7 @@ pub const Analyzer = struct {
             .Identifier => final = (try self.identifier(node, true)).typ,
             .If => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
+            .member => unreachable,
             .MultiVarDecl => try self.multi_var_decl(node),
             .Null => final = try self.null_lit(),
             .Print => try self.print(node),
@@ -636,7 +633,6 @@ pub const Analyzer = struct {
         switch (self.node_tags[assigne_idx]) {
             .Identifier => {
                 // TODO: check if this is a function's parameter (there are constant by defninition)
-                // const assigne = try self.resolve_identifier(assigne_idx, false);
                 const assigne = try self.identifier(assigne_idx, false);
 
                 const value_idx = self.node_idx;
@@ -786,7 +782,6 @@ pub const Analyzer = struct {
                 }
             },
             .Eq, .Ne => {
-                // TODO: Error handling for non int, float and str
                 switch (op) {
                     .Eq => data.op = switch (lhs) {
                         .bool => .EqBool,
@@ -958,7 +953,7 @@ pub const Analyzer = struct {
 
     fn float_lit(self: *Self, node: Node.Index) !Type {
         const value = std.fmt.parseFloat(f64, self.source_from_node(node)) catch blk: {
-            // TODO: error handling, only one possible it's invalid char
+            // TODO: error handling, only one possible it's invalid char or too big
             std.debug.print("Error parsing float\n", .{});
             break :blk 0.0;
         };
@@ -1650,9 +1645,9 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const decl = try self.resolve_identifier(self.node_idx, true);
 
-        _ = try self.add_instr(.{
+        const struct_lit_idx = try self.add_instr(.{
             .tag = .struct_literal,
-            .data = .{ .struct_literal = .{ .variable = decl.to_var(), .arity = arity } },
+            .data = .{ .struct_literal = .{ .variable = decl.to_var(), .arity = arity, .end = 0 } },
         }, node);
 
         if (self.type_manager.declared.get(decl.name)) |struct_type| {
@@ -1661,12 +1656,19 @@ pub const Analyzer = struct {
             var proto = infos.proto(self.allocator);
             defer proto.deinit(self.allocator);
 
+            const start = self.instructions.len;
+            try self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity);
+
+            for (0..arity) |_| {
+                self.instructions.appendAssumeCapacity(.{ .tag = .field, .data = undefined });
+            }
+
             for (0..arity) |_| {
                 const field_name = try self.interner.intern(self.source_from_node(self.node_idx));
 
                 if (infos.fields.get(field_name)) |f| {
                     proto.putAssumeCapacity(field_name, true);
-                    _ = try self.add_instr(.{ .tag = .field, .data = .{ .field = f.idx } }, self.node_idx);
+                    self.instructions.items(.data)[start + f.idx] = .{ .field = self.instructions.len };
 
                     // Syntax: { x } instead of { x = x }
                     if (self.node_tags[self.node_idx + 1] == .Empty) {
@@ -1693,6 +1695,10 @@ pub const Analyzer = struct {
                     }
                 }
             }
+
+            // As the compiler is gonna jump around to compile in the correct order, we need a way
+            // to know where to go in the list at the end to continue compiling as normal
+            self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
 
             return decl.typ;
         } else {

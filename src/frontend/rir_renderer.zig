@@ -34,8 +34,8 @@ pub const RirRenderer = struct {
     pub fn init(
         allocator: Allocator,
         source: []const u8,
-        instr_tags: []const Instruction.Tag,
-        instr_data: []const Instruction.Data,
+        from: usize,
+        instructions: std.MultiArrayList(Instruction),
         errs: []const AnalyzerReport,
         warns: []const AnalyzerReport,
         interner: *const Interner,
@@ -43,8 +43,8 @@ pub const RirRenderer = struct {
     ) Self {
         return .{
             .source = source,
-            .instr_tags = instr_tags,
-            .instr_data = instr_data,
+            .instr_tags = instructions.items(.tag)[from..],
+            .instr_data = instructions.items(.data)[from..],
             .errs = errs,
             .warns = warns,
             .interner = interner,

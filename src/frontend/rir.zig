@@ -111,7 +111,7 @@ pub const Instruction = struct {
     pub const Imported = struct { index: u64, variable: Variable };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { variable: Variable, arity: usize };
+    pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };
     pub const Unary = packed struct {
         op: Op,
         typ: Type,

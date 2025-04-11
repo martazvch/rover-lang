@@ -26,7 +26,7 @@ pub const Parser = struct {
     panic_mode: bool,
 
     const Self = @This();
-    const Error = error{ err, StructInitWrongCtx } || Allocator.Error || std.fmt.ParseIntError;
+    const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
 
     pub const ParserReport = GenReport(ParserMsg);
     pub const empty: Self = .{
@@ -79,6 +79,13 @@ pub const Parser = struct {
 
             // After each statements we expect a new line
             if (!self.check(.NewLine)) {
+                // Could be that user wrote: Foo{} instead of Foo.{}, it's identifier + block
+                // without a new line instead of structure literal
+                if (self.token_tags[self.token_idx - 1] == .Identifier and self.token_tags[self.token_idx] == .LeftBrace) {
+                    std.debug.print("Could be trying to do structure literal? Missing '.'\n", .{});
+                    // TODO: Error
+                }
+
                 const start = self.token_spans[self.token_idx - 1].end;
 
                 self.error_at_span(
@@ -794,8 +801,7 @@ pub const Parser = struct {
                 if (self.match(.LeftBrace)) {
                     try self.struct_literal(node);
                 } else {
-                    // Member access
-                    unreachable;
+                    try self.member(node);
                 }
             } else break;
         }
@@ -826,6 +832,12 @@ pub const Parser = struct {
         try self.expect(.RightParen, .ExpectParenAfterFnArgs);
 
         self.nodes.items(.data)[node] = arity;
+    }
+
+    fn member(self: *Self, node: Node.Index) Error!void {
+        try self.nodes.insert(self.allocator, node, .{ .tag = .member });
+        try self.expect(.Identifier, .ExpectNameAfterDot);
+        _ = try self.literal(.Identifier);
     }
 
     fn struct_literal(self: *Self, node: Node.Index) Error!void {

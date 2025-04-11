@@ -604,23 +604,19 @@ const Compiler = struct {
         const data = self.get_data().struct_literal;
         self.manager.instr_idx += 1;
 
-        var list: std.ArrayListUnmanaged(usize) = .{};
-        try list.ensureTotalCapacity(self.manager.vm.allocator, data.arity);
-        defer list.deinit(self.manager.vm.allocator);
-
         for (0..data.arity) |_| {
-            const field_idx = self.get_data().field;
-            list.appendAssumeCapacity(field_idx);
-            self.manager.instr_idx += 1;
+            const save = self.manager.instr_idx;
+            const field_value_start = self.get_data().field;
+            self.manager.instr_idx = field_value_start;
             try self.compile_instr();
+            // Jumps the `field` tag
+            self.manager.instr_idx = save + 1;
         }
+
+        self.manager.instr_idx = data.end;
 
         try self.write_op_and_byte(.struct_literal, @intCast(data.arity), start);
         try self.emit_get_var(data.variable, start);
-
-        for (list.items) |field| {
-            try self.write_byte(@intCast(field), start);
-        }
     }
 
     fn unary(self: *Self) !void {

@@ -174,8 +174,8 @@ fn render_ir(
     var rir_renderer = RirRenderer.init(
         allocator,
         source,
-        analyzer.instructions.items(.tag)[start..],
-        analyzer.instructions.items(.data)[start..],
+        start,
+        analyzer.instructions,
         analyzer.errs.items,
         analyzer.warns.items,
         &analyzer.interner,

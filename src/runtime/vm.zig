@@ -414,6 +414,7 @@ pub const Vm = struct {
                     const locals_count = frame.read_byte();
                     const res = self.stack.pop();
 
+                    // PERF: just adjust the stack top ptr? No need to pop them
                     for (0..locals_count) |_| _ = self.stack.pop();
                     self.stack.push(res);
                 },
@@ -436,10 +437,8 @@ pub const Vm = struct {
 
                     var instance = try ObjInstance.create(self, structure);
 
-                    // PERF: maybe encode index in a u16 and check if arity even, avoid read_byte() calls
                     for (0..arity) |i| {
-                        const field_idx = frame.read_byte();
-                        instance.fields[field_idx] = self.stack.peek(arity - i - 1);
+                        instance.fields[i] = self.stack.peek(arity - i - 1);
                     }
 
                     self.stack.top -= arity;
