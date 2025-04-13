@@ -631,55 +631,114 @@ pub const Analyzer = struct {
         const assigne_idx = self.node_idx;
         const idx = try self.add_instr(.{ .tag = .Assignment }, assigne_idx);
 
-        switch (self.node_tags[assigne_idx]) {
-            .Identifier => {
+        // switch (self.node_tags[assigne_idx]) {
+        //     .Identifier => {
+        //         // TODO: check if this is a function's parameter (there are constant by defninition)
+        //         const assigne = try self.identifier(assigne_idx, false);
+        //
+        //         const value_idx = self.node_idx;
+        //         const value_type = try self.analyze_node(value_idx);
+        //
+        //         // For now, we can assign only to scalar variables
+        //         // TODO: useless check?
+        //         if (TypeSys.get_kind(assigne.typ) != .variable) {
+        //             return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
+        //         }
+        //
+        //         if (value_type == .void) {
+        //             return self.err(.VoidAssignment, self.to_span(value_idx));
+        //         }
+        //
+        //         // If type is unknown, we update it
+        //         if (assigne.typ == .void) {
+        //             assigne.typ = value_type;
+        //         } else if (assigne.typ != value_type) {
+        //             // One case in wich we can coerce; int -> float
+        //             if (assigne.typ == .float and value_type == .int) {
+        //                 cast = true;
+        //                 _ = try self.add_instr(
+        //                     .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
+        //                     assigne_idx,
+        //                 );
+        //             } else {
+        //                 return self.err(
+        //                     .{ .InvalidAssignType = .{
+        //                         .expect = self.get_type_name(assigne.typ),
+        //                         .found = self.get_type_name(value_type),
+        //                     } },
+        //                     self.to_span(assigne_idx),
+        //                 );
+        //             }
+        //         }
+        //
+        //         if (!assigne.initialized) assigne.initialized = true;
+        //
+        //         self.instructions.items(.data)[idx] = .{ .Assignment = .{ .cast = cast } };
+        //     },
+        //     .field => {
+        //         const assigne = try self.field();
+        //
+        //         const value_idx = self.node_idx;
+        //         const value_type = try self.analyze_node(value_idx);
+        //
+        //     },
+        //     // Later, manage member, pointer, ...
+        //     else => return self.err(.InvalidAssignTarget, self.to_span(assigne_idx)),
+        // }
+
+        var assigne_type = switch (self.node_tags[assigne_idx]) {
+            .Identifier => blk: {
                 // TODO: check if this is a function's parameter (there are constant by defninition)
                 const assigne = try self.identifier(assigne_idx, false);
 
-                const value_idx = self.node_idx;
-                const value_type = try self.analyze_node(value_idx);
-
-                // For now, we can assign only to scalar variables
-                if (TypeSys.get_kind(assigne.typ) != .variable) {
-                    return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
-                }
-
-                // Restore state
-                self.state.allow_partial = last;
-
-                if (value_type == .void) {
-                    return self.err(.VoidAssignment, self.to_span(value_idx));
-                }
-
-                // If type is unknown, we update it
-                if (assigne.typ == .void) {
-                    assigne.typ = value_type;
-                } else if (assigne.typ != value_type) {
-                    // One case in wich we can coerce; int -> float
-                    if (assigne.typ == .float and value_type == .int) {
-                        cast = true;
-                        _ = try self.add_instr(
-                            .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
-                            assigne_idx,
-                        );
-                    } else {
-                        return self.err(
-                            .{ .InvalidAssignType = .{
-                                .expect = self.get_type_name(assigne.typ),
-                                .found = self.get_type_name(value_type),
-                            } },
-                            self.to_span(assigne_idx),
-                        );
-                    }
-                }
-
                 if (!assigne.initialized) assigne.initialized = true;
 
-                self.instructions.items(.data)[idx] = .{ .Assignment = .{ .cast = cast } };
+                break :blk assigne.typ;
             },
+            .field => try self.field(),
             // Later, manage member, pointer, ...
             else => return self.err(.InvalidAssignTarget, self.to_span(assigne_idx)),
+        };
+
+        const value_idx = self.node_idx;
+        const value_type = try self.analyze_node(value_idx);
+
+        // For now, we can assign only to scalar variables
+        // TODO: useless check?
+        if (TypeSys.get_kind(assigne_type) != .variable) {
+            return self.err(.InvalidAssignTarget, self.to_span(assigne_idx));
         }
+
+        if (value_type == .void) {
+            return self.err(.VoidAssignment, self.to_span(value_idx));
+        }
+
+        // If type is unknown, we update it
+        if (assigne_type == .void) {
+            assigne_type = value_type;
+        } else if (assigne_type != value_type) {
+            // One case in wich we can coerce; int -> float
+            if (assigne_type == .float and value_type == .int) {
+                cast = true;
+                _ = try self.add_instr(
+                    .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
+                    assigne_idx,
+                );
+            } else {
+                return self.err(
+                    .{ .InvalidAssignType = .{
+                        .expect = self.get_type_name(assigne_type),
+                        .found = self.get_type_name(value_type),
+                    } },
+                    self.to_span(assigne_idx),
+                );
+            }
+        }
+
+        self.instructions.items(.data)[idx] = .{ .Assignment = .{ .cast = cast } };
+
+        // Restore state
+        self.state.allow_partial = last;
     }
 
     fn binop(self: *Self, node: Node.Index) Error!Type {
@@ -985,9 +1044,30 @@ pub const Analyzer = struct {
     }
 
     fn field(self: *Self) !Type {
-        _ = try self.add_instr(.{ .tag = .field }, self.node_idx);
+        const idx = try self.add_instr(.{ .tag = .field }, self.node_idx);
+        self.node_idx += 1;
 
-        return .void;
+        const struct_type = try self.analyze_node(self.node_idx);
+        const field_idx = try self.interner.intern(self.source_from_node(self.node_idx));
+        self.node_idx += 1;
+
+        if (!TypeSys.is(struct_type, .@"struct")) {
+            // TODO: error
+            std.debug.print("Error, field access on a non-struct", .{});
+        }
+
+        const infos = self.type_manager.type_infos.items[TypeSys.get_value(struct_type)].@"struct";
+
+        if (infos.fields.get(field_idx)) |f| {
+            self.instructions.items(.data)[idx] = .{ .field = f.idx };
+
+            return f.type;
+        } else {
+            // TODO: Error
+            std.debug.print("Undeclared field during access", .{});
+        }
+
+        unreachable;
     }
 
     fn float_lit(self: *Self, node: Node.Index) !Type {
@@ -1636,7 +1716,7 @@ pub const Analyzer = struct {
         try self.type_manager.add_type(name, struct_type);
 
         _ = try self.end_scope();
-        _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
+        // _ = try self.declare_variable(name, struct_type, true, struct_idx, .@"struct");
         self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
             .fields_count = fields_count,
             .default_fields = default_value_fields,

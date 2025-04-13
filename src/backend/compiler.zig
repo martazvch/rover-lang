@@ -246,7 +246,7 @@ const Compiler = struct {
             .Bool => self.bool_instr(),
             .Cast => self.cast(),
             .Discard => self.discard(),
-            .field => unreachable,
+            .field => self.get_field(),
             .Float => self.float_instr(),
             .call => self.fn_call(),
             .FnDecl => self.fn_decl(),
@@ -277,8 +277,9 @@ const Compiler = struct {
 
         const data = if (self.manager.instr_tags[data_idx] == .IdentifierId)
             self.manager.instr_data[self.manager.instr_data[data_idx].Id].VarDecl.variable
-        else
-            self.manager.instr_data[data_idx].Variable;
+        else if (self.manager.instr_tags[data_idx] == .field) {
+            return self.field_assignment(assign_data);
+        } else self.manager.instr_data[data_idx].Variable;
 
         self.manager.instr_idx += 2;
 
@@ -300,6 +301,16 @@ const Compiler = struct {
             @intCast(data.index),
             start,
         );
+    }
+
+    fn field_assignment(self: *Self, assign_data: Rir.Instruction.Assignment) Error!void {
+        try self.get_field();
+
+        // Value
+        try self.compile_instr();
+
+        // We cast the value on top of stack if needed
+        if (assign_data.cast) try self.compile_instr();
     }
 
     fn binop(self: *Self) !void {
@@ -408,6 +419,15 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
         try self.compile_instr();
         try self.write_op(.Pop, 0);
+    }
+
+    fn get_field(self: *Self) Error!void {
+        const data = self.get_data().field;
+        const start = self.get_start();
+        self.manager.instr_idx += 1;
+
+        try self.write_op_and_byte(.get_field, @intCast(data), start);
+        try self.compile_instr();
     }
 
     fn float_instr(self: *Self) !void {

@@ -309,6 +309,10 @@ pub const Vm = struct {
                 .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
                 .False => self.stack.push(Value.bool_(false)),
+                .get_field => {
+                    const value = self.get_field(frame);
+                    self.stack.push(value.*);
+                },
                 // Compiler bug: https://github.com/ziglang/zig/issues/13938
                 .GetGlobal => self.stack.push((&self.globals)[frame.read_byte()]),
                 .GetHeap => self.stack.push(self.heap_vars[frame.read_byte()]),
@@ -456,6 +460,29 @@ pub const Vm = struct {
                 .True => self.stack.push(Value.bool_(true)),
             }
         }
+    }
+
+    // TODO: make this treatment in earlier stages to avoid runtime checks?
+    fn get_field(self: *Self, frame: *CallFrame) *Value {
+        const field_idx = frame.read_byte();
+
+        const instance = blk: {
+            const op: OpCode = @enumFromInt(frame.read_byte());
+
+            if (op == .get_field)
+                break :blk self.get_field(frame);
+
+            const idx = frame.read_byte();
+
+            break :blk if (op == .GetGlobal)
+                &self.globals[idx]
+            else if (op == .GetHeap)
+                &self.heap_vars[idx]
+            else
+                &frame.slots[idx];
+        };
+
+        return &instance.Obj.as(ObjInstance).fields[field_idx];
     }
 
     fn str_concat(self: *Self) !void {

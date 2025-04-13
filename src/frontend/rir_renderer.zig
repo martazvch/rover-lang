@@ -122,7 +122,7 @@ pub const RirRenderer = struct {
             .Discard => self.discard(),
             .Float => self.float_instr(index),
             .call => self.fn_call(index),
-            .field => unreachable,
+            .field => self.get_field(index),
             .FnDecl => self.fn_declaration(index),
             .Name => unreachable,
             .Identifier => self.identifier(index, false),
@@ -161,8 +161,9 @@ pub const RirRenderer = struct {
 
         const data = if (self.instr_tags[instr + 1] == .IdentifierId)
             self.instr_data[self.instr_data[instr + 1].Id].VarDecl.variable
-        else
-            self.instr_data[instr + 1].Variable;
+        else if (self.instr_tags[instr + 1] == .field) {
+            return self.field_assignment(assign_data);
+        } else self.instr_data[instr + 1].Variable;
 
         var writer = self.tree.writer();
         try self.indent();
@@ -171,6 +172,20 @@ pub const RirRenderer = struct {
         });
 
         self.instr_idx += 1;
+        self.indent_level += 1;
+        try self.parse_instr(self.instr_idx);
+
+        if (assign_data.cast) try self.parse_instr(self.instr_idx);
+        self.indent_level -= 1;
+    }
+
+    fn field_assignment(self: *Self, assign_data: Instruction.Assignment) Error!void {
+        var writer = self.tree.writer();
+        try self.indent();
+        try writer.writeAll("[Field assignment]\n");
+
+        try self.get_field(self.instr_idx);
+
         self.indent_level += 1;
         try self.parse_instr(self.instr_idx);
 
@@ -277,6 +292,20 @@ pub const RirRenderer = struct {
             }
         }
 
+        self.indent_level -= 1;
+    }
+
+    fn get_field(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].field;
+        self.instr_idx += 1;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Field access {}]\n", .{data});
+        self.indent_level += 1;
+
+        // Variable
+        try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 
@@ -434,13 +463,16 @@ pub const RirRenderer = struct {
         self.indent_level += 1;
 
         for (0..data.arity) |_| {
+            const save = self.instr_idx;
             const field_data = self.next(.data).field;
-            try self.indent();
-            try writer.print("[field {}]\n", .{field_data});
+            self.instr_idx = field_data;
             self.indent_level += 1;
             try self.parse_instr(self.instr_idx);
             self.indent_level -= 1;
+            self.instr_idx = save + 1;
         }
+
+        self.instr_idx = data.end;
 
         self.indent_level -= 1;
     }

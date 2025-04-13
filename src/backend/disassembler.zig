@@ -93,6 +93,7 @@ pub const Disassembler = struct {
             .False => self.simple_instruction("OP_FALSE", offset, writer),
             .call => self.index_instruction("OP_CALL", offset, writer),
             // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
+            .get_field => self.get_field(offset, writer),
             .GetGlobal => self.index_instruction("OP_GET_GLOBAL", offset, writer),
             .GetHeap => self.index_instruction("OP_GET_HEAP", offset, writer),
             .GetLocal => self.index_instruction("OP_GET_LOCAL", offset, writer),
@@ -137,7 +138,8 @@ pub const Disassembler = struct {
             .StrCat => self.simple_instruction("OP_STRING_CONCAT", offset, writer),
             .StrMulL => self.simple_instruction("OP_STRING_MUL_L", offset, writer),
             .StrMulR => self.simple_instruction("OP_STRING_MUL_R", offset, writer),
-            .struct_literal => self.struct_literal(offset, writer),
+            // .struct_literal => self.struct_literal(offset, writer),
+            .struct_literal => self.index_instruction("OP_STRUCT_LIT", offset, writer),
             .SubFloat => self.simple_instruction("OP_SUBTRACT_FLOAT", offset, writer),
             .SubInt => self.simple_instruction("OP_SUBTRACT_INT", offset, writer),
             .True => self.simple_instruction("OP_TRUE", offset, writer),
@@ -231,19 +233,37 @@ pub const Disassembler = struct {
         // Skips the struct_literal op
         var local_offset = offset + 1;
         const arity = self.chunk.code.items[local_offset];
-        try writer.print("{s:<24} arity {}\n", .{ "OP_STRUCT_LIT", arity });
+        try writer.print("{s:<24} arity {:>4}\n", .{ "OP_STRUCT_LIT", arity });
 
         local_offset += 1;
 
         // Get the structure
         local_offset = try self.dis_instruction(local_offset, writer);
 
-        // Each field assign
-        for (0..arity) |_| {
-            local_offset = try self.dis_instruction(local_offset, writer);
-        }
+        // // Each field assign
+        // for (0..arity) |_| {
+        //     local_offset = try self.dis_instruction(local_offset, writer);
+        // }
 
         return local_offset;
+    }
+
+    fn get_field(self: *const Self, offset: usize, writer: anytype) !usize {
+        // Skips the struct_literal op
+        var local_offset = offset;
+        local_offset += 1;
+        const idx = self.chunk.code.items[local_offset];
+        local_offset += 1;
+
+        if (self.render_mode == .Test) {
+            try writer.print("{s} index {} of next variable\n", .{ "OP_GET_FIELD", idx });
+        } else {
+            try writer.print("{s:<24} index {:>4} of next variable\n", .{ "OP_GET_FIELD", idx });
+        }
+
+        local_offset = try self.dis_instruction(local_offset, writer);
+
+        return local_offset + 1;
     }
 
     fn invoke_instruction(

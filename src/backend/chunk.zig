@@ -20,6 +20,7 @@ pub const OpCode = enum(u8) {
     ExitRepl,
     False,
     call,
+    get_field,
     GetGlobal,
     GetHeap,
     GetLocal,
