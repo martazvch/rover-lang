@@ -21,7 +21,7 @@ fn main() {
     }
 }
 
-// Return kinds
+// @"return" kinds
 fn add1() { return }
 fn add2() -> int { 5 }
 fn add3()  {  }

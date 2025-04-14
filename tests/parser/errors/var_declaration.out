@@ -1,5 +1,5 @@
 ExpectName, variable
 ExpectName, variable
-ExpectColonBeforeType
+ExpectcolonBeforeType
 ExpectTypeName
 ExpectExpr, var

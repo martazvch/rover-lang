@@ -127,16 +127,16 @@ pub const RirRenderer = struct {
             .Name => unreachable,
             .Identifier => self.identifier(index, false),
             .IdentifierId => self.identifier(index, true),
-            .If => self.if_instr(index),
+            .@"if" => self.if_instr(index),
             .Imported => unreachable,
             .Int => self.int_instr(),
             .MultipleVarDecl => self.multiple_var_decl(),
-            .Null => {
+            .null => {
                 try self.indent();
                 try self.tree.appendSlice("[Null]\n");
                 self.instr_idx += 1;
             },
-            .Print => {
+            .print => {
                 try self.indent();
                 try self.tree.appendSlice("[Print]\n");
                 self.instr_idx += 1;
@@ -144,14 +144,14 @@ pub const RirRenderer = struct {
                 try self.parse_instr(self.instr_idx);
                 self.indent_level -= 1;
             },
-            .Return => self.return_instr(),
-            .String => self.string_instr(),
+            .@"return" => self.return_instr(),
+            .string => self.string_instr(),
             .struct_decl => self.struct_decl(),
             .struct_literal => self.struct_literal(),
             .Unary => self.unary(index),
-            .Use => self.use(index),
+            .use => self.use(index),
             .VarDecl => self.var_decl(index),
-            .While => self.while_instr(),
+            .@"while" => self.while_instr(),
         };
     }
 
@@ -347,7 +347,7 @@ pub const RirRenderer = struct {
     }
 
     fn if_instr(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].If;
+        const data = self.instr_data[instr].@"if";
 
         try self.indent();
         var writer = self.tree.writer();
@@ -395,7 +395,7 @@ pub const RirRenderer = struct {
     }
 
     fn return_instr(self: *Self) Error!void {
-        const data = self.next(.data).Return;
+        const data = self.next(.data).@"return";
 
         try self.indent();
         var writer = self.tree.writer();
@@ -490,7 +490,7 @@ pub const RirRenderer = struct {
     }
 
     fn use(self: *Self, instr: usize) Error!void {
-        const count = self.instr_data[instr].Use;
+        const count = self.instr_data[instr].use;
         var writer = self.tree.writer();
 
         // NOTE: For now, skips the first 'Null' placed by the analyzer

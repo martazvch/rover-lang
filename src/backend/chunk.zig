@@ -18,7 +18,7 @@ pub const OpCode = enum(u8) {
     EqInt,
     EqStr,
     ExitRepl,
-    False,
+    false,
     call,
     get_field,
     GetGlobal,
@@ -46,11 +46,11 @@ pub const OpCode = enum(u8) {
     NeStr,
     NegateFloat,
     NegateInt,
-    Not,
-    Null,
+    not,
+    null,
     Pop,
-    Print,
-    Return,
+    print,
+    @"return",
     ScopeReturn,
     SetGlobal,
     SetHeap,
@@ -61,7 +61,7 @@ pub const OpCode = enum(u8) {
     struct_literal,
     SubFloat,
     SubInt,
-    True,
+    true,
 };
 
 pub const Chunk = struct {

@@ -11,7 +11,8 @@ const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
 const Lexer = @import("frontend/lexer.zig").Lexer;
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const Parser = @import("frontend/parser.zig").Parser;
+// const Parser = @import("frontend/parser.zig").Parser;
+const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const GenReporter = @import("reporter.zig").GenReporter;
@@ -68,82 +69,94 @@ pub const Pipeline = struct {
 
         // Parser
         // TODO: self.allocator is already an arena, modify Parser
-        var parser: Parser = .empty;
-        parser.init(self.allocator);
-        defer parser.deinit();
+        // var parser: Parser = .empty;
+        // parser.init(self.allocator);
+        // defer parser.deinit();
 
-        try parser.parse(
-            source,
-            lexer.tokens.items(.tag),
-            lexer.tokens.items(.span),
-        );
+        // try parser.parse(
+        //     source,
+        //     lexer.tokens.items(.tag),
+        //     lexer.tokens.items(.span),
+        // );
+
+        // --------------
+        //   New parser
+        // --------------
+        var parser2: Parser = .empty;
+        parser2.init(self.allocator);
+        defer parser2.deinit();
+
+        try parser2.parse(source, lexer.tokens);
 
         // Printer
-        if (options.test_mode and self.config.print_ast) {
-            try print_ast(self.allocator, source, &lexer, &parser);
-            return error.ExitOnPrint;
-        }
+        // if (options.test_mode and self.config.print_ast) {
+        //     try print_ast(self.allocator, source, &lexer, &parser2);
+        //     return error.ExitOnPrint;
+        // }
+        //
+        // if (parser2.errs.items.len > 0) {
+        //     var reporter = GenReporter(ParserMsg).init(source);
+        //     try reporter.report_all(filename, parser2.errs.items);
+        //     return error.ExitOnPrint;
+        // } else if (self.config.print_ast) try print_ast(self.allocator, source, &lexer, &parser2);
 
-        if (parser.errs.items.len > 0) {
-            var reporter = GenReporter(ParserMsg).init(source);
-            try reporter.report_all(filename, parser.errs.items);
-            return error.ExitOnPrint;
-        } else if (self.config.print_ast) try print_ast(self.allocator, source, &lexer, &parser);
+        std.process.exit(0);
 
         // Analyzer
-        try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes);
-        defer self.analyzer.reinit();
+        // try self.analyzer.analyze(source, &lexer.tokens, &parser2.nodes);
+        // defer self.analyzer.reinit();
+        //
+        // // We don't keep errors/warnings from a prompt to another
+        // defer self.analyzer.errs.clearRetainingCapacity();
+        // defer self.analyzer.warns.clearRetainingCapacity();
+        //
+        // // Analyzed Ast printer
+        // if (options.test_mode and self.config.print_ir) {
+        //     try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        //     return error.ExitOnPrint;
+        // }
+        //
+        // if (self.analyzer.errs.items.len > 0) {
+        //     var reporter = GenReporter(AnalyzerMsg).init(source);
+        //     try reporter.report_all(filename, self.analyzer.errs.items);
+        //
+        //     if (self.analyzer.warns.items.len > 0) {
+        //         reporter = GenReporter(AnalyzerMsg).init(source);
+        //         try reporter.report_all(filename, self.analyzer.warns.items);
+        //     }
+        //
+        //     self.instr_count = self.analyzer.instructions.len;
+        //     return error.ExitOnPrint;
+        // } else if (self.config.print_ir)
+        //     try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
-        // We don't keep errors/warnings from a prompt to another
-        defer self.analyzer.errs.clearRetainingCapacity();
-        defer self.analyzer.warns.clearRetainingCapacity();
-
-        // Analyzed Ast printer
-        if (options.test_mode and self.config.print_ir) {
-            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
-            return error.ExitOnPrint;
-        }
-
-        if (self.analyzer.errs.items.len > 0) {
-            var reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.report_all(filename, self.analyzer.errs.items);
-
-            if (self.analyzer.warns.items.len > 0) {
-                reporter = GenReporter(AnalyzerMsg).init(source);
-                try reporter.report_all(filename, self.analyzer.warns.items);
-            }
-
-            self.instr_count = self.analyzer.instructions.len;
-            return error.ExitOnPrint;
-        } else if (self.config.print_ir)
-            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
-
-        // Analyzer warnings
-        if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
-            var reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.report_all(filename, self.analyzer.warns.items);
-            return error.ExitOnPrint;
-        }
-
-        // Compiler
-        var compiler = CompilationManager.init(
-            self.vm,
-            self.analyzer.type_manager.natives.functions,
-            &self.analyzer.interner,
-            self.instr_count,
-            &self.analyzer.instructions,
-            if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
-            if (self.config.embedded) 0 else self.analyzer.main.?,
-            self.config.embedded,
-        );
-        defer compiler.deinit();
-        self.instr_count = self.analyzer.instructions.len;
-        const function = try compiler.compile();
-
-        return if (options.test_mode and self.config.print_bytecode)
-            error.ExitOnPrint
-        else
-            function;
+        //
+        // // Analyzer warnings
+        // if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
+        //     var reporter = GenReporter(AnalyzerMsg).init(source);
+        //     try reporter.report_all(filename, self.analyzer.warns.items);
+        //     return error.ExitOnPrint;
+        // }
+        //
+        // // Compiler
+        // var compiler = CompilationManager.init(
+        //     self.vm,
+        //     self.analyzer.type_manager.natives.functions,
+        //     &self.analyzer.interner,
+        //     self.instr_count,
+        //     &self.analyzer.instructions,
+        //     if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
+        //     if (self.config.embedded) 0 else self.analyzer.main.?,
+        //     self.config.embedded,
+        // );
+        // defer compiler.deinit();
+        // self.instr_count = self.analyzer.instructions.len;
+        // const function = try compiler.compile();
+        //
+        // return if (options.test_mode and self.config.print_bytecode)
+        //     error.ExitOnPrint
+        // else
+        //     function;
     }
 };
 

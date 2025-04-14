@@ -271,7 +271,7 @@ pub const Analyzer = struct {
 
     fn to_span(self: *const Self, node: Node.Index) Span {
         return switch (self.node_tags[node]) {
-            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
+            .Add, .@"and", .Div, .Mul, .@"or", .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
                 .start = self.token_spans[self.node_mains[node + 1]].start,
                 .end = self.to_span(node + 2).end,
             },
@@ -283,7 +283,7 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node]].start + 1,
             },
-            .Bool, .Float, .Identifier, .Int, .Null, .String => self.token_spans[self.node_mains[node]],
+            .Bool, .Float, .Identifier, .Int, .null, .string => self.token_spans[self.node_mains[node]],
             .call => self.token_spans[self.node_mains[node + 1]],
             .Discard => .{
                 .start = self.token_spans[self.node_mains[node]].start,
@@ -299,16 +299,16 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_data[node]].end,
             },
-            .If => self.token_spans[self.node_mains[node]],
+            .@"if" => self.token_spans[self.node_mains[node]],
             .Parameter => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
-            .Print => .{
+            .print => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.to_span(node + 1).end,
             },
-            .Return => .{
+            .@"return" => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = if (self.node_tags[node + 1] == .Empty)
                     self.token_spans[self.node_mains[node]].end
@@ -321,7 +321,7 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + 1]].end,
             },
-            .Use => .{
+            .use => .{
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
             },
@@ -329,7 +329,7 @@ pub const Analyzer = struct {
                 .start = self.token_spans[self.node_mains[node]].start,
                 .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
             },
-            .While => self.token_spans[self.node_mains[node]],
+            .@"while" => self.token_spans[self.node_mains[node]],
             .MultiVarDecl, .count => unreachable,
         };
     }
@@ -460,7 +460,7 @@ pub const Analyzer = struct {
     /// `empty`, returns `void`
     fn check_and_get_type(self: *Self) Error!Type {
         // Function type are not declared in advance, so we declare it and return it's index
-        if (self.node_tags[self.node_idx] != .Empty and self.token_tags[self.node_mains[self.node_idx]] == .Fn) {
+        if (self.node_tags[self.node_idx] != .Empty and self.token_tags[self.node_mains[self.node_idx]] == .@"fn") {
             return self.create_anonymus_fn_type();
         }
 
@@ -558,8 +558,8 @@ pub const Analyzer = struct {
         return switch (self.node_tags[node]) {
             // Skips assign node and identifier
             .Assignment => self.is_pure(node + 2),
-            .Bool, .Float, .Int, .Null, .String, .FnDecl, .StructDecl, .Use => true,
-            .Add, .Div, .Mul, .Sub, .And, .Or, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
+            .Bool, .Float, .Int, .null, .string, .FnDecl, .StructDecl, .use => true,
+            .Add, .Div, .Mul, .Sub, .@"and", .@"or", .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
                 const lhs = self.is_pure(node + 1);
                 return lhs and self.is_pure(node + 2);
             },
@@ -577,7 +577,7 @@ pub const Analyzer = struct {
     fn analyze_node(self: *Self, node: Node.Index) Error!Type {
         if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
             // TODO: add block, not allowed to have local scopes in global scope
-            return if (self.node_tags[node] == .Return)
+            return if (self.node_tags[node] == .@"return")
                 self.err(.ReturnOutsideFn, self.to_span(node))
             else
                 self.err(.UnpureInGlobal, self.to_span(node));
@@ -586,7 +586,7 @@ pub const Analyzer = struct {
         var final: Type = .void;
 
         switch (self.node_tags[node]) {
-            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => final = try self.binop(node),
+            .Add, .@"and", .Div, .Mul, .@"or", .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => final = try self.binop(node),
             .Assignment => try self.assignment(node),
             .Block => final = try self.block(node),
             .Bool => final = try self.bool_lit(node),
@@ -601,19 +601,19 @@ pub const Analyzer = struct {
                 final = try self.analyze_node(self.node_idx);
             },
             .Identifier => final = (try self.identifier(node, true)).typ,
-            .If => final = try self.if_expr(node),
+            .@"if" => final = try self.if_expr(node),
             .Int => final = try self.int_lit(node),
             .MultiVarDecl => try self.multi_var_decl(node),
-            .Null => final = try self.null_lit(),
-            .Print => try self.print(node),
-            .Return => final = try self.return_expr(node),
-            .String => final = try self.string(node),
+            .null => final = try self.null_lit(),
+            .print => try self.print(node),
+            .@"return" => final = try self.return_expr(node),
+            .string => final = try self.string(node),
             .StructDecl => final = try self.structure(node),
             .struct_literal => final = try self.struct_literal(node),
             .Unary => final = try self.unary(node),
-            .Use => try self.use(node),
+            .use => try self.use(node),
             .VarDecl => try self.var_decl(node),
-            .While => try self.while_stmt(node),
+            .@"while" => try self.while_stmt(node),
             .Parameter, .self, .count, .Type => unreachable,
         }
 
@@ -939,7 +939,7 @@ pub const Analyzer = struct {
                 res = .bool;
             },
             // Logical binop
-            .And, .Or => {
+            .@"and", .@"or" => {
                 if (lhs != .bool) return self.err(.{ .InvalidLogical = .{
                     .found = self.get_type_name(lhs),
                 } }, self.to_span(lhs_index));
@@ -949,8 +949,8 @@ pub const Analyzer = struct {
                 } }, self.to_span(rhs_index));
 
                 switch (op) {
-                    .And => data.op = .And,
-                    .Or => data.op = .Or,
+                    .@"and" => data.op = .@"and",
+                    .@"or" => data.op = .@"or",
                     else => unreachable,
                 }
             },
@@ -994,7 +994,7 @@ pub const Analyzer = struct {
 
     fn bool_lit(self: *Self, node: Node.Index) !Type {
         _ = try self.add_instr(.{ .tag = .Bool, .data = .{
-            .Bool = if (self.token_tags[self.node_mains[node]] == .True) true else false,
+            .Bool = if (self.token_tags[self.node_mains[node]] == .true) true else false,
         } }, node);
 
         self.node_idx += 1;
@@ -1434,9 +1434,9 @@ pub const Analyzer = struct {
     }
 
     fn if_expr(self: *Self, node: Node.Index) Error!Type {
-        const idx = try self.add_instr(.{ .tag = .If, .data = undefined }, node);
+        const idx = try self.add_instr(.{ .tag = .@"if", .data = undefined }, node);
         self.node_idx += 1;
-        var data: Instruction.If = .{ .cast = .none, .has_else = false };
+        var data: Instruction.@"if" = .{ .cast = .none, .has_else = false };
 
         const cond_idx = self.node_idx;
         const cond_type = try self.analyze_node(self.node_idx);
@@ -1521,7 +1521,7 @@ pub const Analyzer = struct {
             );
         } else self.node_idx += 1;
 
-        self.instructions.items(.data)[idx] = .{ .If = data };
+        self.instructions.items(.data)[idx] = .{ .@"if" = data };
 
         return final_type;
     }
@@ -1550,14 +1550,14 @@ pub const Analyzer = struct {
     }
 
     fn null_lit(self: *Self) !Type {
-        _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, self.node_idx);
+        _ = try self.add_instr(.{ .tag = .null, .data = undefined }, self.node_idx);
         self.node_idx += 1;
 
         return .null;
     }
 
     fn print(self: *Self, _: Node.Index) !void {
-        _ = try self.add_instr(.{ .tag = .Print, .data = undefined }, self.node_idx);
+        _ = try self.add_instr(.{ .tag = .print, .data = undefined }, self.node_idx);
         self.node_idx += 1;
         const expr_idx = self.node_idx;
         const typ = try self.analyze_node(self.node_idx);
@@ -1569,7 +1569,7 @@ pub const Analyzer = struct {
     fn return_expr(self: *Self, node: Node.Index) Error!Type {
         self.node_idx += 1;
 
-        const idx = try self.add_instr(.{ .tag = .Return, .data = .{ .Return = .{
+        const idx = try self.add_instr(.{ .tag = .@"return", .data = .{ .@"return" = .{
             .value = false,
             .cast = false,
         } } }, node);
@@ -1577,7 +1577,7 @@ pub const Analyzer = struct {
         const value_idx = self.node_idx;
 
         const return_type = if (self.node_tags[self.node_idx] != .Empty) blk: {
-            self.instructions.items(.data)[idx].Return.value = true;
+            self.instructions.items(.data)[idx].@"return".value = true;
             break :blk try self.analyze_node(self.node_idx);
         } else blk: {
             self.node_idx += 1;
@@ -1591,7 +1591,7 @@ pub const Analyzer = struct {
 
         if (!self.check_equal_fn_types(self.state.fn_type, return_type)) {
             if (self.state.fn_type == .float and return_type == .int) {
-                self.instructions.items(.data)[idx].Return.cast = true;
+                self.instructions.items(.data)[idx].@"return".cast = true;
                 _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
             } else return self.err(
                 .{ .IncompatibleFnType = .{
@@ -1610,7 +1610,7 @@ pub const Analyzer = struct {
         const source = self.source_from_node(node);
         // Removes the quotes
         const value = try self.interner.intern(source[1 .. source.len - 1]);
-        _ = try self.add_instr(.{ .tag = .String, .data = .{ .Id = value } }, node);
+        _ = try self.add_instr(.{ .tag = .string, .data = .{ .Id = value } }, node);
         self.node_idx += 1;
 
         return .str;
@@ -1800,7 +1800,7 @@ pub const Analyzer = struct {
         const idx = try self.add_instr(.{
             .tag = .Unary,
             .data = .{ .Unary = .{
-                .op = if (op == .Not) .bang else .minus,
+                .op = if (op == .not) .bang else .minus,
                 .typ = .Float,
             } },
         }, node);
@@ -1808,7 +1808,7 @@ pub const Analyzer = struct {
         self.node_idx += 1;
         const rhs = try self.analyze_node(self.node_idx);
 
-        if (op == .Not and rhs != .bool) {
+        if (op == .not and rhs != .bool) {
             return self.err(
                 .{ .InvalidUnary = .{ .found = self.get_type_name(rhs) } },
                 self.to_span(node),
@@ -1826,7 +1826,7 @@ pub const Analyzer = struct {
     }
 
     fn use(self: *Self, node: Node.Index) !void {
-        const idx = try self.add_instr(.{ .tag = .Use, .data = undefined }, node);
+        const idx = try self.add_instr(.{ .tag = .use, .data = undefined }, node);
         self.node_idx += 1;
 
         var count: usize = 0;
@@ -1839,7 +1839,7 @@ pub const Analyzer = struct {
         if (name == self.std_interned) {
             // TODO: For now, il allows to keep synchronized the different arrays of
             // nodes/instructions
-            _ = try self.add_instr(.{ .tag = .Null, .data = undefined }, 0);
+            _ = try self.add_instr(.{ .tag = .null, .data = undefined }, 0);
 
             // TODO: support real imports
             if (self.node_data[node] > 2) @panic("Use statements can't import more than std + one module");
@@ -1875,7 +1875,7 @@ pub const Analyzer = struct {
                         count += 1;
                     }
 
-                    self.instructions.items(.data)[idx] = .{ .Use = count };
+                    self.instructions.items(.data)[idx] = .{ .use = count };
                     self.node_idx += 1;
 
                     return;
@@ -1937,7 +1937,7 @@ pub const Analyzer = struct {
 
             initialized = true;
         } else {
-            _ = try self.add_instr(.{ .tag = .Null }, node);
+            _ = try self.add_instr(.{ .tag = .null }, node);
             self.node_idx += 1;
         }
 
@@ -1948,7 +1948,7 @@ pub const Analyzer = struct {
     fn while_stmt(self: *Self, _: Node.Index) Error!void {
         self.node_idx += 1;
         const cond_idx = self.node_idx;
-        _ = try self.add_instr(.{ .tag = .While }, cond_idx);
+        _ = try self.add_instr(.{ .tag = .@"while" }, cond_idx);
         const cond_type = try self.analyze_node(cond_idx);
 
         if (cond_type != .bool) return self.err(

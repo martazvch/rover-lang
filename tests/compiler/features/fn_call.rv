@@ -3,7 +3,7 @@ fn add() {}
 // With args
 fn add1(arg1: int, arg2: float,) {}
 
-// Return kinds
+// @"return" kinds
 fn add2(arg1: int, arg2: float,) -> float {
     arg2
 }

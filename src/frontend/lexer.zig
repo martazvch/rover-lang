@@ -21,175 +21,102 @@ pub const Token = struct {
     span: Span,
 
     const keywords = std.StaticStringMap(Tag).initComptime(.{
-        .{ "and", .And },
-        .{ "as", .As },
-        .{ "bool", .Bool },
-        .{ "do", .Do },
+        .{ "and", .@"and" },
+        .{ "as", .as },
+        .{ "bool", .bool },
+        .{ "do", .do },
         .{ "else", .@"else" },
-        .{ "error", .Error },
-        .{ "false", .False },
-        .{ "float", .FloatKw },
-        .{ "fn", .Fn },
-        .{ "for", .For },
-        .{ "if", .If },
-        .{ "ifnull", .IfNull },
-        .{ "in", .In },
-        .{ "int", .IntKw },
-        .{ "not", .Not },
-        .{ "null", .Null },
-        .{ "or", .Or },
-        .{ "print", .Print },
-        .{ "return", .Return },
-        .{ "self", .Self },
-        .{ "str", .StrKw },
-        .{ "struct", .Struct },
-        .{ "true", .True },
-        .{ "use", .Use },
-        .{ "var", .Var },
-        .{ "while", .While },
+        .{ "error", .@"error" },
+        .{ "false", .false },
+        .{ "float", .floatKw },
+        .{ "fn", .@"fn" },
+        .{ "for", .@"for" },
+        .{ "if", .@"if" },
+        .{ "ifnull", .ifNull },
+        .{ "in", .in },
+        .{ "int", .intKw },
+        .{ "not", .not },
+        .{ "null", .null },
+        .{ "or", .@"or" },
+        .{ "print", .print },
+        .{ "return", .@"return" },
+        .{ "self", .self },
+        .{ "str", .strKw },
+        .{ "struct", .@"struct" },
+        .{ "true", .true },
+        .{ "use", .use },
+        .{ "var", .@"var" },
+        .{ "while", .@"while" },
     });
 
     pub const Tag = enum {
-        And,
-        As,
+        @"and",
+        as,
         bang,
-        BangEqual,
-        Bool,
-        Colon,
-        Comma,
-        Do,
-        Dot,
-        DotBang,
-        DotDot,
-        DotDotDot,
-        DotQuestionMark,
-        DotStar,
+        bangEqual,
+        bool,
+        colon,
+        comma,
+        do,
+        dot,
+        dotBang,
+        dotDot,
+        dotDotDot,
+        dotQuestionMark,
+        dotStar,
         @"else",
-        Eof,
-        Equal,
-        EqualEqual,
-        Error,
-        False,
-        Float,
-        FloatKw,
-        Fn,
-        For,
-        Greater,
-        GreaterEqual,
-        Identifier,
-        If,
-        IfNull,
-        In,
-        Int,
-        IntKw,
-        LeftBrace,
-        LeftParen,
-        Less,
-        LessEqual,
+        eof,
+        equal,
+        equalEqual,
+        @"error",
+        false,
+        float,
+        floatKw,
+        @"fn",
+        @"for",
+        greater,
+        greaterEqual,
+        identifier,
+        @"if",
+        ifNull,
+        in,
+        int,
+        intKw,
+        leftBrace,
+        leftParen,
+        less,
+        lessEqual,
         minus,
-        Modulo,
-        NewLine,
-        Not,
-        Null,
-        Or,
-        Plus,
-        Print,
-        QuestionMark,
-        Return,
-        RightBrace,
-        RightParen,
-        Self,
-        Slash,
-        SmallArrow,
-        Star,
-        StrKw,
-        String,
-        Struct,
-        True,
-        Underscore,
-        Use,
-        Var,
-        While,
+        modulo,
+        newLine,
+        not,
+        null,
+        @"or",
+        plus,
+        print,
+        questionMark,
+        @"return",
+        rightBrace,
+        rightParen,
+        self,
+        slash,
+        smallArrow,
+        star,
+        strKw,
+        string,
+        @"struct",
+        true,
+        underscore,
+        use,
+        @"var",
+        @"while",
 
-        LeadingZeros,
-        UnterminatedStr,
-        UnexpectedChar,
-
-        // Only used by AST printer for binop and unary nodes
-        pub fn symbol(self: Tag) []const u8 {
-            return switch (self) {
-                .And => "and",
-                // .As => "as",
-                .bang => "!",
-                .BangEqual => "!=",
-                // .Bool => "bool",
-                // .Colon => ":",
-                // .Comma => ",",
-                // .Do => "do",
-                // .Dot => ".",
-                // .DotBang => ".!",
-                // .DotDot => "..",
-                // .DotDotDot => "...",
-                // .DotQuestionMark => ".?",
-                // .DotStar => ".*",
-                // .@"else" => "else",
-                // .Eof => "eof",
-                // .Equal => "=",
-                // .EqualEqual => "==",
-                // .Error => "error",
-                // .False => "false",
-                // .Float => "float value",
-                // .FloatKw => "float",
-                // .Fn => "fn",
-                // .For => "for",
-                .Greater => ">",
-                .GreaterEqual => ">=",
-                // .Identifier => "identifier",
-                // .If => "if",
-                // .IfNull => "ifnull",
-                // .In => "in",
-                // .Int => "int value",
-                // .IntKw => "int",
-                // .LeftBrace => "{",
-                // .LeftParen => "(",
-                .Less => "<",
-                .LessEqual => "<=",
-                .minus => "-",
-                // .Modulo => "%",
-                // .NewLine => "newline",
-                .Not => "not",
-                // .Null => "null",
-                .Or => "or",
-                .Plus => "+",
-                // .Print => "print",
-                // .QuestionMark => "?",
-                // .Return => "return",
-                // .RightBrace => "}",
-                // .RightParen => ")",
-                // .Self => "self",
-                .Slash => "/",
-                // .SmallArrow => "->",
-                .Star => "*",
-                // .StrKw => "str",
-                // .String => "string value",
-                // .Struct => "struct",
-                // .True => "true",
-                // .Underscore => "_",
-                // .Use => "use",
-                // .Var => "var",
-                // .While => "while",
-
-                // .LeadingZeros, .UnexpectedChar, .UnterminatedStr => unreachable,
-                else => unreachable,
-            };
-        }
+        leadingZeros,
+        unterminatedStr,
+        unexpectedChar,
     };
 
-    pub fn from_source(self: *const Token, source: []const u8) []const u8 {
-        return source[self.span.start..self.span.end];
-    }
-
-    pub fn get_keyword(ident: []const u8) ?Tag {
+    pub fn getKeyword(ident: []const u8) ?Tag {
         return keywords.get(ident);
     }
 };
@@ -206,19 +133,19 @@ pub const Lexer = struct {
 
     const State = enum {
         bang,
-        Comment,
-        Dot,
-        DotDot,
-        Equal,
-        Float,
-        Greater,
-        Identifier,
-        Int,
-        Invalid,
-        Less,
-        Slash,
-        Start,
-        String,
+        comment,
+        dot,
+        dotDot,
+        equal,
+        float,
+        greater,
+        identifier,
+        int,
+        invalid,
+        less,
+        slash,
+        start,
+        string,
     };
 
     pub fn init(allocator: Allocator) Self {
@@ -245,17 +172,17 @@ pub const Lexer = struct {
             // TODO: redo this part. As we lex every thing at once, use arraylist for
             // errors like parser, analyzer, ...? Or use compitme to associate both sides
             try switch (tk.tag) {
-                .LeadingZeros => self.error_at(.LeadingZeros, &tk),
-                .UnterminatedStr => self.error_at(.UnterminatedStr, &tk),
-                .UnexpectedChar => self.error_at(.UnexpectedChar, &tk),
+                .leadingZeros => self.errorAt(.leadingZeros, &tk),
+                .unterminatedStr => self.errorAt(.unterminatedStr, &tk),
+                .unexpectedChar => self.errorAt(.unexpectedChar, &tk),
                 else => self.tokens.append(self.allocator, tk),
             };
 
-            if (tk.tag == .Eof) break;
+            if (tk.tag == .eof) break;
         }
     }
 
-    fn error_at(self: *Self, tag: LexerMsg, token: *const Token) !void {
+    fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) !void {
         const report = LexerReport.err(tag, token.span);
         try self.errs.append(report);
     }
@@ -269,44 +196,44 @@ pub const Lexer = struct {
             },
         };
 
-        state: switch (State.Start) {
-            .Start => {
+        state: switch (State.start) {
+            .start => {
                 switch (self.source[self.index]) {
                     'a'...'z', 'A'...'Z' => {
-                        res.tag = .Identifier;
-                        continue :state .Identifier;
+                        res.tag = .identifier;
+                        continue :state .identifier;
                     },
                     ' ', '\t', '\r' => {
                         self.index += 1;
                         res.span.start = self.index;
-                        continue :state .Start;
+                        continue :state .start;
                     },
                     '(' => {
-                        res.tag = .LeftParen;
+                        res.tag = .leftParen;
                         self.index += 1;
                     },
                     ')' => {
-                        res.tag = .RightParen;
+                        res.tag = .rightParen;
                         self.index += 1;
                     },
                     '{' => {
-                        res.tag = .LeftBrace;
+                        res.tag = .leftBrace;
                         self.index += 1;
                     },
                     '}' => {
-                        res.tag = .RightBrace;
+                        res.tag = .rightBrace;
                         self.index += 1;
                     },
                     ':' => {
-                        res.tag = .Colon;
+                        res.tag = .colon;
                         self.index += 1;
                     },
                     ',' => {
-                        res.tag = .Comma;
+                        res.tag = .comma;
                         self.index += 1;
                     },
                     '+' => {
-                        res.tag = .Plus;
+                        res.tag = .plus;
                         self.index += 1;
                     },
                     '-' => {
@@ -314,70 +241,70 @@ pub const Lexer = struct {
 
                         if (self.source[self.index] == '>') {
                             self.index += 1;
-                            res.tag = .SmallArrow;
+                            res.tag = .smallArrow;
                         } else res.tag = .minus;
                     },
                     '*' => {
-                        res.tag = .Star;
+                        res.tag = .star;
                         self.index += 1;
                     },
-                    '/' => continue :state .Slash,
+                    '/' => continue :state .slash,
                     '\n' => {
-                        res.tag = .NewLine;
+                        res.tag = .newLine;
                         self.index += 1;
                     },
-                    '<' => continue :state .Less,
-                    '>' => continue :state .Greater,
+                    '<' => continue :state .less,
+                    '>' => continue :state .greater,
                     '!' => continue :state .bang,
-                    '=' => continue :state .Equal,
-                    '.' => continue :state .Dot,
+                    '=' => continue :state .equal,
+                    '.' => continue :state .dot,
                     '"' => {
-                        res.tag = .String;
-                        continue :state .String;
+                        res.tag = .string;
+                        continue :state .string;
                     },
                     '0' => {
                         if (self.source[self.index + 1] == '.') {
                             self.index += 1;
-                            continue :state .Float;
+                            continue :state .float;
                         } else {
                             self.index += 1;
                             switch (self.source[self.index]) {
                                 '0'...'9' => return .{
-                                    .tag = .LeadingZeros,
+                                    .tag = .leadingZeros,
                                     .span = .{
                                         .start = self.index - 1,
                                         .end = self.index,
                                     },
                                 },
-                                else => res.tag = .Int,
+                                else => res.tag = .int,
                             }
                         }
                     },
                     '1'...'9' => {
-                        res.tag = .Int;
+                        res.tag = .int;
                         self.index += 1;
-                        continue :state .Int;
+                        continue :state .int;
                     },
                     '_' => {
                         self.index += 1;
                         switch (self.source[self.index]) {
                             'a'...'z', 'A'...'Z', '0'...'9', '_' => {
-                                res.tag = .Identifier;
-                                continue :state .Identifier;
+                                res.tag = .identifier;
+                                continue :state .identifier;
                             },
-                            else => res.tag = .Underscore,
+                            else => res.tag = .underscore,
                         }
                     },
                     0 => {
                         if (self.index == self.source.len) {
                             return .{
-                                .tag = .Eof,
+                                .tag = .eof,
                                 .span = .{ .start = self.index, .end = self.index },
                             };
-                        } else continue :state .Invalid;
+                        } else continue :state .invalid;
                     },
                     else => {
-                        res.tag = .UnexpectedChar;
+                        res.tag = .unexpectedChar;
                         self.index += 1;
                     },
                 }
@@ -387,139 +314,139 @@ pub const Lexer = struct {
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.tag = .BangEqual;
+                        res.tag = .bangEqual;
                         self.index += 1;
                     },
                     else => res.tag = .bang,
                 }
             },
-            .Comment => {
+            .comment => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
-                    '\n' => continue :state .Start,
-                    else => continue :state .Comment,
+                    '\n' => continue :state .start,
+                    else => continue :state .comment,
                 }
             },
-            .Dot => {
+            .dot => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
-                    '0'...'9' => continue :state .Float,
-                    '.' => continue :state .DotDot,
+                    '0'...'9' => continue :state .float,
+                    '.' => continue :state .dotDot,
                     '*' => {
-                        res.tag = .DotStar;
+                        res.tag = .dotStar;
                         self.index += 1;
                     },
                     '?' => {
-                        res.tag = .DotQuestionMark;
+                        res.tag = .dotQuestionMark;
                         self.index += 1;
                     },
                     '!' => {
-                        res.tag = .DotBang;
+                        res.tag = .dotBang;
                         self.index += 1;
                     },
-                    else => res.tag = .Dot,
+                    else => res.tag = .dot,
                 }
             },
-            .DotDot => {
+            .dotDot => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
                     '.' => {
-                        res.tag = .DotDotDot;
+                        res.tag = .dotDotDot;
                         self.index += 1;
                     },
-                    else => res.tag = .DotDot,
+                    else => res.tag = .dotDot,
                 }
             },
-            .Equal => {
+            .equal => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.tag = .EqualEqual;
+                        res.tag = .equalEqual;
                         self.index += 1;
                     },
-                    else => res.tag = .Equal,
+                    else => res.tag = .equal,
                 }
             },
-            .Float => {
+            .float => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
-                    '0'...'9' => continue :state .Float,
-                    else => res.tag = .Float,
+                    '0'...'9' => continue :state .float,
+                    else => res.tag = .float,
                 }
             },
-            .Greater => {
+            .greater => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.tag = .GreaterEqual;
+                        res.tag = .greaterEqual;
                         self.index += 1;
                     },
-                    else => res.tag = .Greater,
+                    else => res.tag = .greater,
                 }
             },
-            .Identifier => {
+            .identifier => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
-                    'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .Identifier,
+                    'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .identifier,
                     else => {
                         const ident = self.source[res.span.start..self.index];
 
-                        if (Token.get_keyword(ident)) |kw| {
+                        if (Token.getKeyword(ident)) |kw| {
                             res.tag = kw;
                         }
                     },
                 }
             },
-            .Int => {
+            .int => {
                 switch (self.source[self.index]) {
                     '0'...'9' => {
                         self.index += 1;
-                        continue :state .Int;
+                        continue :state .int;
                     },
-                    '.' => continue :state .Float,
+                    '.' => continue :state .float,
                     else => {},
                 }
             },
-            .Invalid => {
+            .invalid => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
                     0 => {
                         if (self.index == self.source.len) {
-                            res.tag = .Eof;
-                        } else continue :state .Invalid;
+                            res.tag = .eof;
+                        } else continue :state .invalid;
                     },
-                    ' ' => res.tag = .Error,
-                    else => continue :state .Invalid,
+                    ' ' => res.tag = .@"error",
+                    else => continue :state .invalid,
                 }
             },
-            .Less => {
+            .less => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
                     '=' => {
-                        res.tag = .LessEqual;
+                        res.tag = .lessEqual;
                         self.index += 1;
                     },
-                    else => res.tag = .Less,
+                    else => res.tag = .less,
                 }
             },
-            .Slash => {
+            .slash => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
-                    '/' => continue :state .Comment,
-                    else => res.tag = .Slash,
+                    '/' => continue :state .comment,
+                    else => res.tag = .slash,
                 }
             },
-            .String => {
+            .string => {
                 self.index += 1;
 
                 switch (self.source[self.index]) {
@@ -527,7 +454,7 @@ pub const Lexer = struct {
                         if (self.index == self.source.len) {
                             // For error reporting, one byte length
                             return .{
-                                .tag = .UnterminatedStr,
+                                .tag = .unterminatedStr,
                                 .span = .{
                                     .start = res.span.start,
                                     .end = res.span.start + 1,
@@ -536,7 +463,7 @@ pub const Lexer = struct {
                         }
                     },
                     '"' => self.index += 1,
-                    else => continue :state .String,
+                    else => continue :state .string,
                 }
             },
         }
@@ -555,10 +482,10 @@ test "ident and strings" {
     try lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
-        .{ .tag = .Identifier, .span = .{ .start = 0, .end = 3 } },
-        .{ .tag = .Identifier, .span = .{ .start = 4, .end = 7 } },
-        .{ .tag = .Identifier, .span = .{ .start = 8, .end = 16 } },
-        .{ .tag = .Identifier, .span = .{ .start = 18, .end = 23 } },
+        .{ .tag = .identifier, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .identifier, .span = .{ .start = 4, .end = 7 } },
+        .{ .tag = .identifier, .span = .{ .start = 8, .end = 16 } },
+        .{ .tag = .identifier, .span = .{ .start = 18, .end = 23 } },
     };
 
     for (0..res.len) |i| {
@@ -577,10 +504,10 @@ test "numbers" {
     try lexer.lex("123 45.6 7. .86");
 
     const res = [_]Token{
-        .{ .tag = .Int, .span = .{ .start = 0, .end = 3 } },
-        .{ .tag = .Float, .span = .{ .start = 4, .end = 8 } },
-        .{ .tag = .Float, .span = .{ .start = 9, .end = 11 } },
-        .{ .tag = .Float, .span = .{ .start = 12, .end = 15 } },
+        .{ .tag = .int, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .float, .span = .{ .start = 4, .end = 8 } },
+        .{ .tag = .float, .span = .{ .start = 9, .end = 11 } },
+        .{ .tag = .float, .span = .{ .start = 12, .end = 15 } },
     };
 
     for (0..res.len) |i| {
@@ -599,9 +526,9 @@ test "tokens" {
     try lexer.lex("(){}.:,=!< ><= >= !=+-*/");
 
     const res = [_]Token.Tag{
-        .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
-        .Comma,        .Equal,      .bang,      .Less,       .Greater, .LessEqual,
-        .GreaterEqual, .BangEqual,  .Plus,      .minus,      .Star,    .Slash,
+        .leftParen,    .rightParen, .leftBrace, .rightBrace, .dot,     .colon,
+        .comma,        .equal,      .bang,      .less,       .greater, .lessEqual,
+        .greaterEqual, .bangEqual,  .plus,      .minus,      .star,    .slash,
     };
 
     for (0..res.len) |i| {
@@ -619,9 +546,9 @@ test "keywords" {
     );
 
     const res = [_]Token.Tag{
-        .And,    .@"else", .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
-        .Return, .NewLine, .Self,  .Struct, .True, .Var, .While, .Not,  .IntKw, .FloatKw,
-        .StrKw,  .Do,      .Use,   .Eof,
+        .@"and",    .@"else", .false, .@"for",    .@"fn", .@"if",  .in,       .null, .@"or", .print,
+        .@"return", .newLine, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .intKw, .floatKw,
+        .strKw,     .do,      .use,   .eof,
     };
 
     for (0..res.len) |i| {
@@ -636,7 +563,7 @@ test "unterminated string" {
     try lexer.lex("\"blabla bli blop");
 
     const err = lexer.errs.items[0];
-    try expect(err.report == .UnterminatedStr);
+    try expect(err.report == .unterminatedStr);
 }
 
 test "leading zeros" {
@@ -644,8 +571,8 @@ test "leading zeros" {
     defer lexer.deinit();
     try lexer.lex("var e = 01\n var b = 00002");
 
-    try expect(lexer.errs.items[0].report == .LeadingZeros);
-    try expect(lexer.errs.items[1].report == .LeadingZeros);
+    try expect(lexer.errs.items[0].report == .leadingZeros);
+    try expect(lexer.errs.items[1].report == .leadingZeros);
 }
 
 test "underscore" {
@@ -654,8 +581,8 @@ test "underscore" {
     try lexer.lex("var _under   _=1   var _1art   var ___yo");
 
     const res = [_]Token.Tag{
-        .Var, .Identifier, .Underscore, .Equal,      .Int,
-        .Var, .Identifier, .Var,        .Identifier, .Eof,
+        .@"var", .identifier, .underscore, .equal,      .int,
+        .@"var", .identifier, .@"var",     .identifier, .eof,
     };
 
     for (0..res.len) |i| {
@@ -670,8 +597,8 @@ test "arrow" {
     try lexer.lex("- > -5> >- -< ->");
 
     const res = [_]Token.Tag{
-        .minus, .Greater, .minus,      .Int, .Greater, .Greater, .minus,
-        .minus, .Less,    .SmallArrow,
+        .minus, .greater, .minus,      .int, .greater, .greater, .minus,
+        .minus, .less,    .smallArrow,
     };
 
     for (0..res.len) |i| {
@@ -686,8 +613,8 @@ test "dot" {
     try lexer.lex(". .. ... .! .? .* ....!");
 
     const res = [_]Token.Tag{
-        .Dot,     .DotDot,    .DotDotDot, .DotBang, .DotQuestionMark,
-        .DotStar, .DotDotDot, .DotBang,
+        .dot,     .dotDot,    .dotDotDot, .dotBang, .dotQuestionMark,
+        .dotStar, .dotDotDot, .dotBang,
     };
 
     for (0..res.len) |i| {

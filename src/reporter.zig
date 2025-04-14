@@ -309,15 +309,15 @@ pub fn GenReport(comptime T: type) type {
         end: usize,
 
         pub const Level = enum {
-            Error,
-            Info,
-            Warning,
+            @"error",
+            info,
+            warning,
 
             pub fn get_level_msg(self: Level) []const u8 {
                 return switch (self) {
-                    .Error => err_msg,
-                    .Info => @panic("not implemented yet"),
-                    .Warning => warning_msg,
+                    .@"error" => err_msg,
+                    .info => @panic("not implemented yet"),
+                    .warning => warning_msg,
                 };
             }
         };
@@ -335,12 +335,12 @@ pub fn GenReport(comptime T: type) type {
 
         /// Creates an error associated with the tag
         pub fn err(report: T, span: Span) Self {
-            return Self.init(report, .Error, span.start, span.end);
+            return Self.init(report, .@"error", span.start, span.end);
         }
 
         /// Creates warning associated with the tag
         pub fn warn(report: T, span: Span) Self {
-            return Self.init(report, .Warning, span.start, span.end);
+            return Self.init(report, .warning, span.start, span.end);
         }
 
         pub fn get_msg(self: *const Self, writer: anytype) !void {

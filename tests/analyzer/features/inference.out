@@ -6,7 +6,7 @@
     [Bool true]
 
 [Fn declaration get_bool, index: 3, scope: global, return kind: explicit]
-    [Return expr: true, cast: false]
+    [@"return" expr: true, cast: false]
         [Bool true]
 
 [Fn declaration main, index: 4, scope: global, return kind: implicit_void]

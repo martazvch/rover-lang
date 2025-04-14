@@ -27,7 +27,7 @@ pub const Instruction = struct {
         MultipleVarDecl,
         Null,
         Print,
-        Return,
+        @"return",
         String,
         struct_decl,
         struct_literal,
@@ -52,7 +52,7 @@ pub const Instruction = struct {
         If: If,
         Imported: Imported,
         Int: i64,
-        Return: Return,
+        @"return": @"return",
         struct_decl: StructDecl,
         struct_literal: StructLiteral,
         Unary: Unary,
@@ -70,7 +70,7 @@ pub const Instruction = struct {
             AddFloat,
             AddInt,
             AddStr,
-            And,
+            @"and",
             DivFloat,
             DivInt,
             EqBool,
@@ -109,7 +109,7 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { then, @"else", none };
     };
     pub const Imported = struct { index: u64, variable: Variable };
-    pub const Return = struct { value: bool, cast: bool };
+    pub const @"return" = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };
     pub const Unary = packed struct {
@@ -130,7 +130,7 @@ comptime {
     // @compileLog(@sizeOf(Instruction.Block));
     // @compileLog(@sizeOf(Instruction.call));
     // @compileLog(@sizeOf(Instruction.FnDecl));
-    // @compileLog(@sizeOf(Instruction.If));
+    // @compileLog(@sizeOf(Instruction.@"if"));
     // @compileLog(@sizeOf(Instruction.Imported));
     // @compileLog(@sizeOf(Instruction.Unary));
     // @compileLog(@sizeOf(Instruction.Variable));

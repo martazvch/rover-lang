@@ -1,15 +1,15 @@
 pub const LexerMsg = union(enum) {
-    LeadingZeros,
-    UnterminatedStr,
-    UnexpectedChar,
+    leadingZeros,
+    unterminatedStr,
+    unexpectedChar,
 
     const Self = @This();
 
     pub fn get_msg(self: Self, writer: anytype) !void {
         try switch (self) {
-            .LeadingZeros => writer.print("leading zeros in integer literals are not allowed", .{}),
-            .UnterminatedStr => writer.print("unterminated string", .{}),
-            .UnexpectedChar => writer.print("unexpected character", .{}),
+            .leadingZeros => writer.print("leading zeros in integer literals are not allowed", .{}),
+            .unterminatedStr => writer.print("unterminated string", .{}),
+            .unexpectedChar => writer.print("unexpected character", .{}),
         };
     }
 
@@ -21,8 +21,8 @@ pub const LexerMsg = union(enum) {
 
     pub fn get_help(self: Self, writer: anytype) !void {
         try switch (self) {
-            .LeadingZeros => writer.print("remove the leading zeros", .{}),
-            .UnterminatedStr => writer.print("close the opening quote", .{}),
+            .leadingZeros => writer.print("remove the leading zeros", .{}),
+            .unterminatedStr => writer.print("close the opening quote", .{}),
             else => {},
         };
     }

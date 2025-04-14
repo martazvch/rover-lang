@@ -21,12 +21,12 @@
                 - args:
                 [Int 1]
 
-// Return kinds
+// @"return" kinds
 [Fn declaration add1, index: 2, scope: global, return kind: explicit]
-    [Return expr: false, cast: false]
+    [@"return" expr: false, cast: false]
 [Fn declaration add2, index: 3, scope: global, return kind: implicit_value]
     [Int 5]
 [Fn declaration add3, index: 4, scope: global, return kind: implicit_void]
 [Fn declaration add4, index: 5, scope: global, return kind: explicit]
-    [Return expr: true, cast: false]
+    [@"return" expr: true, cast: false]
         [Int 5]

@@ -24,7 +24,7 @@ fn main() {
     print "foo " == "foo " // expect: true
     print "f o o" == "f oo" // expect: false
 
-    // And & Or
+    // @"and" & Or
     print true and true // expect: true
     print true and false // expect: false
     print false and true // expect: false

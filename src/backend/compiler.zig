@@ -255,18 +255,18 @@ const Compiler = struct {
             .IdentifierId => self.identifier(true),
             .Imported => unreachable,
             .Int => self.int_instr(),
-            .If => self.if_instr(),
+            .@"if" => self.if_instr(),
             .MultipleVarDecl => self.multiple_var_decl(),
-            .Null => self.null_instr(),
-            .Print => self.print_instr(),
-            .Return => self.return_instr(),
-            .String => self.string_instr(),
+            .null => self.null_instr(),
+            .print => self.print_instr(),
+            .@"return" => self.return_instr(),
+            .string => self.string_instr(),
             .struct_decl => self.struct_decl(),
             .struct_literal => self.struct_literal(),
             .Unary => self.unary(),
-            .Use => self.use(),
+            .use => self.use(),
             .VarDecl => self.var_decl(),
-            .While => self.while_instr(),
+            .@"while" => self.while_instr(),
         };
     }
 
@@ -319,7 +319,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         // Special handle for logicals
-        if (data.op == .And or data.op == .Or) return self.logical_binop(start, data);
+        if (data.op == .@"and" or data.op == .@"or") return self.logical_binop(start, data);
 
         try self.compile_instr();
         if (data.cast == .lhs and data.op != .MulStr) try self.write_op(.CastToFloat, start);
@@ -374,7 +374,7 @@ const Compiler = struct {
 
     fn logical_binop(self: *Self, start: usize, data: Instruction.Binop) !void {
         switch (data.op) {
-            .And => {
+            .@"and" => {
                 try self.compile_instr();
                 const end_jump = try self.emit_jump(.JumpIfFalse, start);
                 // If true, pop the value, else the 'false' remains on top of stack
@@ -382,7 +382,7 @@ const Compiler = struct {
                 try self.compile_instr();
                 try self.patch_jump(end_jump);
             },
-            .Or => {
+            .@"or" => {
                 try self.compile_instr();
                 const else_jump = try self.emit_jump(.JumpIfTrue, start);
                 try self.write_op(.Pop, start);
@@ -410,7 +410,7 @@ const Compiler = struct {
     }
 
     fn bool_instr(self: *Self) Error!void {
-        const op: OpCode = if (self.get_data().Bool) .True else .False;
+        const op: OpCode = if (self.get_data().Bool) .true else .false;
         try self.write_op(op, self.get_start());
         self.manager.instr_idx += 1;
     }
@@ -468,7 +468,7 @@ const Compiler = struct {
         const fn_var = self.get_data().VarDecl.variable;
         self.manager.instr_idx += 1;
 
-        try self.compile_function(.Fn, fn_name, data);
+        try self.compile_function(.@"fn", fn_name, data);
         try self.define_variable(fn_var, 0);
 
         // Check for main function
@@ -492,7 +492,7 @@ const Compiler = struct {
 
         if (data.return_kind == .implicit_value) {
             try compiler.write_op(
-                .Return,
+                .@"return",
                 self.manager.instr_offsets[self.manager.instr_idx - 1],
             );
         } else if (data.return_kind == .implicit_void) {
@@ -522,7 +522,7 @@ const Compiler = struct {
     }
 
     fn if_instr(self: *Self) !void {
-        const data = self.get_data().If;
+        const data = self.get_data().@"if";
         const start = self.get_start();
         self.manager.instr_idx += 1;
 
@@ -563,7 +563,7 @@ const Compiler = struct {
     }
 
     fn null_instr(self: *Self) !void {
-        try self.write_op(.Null, self.get_start());
+        try self.write_op(.null, self.get_start());
         self.manager.instr_idx += 1;
     }
 
@@ -571,11 +571,11 @@ const Compiler = struct {
         const start = self.get_start();
         self.manager.instr_idx += 1;
         try self.compile_instr();
-        try self.get_chunk().write_op(.Print, start);
+        try self.get_chunk().write_op(.print, start);
     }
 
     fn return_instr(self: *Self) !void {
-        const data = self.get_data().Return;
+        const data = self.get_data().@"return";
         const start = self.get_start();
         self.manager.instr_idx += 1;
 
@@ -583,7 +583,7 @@ const Compiler = struct {
             try self.compile_instr();
             if (data.cast) try self.compile_instr();
 
-            try self.write_op(.Return, start);
+            try self.write_op(.@"return", start);
         } else try self.write_op(.NakedReturn, start);
     }
 
@@ -652,12 +652,12 @@ const Compiler = struct {
                 start,
             );
         } else {
-            try self.write_op(.Not, start);
+            try self.write_op(.not, start);
         }
     }
 
     fn use(self: *Self) !void {
-        const data = self.get_data().Use;
+        const data = self.get_data().use;
         self.manager.instr_idx += 1;
 
         // NOTE: For now, analyzer places an empty import
@@ -687,8 +687,8 @@ const Compiler = struct {
         const data = self.get_data().VarDecl;
         self.manager.instr_idx += 1;
 
-        if (self.manager.instr_tags[self.manager.instr_idx] == .Null) {
-            try self.write_op(.Null, start);
+        if (self.manager.instr_tags[self.manager.instr_idx] == .null) {
+            try self.write_op(.null, start);
             self.manager.instr_idx += 1;
         } else {
             try self.compile_instr();
@@ -704,7 +704,7 @@ const Compiler = struct {
             // the locals list is synchronized to all following declaration. Instead of
             // back patching all locals declaration past a heap variable, we make the
             // compiler place a tombstone.
-            try self.write_op(.Null, start);
+            try self.write_op(.null, start);
         }
     }
 
