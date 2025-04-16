@@ -1,64 +1,15 @@
 const std = @import("std");
 
+const Token = @import("lexer.zig").Token;
 const Span = @import("lexer.zig").Span;
+
+source: [:0]const u8,
+tokens: *const std.MultiArrayList(Token),
+nodes: []Node,
+
 pub const TokenIndex = usize;
 
-pub const Node = struct {
-    tag: Tag,
-    main: TokenIndex = 0,
-    data: usize = 0,
-    end: Node.Index = 0,
-
-    pub const Index = usize;
-    pub const empty: Node = .{
-        .tag = .Empty,
-    };
-
-    pub const Tag = enum {
-        Add,
-        @"and",
-        Assignment,
-        Block,
-        Bool,
-        count,
-        Discard,
-        Div,
-        Empty,
-        Eq,
-        field,
-        Float,
-        FnDecl,
-        call,
-        Ge,
-        Gt,
-        Grouping,
-        Identifier,
-        If,
-        Int,
-        Le,
-        Lt,
-        Mul,
-        MultiVarDecl,
-        Ne,
-        Null,
-        Or,
-        Parameter,
-        Print,
-        @"return",
-        self,
-        String,
-        StructDecl,
-        struct_literal,
-        Sub,
-        Type,
-        Unary,
-        Use,
-        VarDecl,
-        While,
-    };
-};
-
-pub const Stmt = union(enum) {
+pub const Node = union(enum) {
     assignment: struct {
         assigne: *Expr,
         value: *Expr,
@@ -94,3 +45,7 @@ pub const Unary = struct {
     op: TokenIndex,
     expr: *Expr,
 };
+
+// comptime {
+//     @compileLog(@sizeOf(Node2));
+// }

@@ -6,9 +6,9 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 
 const GenReport = @import("../reporter.zig").GenReport;
-const Ast = @import("ast.zig");
+const Ast = @import("Ast.zig");
 const Expr = Ast.Expr;
-const Stmt = Ast.Stmt;
+const Node2 = Ast.Node;
 const TokenIndex = Ast.TokenIndex;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Span = @import("lexer.zig").Span;
@@ -21,14 +21,14 @@ allocator: Allocator,
 token_tags: []const Token.Tag,
 token_spans: []const Span,
 token_idx: usize,
-statements: ArrayListUnmanaged(Stmt),
+nodes: ArrayListUnmanaged(Node2),
 panic_mode: bool,
 
-const Self = @This();
+const Parser = @This();
 pub const ParserReport = GenReport(ParserMsg);
 const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
 
-pub const empty: Self = .{
+pub const empty: Parser = .{
     .source = undefined,
     .errs = undefined,
     .arena = undefined,
@@ -36,22 +36,22 @@ pub const empty: Self = .{
     .token_tags = undefined,
     .token_spans = undefined,
     .token_idx = 0,
-    .statements = .{},
+    .nodes = .{},
     .panic_mode = false,
 };
 
-pub fn init(self: *Self, allocator: Allocator) void {
+pub fn init(self: *Parser, allocator: Allocator) void {
     self.arena = .init(allocator);
     self.allocator = self.arena.allocator();
     self.errs = .init(self.allocator);
 }
 
-pub fn deinit(self: *Self) void {
+pub fn deinit(self: *Parser) void {
     self.arena.deinit();
 }
 
 /// Parses the token stream
-pub fn parse(self: *Self, source: [:0]const u8, tokens: MultiArrayList(Token)) !void {
+pub fn parse(self: *Parser, source: [:0]const u8, tokens: *const MultiArrayList(Token)) !Ast {
     self.source = source;
     self.token_tags = tokens.items(.tag);
     self.token_spans = tokens.items(.span);
@@ -71,7 +71,7 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: MultiArrayList(Token)) !
         // If EOF, exit
         if (self.match(.eof)) break;
 
-        // After each statements we expect a new line
+        // After each nodes we expect a new line
         if (!self.check(.newLine)) {
             // Could be that user wrote: Foo{} instead of Foo.{}, it's identifier + block
             // without a new line instead of structure literal
@@ -90,10 +90,12 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: MultiArrayList(Token)) !
             self.synchronize();
         }
 
-        try self.statements.append(self.allocator, stmt);
+        try self.nodes.append(self.allocator, stmt);
 
         self.skipNewLines();
     }
+
+    return .{ .source = source, .tokens = tokens, .nodes = try self.nodes.toOwnedSlice(self.allocator) };
 }
 
 const TokenField = enum { span, tag };
@@ -105,28 +107,28 @@ fn TokenFieldType(tkField: TokenField) type {
     };
 }
 
-inline fn prev(self: *const Self, comptime tkField: TokenField) TokenFieldType(tkField) {
+inline fn prev(self: *const Parser, comptime tkField: TokenField) TokenFieldType(tkField) {
     return self.getTkField(tkField, self.token_idx - 1);
 }
 
-inline fn current(self: *const Self, comptime tkField: TokenField) TokenFieldType(tkField) {
+inline fn current(self: *const Parser, comptime tkField: TokenField) TokenFieldType(tkField) {
     return self.getTkField(tkField, self.token_idx);
 }
 
-inline fn getTkField(self: *const Self, comptime tkField: TokenField, idx: usize) TokenFieldType(tkField) {
+inline fn getTkField(self: *const Parser, comptime tkField: TokenField, idx: usize) TokenFieldType(tkField) {
     return switch (tkField) {
         .span => self.token_spans[idx],
         .tag => self.token_tags[idx],
     };
 }
 
-inline fn advance(self: *Self) void {
+inline fn advance(self: *Parser) void {
     self.token_idx += 1;
 }
 
 /// Returns *true* if the current token is of the asked type and
 /// advance the `current` field to next one. Otherwise, returns *false*
-fn match(self: *Self, kind: Token.Tag) bool {
+fn match(self: *Parser, kind: Token.Tag) bool {
     if (!self.check(kind)) {
         return false;
     }
@@ -135,18 +137,18 @@ fn match(self: *Self, kind: Token.Tag) bool {
     return true;
 }
 
-fn matchAndSkip(self: *Self, kind: Token.Tag) bool {
+fn matchAndSkip(self: *Parser, kind: Token.Tag) bool {
     const res = self.match(kind);
     self.skipNewLines();
     return res;
 }
 
 /// Checks if we currently are at a token
-fn check(self: *const Self, kind: Token.Tag) bool {
+fn check(self: *const Parser, kind: Token.Tag) bool {
     return self.token_tags[self.token_idx] == kind;
 }
 
-fn skipNewLines(self: *Self) void {
+fn skipNewLines(self: *Parser) void {
     while (self.check(.newLine)) {
         self.advance();
     }
@@ -154,7 +156,7 @@ fn skipNewLines(self: *Self) void {
 
 /// Expect a specific type, otherwise it's an error and we enter
 /// *panic* mode
-fn expect(self: *Self, kind: Token.Tag, error_kind: ParserMsg) !void {
+fn expect(self: *Parser, kind: Token.Tag, error_kind: ParserMsg) !void {
     if (self.match(kind)) {
         return;
     }
@@ -164,24 +166,24 @@ fn expect(self: *Self, kind: Token.Tag, error_kind: ParserMsg) !void {
 
 /// Expect a specific type, otherwise it's an error and we enter
 /// *panic* mode. Error will mark the previous token
-fn expectOrErrAtPrev(self: *Self, kind: Token.Tag, error_kind: ParserMsg) !void {
+fn expectOrErrAtPrev(self: *Parser, kind: Token.Tag, error_kind: ParserMsg) !void {
     return self.expectOrErrAtToken(kind, error_kind, self.token_idx - 1);
 }
 
 /// Expect a specific token tag, otherwise it's an error and we enter
 /// *panic* mode. Allow to pass a token to be marked as initial error
 /// (usefull for example when unclosed parenthesis, we give the first)
-fn expectOrErrAtToken(self: *Self, kind: Token.Tag, error_kind: ParserMsg, tk: TokenIndex) !void {
+fn expectOrErrAtToken(self: *Parser, kind: Token.Tag, error_kind: ParserMsg, tk: TokenIndex) !void {
     if (self.match(kind)) return;
 
     return self.errAt(tk, error_kind);
 }
 
-fn errAtCurrent(self: *Self, error_kind: ParserMsg) Error {
+fn errAtCurrent(self: *Parser, error_kind: ParserMsg) Error {
     return self.errAt(self.token_idx, error_kind);
 }
 
-fn errAtPrev(self: *Self, error_kind: ParserMsg) Error {
+fn errAtPrev(self: *Parser, error_kind: ParserMsg) Error {
     return self.errAt(self.token_idx - 1, error_kind);
 }
 
@@ -189,7 +191,7 @@ fn errAtPrev(self: *Self, error_kind: ParserMsg) Error {
 /// we exit, let synchronize and resume. It is likely that if we
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
-fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
+fn errAt(self: *Parser, token: TokenIndex, error_kind: ParserMsg) Error {
     if (self.panic_mode) return error.err;
 
     self.panic_mode = true;
@@ -204,7 +206,7 @@ fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
 /// we exit, let synchronize and resume. It is likely that if we
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
-fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
+fn errAtSpan(self: *Parser, span: Span, error_kind: ParserMsg) Error {
     if (self.panic_mode) return error.err;
 
     self.panic_mode = true;
@@ -215,7 +217,7 @@ fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
     return error.err;
 }
 
-fn synchronize(self: *Self) void {
+fn synchronize(self: *Parser) void {
     self.panic_mode = false;
 
     while (!self.check(.eof)) {
@@ -226,7 +228,7 @@ fn synchronize(self: *Self) void {
     }
 }
 
-fn declaration(self: *Self) Error!Stmt {
+fn declaration(self: *Parser) Error!Node2 {
     // const idx = try if (self.match(.@"nf"))
     //     self.fnDecl()
     // else if (self.match(.@"var"))
@@ -247,7 +249,7 @@ fn declaration(self: *Self) Error!Stmt {
     // return self.finish_node(idx);
 }
 
-fn fnDecl(self: *Self) Error!Stmt {
+fn fnDecl(self: *Parser) Error!Node2 {
     try self.expect(.identifier, .ExpectFnName);
 
     const idx = try self.add_node(.{
@@ -311,7 +313,7 @@ fn fnDecl(self: *Self) Error!Stmt {
     return idx;
 }
 
-fn returnExpr(self: *Self) Error!Stmt {
+fn returnExpr(self: *Parser) Error!Node2 {
     const tk = self.token_idx - 1;
     const idx = try self.add_node(.{ .tag = .@"return", .main = tk });
 
@@ -323,7 +325,7 @@ fn returnExpr(self: *Self) Error!Stmt {
     return idx;
 }
 
-fn structDecl(self: *Self) !Stmt {
+fn structDecl(self: *Parser) !Node2 {
     try self.expect(.identifier, .ExpectStructName);
     const name_idx = self.token_idx - 1;
     self.skipNewLines();
@@ -390,7 +392,7 @@ fn structDecl(self: *Self) !Stmt {
     return idx;
 }
 
-fn varDecl(self: *Self) !Stmt {
+fn varDecl(self: *Parser) !Node2 {
     try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
 
     if (self.check(.comma))
@@ -411,7 +413,7 @@ fn varDecl(self: *Self) !Stmt {
     return idx;
 }
 
-fn multiVarDecl(self: *Self) !Stmt {
+fn multiVarDecl(self: *Parser) !Node2 {
     const idx = try self.add_node(.{ .tag = .MultiVarDecl });
 
     _ = try self.add_node(.{ .tag = .VarDecl, .main = self.token_idx - 1 });
@@ -464,7 +466,7 @@ fn multiVarDecl(self: *Self) !Stmt {
 }
 
 /// Expects a type after ':'. If no colon, declares an empty type
-fn expectTypeOrEmpty(self: *Self) Error!Stmt {
+fn expectTypeOrEmpty(self: *Parser) Error!Node2 {
     return if (self.match(.colon))
         try self.parseType()
     else if (self.check(.identifier))
@@ -474,7 +476,7 @@ fn expectTypeOrEmpty(self: *Self) Error!Stmt {
 }
 
 /// Parses a type. It assumes you know that a type is expected at this place
-fn parseType(self: *Self) Error!Stmt {
+fn parseType(self: *Parser) Error!Node2 {
     if (self.isIdentOrType()) {
         return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
     } else if (self.match(.@"fn")) {
@@ -506,7 +508,7 @@ fn parseType(self: *Self) Error!Stmt {
     }
 }
 
-fn isIdentOrType(self: *Self) bool {
+fn isIdentOrType(self: *Parser) bool {
     return if (self.match(.identifier) or
         self.match(.floatKw) or
         self.match(.intKw) or
@@ -517,7 +519,7 @@ fn isIdentOrType(self: *Self) bool {
         false;
 }
 
-fn discard(self: *Self) !Stmt {
+fn discard(self: *Parser) !Node2 {
     try self.expect(.equal, .InvalidDiscard);
     const idx = try self.add_node(.{
         .tag = .Discard,
@@ -529,7 +531,7 @@ fn discard(self: *Self) !Stmt {
     return idx;
 }
 
-fn use(self: *Self) Error!Stmt {
+fn use(self: *Parser) Error!Node2 {
     const idx = try self.add_node(.{
         .tag = .use,
         .main = self.token_idx - 1,
@@ -557,7 +559,7 @@ fn use(self: *Self) Error!Stmt {
     return idx;
 }
 
-fn statement(self: *Self) !Stmt {
+fn statement(self: *Parser) !Node2 {
     // if (self.match(.print)) {
     //     return self.print();
     // } else if (self.match(.@"while")) {
@@ -576,14 +578,14 @@ fn statement(self: *Self) !Stmt {
     // }
 }
 
-fn assignment(self: *Self, assigne: *Expr) !Stmt {
+fn assignment(self: *Parser, assigne: *Expr) !Node2 {
     return .{ .assignment = .{
         .assigne = assigne,
         .value = try self.parsePrecedenceExpr(0),
     } };
 }
 
-fn print(self: *Self) Error!Stmt {
+fn print(self: *Parser) Error!Node2 {
     const idx = try self.add_node(.{
         .tag = .print,
         .main = self.token_idx - 1,
@@ -595,7 +597,7 @@ fn print(self: *Self) Error!Stmt {
     return idx;
 }
 
-fn whileStmt(self: *Self) !Stmt {
+fn whileStmt(self: *Parser) !Node2 {
     const idx = try self.add_node(.{
         .tag = .@"while",
         .main = self.token_idx - 1,
@@ -635,7 +637,7 @@ const rules = std.enums.directEnumArrayDefault(Token.Tag, Rule, .{ .prec = -1 },
     // .star = .{ .prec = 70, .tag = .Mul },
 });
 
-fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
+fn parsePrecedenceExpr(self: *Parser, prec_min: i8) Error!*Expr {
     self.advance();
     const expr = try self.parseExpr();
 
@@ -669,7 +671,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 }
 
 /// Parses expressions (prefix + sufix)
-fn parseExpr(self: *Self) Error!*Expr {
+fn parseExpr(self: *Parser) Error!*Expr {
     // Prefix part
     const expr = try switch (self.prev(.tag)) {
         // .leftBrace => self.block(),
@@ -683,7 +685,7 @@ fn parseExpr(self: *Self) Error!*Expr {
     return self.postfix(expr);
 }
 
-fn block(self: *Self) Error!*Expr {
+fn block(self: *Parser) Error!*Expr {
     const openning_brace = self.token_idx - 1;
 
     self.skipNewLines();
@@ -703,7 +705,7 @@ fn block(self: *Self) Error!*Expr {
     return idx;
 }
 
-fn ifExpr(self: *Self) Error!Expr {
+fn ifExpr(self: *Parser) Error!Expr {
     const idx = try self.add_node(.{
         .tag = .@"if",
         .main = self.token_idx - 1,
@@ -738,15 +740,15 @@ fn ifExpr(self: *Self) Error!Expr {
     return idx;
 }
 
-fn unary(self: *Self) Error!*Expr {
+fn unary(self: *Parser) Error!*Expr {
     const expr = try self.allocator.create(Expr);
-    expr.* = .{ .unary = .{ .op = self.token_idx - 1, .expr = try self.parseExpr() } };
     self.advance();
+    expr.* = .{ .unary = .{ .op = self.token_idx - 2, .expr = try self.parseExpr() } };
 
     return expr;
 }
 
-fn primaryExpr(self: *Self) Error!*Expr {
+fn primaryExpr(self: *Parser) Error!*Expr {
     return switch (self.prev(.tag)) {
         .false => self.literal(.bool),
         .float => self.literal(.float),
@@ -763,7 +765,7 @@ fn primaryExpr(self: *Self) Error!*Expr {
     };
 }
 
-fn grouping(self: *Self) Error!*Expr {
+fn grouping(self: *Parser) Error!*Expr {
     const start = self.token_idx - 1;
     const opening = self.prev(.span).start;
     self.skipNewLines();
@@ -787,7 +789,7 @@ fn grouping(self: *Self) Error!*Expr {
     return expr;
 }
 
-fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
+fn literal(self: *Parser, tag: Ast.Literal.Tag) Error!*Expr {
     const expr = try self.allocator.create(Expr);
     expr.* = .{ .literal = .{ .tag = tag, .idx = self.token_idx - 1 } };
 
@@ -795,7 +797,7 @@ fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
 }
 
 // Parses postfix expressions: calls, member access
-fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
+fn postfix(self: *Parser, prefixExpr: *Expr) Error!*Expr {
     var expr = prefixExpr;
 
     while (true) {
@@ -814,7 +816,7 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 }
 
 // Takes the callee expression as input and output the full function call expression
-fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
+fn finishCall(self: *Parser, expr: *Expr) Error!*Expr {
     const call_expr = try self.allocator.create(Expr);
 
     // TODO: init with capacity of 255?
@@ -845,13 +847,13 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
     return call_expr;
 }
 
-fn field(self: *Self, expr: *Expr) Error!void {
+fn field(self: *Parser, expr: *Expr) Error!void {
     try self.nodes.insert(self.allocator, expr, .{ .tag = .field });
     try self.expect(.identifier, .ExpectNameAfterDot);
     _ = try self.literal(.identifier);
 }
 
-fn structLiteral(self: *Self, expr: *Expr) Error!void {
+fn structLiteral(self: *Parser, expr: *Expr) Error!void {
     try self.nodes.insert(self.allocator, expr, .{ .tag = .structLiteral });
     var arity: usize = 0;
 

@@ -13,6 +13,7 @@ const Lexer = @import("frontend/lexer.zig").Lexer;
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 // const Parser = @import("frontend/parser.zig").Parser;
 const Parser = @import("frontend/Parser.zig");
+const AstRender = @import("frontend/AstRender.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const GenReporter = @import("reporter.zig").GenReporter;
@@ -86,7 +87,13 @@ pub const Pipeline = struct {
         parser2.init(self.allocator);
         defer parser2.deinit();
 
-        try parser2.parse(source, lexer.tokens);
+        var ast = try parser2.parse(source, &lexer.tokens);
+
+        if (self.config.print_ast) {
+            var renderer: AstRender = .init(self.allocator, source, lexer.tokens.items(.span));
+            try renderer.render(&ast);
+            std.debug.print("-- Ast:\n{s}", .{renderer.output.items});
+        }
 
         // Printer
         // if (options.test_mode and self.config.print_ast) {
