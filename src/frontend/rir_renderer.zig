@@ -8,8 +8,8 @@ const AnalyzerReport = @import("analyzer.zig").Analyzer.AnalyzerReport;
 const Ast = @import("ast.zig");
 const Instruction = @import("rir.zig").Instruction;
 const Node = @import("ast.zig").Node;
-const Span = @import("lexer.zig").Span;
-const Token = @import("lexer.zig").Token;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 

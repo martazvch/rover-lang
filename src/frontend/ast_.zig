@@ -1,7 +1,8 @@
 const std = @import("std");
 
-const Token = @import("lexer.zig").Token;
-const Span = @import("lexer.zig").Span;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
+
 pub const TokenIndex = usize;
 
 source: [:0]const u8,
@@ -72,7 +73,7 @@ pub const Node2 = union(enum) {
 };
 
 pub const Expr = union(enum) {
-    fnCall: FnCall,
+    fn_call: FnCall,
     grouping: Grouping,
     literal: Literal,
     unary: Unary,

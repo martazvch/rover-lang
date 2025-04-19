@@ -4,8 +4,8 @@ const Allocator = std.mem.Allocator;
 const Ast = @import("ast.zig");
 const Node = @import("ast.zig").Node;
 const ParserReport = @import("parser.zig").Parser.ParserReport;
-const Span = @import("lexer.zig").Span;
-const Token = @import("lexer.zig").Token;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
 
 pub const AstPrinter = struct {
     allocator: Allocator,

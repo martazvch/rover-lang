@@ -11,8 +11,8 @@ const Ast = @import("ast.zig");
 const Node = Ast.Node;
 const TokenIndex = Ast.TokenIndex;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
-const Span = @import("lexer.zig").Span;
-const Token = @import("lexer.zig").Token;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
 
 pub const Parser = struct {
     source: []const u8,
@@ -78,7 +78,7 @@ pub const Parser = struct {
             if (self.match(.Eof)) break;
 
             // After each statements we expect a new line
-            if (!self.check(.newLine)) {
+            if (!self.check(.new_line)) {
                 // Could be that user wrote: Foo{} instead of Foo.{}, it's identifier + block
                 // without a new line instead of structure literal
                 if (self.token_tags[self.token_idx - 1] == .Identifier and self.token_tags[self.token_idx] == .LeftBrace) {
@@ -90,7 +90,7 @@ pub const Parser = struct {
 
                 self.error_at_span(
                     .{ .start = start, .end = start + 1 },
-                    .ExpectNewLine,
+                    .expect_newl_ine,
                 ) catch {};
 
                 self.synchronize();
@@ -138,7 +138,7 @@ pub const Parser = struct {
     }
 
     fn skip_new_lines(self: *Self) void {
-        while (self.check(.newLine)) {
+        while (self.check(.new_line)) {
             self.advance();
         }
     }
@@ -242,41 +242,41 @@ pub const Parser = struct {
     }
 
     fn fn_declaration(self: *Self) Error!Node.Index {
-        try self.expect(.Identifier, .ExpectFnName);
+        try self.expect(.Identifier, .expect_fn_name);
 
         const idx = try self.add_node(.{
             .tag = .FnDecl,
             .main = self.token_idx - 1,
         });
 
-        try self.expect(.leftParen, .ExpectParenAfterFnName);
+        try self.expect(.left_paren, .expect_paren_after_fn_name);
         self.skip_new_lines();
 
         var arity: usize = 0;
 
         while (!self.check(.RightParen)) {
             if (self.check(.Eof)) {
-                return self.error_at_prev(.ExpectParenAfterFnParams);
+                return self.error_at_prev(.expect_paren_after_fn_params);
             }
 
             if (arity == 255) return self.error_at_current(
-                .{ .TooManyFnArgs = .{ .what = "parameter" } },
+                .{ .too_many_fn_args = .{ .what = "parameter" } },
             );
 
             if (self.match(.self)) {
                 if (arity > 0) {
-                    return self.error_at_prev(.SelfAsNonFirstParam);
+                    return self.error_at_prev(.self_as_non_first_param);
                 }
 
                 if (self.match(.colon)) {
-                    return self.error_at_current(.TypedSelf);
+                    return self.error_at_current(.typed_self);
                 }
 
                 _ = try self.add_node(.{ .tag = .self, .main = self.token_idx - 1 });
             } else {
                 try self.expect(.Identifier, .{ .ExpectName = .{ .kind = "parameter" } });
                 _ = try self.add_node(.{ .tag = .Parameter, .main = self.token_idx - 1 });
-                try self.expect(.colon, .MissingFnParamType);
+                try self.expect(.colon, .missing_fn_param_type);
                 _ = try self.parse_type();
             }
 
@@ -287,19 +287,19 @@ pub const Parser = struct {
             self.skip_new_lines();
         }
 
-        try self.expect(.RightParen, .ExpectParenAfterFnParams);
+        try self.expect(.RightParen, .expect_paren_after_fn_params);
 
         self.nodes.items(.data)[idx] = arity;
 
-        _ = if (self.match(.smallArrow))
+        _ = if (self.match(.small_arrow))
             try self.parse_type()
-        else if (self.check(.Identifier) or self.check(.Bool) or self.check(.intKw) or self.check(.floatKw))
-            return self.error_at_current(.ExpectArrowBeforeFnType)
+        else if (self.check(.Identifier) or self.check(.Bool) or self.check(.int_kw) or self.check(.floatKw))
+            return self.error_at_current(.expect_arrow_before_fn_type)
         else
             try self.add_node(.empty);
 
         self.skip_new_lines();
-        try self.expect(.LeftBrace, .ExpectBraceBeforeFnBody);
+        try self.expect(.LeftBrace, .expect_brace_before_fn_body);
         _ = try self.block_expr();
 
         return idx;
@@ -309,7 +309,7 @@ pub const Parser = struct {
         const tk = self.token_idx - 1;
         const idx = try self.add_node(.{ .tag = .@"return", .main = tk });
 
-        _ = if (self.check(.newLine) or self.check(.rightBrace))
+        _ = if (self.check(.new_line) or self.check(.right_brace))
             try self.add_node(.empty)
         else
             try self.parse_precedence_expr(0);
@@ -318,10 +318,10 @@ pub const Parser = struct {
     }
 
     fn struct_declaration(self: *Self) !Node.Index {
-        try self.expect(.Identifier, .ExpectStructName);
+        try self.expect(.Identifier, .expect_struct_name);
         const name_idx = self.token_idx - 1;
         self.skip_new_lines();
-        try self.expect_or_err_at_prev(.LeftBrace, .ExpectBraceBeforeStructBody);
+        try self.expect_or_err_at_prev(.LeftBrace, .expect_brace_before_struct_body);
         self.skip_new_lines();
 
         const idx = try self.add_node(.{
@@ -334,9 +334,9 @@ pub const Parser = struct {
         var fields_count: usize = 0;
 
         // If at least one field
-        while (!self.check(.@"fn") and !self.check(.rightBrace) and !self.check(.Eof)) {
+        while (!self.check(.@"fn") and !self.check(.right_brace) and !self.check(.Eof)) {
             var valid = false;
-            _ = try self.expect(.Identifier, .ExpectFieldName);
+            _ = try self.expect(.Identifier, .expect_field_name);
             _ = try self.add_node(.{ .tag = .field, .main = self.token_idx - 1 });
 
             if (self.match(.colon)) {
@@ -350,7 +350,7 @@ pub const Parser = struct {
             } else _ = try self.add_node(.empty);
 
             if (!valid) {
-                return self.error_at_current(.ExpectFieldTypeOrDefault);
+                return self.error_at_current(.expect_field_type_or_default);
             }
 
             fields_count += 1;
@@ -362,7 +362,7 @@ pub const Parser = struct {
 
         // If we are at an identifier, might be a missing comma between fields
         if (self.check(.Identifier)) {
-            return self.error_at_prev(.MissingCommaAfterField);
+            return self.error_at_prev(.missing_comma_after_field);
         }
 
         self.nodes.items(.data)[fields] = fields_count;
@@ -371,15 +371,15 @@ pub const Parser = struct {
         const func = try self.add_node(.{ .tag = .count });
         var fn_count: usize = 0;
 
-        while (!self.check(.rightBrace) and !self.check(.Eof)) {
-            _ = try self.expect(.@"fn", .ExpectFnInStructBody);
+        while (!self.check(.right_brace) and !self.check(.Eof)) {
+            _ = try self.expect(.@"fn", .expect_fn_in_struct_body);
             _ = try self.fn_declaration();
             self.skip_new_lines();
             fn_count += 1;
         }
         self.nodes.items(.data)[func] = fn_count;
 
-        try self.expect_or_err_at_prev(.rightBrace, .ExpectBraceAfterStructBody);
+        try self.expect_or_err_at_prev(.right_brace, .expect_brace_after_struct_body);
 
         return idx;
     }
@@ -462,7 +462,7 @@ pub const Parser = struct {
         return if (self.match(.colon))
             try self.parse_type()
         else if (self.check(.Identifier))
-            self.error_at_current(.ExpectcolonBeforeType)
+            self.error_at_current(.expect_colon_before_type)
         else
             try self.add_node(.empty);
     }
@@ -473,7 +473,7 @@ pub const Parser = struct {
             return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
         } else if (self.match(.@"fn")) {
             const idx = try self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
-            try self.expect(.leftParen, .ExpectParenAfterFnName);
+            try self.expect(.left_paren, .expect_paren_after_fn_name);
 
             var arity: usize = 0;
             while (!self.check(.RightParen) and !self.check(.Eof)) {
@@ -485,26 +485,26 @@ pub const Parser = struct {
             }
 
             self.nodes.items(.data)[idx] = arity;
-            try self.expect(.RightParen, .ExpectParenAfterFnParams);
+            try self.expect(.RightParen, .expect_paren_after_fn_params);
 
-            _ = if (self.match(.smallArrow))
+            _ = if (self.match(.small_arrow))
                 try self.parse_type()
             else if (self.is_ident_or_type())
-                return self.error_at_current(.ExpectArrowBeforeFnType)
+                return self.error_at_current(.expect_arrow_before_fn_type)
             else
                 try self.add_node(.empty);
 
             return idx;
         } else {
-            return self.error_at_current(.ExpectTypeName);
+            return self.error_at_current(.expect_type_name);
         }
     }
 
     fn is_ident_or_type(self: *Self) bool {
         return if (self.match(.Identifier) or
             self.match(.floatKw) or
-            self.match(.intKw) or
-            self.match(.strKw) or
+            self.match(.int_kw) or
+            self.match(.str_kw) or
             self.match(.Bool))
             true
         else
@@ -512,7 +512,7 @@ pub const Parser = struct {
     }
 
     fn discard(self: *Self) !Node.Index {
-        try self.expect(.Equal, .InvalidDiscard);
+        try self.expect(.Equal, .invalid_discard);
         const idx = try self.add_node(.{
             .tag = .Discard,
             .main = self.token_idx - 1,
@@ -612,12 +612,12 @@ pub const Parser = struct {
         .@"or" = .{ .prec = 20, .tag = .@"or" },
 
         .EqualEqual = .{ .prec = 30, .assoc = .none, .tag = .Eq },
-        .bangEqual = .{ .prec = 30, .assoc = .none, .tag = .Ne },
+        .bang_equal = .{ .prec = 30, .assoc = .none, .tag = .Ne },
 
         .Greater = .{ .prec = 40, .assoc = .none, .tag = .Gt },
         .GreaterEqual = .{ .prec = 40, .assoc = .none, .tag = .Ge },
         .less = .{ .prec = 40, .assoc = .none, .tag = .Lt },
-        .lessEqual = .{ .prec = 40, .assoc = .none, .tag = .Le },
+        .less_equal = .{ .prec = 40, .assoc = .none, .tag = .Le },
 
         .minus = .{ .prec = 60, .tag = .Sub },
         .plus = .{ .prec = 60, .tag = .Add },
@@ -642,7 +642,7 @@ pub const Parser = struct {
             if (next_rule.prec < prec_min) break;
 
             if (next_rule.prec == banned_prec) {
-                return self.error_at_current(.ChainingCmpOp);
+                return self.error_at_current(.chaining_cmp_op);
             }
 
             // If we are in a binop, we insert the node before the operand
@@ -685,13 +685,13 @@ pub const Parser = struct {
         const idx = try self.add_node(.{ .tag = .Block, .main = openning_brace });
         var length: usize = 0;
 
-        while (!self.check(.rightBrace) and !self.check(.Eof)) {
+        while (!self.check(.right_brace) and !self.check(.Eof)) {
             _ = try self.declaration();
             self.skip_new_lines();
             length += 1;
         }
 
-        try self.expect_or_err_at_tk(.rightBrace, .UnclosedBrace, openning_brace);
+        try self.expect_or_err_at_tk(.right_brace, .unclosed_brace, openning_brace);
 
         self.nodes.items(.data)[idx] = length;
 
@@ -748,7 +748,7 @@ pub const Parser = struct {
             .Float => self.literal(.Float),
             .Identifier => self.literal(.Identifier),
             .int => self.literal(.int),
-            .leftParen => self.grouping(),
+            .left_paren => self.grouping(),
             .null => self.literal(.null),
             .string => self.literal(.string),
             .true => self.bool_(),
@@ -770,7 +770,7 @@ pub const Parser = struct {
             self.skip_new_lines();
         } else _ = try self.add_node(.{ .tag = .Empty });
 
-        try self.expect_or_err_at_tk(.RightParen, .UnclosedParen, opening);
+        try self.expect_or_err_at_tk(.RightParen, .unclosed_paren, opening);
 
         // Closing parenthesis for error reporting
         self.nodes.items(.data)[idx] = self.token_idx - 1;
@@ -795,7 +795,7 @@ pub const Parser = struct {
     // Parses postfix expressions: calls, member access
     fn parse_postfix_expr(self: *Self, node: Node.Index) Error!Node.Index {
         while (true) {
-            if (self.match(.leftParen)) {
+            if (self.match(.left_paren)) {
                 try self.finish_call(node);
             } else if (self.match(.Dot)) {
                 if (self.match(.LeftBrace)) {
@@ -817,9 +817,9 @@ pub const Parser = struct {
         // All the skip_lines cover the different syntaxes
         while (!self.check(.RightParen)) {
             self.skip_new_lines();
-            if (self.check(.Eof)) return self.error_at_prev(.ExpectParenAfterFnArgs);
+            if (self.check(.Eof)) return self.error_at_prev(.expect_paren_after_fn_args);
 
-            if (arity == 255) return self.error_at_current(.{ .TooManyFnArgs = .{ .what = "argument" } });
+            if (arity == 255) return self.error_at_current(.{ .too_many_fn_args = .{ .what = "argument" } });
 
             _ = try self.parse_precedence_expr(0);
             arity += 1;
@@ -829,14 +829,14 @@ pub const Parser = struct {
             self.skip_new_lines();
         }
 
-        try self.expect(.RightParen, .ExpectParenAfterFnArgs);
+        try self.expect(.RightParen, .expect_paren_after_fn_args);
 
         self.nodes.items(.data)[node] = arity;
     }
 
     fn field(self: *Self, node: Node.Index) Error!void {
         try self.nodes.insert(self.allocator, node, .{ .tag = .field });
-        try self.expect(.Identifier, .ExpectNameAfterDot);
+        try self.expect(.Identifier, .expect_name_after_dot);
         _ = try self.literal(.Identifier);
     }
 
@@ -845,12 +845,12 @@ pub const Parser = struct {
         var arity: usize = 0;
 
         // All the skip_lines cover the different syntaxes
-        while (!self.check(.rightBrace)) {
+        while (!self.check(.right_brace)) {
             self.skip_new_lines();
-            if (self.check(.Eof)) return self.error_at_prev(.ExpectBraceAfterStructLit);
+            if (self.check(.Eof)) return self.error_at_prev(.expect_brace_after_struct_lit);
 
             if (!self.match(.Identifier)) {
-                return self.error_at_current(.StructLitNonIdentField);
+                return self.error_at_current(.struct_lit_non_ident_field);
             }
 
             _ = try self.add_node(.{ .tag = .Identifier, .main = self.token_idx - 1 });
@@ -867,7 +867,7 @@ pub const Parser = struct {
             self.skip_new_lines();
         }
 
-        try self.expect(.rightBrace, .ExpectBraceAfterStructLit);
+        try self.expect(.right_brace, .expect_brace_after_struct_lit);
 
         self.nodes.items(.data)[node] = arity;
     }

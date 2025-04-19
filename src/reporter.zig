@@ -5,7 +5,7 @@ const assert = std.debug.assert;
 const Writer = std.fs.File.Writer;
 const builtin = @import("builtin");
 
-const Span = @import("frontend/lexer.zig").Span;
+const Span = @import("frontend/Lexer.zig").Span;
 
 const BoxChar = enum {
     BottomLeft,

@@ -1,12 +1,12 @@
-ExpectStructName
-MissingCommaAfterField
-ExpectFnInStructBody
-ExpectFieldTypeOrDefault
-ExpectFieldName
+expect_struct_name
+missing_comma_after_field
+expect_fn_in_struct_body
+expect_field_type_or_default
+expect_field_name
 // Because how synchronize works in parser
 ExpectExpr, }
-ExpectBraceBeforeStructBody
-ExpectFnInStructBody
+expect_brace_before_struct_body
+expect_fn_in_struct_body
 // Because how synchronize works in parser
 ExpectExpr, }
-ExpectBraceAfterStructBody
+expect_brace_after_struct_body
