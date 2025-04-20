@@ -90,7 +90,7 @@ pub const Parser = struct {
 
                 self.error_at_span(
                     .{ .start = start, .end = start + 1 },
-                    .expect_newl_ine,
+                    .expect_new_line,
                 ) catch {};
 
                 self.synchronize();
@@ -293,7 +293,7 @@ pub const Parser = struct {
 
         _ = if (self.match(.small_arrow))
             try self.parse_type()
-        else if (self.check(.Identifier) or self.check(.Bool) or self.check(.int_kw) or self.check(.floatKw))
+        else if (self.check(.Identifier) or self.check(.Bool) or self.check(.int_kw) or self.check(.float_kw))
             return self.error_at_current(.expect_arrow_before_fn_type)
         else
             try self.add_node(.empty);
@@ -502,7 +502,7 @@ pub const Parser = struct {
 
     fn is_ident_or_type(self: *Self) bool {
         return if (self.match(.Identifier) or
-            self.match(.floatKw) or
+            self.match(.float_kw) or
             self.match(.int_kw) or
             self.match(.str_kw) or
             self.match(.Bool))

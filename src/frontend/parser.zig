@@ -76,18 +76,13 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
         if (!self.check(.new_line)) {
             // Could be that user wrote: Foo{} instead of Foo.{}, it's identifier + block
             // without a new line instead of structure literal
-            if (self.token_tags[self.token_idx - 1] == .identifier and self.token_tags[self.token_idx] == .left_brace) {
+            if (self.prev(.tag) == .identifier and self.current(.tag) == .left_brace) {
                 std.debug.print("Could be trying to do structure literal? Missing '.'\n", .{});
                 // TODO: Error
             }
 
-            const start = self.token_spans[self.token_idx - 1].end;
-
-            self.errAtSpan(
-                .{ .start = start, .end = start + 1 },
-                .expect_newl_ine,
-            ) catch {};
-
+            const start = self.prev(.span).end;
+            self.errAtSpan(.{ .start = start, .end = start + 1 }, .expect_new_line) catch {};
             self.synchronize();
         }
 
@@ -228,10 +223,6 @@ fn synchronize(self: *Self) void {
 }
 
 fn declaration(self: *Self) Error!Node {
-    // const idx = try if (self.match(.@"nf"))
-    //     self.fnDecl()
-    // else if (self.match(.@"var"))
-    //     self.varDecl()
     // else if (self.match(.@"struct"))
     //     self.structDecl()
     // else if (self.match(.@"return"))
@@ -243,35 +234,37 @@ fn declaration(self: *Self) Error!Node {
     // else
     // self.statement();
 
-    return self.statement();
-
-    // return self.finish_node(idx);
+    return if (self.match(.@"var"))
+        self.varDecl()
+    else if (self.match(.@"fn"))
+        self.fnDecl()
+    else if (self.match(.@"struct"))
+        self.structDecl()
+    else
+        self.statement();
 }
 
 fn fnDecl(self: *Self) Error!Node {
     try self.expect(.identifier, .expect_fn_name);
-
-    const idx = try self.add_node(.{
-        .tag = .FnDecl,
-        .main = self.token_idx - 1,
-    });
-
+    const name = self.token_idx - 1;
     try self.expect(.left_paren, .expect_paren_after_fn_name);
     self.skipNewLines();
 
-    var arity: usize = 0;
+    var params: ArrayListUnmanaged(Ast.Param) = .{};
 
     while (!self.check(.right_paren)) {
         if (self.check(.eof)) {
             return self.errAtPrev(.expect_paren_after_fn_params);
         }
 
-        if (arity == 255) return self.errAtCurrent(
+        if (params.items.len == 255) return self.errAtCurrent(
             .{ .too_many_fn_args = .{ .what = "parameter" } },
         );
 
+        var param: Ast.Param = undefined;
+
         if (self.match(.self)) {
-            if (arity > 0) {
+            if (params.items.len > 0) {
                 return self.errAtPrev(.self_as_non_first_param);
             }
 
@@ -279,15 +272,15 @@ fn fnDecl(self: *Self) Error!Node {
                 return self.errAtCurrent(.typed_self);
             }
 
-            _ = try self.add_node(.{ .tag = .self, .main = self.token_idx - 1 });
+            param.name = self.token_idx - 1;
         } else {
             try self.expect(.identifier, .{ .ExpectName = .{ .kind = "parameter" } });
-            _ = try self.add_node(.{ .tag = .Parameter, .main = self.token_idx - 1 });
+            param.name = self.token_idx - 1;
             try self.expect(.colon, .missing_fn_param_type);
-            _ = try self.parseType();
+            param.typ = try self.parseType();
         }
 
-        arity += 1;
+        try params.append(self.allocator, param);
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -296,59 +289,45 @@ fn fnDecl(self: *Self) Error!Node {
 
     try self.expect(.right_paren, .expect_paren_after_fn_params);
 
-    self.nodes.items(.data)[idx] = arity;
-
-    _ = if (self.match(.small_arrow))
+    const return_type: ?*Ast.Type = if (self.match(.small_arrow))
         try self.parseType()
-    else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.floatKw))
+    else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.float_kw))
         return self.errAtCurrent(.expect_arrow_before_fn_type)
     else
-        try self.add_node(.empty);
+        null;
 
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
-    _ = try self.block();
 
-    return idx;
+    return .{ .fn_decl = .{
+        .name = name,
+        .params = try params.toOwnedSlice(self.allocator),
+        .body = try self.block(),
+        .return_type = return_type,
+    } };
 }
 
 fn structDecl(self: *Self) !Node {
     try self.expect(.identifier, .expect_struct_name);
-    const name_idx = self.token_idx - 1;
+    const name = self.token_idx - 1;
     self.skipNewLines();
     try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_struct_body);
     self.skipNewLines();
 
-    const idx = try self.add_node(.{
-        .tag = .StructDecl,
-        .main = name_idx,
-    });
-
-    // Fields
-    const fields = try self.add_node(.{ .tag = .count });
-    var fields_count: usize = 0;
+    var fields: ArrayListUnmanaged(Ast.VarDecl) = .{};
 
     // If at least one field
     while (!self.check(.@"fn") and !self.check(.right_brace) and !self.check(.eof)) {
-        var valid = false;
-        _ = try self.expect(.identifier, .expect_field_name);
-        _ = try self.add_node(.{ .tag = .field, .main = self.token_idx - 1 });
+        try self.expect(.identifier, .expect_field_name);
+        const field_name = self.token_idx - 1;
+        const typ = if (self.match(.colon)) try self.parseType() else null;
+        const value = if (self.match(.equal)) try self.parsePrecedenceExpr(0) else null;
 
-        if (self.match(.colon)) {
-            _ = try self.parseType();
-            valid = true;
-        } else _ = try self.add_node(.empty);
-
-        if (self.match(.equal)) {
-            valid = true;
-            _ = try self.parsePrecedenceExpr(0);
-        } else _ = try self.add_node(.empty);
-
-        if (!valid) {
+        if (typ == null and value == null) {
             return self.errAtCurrent(.expect_field_type_or_default);
         }
 
-        fields_count += 1;
+        try fields.append(self.allocator, .{ .name = field_name, .typ = typ, .value = value });
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -360,76 +339,66 @@ fn structDecl(self: *Self) !Node {
         return self.errAtPrev(.missing_comma_after_field);
     }
 
-    self.nodes.items(.data)[fields] = fields_count;
-
     // Functions
-    const func = try self.add_node(.{ .tag = .count });
-    var fn_count: usize = 0;
+    var functions: ArrayListUnmanaged(Ast.FnDecl) = .{};
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
-        _ = try self.expect(.@"fn", .expect_fn_in_struct_body);
-        _ = try self.fnDecl();
+        try self.expect(.@"fn", .expect_fn_in_struct_body);
+        try functions.append(self.allocator, try self.fnDecl());
         self.skipNewLines();
-        fn_count += 1;
     }
-    self.nodes.items(.data)[func] = fn_count;
 
     try self.expectOrErrAtPrev(.right_brace, .expect_brace_after_struct_body);
 
-    return idx;
+    return .{ .struct_decl = .{
+        .name = name,
+        .fields = try fields.toOwnedSlice(self.allocator),
+        .functions = try functions.toOwnedSlice(self.allocator),
+    } };
 }
 
 fn varDecl(self: *Self) !Node {
     try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
+    const name = self.token_idx - 1;
 
     if (self.check(.comma))
-        return self.multiVarDecl();
+        return self.multiVarDecl(name);
 
-    const idx = try self.add_node(.{
-        .tag = .VarDecl,
-        .main = self.token_idx - 1,
-    });
+    const typ = try self.expectTypeOrEmpty();
 
-    _ = try self.expectTypeOrEmpty();
-
-    _ = if (self.match(.equal))
+    const value = if (self.match(.equal))
         try self.parsePrecedenceExpr(0)
     else
-        try self.add_node(.empty);
+        null;
 
-    return idx;
+    return .{ .var_decl = .{ .name = name, .typ = typ, .value = value } };
 }
 
-fn multiVarDecl(self: *Self) !Node {
-    const idx = try self.add_node(.{ .tag = .MultiVarDecl });
-
-    _ = try self.add_node(.{ .tag = .VarDecl, .main = self.token_idx - 1 });
-
+fn multiVarDecl(self: *Self, first_name: usize) !Node {
     var count: usize = 1;
-    var variables = std.ArrayListUnmanaged(usize){};
+    var decls: ArrayListUnmanaged(Ast.VarDecl) = .{};
+    var variables = ArrayListUnmanaged(usize){};
     defer variables.deinit(self.allocator);
 
-    while (self.match(.comma)) : (count += 1) {
+    while (self.match(.comma)) {
         try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
         try variables.append(self.allocator, self.token_idx - 1);
     }
-    self.nodes.items(.main)[idx] = count;
 
-    const type_idx = try self.expectTypeOrEmpty();
-
+    try decls.ensureTotalCapacity(self.allocator, variables.items.len);
+    const typ = try self.expectTypeOrEmpty();
     const first_value = if (self.match(.equal))
         try self.parsePrecedenceExpr(0)
     else
-        try self.add_node(.empty);
+        null;
 
-    count = 1;
+    // First declaration
+    decls.appendAssumeCapacity(.{ .name = first_name, .typ = typ, .value = first_value });
 
     // If only one value
     if (!self.check(.comma)) {
         for (variables.items) |var_idx| {
-            _ = try self.add_node(.{ .tag = .VarDecl, .main = var_idx });
-            _ = try self.add_node(self.nodes.get(type_idx));
-            _ = try self.add_node(self.nodes.get(first_value));
+            decls.appendAssumeCapacity(.{ .name = var_idx, .typ = typ, .value = first_value });
         }
     } else while (self.match(.comma)) : (count += 1) {
         if (count > variables.items.len) {
@@ -437,9 +406,11 @@ fn multiVarDecl(self: *Self) !Node {
             break;
         }
 
-        _ = try self.add_node(.{ .tag = .VarDecl, .main = variables.items[count - 1] });
-        _ = try self.add_node(self.nodes.get(type_idx));
-        _ = try self.parsePrecedenceExpr(0);
+        decls.appendAssumeCapacity(.{
+            .name = variables.items[count - 1],
+            .typ = typ,
+            .value = try self.parsePrecedenceExpr(0),
+        });
     }
 
     if (count > 1 and count != variables.items.len + 1)
@@ -447,63 +418,60 @@ fn multiVarDecl(self: *Self) !Node {
             .expect = variables.items.len + 1,
         } });
 
-    self.nodes.items(.data)[idx] = count;
-
-    return idx;
+    return .{ .multi_var_decl = try decls.toOwnedSlice(self.allocator) };
 }
 
 /// Expects a type after ':'. If no colon, declares an empty type
-fn expectTypeOrEmpty(self: *Self) Error!Node {
+fn expectTypeOrEmpty(self: *Self) Error!?*Ast.Type {
     return if (self.match(.colon))
         try self.parseType()
     else if (self.check(.identifier))
         self.errAtCurrent(.expect_colon_before_type)
     else
-        try self.add_node(.empty);
+        null;
 }
 
 /// Parses a type. It assumes you know that a type is expected at this place
-fn parseType(self: *Self) Error!Node {
+fn parseType(self: *Self) Error!*Ast.Type {
+    const typ = try self.allocator.create(Ast.Type);
+
     if (self.isIdentOrType()) {
-        return self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
+        typ.* = .{ .scalar = self.token_idx - 1 };
     } else if (self.match(.@"fn")) {
-        const idx = try self.add_node(.{ .tag = .Type, .main = self.token_idx - 1 });
+        var params: ArrayListUnmanaged(*Ast.Type) = .{};
         try self.expect(.left_paren, .expect_paren_after_fn_name);
 
-        var arity: usize = 0;
         while (!self.check(.right_paren) and !self.check(.eof)) {
-            // Parse parameters type
-            _ = try self.parseType();
-            arity += 1;
-
+            try params.append(self.allocator, try self.parseType());
             if (!self.match(.comma)) break;
         }
 
-        self.nodes.items(.data)[idx] = arity;
         try self.expect(.right_paren, .expect_paren_after_fn_params);
 
-        _ = if (self.match(.small_arrow))
+        const return_type = if (self.match(.small_arrow))
             try self.parseType()
         else if (self.isIdentOrType())
             return self.errAtCurrent(.expect_arrow_before_fn_type)
         else
-            try self.add_node(.empty);
+            null;
 
-        return idx;
+        typ.* = .{ .function = .{
+            .params = try params.toOwnedSlice(self.allocator),
+            .return_type = return_type,
+        } };
     } else {
         return self.errAtCurrent(.expect_type_name);
     }
+
+    return typ;
 }
 
 fn isIdentOrType(self: *Self) bool {
-    return if (self.match(.identifier) or
-        self.match(.floatKw) or
+    return self.match(.identifier) or
+        self.match(.float_kw) or
         self.match(.int_kw) or
         self.match(.str_kw) or
-        self.match(.bool))
-        true
-    else
-        false;
+        self.match(.bool);
 }
 
 fn discard(self: *Self) !Node {

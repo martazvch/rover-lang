@@ -37,7 +37,7 @@ pub const Token = struct {
         .{ "else", .@"else" },
         .{ "error", .@"error" },
         .{ "false", .false },
-        .{ "float", .floatKw },
+        .{ "float", .float_kw },
         .{ "fn", .@"fn" },
         .{ "for", .@"for" },
         .{ "if", .@"if" },
@@ -80,7 +80,7 @@ pub const Token = struct {
         @"error",
         false,
         float,
-        floatKw,
+        float_kw,
         @"fn",
         @"for",
         greater,
@@ -545,7 +545,7 @@ test "keywords" {
 
     const res = [_]Token.Tag{
         .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .in,       .null, .@"or",  .print,
-        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .int_kw, .floatKw,
+        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .int_kw, .float_kw,
         .str_kw,    .do,       .use,   .eof,
     };
 

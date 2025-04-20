@@ -14,8 +14,44 @@ pub const Node = union(enum) {
         assigne: *Expr,
         value: *Expr,
     },
+    fn_decl: FnDecl,
+    multi_var_decl: []VarDecl,
     print: *Expr,
+    struct_decl: StructDecl,
+    var_decl: VarDecl,
     expr: *Expr,
+};
+
+pub const FnDecl = struct {
+    name: TokenIndex,
+    params: []Param,
+    body: *Expr,
+    return_type: ?*Type,
+};
+
+pub const Param = struct {
+    name: TokenIndex,
+    typ: *Type,
+};
+
+pub const Type = union(enum) {
+    scalar: TokenIndex,
+    function: struct {
+        params: []*Type,
+        return_type: ?*Type,
+    },
+};
+
+pub const StructDecl = struct {
+    name: TokenIndex,
+    fields: []VarDecl,
+    functions: []FnDecl,
+};
+
+pub const VarDecl = struct {
+    name: TokenIndex,
+    typ: ?*Type,
+    value: ?*Expr,
 };
 
 pub const Expr = union(enum) {

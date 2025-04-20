@@ -1,4 +1,4 @@
 ExpectBraceOrDo, if
 ExpectExpr, =
-expect_newl_ine
+expect_new_line
 
