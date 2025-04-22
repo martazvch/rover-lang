@@ -1,40 +1,84 @@
-[Unary -]
-    [Int literal 1]
-
-[Unary -]
-    [Unary -]
-        [Int literal 1]
-
-[Binop *]
-    [Unary -]
-        [Int literal 5]
-    [Int literal 3]
-
-[Unary not]
-    [Bool literal true]
-
-[Unary -]
-    [Block]
-        [Fn call
-            callee:
-            [Identifier add]
-            args:
-        ]
-
-[Unary not]
-    [If
-        condition:
-        [Bool literal true]
-        then body:
-        [String literal "yes"]
-        else body:
-        [String literal "no"]
-    ]
-
-[Unary not]
-    [Unary -]
-        [Fn call
-            callee:
-            [Identifier add]
-            args:
-        ]
+{
+    "unary": {
+        "op": "-",
+        "expr": {
+            "literal": "1"
+        }
+    },
+    "unary": {
+        "op": "-",
+        "expr": {
+            "unary": {
+                "op": "-",
+                "expr": {
+                    "literal": "1"
+                }
+            }
+        }
+    },
+    "binop": {
+        "lhs": {
+            "unary": {
+                "op": "-",
+                "expr": {
+                    "literal": "5"
+                }
+            }
+        },
+        "rhs": {
+            "literal": "3"
+        },
+        "op": "*"
+    },
+    "unary": {
+        "op": "not",
+        "expr": {
+            "literal": "true"
+        }
+    },
+    "unary": {
+        "op": "-",
+        "expr": {
+            "block": [
+                "fn_call": {
+                    "callee": {
+                        "literal": "add"
+                    },
+                    "args": []
+                }
+            ]
+        }
+    },
+    "unary": {
+        "op": "not",
+        "expr": {
+            "if": {
+                "condition": {
+                    "literal": "true"
+                },
+                "then": {
+                    "literal": "yes"
+                },
+                "else": {
+                    "literal": "no"
+                }
+            }
+        }
+    },
+    "unary": {
+        "op": "not",
+        "expr": {
+            "unary": {
+                "op": "-",
+                "expr": {
+                    "fn_call": {
+                        "callee": {
+                            "literal": "add"
+                        },
+                        "args": []
+                    }
+                }
+            }
+        }
+    }
+}

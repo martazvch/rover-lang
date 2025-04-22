@@ -1,18 +1,23 @@
-[Discard
-    [If
-        condition:
-        [Bool literal true]
-        then body:
-        [Int literal 5]
-        else body:
-        [Int literal 10]
-    ]
-]
-[Discard
-    [Int literal 56]
-]
-[Discard
-    [Block]
-        [Int literal 5]
-]
-
+{
+    "discard": {
+        "if": {
+            "condition": {
+                "literal": "true"
+            },
+            "then": {
+                "literal": "5"
+            },
+            "else": {
+                "literal": "10"
+            }
+        }
+    },
+    "discard": {
+        "literal": "56"
+    },
+    "discard": {
+        "block": [
+            "literal": "5"
+        ]
+    }
+}

@@ -1,11 +1,36 @@
-[Binop and]
-    [Bool literal true]
-    [Bool literal false]
-
-[Binop and]
-    [Binop or]
-        [Binop and]
-            [Bool literal true]
-            [Bool literal true]
-        [Bool literal false]
-    [Bool literal true]
+{
+    "binop": {
+        "lhs": {
+            "literal": "true"
+        },
+        "rhs": {
+            "literal": "false"
+        },
+        "op": "and"
+    },
+    "binop": {
+        "lhs": {
+            "binop": {
+                "lhs": {
+                    "binop": {
+                        "lhs": {
+                            "literal": "true"
+                        },
+                        "rhs": {
+                            "literal": "true"
+                        },
+                        "op": "and"
+                    }
+                },
+                "rhs": {
+                    "literal": "false"
+                },
+                "op": "or"
+            }
+        },
+        "rhs": {
+            "literal": "true"
+        },
+        "op": "and"
+    }
+}

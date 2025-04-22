@@ -1,2 +1,2 @@
-ExpectBraceOrDo, while
-ExpectBraceOrDo, while
+expect_brace_after_while_cond
+expect_brace_after_while_cond

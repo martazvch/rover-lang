@@ -223,23 +223,16 @@ fn synchronize(self: *Self) void {
 }
 
 fn declaration(self: *Self) Error!Node {
-    // else if (self.match(.@"struct"))
-    //     self.structDecl()
-    // else if (self.match(.@"return"))
-    //     self.returnExpr()
-    // else if (self.match(.Underscore))
-    //     self.discard()
-    // else if (self.match(.use))
-    //     self.use()
-    // else
-    // self.statement();
-
     return if (self.match(.@"var"))
         self.varDecl()
     else if (self.match(.@"fn"))
         self.fnDecl()
     else if (self.match(.@"struct"))
         self.structDecl()
+    else if (self.match(.underscore))
+        self.discard()
+    else if (self.match(.use))
+        self.use()
     else
         self.statement();
 }
@@ -261,7 +254,7 @@ fn fnDecl(self: *Self) Error!Node {
             .{ .too_many_fn_args = .{ .what = "parameter" } },
         );
 
-        var param: Ast.Param = undefined;
+        var param: Ast.Param = .{ .name = self.token_idx, .typ = undefined };
 
         if (self.match(.self)) {
             if (params.items.len > 0) {
@@ -272,10 +265,12 @@ fn fnDecl(self: *Self) Error!Node {
                 return self.errAtCurrent(.typed_self);
             }
 
-            param.name = self.token_idx - 1;
+            // TODO: Allocate only one `Self` type for all
+            const typ = try self.allocator.create(Ast.Type);
+            typ.* = .{ .self = {} };
+            param.typ = typ;
         } else {
             try self.expect(.identifier, .{ .ExpectName = .{ .kind = "parameter" } });
-            param.name = self.token_idx - 1;
             try self.expect(.colon, .missing_fn_param_type);
             param.typ = try self.parseType();
         }
@@ -302,7 +297,7 @@ fn fnDecl(self: *Self) Error!Node {
     return .{ .fn_decl = .{
         .name = name,
         .params = try params.toOwnedSlice(self.allocator),
-        .body = try self.block(),
+        .body = (try self.block()).block,
         .return_type = return_type,
     } };
 }
@@ -344,7 +339,7 @@ fn structDecl(self: *Self) !Node {
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
         try self.expect(.@"fn", .expect_fn_in_struct_body);
-        try functions.append(self.allocator, try self.fnDecl());
+        try functions.append(self.allocator, (try self.fnDecl()).fn_decl);
         self.skipNewLines();
     }
 
@@ -476,50 +471,31 @@ fn isIdentOrType(self: *Self) bool {
 
 fn discard(self: *Self) !Node {
     try self.expect(.equal, .invalid_discard);
-    const idx = try self.add_node(.{
-        .tag = .Discard,
-        .main = self.token_idx - 1,
-    });
 
-    _ = try self.parsePrecedenceExpr(0);
-
-    return idx;
+    return .{ .discard = try self.parsePrecedenceExpr(0) };
 }
 
 fn use(self: *Self) Error!Node {
-    const idx = try self.add_node(.{
-        .tag = .use,
-        .main = self.token_idx - 1,
-    });
+    var names: ArrayListUnmanaged(usize) = .{};
 
     if (!self.check(.identifier)) {
         return self.errAtCurrent(.{ .ExpectName = .{ .kind = "module" } });
     }
 
-    var count: usize = 0;
     while (self.match(.identifier) and !self.check(.eof)) {
-        _ = try self.add_node(.{
-            .tag = .identifier,
-            .main = self.token_idx - 1,
-        });
-
-        count += 1;
-
+        try names.append(self.allocator, self.token_idx - 1);
         if (self.match(.dot)) continue;
         break;
     }
 
-    self.nodes.items(.data)[idx] = count;
-
-    return idx;
+    return .{ .use = try names.toOwnedSlice(self.allocator) };
 }
 
 fn statement(self: *Self) Error!Node {
     if (self.match(.print)) {
         return self.print();
     } else if (self.match(.@"while")) {
-        unreachable;
-        //     return self.whileStmt();
+        return self.whileStmt();
     } else {
         const assigne = try self.parsePrecedenceExpr(0);
 
@@ -542,20 +518,13 @@ fn print(self: *Self) Error!Node {
 }
 
 fn whileStmt(self: *Self) !Node {
-    const idx = try self.add_node(.{
-        .tag = .@"while",
-        .main = self.token_idx - 1,
-    });
-    _ = try self.parsePrecedenceExpr(0);
-
-    _ = if (self.matchAndSkip(.left_brace))
-        try self.block()
-    else if (self.matchAndSkip(.do))
-        try self.declaration()
+    const cond = try self.parsePrecedenceExpr(0);
+    const body = if (self.matchAndSkip(.left_brace))
+        (try self.block()).block
     else
-        return self.errAtCurrent(.{ .ExpectBraceOrDo = .{ .what = "while" } });
+        return self.errAtCurrent(.expect_brace_after_while_cond);
 
-    return idx;
+    return .{ .@"while" = .{ .cond = cond, .body = body } };
 }
 
 const Assoc = enum { left, none };
@@ -685,8 +654,10 @@ fn ifExpr(self: *Self) Error!*Expr {
             .{ .expr = try self.block() }
         else
             try self.declaration()
-    else
-        null;
+    else blk: {
+        self.token_idx -= 1;
+        break :blk null;
+    };
 
     const expr = try self.allocator.create(Expr);
     expr.* = .{ .@"if" = .{

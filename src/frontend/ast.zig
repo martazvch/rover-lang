@@ -14,18 +14,24 @@ pub const Node = union(enum) {
         assigne: *Expr,
         value: *Expr,
     },
+    discard: *Expr,
     fn_decl: FnDecl,
     multi_var_decl: []VarDecl,
     print: *Expr,
     struct_decl: StructDecl,
+    use: []const TokenIndex,
     var_decl: VarDecl,
+    @"while": struct {
+        cond: *Expr,
+        body: Block,
+    },
     expr: *Expr,
 };
 
 pub const FnDecl = struct {
     name: TokenIndex,
     params: []Param,
-    body: *Expr,
+    body: Block,
     return_type: ?*Type,
 };
 
@@ -40,6 +46,7 @@ pub const Type = union(enum) {
         params: []*Type,
         return_type: ?*Type,
     },
+    self: void,
 };
 
 pub const StructDecl = struct {

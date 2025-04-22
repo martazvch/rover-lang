@@ -1,20 +1,35 @@
-[Block]
-    [Int literal 5]
-
-[Block]
-    [Var declaration a, type void, value
-        none
+{
+    "block": [
+        "literal": "5"
+    ],
+    "block": [
+        "var_decl": {
+            "name": "a",
+            "type": {},
+            "value": {}
+        }
+    ],
+    "block": [
+        "var_decl": {
+            "name": "a",
+            "type": {},
+            "value": {}
+        },
+        "assignment": {
+            "assignee": {
+                "literal": "a"
+            },
+            "value": {
+                "binop": {
+                    "lhs": {
+                        "literal": "1"
+                    },
+                    "rhs": {
+                        "literal": "56"
+                    },
+                    "op": "+"
+                }
+            }
+        }
     ]
-
-[Block]
-    [Var declaration a, type void, value
-        none
-    ]
-    [Assignment
-        assigne:
-        [Identifier a]
-        value:
-        [Binop +]
-            [Int literal 1]
-            [Int literal 56]
-    ]
+}

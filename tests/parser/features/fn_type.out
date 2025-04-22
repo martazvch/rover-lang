@@ -1,19 +1,30 @@
-[Fn declaration factory, type fn() -> void, arity 0
-    params:
-    body:
-        [Block]
-]
-
-[Fn declaration factory, type fn(float, bool) -> float, arity 1
-    params:
-        arg, type float
-    body:
-        [Block]
-]
-
-[Fn declaration factory, type int, arity 1
-    params:
-        arg, type fn() -> int
-    body:
-        [Block]
-]
+{
+    "fn_decl": {
+        "name": "factory",
+        "params": [],
+        "return_type": "fn() -> void",
+        "block": []
+    },
+    "fn_decl": {
+        "name": "factory",
+        "params": [
+            {
+                "name": "arg",
+                "type": "float"
+            }
+        ],
+        "return_type": "fn(float, bool) -> float",
+        "block": []
+    },
+    "fn_decl": {
+        "name": "factory",
+        "params": [
+            {
+                "name": "arg",
+                "type": "fn() -> int"
+            }
+        ],
+        "return_type": "int",
+        "block": []
+    }
+}

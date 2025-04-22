@@ -1,56 +1,139 @@
-[Structure declaration Foo
-    [Fn declaration bar, type void, arity 2
-        params:
-            self
-            a, type int
-        body:
-            [Block]
-                [Print]
-                    [Identifier a]
-    ]
-    [Fn declaration buz, type Self, arity 1
-        params:
-            c, type bool
-        body:
-            [Block]
-    ]
-]
-
-[Structure declaration Bar
-    fields:
-        name, type: int
-        age, type: str
-        life, type: float
-        parent, type: Human
-        number, value:
-            [Int literal 1234]
-        money, type: int, value:
-            [Int literal 120]
-
-]
-
-[Structure declaration Baz
-    fields:
-        name, type: int
-        parent, type: Human
-        number, value:
-            [Int literal 1234]
-        money, type: int, value:
-            [Int literal 120]
-
-    [Fn declaration bar, type void, arity 2
-        params:
-            self
-            a, type int
-        body:
-            [Block]
-                [Print]
-                    [Identifier a]
-    ]
-    [Fn declaration buz, type Self, arity 1
-        params:
-            c, type bool
-        body:
-            [Block]
-    ]
-]
+{
+    "struct_decl": {
+        "name": "Foo",
+        "fields": [],
+        "functions": [
+            "fn_decl": {
+                "name": "bar",
+                "params": [
+                    {
+                        "name": "self",
+                        "type": "Self"
+                    },
+                    {
+                        "name": "a",
+                        "type": "int"
+                    }
+                ],
+                "return_type": "void",
+                "block": [
+                    "print": {
+                        "literal": "a"
+                    }
+                ]
+            },
+            "fn_decl": {
+                "name": "buz",
+                "params": [
+                    {
+                        "name": "c",
+                        "type": "bool"
+                    }
+                ],
+                "return_type": "Self",
+                "block": []
+            }
+        ]
+    },
+    "struct_decl": {
+        "name": "Bar",
+        "fields": [
+            {
+                "name": "name",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "age",
+                "type": "str",
+                "value": {}
+            },
+            {
+                "name": "life",
+                "type": "float",
+                "value": {}
+            },
+            {
+                "name": "parent",
+                "type": "Human",
+                "value": {}
+            },
+            {
+                "name": "number",
+                "type": {},
+                "value": {
+                    "literal": "1234"
+                }
+            },
+            {
+                "name": "money",
+                "type": "int",
+                "value": {
+                    "literal": "120"
+                }
+            }
+        ],
+        "functions": []
+    },
+    "struct_decl": {
+        "name": "Baz",
+        "fields": [
+            {
+                "name": "name",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "parent",
+                "type": "Human",
+                "value": {}
+            },
+            {
+                "name": "number",
+                "type": {},
+                "value": {
+                    "literal": "1234"
+                }
+            },
+            {
+                "name": "money",
+                "type": "int",
+                "value": {
+                    "literal": "120"
+                }
+            }
+        ],
+        "functions": [
+            "fn_decl": {
+                "name": "bar",
+                "params": [
+                    {
+                        "name": "self",
+                        "type": "Self"
+                    },
+                    {
+                        "name": "a",
+                        "type": "int"
+                    }
+                ],
+                "return_type": "void",
+                "block": [
+                    "print": {
+                        "literal": "a"
+                    }
+                ]
+            },
+            "fn_decl": {
+                "name": "buz",
+                "params": [
+                    {
+                        "name": "c",
+                        "type": "bool"
+                    }
+                ],
+                "return_type": "Self",
+                "block": []
+            }
+        ]
+    }
+}

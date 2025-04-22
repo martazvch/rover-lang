@@ -1,44 +1,63 @@
-[Fn call
-    callee:
-    [Identifier add]
-    args:
-    [Block]
-        [Binop +]
-            [Int literal 1]
-            [Fn call
-                callee:
-                [Identifier add]
-                args:
-                [Int literal 2]
-                [Int literal 3]
-            ]
-    [If
-        condition:
-        [Bool literal true]
-        then body:
-        [Int literal 8]
-        else body:
-        [Int literal 24]
-    ]
-]
-
-[Fn call
-    callee:
-    [Block]
-        [Fn call
-            callee:
-            [Identifier get_fn]
-            args:
+{
+    "fn_call": {
+        "callee": {
+            "literal": "add"
+        },
+        "args": [
+            "block": [
+                "binop": {
+                    "lhs": {
+                        "literal": "1"
+                    },
+                    "rhs": {
+                        "fn_call": {
+                            "callee": {
+                                "literal": "add"
+                            },
+                            "args": [
+                                "literal": "2",
+                                "literal": "3"
+                            ]
+                        }
+                    },
+                    "op": "+"
+                }
+            ],
+            "if": {
+                "condition": {
+                    "literal": "true"
+                },
+                "then": {
+                    "literal": "8"
+                },
+                "else": {
+                    "literal": "24"
+                }
+            }
         ]
-    args:
-]
-
-[Fn call
-    callee:
-    [Fn call
-        callee:
-        [Identifier add]
-        args:
-    ]
-    args:
-]
+    },
+    "fn_call": {
+        "callee": {
+            "block": [
+                "fn_call": {
+                    "callee": {
+                        "literal": "get_fn"
+                    },
+                    "args": []
+                }
+            ]
+        },
+        "args": []
+    },
+    "fn_call": {
+        "callee": {
+            "fn_call": {
+                "callee": {
+                    "literal": "add"
+                },
+                "args": []
+            }
+        },
+        "args": []
+    }
+}

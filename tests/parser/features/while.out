@@ -1,34 +1,32 @@
-[While
-    condition:
-    [Bool literal true]
-    body:
-    [Block]
-]
-[While
-    condition:
-    [Bool literal true]
-    body:
-    [Block]
-]
-[While
-    condition:
-    [Binop and]
-        [Bool literal true]
-        [Bool literal false]
-    body:
-    [Var declaration a, type void, value
-        [Int literal 1]
-    ]
-]
-[While
-    condition:
-    [Block]
-        [Bool literal true]
-    body:
-    [Block]
-        [Var declaration tmp, type void, value
-            [Binop +]
-                [Int literal 1]
-                [Int literal 5]
+{
+    "while": {
+        "condition": {
+            "literal": "true"
+        },
+        "block": []
+    },
+    "while": {
+        "condition": {
+            "block": [
+                "literal": "true"
+            ]
+        },
+        "block": [
+            "var_decl": {
+                "name": "tmp",
+                "type": {},
+                "value": {
+                    "binop": {
+                        "lhs": {
+                            "literal": "1"
+                        },
+                        "rhs": {
+                            "literal": "5"
+                        },
+                        "op": "+"
+                    }
+                }
+            }
         ]
-]
+    }
+}
