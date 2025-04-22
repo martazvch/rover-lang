@@ -6,7 +6,8 @@ const options = @import("options");
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
-const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+// const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("frontend/Ast.zig");
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
@@ -70,29 +71,14 @@ pub const Pipeline = struct {
         }
 
         // Parser
-        // TODO: self.allocator is already an arena, modify Parser
-        // var parser: Parser = .empty;
-        // parser.init(self.allocator);
-        // defer parser.deinit();
-
-        // try parser.parse(
-        //     source,
-        //     lexer.tokens.items(.tag),
-        //     lexer.tokens.items(.span),
-        // );
-
-        // --------------
-        //   New parser
-        // --------------
         var parser: Parser = .empty;
         parser.init(self.allocator);
         defer parser.deinit();
 
         var ast = try parser.parse(source, &lexer.tokens);
 
-        // Printer
         if (options.test_mode and self.config.print_ast) {
-            try printAst(self.allocator, source, &lexer, &ast, &parser);
+            try printAst(self.allocator, &ast, &parser);
             return error.ExitOnPrint;
         }
 
@@ -100,15 +86,15 @@ pub const Pipeline = struct {
             var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, parser.errs.items);
             return error.ExitOnPrint;
-        } else if (self.config.print_ast) try printAst(self.allocator, source, &lexer, &ast, &parser);
+        } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
+
+        // Analyzer
+        try self.analyzer.analyze(&ast);
+        defer self.analyzer.reinit();
 
         std.process.exit(0);
 
-        // Analyzer
-        // try self.analyzer.analyze(source, &lexer.tokens, &parser2.nodes);
-        // defer self.analyzer.reinit();
-        //
-        // // We don't keep errors/warnings from a prompt to another
+        // We don't keep errors/warnings from a prompt to another
         // defer self.analyzer.errs.clearRetainingCapacity();
         // defer self.analyzer.warns.clearRetainingCapacity();
         //
@@ -162,7 +148,7 @@ pub const Pipeline = struct {
     }
 };
 
-fn printAst(allocator: Allocator, source: [:0]const u8, lexer: *const Lexer, ast: *const Ast, parser: *const Parser) !void {
+fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
     var stdout = std.io.getStdOut().writer();
 
     if (parser.errs.items.len > 0) {
@@ -171,7 +157,7 @@ fn printAst(allocator: Allocator, source: [:0]const u8, lexer: *const Lexer, ast
             try stdout.writeAll("\n");
         }
     } else {
-        var renderer: AstRender = .init(allocator, source, lexer.tokens.items(.span));
+        var renderer: AstRender = .init(allocator, ast.source, ast.tokens.items(.span));
         try renderer.render(ast);
         try stdout.writeAll(renderer.output.items);
     }
