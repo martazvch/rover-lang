@@ -92,31 +92,31 @@ pub const Pipeline = struct {
         try self.analyzer.analyze(&ast);
         defer self.analyzer.reinit();
 
-        std.process.exit(0);
-
         // We don't keep errors/warnings from a prompt to another
-        // defer self.analyzer.errs.clearRetainingCapacity();
-        // defer self.analyzer.warns.clearRetainingCapacity();
-        //
-        // // Analyzed Ast printer
-        // if (options.test_mode and self.config.print_ir) {
-        //     try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
-        //     return error.ExitOnPrint;
-        // }
-        //
-        // if (self.analyzer.errs.items.len > 0) {
-        //     var reporter = GenReporter(AnalyzerMsg).init(source);
-        //     try reporter.report_all(filename, self.analyzer.errs.items);
-        //
-        //     if (self.analyzer.warns.items.len > 0) {
-        //         reporter = GenReporter(AnalyzerMsg).init(source);
-        //         try reporter.report_all(filename, self.analyzer.warns.items);
-        //     }
-        //
-        //     self.instr_count = self.analyzer.instructions.len;
-        //     return error.ExitOnPrint;
-        // } else if (self.config.print_ir)
-        //     try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        defer self.analyzer.errs.clearRetainingCapacity();
+        defer self.analyzer.warns.clearRetainingCapacity();
+
+        // Analyzed Ast printer
+        if (options.test_mode and self.config.print_ir) {
+            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+            return error.ExitOnPrint;
+        }
+
+        if (self.analyzer.errs.items.len > 0) {
+            var reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, self.analyzer.errs.items);
+
+            if (self.analyzer.warns.items.len > 0) {
+                reporter = GenReporter(AnalyzerMsg).init(source);
+                try reporter.report_all(filename, self.analyzer.warns.items);
+            }
+
+            self.instr_count = self.analyzer.instructions.len;
+            return error.ExitOnPrint;
+        } else if (self.config.print_ir)
+            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+
+        std.process.exit(0);
 
         //
         // // Analyzer warnings

@@ -413,7 +413,7 @@ fn multiVarDecl(self: *Self, first_name: usize) !Node {
             .expect = variables.items.len + 1,
         } });
 
-    return .{ .multi_var_decl = try decls.toOwnedSlice(self.allocator) };
+    return .{ .multi_var_decl = .{ .decls = try decls.toOwnedSlice(self.allocator) } };
 }
 
 /// Expects a type after ':'. If no colon, declares an empty type
@@ -433,6 +433,8 @@ fn parseType(self: *Self) Error!*Ast.Type {
     if (self.isIdentOrType()) {
         typ.* = .{ .scalar = self.token_idx - 1 };
     } else if (self.match(.@"fn")) {
+        var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
+
         var params: ArrayListUnmanaged(*Ast.Type) = .{};
         try self.expect(.left_paren, .expect_paren_after_fn_name);
 
@@ -450,9 +452,12 @@ fn parseType(self: *Self) Error!*Ast.Type {
         else
             null;
 
+        span.end = self.token_idx - 1;
+
         typ.* = .{ .function = .{
             .params = try params.toOwnedSlice(self.allocator),
             .return_type = return_type,
+            .span = span,
         } };
     } else {
         return self.errAtCurrent(.expect_type_name);
@@ -488,7 +493,7 @@ fn use(self: *Self) Error!Node {
         break;
     }
 
-    return .{ .use = try names.toOwnedSlice(self.allocator) };
+    return .{ .use = .{ .names = try names.toOwnedSlice(self.allocator) } };
 }
 
 fn statement(self: *Self) Error!Node {

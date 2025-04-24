@@ -53,9 +53,9 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         .fn_decl => |*n| try self.renderFnDecl(n, comma),
         .multi_var_decl => |n| {
             try self.openKey(@tagName(node.*), .list);
-            for (n, 0..) |*decl, i| {
+            for (n.decls, 0..) |*decl, i| {
                 try self.openKey("var_decl", .block);
-                try self.renderNameTypeValue(decl, i != n.len - 1);
+                try self.renderNameTypeValue(decl, i != n.decls.len - 1);
                 try self.closeKey(.block, comma);
             }
             try self.closeKey(.list, comma);
@@ -97,8 +97,8 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         },
         .use => |n| {
             try self.openKey("use", .list);
-            for (n, 0..) |name, i| {
-                const last = i != n.len - 1;
+            for (n.names, 0..) |name, i| {
+                const last = i != n.names.len - 1;
                 try self.indent();
                 try self.writer.print("\"{s}\"", .{self.spanToSrc(name)});
                 try self.finishPush(last);

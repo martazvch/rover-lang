@@ -4,7 +4,7 @@ const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
 const Interner = @import("../interner.zig").Interner;
-const AnalyzerReport = @import("analyzer.zig").Analyzer.AnalyzerReport;
+const AnalyzerReport = @import("analyzer.zig").AnalyzerReport;
 const Ast = @import("ast.zig");
 const Instruction = @import("rir.zig").Instruction;
 const Node = @import("ast.zig").Node;

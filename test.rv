@@ -1,5 +1,1 @@
-while true {}
-while {true} {
-    var tmp = 1+5
-}
-
+1

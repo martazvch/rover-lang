@@ -154,7 +154,7 @@ allocator: Allocator,
 repl: bool,
 
 const Self = @This();
-const Error = error{ Err, Overflow } || TypeManager.Error || Allocator.Error;
+const Error = error{ Err, UndeclaredVar, UninitVar } || TypeManager.Error || Allocator.Error;
 
 const Variable = struct {
     index: usize = 0,
@@ -252,40 +252,21 @@ pub fn analyze(
     for (ast.nodes) |*node| {
         const node_type = self.analyzeNode(node) catch |e| {
             switch (e) {
-                error.TooManyTypes => return self.err(.TooManyTypes, ast.toSpan(node)),
+                error.TooManyTypes => return self.err(.TooManyTypes, node.getSpan(ast)),
                 else => return e,
             }
         };
+        _ = node_type; // autofix
 
-        if (node_type != .void) {
-            self.err(.UnusedValue, ast.toSpan(node)) catch {};
-        }
+        // if (node_type != .void) {
+        //     self.err(.UnusedValue, node.getSpan(ast)) catch {};
+        // }
     }
 
-    // while (self.node_idx < self.node_data.len) {
-    //     const start = self.node_idx;
-    //
-    //     const node_type = self.analyze_node(self.node_idx) catch |e| {
-    //         switch (e) {
-    //             // If it's our own error, we continue
-    //             error.Err => {
-    //                 self.node_idx = self.node_ends[start];
-    //                 continue;
-    //             },
-    //             error.TooManyTypes => return self.err(.TooManyTypes, self.to_span(self.node_idx)),
-    //             else => return e,
-    //         }
-    //     };
-    //
-    //     if (node_type != .void) {
-    //         self.err(.UnusedValue, self.to_span(start)) catch {};
-    //     }
-    // }
-
     // In REPL mode, no need for main function
-    if (self.repl)
-        return
-    else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+    // if (self.repl)
+    //     return
+    // else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
 }
 
 fn analyzeNode(self: *Self, node: *const Node) Error!Type {
@@ -350,13 +331,30 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return final;
 }
 
-fn toSource(self: *const Self, node: anytype) []const u8 {
-    return self.ast.toSource(@ptrCast(node));
+/// Adds a new instruction and add it's `start` field and returns its index.
+fn addInstr(self: *Self, instr: Instruction) !usize {
+    try self.instructions.append(self.allocator, .{
+        .tag = instr.tag,
+        .data = instr.data,
+    });
+    return self.instructions.len - 1;
+}
+
+fn is_numeric(t: Type) bool {
+    return t == .int or t == .float;
+}
+
+fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
+    try self.errs.append(AnalyzerReport.err(kind, span));
+    return error.Err;
+}
+
+fn warn(self: *Self, kind: AnalyzerMsg, span: Span) !void {
+    try self.warns.append(AnalyzerReport.warn(kind, span));
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
-    const span = self.ast.tokens.items(.span)[expr.idx];
-    const text = self.ast.source[span.start..span.end];
+    const text = self.ast.toSource(expr);
 
     switch (expr.tag) {
         .bool => {
@@ -365,6 +363,15 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
             } });
 
             return .bool;
+        },
+        .identifier => {
+            const variable = self.identifier(text, true) catch |e| return switch (e) {
+                error.UninitVar => self.err(.{ .UseUninitVar = .{ .name = text } }, expr.getSpan(self.ast)),
+                error.UndeclaredVar => self.err(.{ .UndeclaredVar = .{ .name = text } }, expr.getSpan(self.ast)),
+                else => e,
+            };
+
+            return variable.typ;
         },
         .int => {
             const value = std.fmt.parseInt(isize, text, 10) catch blk: {
@@ -387,19 +394,90 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
             return .float;
         },
         .null => {
-            _ = try self.addInstr(.{ .tag = .Null, .data = undefined });
+            _ = try self.addInstr(.{ .tag = .null, .data = undefined });
 
             return .null;
         },
         .string => {
             // Removes the quotes
             const value = try self.interner.intern(text[1 .. text.len - 1]);
-            _ = try self.addInstr(.{ .tag = .String, .data = .{ .Id = value } });
+            _ = try self.addInstr(.{ .tag = .string, .data = .{ .Id = value } });
 
             return .str;
         },
-        else => unreachable,
     }
+}
+
+fn identifier(self: *Self, name: []const u8, initialized: bool) Error!*Variable {
+    const variable = try self.resolveIdentifier(name, initialized);
+
+    if (variable.kind == .normal) {
+        self.checkCapture(variable);
+        _ = try self.addInstr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } });
+    } else {
+        // Params and imports aren't declared so we can't reference them, they just live on stack
+        // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
+        _ = try self.addInstr(
+            .{ .tag = .Identifier, .data = .{ .Variable = .{
+                .index = @intCast(variable.index),
+                .scope = if (variable.depth > 0) .local else .global,
+            } } },
+        );
+    }
+
+    return variable;
+}
+
+/// Checks if a variable is in local scope, enclosing scope or global scope. Check if its state
+/// is `initialized`, otherwise return an error.
+fn resolveIdentifier(self: *Self, name: []const u8, initialized: bool) Error!*Variable {
+    const name_idx = try self.interner.intern(name);
+
+    // We first check in locals
+    if (self.locals.items.len > 0) {
+        var idx = self.locals.items.len;
+
+        while (idx > 0) : (idx -= 1) {
+            const local = &self.locals.items[idx - 1];
+
+            if (name_idx == local.name) {
+                // Checks the initialization if asked
+                if (initialized and !local.initialized) {
+                    return error.UninitVar;
+                }
+
+                return local;
+            }
+        }
+    }
+
+    // TODO: in reverse? People tend to use latest declared variables
+    for (self.globals.items) |*glob| {
+        if (name_idx == glob.name) {
+            if (initialized and !glob.initialized) {
+                return error.UninitVar;
+            }
+
+            return glob;
+        }
+    }
+
+    // Else, it's undeclared
+    return error.UndeclaredVar;
+}
+
+/// Check if the variable needs to be captured and captures it if so
+fn checkCapture(self: *Self, variable: *Variable) void {
+    // If it's a global variable or if it's been declared in current function's frame
+    // or already captured, return
+    if (variable.index >= self.local_offset or variable.depth == 0 or variable.captured) return;
+
+    variable.captured = true;
+    variable.index = self.heap_count;
+    self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .heap;
+    // TODO: protect the cast?
+    self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
+    self.heap_count += 1;
 }
 
 fn get_fn_type_name(self: *const Self, typ: Type) ![]const u8 {
@@ -419,28 +497,6 @@ fn get_fn_type_name(self: *const Self, typ: Type) ![]const u8 {
     try writer.print(") -> {s}", .{self.get_type_name(decl.return_type)});
 
     return try res.toOwnedSlice(self.allocator);
-}
-
-/// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstr(self: *Self, instr: Instruction) !usize {
-    try self.instructions.append(self.allocator, .{
-        .tag = instr.tag,
-        .data = instr.data,
-    });
-    return self.instructions.len - 1;
-}
-
-fn is_numeric(t: Type) bool {
-    return t == .int or t == .float;
-}
-
-fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
-    try self.errs.append(AnalyzerReport.err(kind, span));
-    return error.Err;
-}
-
-fn warn(self: *Self, kind: AnalyzerMsg, span: Span) !void {
-    try self.warns.append(AnalyzerReport.warn(kind, span));
 }
 
 fn source_from_node(self: *const Self, node: Node.Index) []const u8 {
@@ -641,7 +697,7 @@ fn assignment(self: *Self, _: Node.Index) !void {
     var cast = false;
 
     const assigne_idx = self.node_idx;
-    const idx = try self.add_instr(.{ .tag = .Assignment }, assigne_idx);
+    const idx = try self.addInstr(.{ .tag = .Assignment }, assigne_idx);
 
     // switch (self.node_tags[assigne_idx]) {
     //     .Identifier => {
@@ -668,7 +724,7 @@ fn assignment(self: *Self, _: Node.Index) !void {
     //             // One case in wich we can coerce; int -> float
     //             if (assigne.typ == .float and value_type == .int) {
     //                 cast = true;
-    //                 _ = try self.add_instr(
+    //                 _ = try self.addInstr(
     //                     .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
     //                     assigne_idx,
     //                 );
@@ -732,7 +788,7 @@ fn assignment(self: *Self, _: Node.Index) !void {
         // One case in wich we can coerce; int -> float
         if (assigne_type == .float and value_type == .int) {
             cast = true;
-            _ = try self.add_instr(
+            _ = try self.addInstr(
                 .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
                 assigne_idx,
             );
@@ -755,7 +811,7 @@ fn assignment(self: *Self, _: Node.Index) !void {
 
 fn binop(self: *Self, node: Node.Index) Error!Type {
     const op = self.node_tags[node];
-    const idx = try self.add_instr(.{ .tag = .Binop }, node);
+    const idx = try self.addInstr(.{ .tag = .Binop }, node);
 
     self.node_idx += 1;
     const lhs_index = self.node_idx;
@@ -980,7 +1036,7 @@ fn block(self: *Self, node: Node.Index) Error!Type {
     self.scope_depth += 1;
     errdefer self.scope_depth -= 1;
 
-    const idx = try self.add_instr(.{ .tag = .Block, .data = undefined }, node);
+    const idx = try self.addInstr(.{ .tag = .Block, .data = undefined }, node);
 
     var final: Type = .void;
     self.node_idx += 1;
@@ -1005,7 +1061,7 @@ fn block(self: *Self, node: Node.Index) Error!Type {
 }
 
 // fn bool_lit(self: *Self, node: Node.Index) !Type {
-//     _ = try self.add_instr(.{ .tag = .Bool, .data = .{
+//     _ = try self.addInstr(.{ .tag = .Bool, .data = .{
 //         .Bool = if (self.token_tags[self.node_mains[node]] == .true) true else false,
 //     } }, node);
 //
@@ -1018,7 +1074,7 @@ fn call(self: *Self, node: Node.Index) Error!Type {
     const arity = self.node_data[node];
     self.node_idx += 1;
 
-    const idx = try self.add_instr(.{ .tag = .call, .data = .{ .call = .{
+    const idx = try self.addInstr(.{ .tag = .call, .data = .{ .call = .{
         .arity = @intCast(arity),
         .builtin = undefined,
     } } }, node);
@@ -1047,7 +1103,7 @@ fn call(self: *Self, node: Node.Index) Error!Type {
 }
 
 fn discard(self: *Self, node: Node.Index) !void {
-    _ = try self.add_instr(.{ .tag = .Discard }, node);
+    _ = try self.addInstr(.{ .tag = .Discard }, node);
 
     self.node_idx += 1;
     const discarded = try self.analyze_node(self.node_idx);
@@ -1056,7 +1112,7 @@ fn discard(self: *Self, node: Node.Index) !void {
 }
 
 fn field(self: *Self) !Type {
-    const idx = try self.add_instr(.{ .tag = .field }, self.node_idx);
+    const idx = try self.addInstr(.{ .tag = .field }, self.node_idx);
     self.node_idx += 1;
 
     const struct_type = try self.analyze_node(self.node_idx);
@@ -1089,7 +1145,7 @@ fn field(self: *Self) !Type {
 //         break :blk 0.0;
 //     };
 //
-//     _ = try self.add_instr(
+//     _ = try self.addInstr(
 //         .{ .tag = .Float, .data = .{ .Float = value } },
 //         node,
 //     );
@@ -1108,7 +1164,7 @@ fn fn_call(self: *Self, instr: usize, infos: TypeSys.FnInfo) Error!Type {
             // If it's an implicit cast between int and float, save the
             // argument indices for compiler. Otherwise, error
             if (infos.params[i] == .float and arg_type == .int) {
-                _ = try self.add_instr(
+                _ = try self.addInstr(
                     .{ .tag = .Cast, .data = .{ .CastTo = .Float } },
                     arg_idx,
                 );
@@ -1169,16 +1225,16 @@ fn fn_declaration(self: *Self, node: Node.Index) Error!void {
 
     // Check in current scope
     const arity = self.node_data[node];
-    const fn_idx = try self.add_instr(.{ .tag = .FnDecl, .data = undefined }, node);
+    const fn_idx = try self.addInstr(.{ .tag = .FnDecl, .data = undefined }, node);
     // We add function's name for runtime access
-    _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name_idx } }, node);
+    _ = try self.addInstr(.{ .tag = .Name, .data = .{ .Id = name_idx } }, node);
 
     // We declare before body for recursion and before parameters to put it as the first local
     const type_idx = try self.type_manager.reserve_info();
     const fn_type = TypeSys.create(.func, .none, type_idx);
     const fn_var = try self.declare_variable(name_idx, fn_type, true, self.instructions.len, .func);
 
-    _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
+    _ = try self.addInstr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = fn_var, .cast = false } } }, node);
 
     self.scope_depth += 1;
     self.local_offset = self.locals.items.len;
@@ -1360,93 +1416,93 @@ fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
 
     return false;
 }
-
-fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
-    const variable = try self.resolve_identifier(node, initialized);
-
-    if (variable.kind == .normal) {
-        self.check_capture(variable);
-        _ = try self.add_instr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
-    } else {
-        // Params and imports aren't declared so we can't reference them, they just live on stack
-        // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
-        _ = try self.add_instr(
-            .{ .tag = .Identifier, .data = .{ .Variable = .{
-                .index = @intCast(variable.index),
-                .scope = if (variable.depth > 0) .local else .global,
-            } } },
-            node,
-        );
-    }
-
-    return variable;
-}
-
-/// Checks if a variable is in local scope, enclosing scope or global scope. Check if its state
-/// is `initialized`, otherwise return an error.
-fn resolve_identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
-    self.node_idx += 1;
-    const name = self.source_from_node(node);
-    const name_idx = try self.interner.intern(name);
-
-    // We first check in locals
-    if (self.locals.items.len > 0) {
-        var idx = self.locals.items.len;
-
-        while (idx > 0) : (idx -= 1) {
-            const local = &self.locals.items[idx - 1];
-
-            if (name_idx == local.name) {
-                // Checks the initialization if asked
-                if (initialized and !local.initialized) {
-                    return self.err(
-                        .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
-                        self.to_span(node),
-                    );
-                }
-
-                return local;
-            }
-        }
-    }
-
-    // TODO: in reverse? People tend to use latest declared variables
-    for (self.globals.items) |*glob| {
-        if (name_idx == glob.name) {
-            if (initialized and !glob.initialized) {
-                return self.err(
-                    .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
-                    self.to_span(node),
-                );
-            }
-
-            return glob;
-        }
-    }
-
-    // Else, it's undeclared
-    return self.err(
-        .{ .UndeclaredVar = .{ .name = self.interner.get_key(name_idx).? } },
-        self.to_span(node),
-    );
-}
-
-/// Check if the variable needs to be captured and captures it if so
-fn check_capture(self: *Self, variable: *Variable) void {
-    // If it's a global variable or if it's been declared in current function's frame
-    // or already captured, return
-    if (variable.index >= self.local_offset or variable.depth == 0 or variable.captured) return;
-
-    variable.captured = true;
-    variable.index = self.heap_count;
-    self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .heap;
-    // TODO: protect the cast?
-    self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
-    self.heap_count += 1;
-}
+//
+// fn identifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
+//     const variable = try self.resolveIdentifier(node, initialized);
+//
+//     if (variable.kind == .normal) {
+//         self.checkCapture(variable);
+//         _ = try self.addInstr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } }, node);
+//     } else {
+//         // Params and imports aren't declared so we can't reference them, they just live on stack
+//         // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
+//         _ = try self.addInstr(
+//             .{ .tag = .Identifier, .data = .{ .Variable = .{
+//                 .index = @intCast(variable.index),
+//                 .scope = if (variable.depth > 0) .local else .global,
+//             } } },
+//             node,
+//         );
+//     }
+//
+//     return variable;
+// }
+//
+// /// Checks if a variable is in local scope, enclosing scope or global scope. Check if its state
+// /// is `initialized`, otherwise return an error.
+// fn resolveIdentifier(self: *Self, node: Node.Index, initialized: bool) Error!*Variable {
+//     self.node_idx += 1;
+//     const name = self.source_from_node(node);
+//     const name_idx = try self.interner.intern(name);
+//
+//     // We first check in locals
+//     if (self.locals.items.len > 0) {
+//         var idx = self.locals.items.len;
+//
+//         while (idx > 0) : (idx -= 1) {
+//             const local = &self.locals.items[idx - 1];
+//
+//             if (name_idx == local.name) {
+//                 // Checks the initialization if asked
+//                 if (initialized and !local.initialized) {
+//                     return self.err(
+//                         .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+//                         self.to_span(node),
+//                     );
+//                 }
+//
+//                 return local;
+//             }
+//         }
+//     }
+//
+//     // TODO: in reverse? People tend to use latest declared variables
+//     for (self.globals.items) |*glob| {
+//         if (name_idx == glob.name) {
+//             if (initialized and !glob.initialized) {
+//                 return self.err(
+//                     .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+//                     self.to_span(node),
+//                 );
+//             }
+//
+//             return glob;
+//         }
+//     }
+//
+//     // Else, it's undeclared
+//     return self.err(
+//         .{ .UndeclaredVar = .{ .name = self.interner.get_key(name_idx).? } },
+//         self.to_span(node),
+//     );
+// }
+//
+// /// Check if the variable needs to be captured and captures it if so
+// fn checkCapture(self: *Self, variable: *Variable) void {
+//     // If it's a global variable or if it's been declared in current function's frame
+//     // or already captured, return
+//     if (variable.index >= self.local_offset or variable.depth == 0 or variable.captured) return;
+//
+//     variable.captured = true;
+//     variable.index = self.heap_count;
+//     self.instructions.items(.data)[variable.decl].VarDecl.variable.scope = .heap;
+//     // TODO: protect the cast?
+//     self.instructions.items(.data)[variable.decl].VarDecl.variable.index = @intCast(self.heap_count);
+//     self.heap_count += 1;
+// }
 
 fn if_expr(self: *Self, node: Node.Index) Error!Type {
-    const idx = try self.add_instr(.{ .tag = .@"if", .data = undefined }, node);
+    const idx = try self.addInstr(.{ .tag = .@"if", .data = undefined }, node);
     self.node_idx += 1;
     var data: Instruction.@"if" = .{ .cast = .none, .has_else = false };
 
@@ -1545,7 +1601,7 @@ fn if_expr(self: *Self, node: Node.Index) Error!Type {
 //         break :blk 0;
 //     };
 //
-//     _ = try self.add_instr(.{ .tag = .Int, .data = .{ .Int = value } }, node);
+//     _ = try self.addInstr(.{ .tag = .Int, .data = .{ .Int = value } }, node);
 //     self.node_idx += 1;
 //
 //     return .int;
@@ -1554,7 +1610,7 @@ fn if_expr(self: *Self, node: Node.Index) Error!Type {
 fn multi_var_decl(self: *Self, node: Node.Index) !void {
     const count = self.node_mains[node];
     self.node_idx += 1;
-    _ = try self.add_instr(.{ .tag = .MultipleVarDecl, .data = .{ .Id = count } }, self.node_idx);
+    _ = try self.addInstr(.{ .tag = .MultipleVarDecl, .data = .{ .Id = count } }, self.node_idx);
 
     for (0..count) |_| {
         try self.var_decl(self.node_idx);
@@ -1562,14 +1618,14 @@ fn multi_var_decl(self: *Self, node: Node.Index) !void {
 }
 
 // fn null_lit(self: *Self) !Type {
-//     _ = try self.add_instr(.{ .tag = .null, .data = undefined }, self.node_idx);
+//     _ = try self.addInstr(.{ .tag = .null, .data = undefined }, self.node_idx);
 //     self.node_idx += 1;
 //
 //     return .null;
 // }
 
 fn print(self: *Self, _: Node.Index) !void {
-    _ = try self.add_instr(.{ .tag = .print, .data = undefined }, self.node_idx);
+    _ = try self.addInstr(.{ .tag = .print, .data = undefined }, self.node_idx);
     self.node_idx += 1;
     const expr_idx = self.node_idx;
     const typ = try self.analyze_node(self.node_idx);
@@ -1581,7 +1637,7 @@ fn print(self: *Self, _: Node.Index) !void {
 fn return_expr(self: *Self, node: Node.Index) Error!Type {
     self.node_idx += 1;
 
-    const idx = try self.add_instr(.{ .tag = .@"return", .data = .{ .@"return" = .{
+    const idx = try self.addInstr(.{ .tag = .@"return", .data = .{ .@"return" = .{
         .value = false,
         .cast = false,
     } } }, node);
@@ -1604,7 +1660,7 @@ fn return_expr(self: *Self, node: Node.Index) Error!Type {
     if (!self.check_equal_fn_types(self.state.fn_type, return_type)) {
         if (self.state.fn_type == .float and return_type == .int) {
             self.instructions.items(.data)[idx].@"return".cast = true;
-            _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
+            _ = try self.addInstr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
         } else return self.err(
             .{ .IncompatibleFnType = .{
                 .expect = self.get_type_name(self.state.fn_type),
@@ -1622,7 +1678,7 @@ fn return_expr(self: *Self, node: Node.Index) Error!Type {
 //     const source = self.source_from_node(node);
 //     // Removes the quotes
 //     const value = try self.interner.intern(source[1 .. source.len - 1]);
-//     _ = try self.add_instr(.{ .tag = .string, .data = .{ .Id = value } }, node);
+//     _ = try self.addInstr(.{ .tag = .string, .data = .{ .Id = value } }, node);
 //     self.node_idx += 1;
 //
 //     return .str;
@@ -1641,10 +1697,10 @@ fn structure(self: *Self, node: Node.Index) !Type {
     const struct_type = TypeSys.create(.@"struct", .none, type_idx);
     const struct_var = try self.declare_variable(name, struct_type, true, self.instructions.len, .@"struct");
 
-    const struct_idx = try self.add_instr(.{ .tag = .struct_decl, .data = undefined }, node);
+    const struct_idx = try self.addInstr(.{ .tag = .struct_decl, .data = undefined }, node);
     // We add function's name for runtime access
-    _ = try self.add_instr(.{ .tag = .Name, .data = .{ .Id = name } }, node);
-    _ = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
+    _ = try self.addInstr(.{ .tag = .Name, .data = .{ .Id = name } }, node);
+    _ = try self.addInstr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
 
     self.scope_depth += 1;
     errdefer _ = self.end_scope() catch @panic("oom");
@@ -1683,7 +1739,7 @@ fn structure(self: *Self, node: Node.Index) !Type {
                 field_infos.default = true;
                 default_value_fields += 1;
 
-                _ = try self.add_instr(.{ .tag = .field, .data = .{ .field = i } }, self.node_idx);
+                _ = try self.addInstr(.{ .tag = .field, .data = .{ .field = i } }, self.node_idx);
                 break :blk try self.analyze_node(self.node_idx);
             } else {
                 self.node_idx += 1;
@@ -1741,9 +1797,9 @@ fn structure(self: *Self, node: Node.Index) !Type {
 fn struct_literal(self: *Self, node: Node.Index) !Type {
     const arity = self.node_data[self.node_idx];
     self.node_idx += 1;
-    const decl = try self.resolve_identifier(self.node_idx, true);
+    const decl = try self.resolveIdentifier(self.node_idx, true);
 
-    const struct_lit_idx = try self.add_instr(.{
+    const struct_lit_idx = try self.addInstr(.{
         .tag = .struct_literal,
         .data = .{ .struct_literal = .{ .variable = decl.to_var(), .arity = arity, .end = 0 } },
     }, node);
@@ -1809,7 +1865,7 @@ fn struct_literal(self: *Self, node: Node.Index) !Type {
 
 fn unary(self: *Self, node: Node.Index) Error!Type {
     const op = self.token_tags[self.node_mains[node]];
-    const idx = try self.add_instr(.{
+    const idx = try self.addInstr(.{
         .tag = .Unary,
         .data = .{ .Unary = .{
             .op = if (op == .not) .bang else .minus,
@@ -1838,7 +1894,7 @@ fn unary(self: *Self, node: Node.Index) Error!Type {
 }
 
 fn use(self: *Self, node: Node.Index) !void {
-    const idx = try self.add_instr(.{ .tag = .use, .data = undefined }, node);
+    const idx = try self.addInstr(.{ .tag = .use, .data = undefined }, node);
     self.node_idx += 1;
 
     var count: usize = 0;
@@ -1851,7 +1907,7 @@ fn use(self: *Self, node: Node.Index) !void {
     if (name == self.std_interned) {
         // TODO: For now, il allows to keep synchronized the different arrays of
         // nodes/instructions
-        _ = try self.add_instr(.{ .tag = .null, .data = undefined }, 0);
+        _ = try self.addInstr(.{ .tag = .null, .data = undefined }, 0);
 
         // TODO: support real imports
         if (self.node_data[node] > 2) @panic("Use statements can't import more than std + one module");
@@ -1879,7 +1935,7 @@ fn use(self: *Self, node: Node.Index) !void {
                     // Declare the variable
                     const variable = try self.declare_variable(name_idx, typ, true, self.node_idx, .import);
 
-                    _ = try self.add_instr(.{ .tag = .Imported, .data = .{ .Imported = .{
+                    _ = try self.addInstr(.{ .tag = .Imported, .data = .{ .Imported = .{
                         .index = func.index,
                         .variable = variable,
                     } } }, node);
@@ -1910,7 +1966,7 @@ fn var_decl(self: *Self, node: Node.Index) !void {
     var checked_type = try self.check_and_get_type();
     const value_idx = self.node_idx;
 
-    const idx = try self.add_instr(.{ .tag = .VarDecl, .data = .{ .VarDecl = undefined } }, node);
+    const idx = try self.addInstr(.{ .tag = .VarDecl, .data = .{ .VarDecl = undefined } }, node);
 
     var initialized = false;
     var cast = false;
@@ -1935,7 +1991,7 @@ fn var_decl(self: *Self, node: Node.Index) !void {
             // One case in wich we can coerce, int -> float
             if (checked_type == .float and value_type == .int) {
                 cast = true;
-                _ = try self.add_instr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, type_idx);
+                _ = try self.addInstr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, type_idx);
             } else {
                 return self.err(
                     .{ .InvalidAssignType = .{
@@ -1949,7 +2005,7 @@ fn var_decl(self: *Self, node: Node.Index) !void {
 
         initialized = true;
     } else {
-        _ = try self.add_instr(.{ .tag = .null }, node);
+        _ = try self.addInstr(.{ .tag = .null }, node);
         self.node_idx += 1;
     }
 
@@ -1960,7 +2016,7 @@ fn var_decl(self: *Self, node: Node.Index) !void {
 fn while_stmt(self: *Self, _: Node.Index) Error!void {
     self.node_idx += 1;
     const cond_idx = self.node_idx;
-    _ = try self.add_instr(.{ .tag = .@"while" }, cond_idx);
+    _ = try self.addInstr(.{ .tag = .@"while" }, cond_idx);
     const cond_type = try self.analyze_node(cond_idx);
 
     if (cond_type != .bool) return self.err(
