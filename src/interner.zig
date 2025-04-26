@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StringHashMap = std.StringHashMap;
+const oom = @import("utils.zig").oom;
 
 pub const Interner = struct {
     map: StringHashMap(usize),
@@ -17,8 +18,8 @@ pub const Interner = struct {
         self.map.deinit();
     }
 
-    pub fn intern(self: *Self, str: []const u8) !usize {
-        const entry = try self.map.getOrPut(str);
+    pub fn intern(self: *Self, str: []const u8) usize {
+        const entry = self.map.getOrPut(str) catch oom();
 
         if (!entry.found_existing) {
             entry.value_ptr.* = self.map.count() - 1;
@@ -27,7 +28,7 @@ pub const Interner = struct {
         return entry.value_ptr.*;
     }
 
-    pub fn get_key(self: *const Self, index: usize) ?[]const u8 {
+    pub fn getKey(self: *const Self, index: usize) ?[]const u8 {
         var it = self.map.iterator();
 
         while (it.next()) |entry| {
@@ -45,11 +46,11 @@ test "intern" {
     var interner = Interner.init(testing.allocator);
     defer interner.deinit();
 
-    try expect(try interner.intern("first") == 0);
-    try expect(try interner.intern("second") == 1);
-    try expect(try interner.intern("first") == 0);
-    try expect(try interner.intern("third") == 2);
-    try expect(try interner.intern("third") == 2);
-    try expect(try interner.intern("third") == 2);
-    try expect(try interner.intern("first") == 0);
+    try expect(interner.intern("first") == 0);
+    try expect(interner.intern("second") == 1);
+    try expect(interner.intern("first") == 0);
+    try expect(interner.intern("third") == 2);
+    try expect(interner.intern("third") == 2);
+    try expect(interner.intern("third") == 2);
+    try expect(interner.intern("first") == 0);
 }

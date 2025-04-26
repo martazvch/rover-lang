@@ -4,7 +4,8 @@ const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
 
 source: [:0]const u8,
-tokens: *const std.MultiArrayList(Token),
+token_tags: []const Token.Tag,
+token_spans: []const Span,
 nodes: []Node,
 
 const Ast = @This();
@@ -48,7 +49,7 @@ pub const FnDecl = struct {
     return_type: ?*Type,
 
     pub fn getSpan(self: *const FnDecl, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.name];
+        return ast.token_spans[self.name];
     }
 };
 
@@ -68,7 +69,7 @@ pub const Param = struct {
     typ: *Type,
 
     pub fn getSpan(self: *const Param, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.name];
+        return ast.token_spans[self.name];
     }
 };
 
@@ -84,7 +85,7 @@ pub const Type = union(enum) {
     pub fn getSpan(self: *const Type, ast: *const Ast) Span {
         return switch (self.*) {
             .function => |t| t.span,
-            .scalar, .void => |t| ast.tokens.items(.span)[t],
+            .scalar, .void => |t| ast.token_spans[t],
         };
     }
 };
@@ -95,7 +96,7 @@ pub const StructDecl = struct {
     functions: []FnDecl,
 
     pub fn getSpan(self: *const StructDecl, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.name];
+        return ast.token_spans[self.name];
     }
 };
 
@@ -104,8 +105,8 @@ pub const Use = struct {
 
     pub fn getSpan(self: *const Use, ast: *const Ast) Span {
         return .{
-            .start = ast.tokens.items(.span)[self.names[0]].start,
-            .end = ast.tokens.items(.span)[self.names[self.names.len - 1]].end,
+            .start = ast.token_spans[self.names[0]].start,
+            .end = ast.token_spans[self.names[self.names.len - 1]].end,
         };
     }
 };
@@ -116,7 +117,7 @@ pub const VarDecl = struct {
     value: ?*Expr,
 
     pub fn getSpan(self: *const VarDecl, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.name];
+        return ast.token_spans[self.name];
     }
 };
 
@@ -176,7 +177,7 @@ pub const Field = struct {
     pub fn getSpan(self: *const Field, ast: *const Ast) Span {
         return .{
             .start = self.structure.getSpan(ast).start,
-            .end = ast.tokens.items(.span)[self.field].end,
+            .end = ast.token_spans[self.field].end,
         };
     }
 };
@@ -191,7 +192,7 @@ pub const FnCall = struct {
 };
 
 pub const Grouping = struct {
-    expr: ?*Expr,
+    expr: *Expr,
     span: Span,
 
     pub fn getSpan(self: *const Grouping, _: *const Ast) Span {
@@ -216,7 +217,7 @@ pub const Literal = struct {
     pub const Tag = enum { bool, float, identifier, int, null, string };
 
     pub fn getSpan(self: *const Literal, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.idx];
+        return ast.token_spans[self.idx];
     }
 };
 
@@ -225,7 +226,7 @@ pub const Return = struct {
     kw: TokenIndex,
 
     pub fn getSpan(self: *const Return, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.kw];
+        return ast.token_spans[self.kw];
     }
 };
 
@@ -234,7 +235,7 @@ pub const StructLiteral = struct {
     fields: []FieldAndValue,
 
     pub fn getSpan(self: *const StructLiteral, ast: *const Ast) Span {
-        return ast.tokens.items(.span)[self.name];
+        return ast.token_spans[self.name];
     }
 };
 
@@ -249,7 +250,7 @@ pub const Unary = struct {
 
     pub fn getSpan(self: *const Unary, ast: *const Ast) Span {
         return .{
-            .start = ast.tokens.items(.span)[self.op].start,
+            .start = ast.token_spans[self.op].start,
             .end = self.expr.getSpan(ast).end,
         };
     }

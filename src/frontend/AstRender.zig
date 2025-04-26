@@ -6,27 +6,27 @@ const Ast = @import("Ast.zig");
 const Span = @import("Lexer.zig").Span;
 
 allocator: Allocator = undefined,
-source: [:0]const u8,
+ast: *const Ast,
+
 output: std.ArrayListUnmanaged(u8) = .{},
 writer: std.ArrayListUnmanaged(u8).Writer = undefined,
 indent_level: usize = 1,
-token_spans: []const Span,
 
 const Self = @This();
 const Error = std.ArrayListUnmanaged(u8).Writer.Error;
 const spaces: []const u8 = " " ** 1024;
 const INDENT_SIZE = 4;
 
-pub fn init(allocator: Allocator, source: [:0]const u8, spans: []const Span) Self {
-    return .{ .allocator = allocator, .source = source, .output = .{}, .token_spans = spans };
+pub fn init(allocator: Allocator, ast: *const Ast) Self {
+    return .{ .allocator = allocator, .ast = ast };
 }
 
-pub fn render(self: *Self, ast: *const Ast) !void {
+pub fn render(self: *Self) !void {
     self.writer = self.output.writer(self.allocator);
     try self.writer.writeAll("{\n");
 
-    for (ast.nodes, 0..) |*node, i| {
-        try self.renderNode(node, i != ast.nodes.len - 1);
+    for (self.ast.nodes, 0..) |*node, i| {
+        try self.renderNode(node, i != self.ast.nodes.len - 1);
     }
 
     self.indent_level -= 1;
@@ -229,7 +229,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         },
         .grouping => |e| {
             try self.openKey(@tagName(expr.*), .block);
-            if (e.expr) |data| try self.renderExpr(data, false);
+            try self.renderExpr(e.expr, false);
             try self.closeKey(.block, comma);
         },
         .@"if" => |e| {
@@ -301,8 +301,8 @@ fn renderBlock(self: *Self, block: *const Ast.Block, comma: bool) !void {
 }
 
 fn spanToSrc(self: *Self, idx: usize) []const u8 {
-    const span = self.token_spans[idx];
-    return self.source[span.start..span.end];
+    const span = self.ast.token_spans[idx];
+    return self.ast.source[span.start..span.end];
 }
 
 const KeyTag = enum {

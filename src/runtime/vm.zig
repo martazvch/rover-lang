@@ -140,7 +140,7 @@ pub const Vm = struct {
         .heap_vars = undefined,
     };
 
-    pub fn init(self: *Self, allocator: Allocator, config: Config) !void {
+    pub fn init(self: *Self, allocator: Allocator, config: Config) void {
         self.allocator = allocator;
         // TODO: pass self instead of calling link after
         // TODO: pass an ObjectPoolAlloc?
@@ -148,7 +148,7 @@ pub const Vm = struct {
         self.gc_alloc = self.gc.allocator();
         self.stdout = std.io.getStdOut().writer();
         self.gc.link(self);
-        try self.pipeline.init(self, config);
+        self.pipeline.init(self, config);
         self.stack.init();
         self.strings = .init(self.allocator);
 

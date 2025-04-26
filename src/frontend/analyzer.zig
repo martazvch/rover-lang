@@ -5,6 +5,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 
+const oom = @import("../utils.zig").oom;
 const Interner = @import("../interner.zig").Interner;
 const GenReport = @import("../reporter.zig").GenReport;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
@@ -32,7 +33,7 @@ pub const TypeManager = struct {
     type_infos: ArrayList(TypeInfo),
     natives: BuiltinAnalyzer = builtin_init(),
 
-    const Error = error{TooManyTypes} || std.fmt.BufPrintError || Allocator.Error;
+    const Error = error{TooManyTypes};
 
     pub fn init(allocator: Allocator) TypeManager {
         return .{
@@ -41,14 +42,14 @@ pub const TypeManager = struct {
         };
     }
 
-    pub fn init_builtins(self: *TypeManager, interner: *Interner) !void {
-        try self.declared.put(try interner.intern("void"), .void);
-        try self.declared.put(try interner.intern("null"), .null);
-        try self.declared.put(try interner.intern("bool"), .bool);
-        try self.declared.put(try interner.intern("float"), .float);
-        try self.declared.put(try interner.intern("int"), .int);
-        try self.declared.put(try interner.intern("str"), .str);
-        try self.declared.put(try interner.intern("Self"), .self);
+    pub fn init_builtins(self: *TypeManager, interner: *Interner) void {
+        self.declared.put(interner.intern("void"), .void) catch oom();
+        self.declared.put(interner.intern("null"), .null) catch oom();
+        self.declared.put(interner.intern("bool"), .bool) catch oom();
+        self.declared.put(interner.intern("float"), .float) catch oom();
+        self.declared.put(interner.intern("int"), .int) catch oom();
+        self.declared.put(interner.intern("str"), .str) catch oom();
+        self.declared.put(interner.intern("Self"), .self) catch oom();
     }
 
     pub fn deinit(self: *TypeManager) void {
@@ -75,8 +76,8 @@ pub const TypeManager = struct {
     }
 
     /// Adds a type linked associated with the name
-    pub fn add_type(self: *TypeManager, name: usize, typ: Type) !void {
-        try self.declared.put(name, typ);
+    pub fn add_type(self: *TypeManager, name: usize, typ: Type) void {
+        self.declared.put(name, typ) catch oom();
     }
 
     /// Declares a new type built with `kind` and `extra` parameters and add the informations
@@ -87,9 +88,8 @@ pub const TypeManager = struct {
         if (count == std.math.maxInt(TypeSys.Value)) return error.TooManyTypes;
 
         const typ = TypeSys.create(kind, extra, @intCast(count));
-        try self.type_infos.append(info);
-
-        try self.declared.put(name, typ);
+        self.type_infos.append(info) catch oom();
+        self.declared.put(name, typ) catch oom();
 
         return typ;
     }
@@ -101,7 +101,7 @@ pub const TypeManager = struct {
 
     /// Use natives function whose informations are gathered at compile time. Import the
     /// informations among other declared types
-    pub fn import_natives(self: *TypeManager, name: []const u8) !?std.StaticStringMap(FnDeclaration) {
+    pub fn import_natives(self: *TypeManager, name: []const u8) ?std.StaticStringMap(FnDeclaration) {
         return self.natives.declarations.get(name);
     }
 
@@ -117,14 +117,6 @@ pub const TypeManager = struct {
     }
 };
 
-// source: []const u8,
-// token_tags: []const Token.Tag,
-// token_spans: []const Span,
-// node_tags: []const Node.Tag,
-// node_mains: []const TokenIndex,
-// node_data: []const usize,
-// node_ends: []const Node.Index,
-// node_idx: usize,
 ast: *const Ast,
 
 instructions: MultiArrayList(Instruction),
@@ -154,7 +146,7 @@ allocator: Allocator,
 repl: bool,
 
 const Self = @This();
-const Error = error{ Err, UndeclaredVar, UninitVar } || TypeManager.Error || Allocator.Error;
+const Error = error{ Err, UndeclaredVar, UninitVar } || TypeManager.Error;
 
 const Variable = struct {
     index: usize = 0,
@@ -193,7 +185,7 @@ const State = struct {
 
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
-pub fn init(self: *Self, allocator: Allocator, repl: bool) !void {
+pub fn init(self: *Self, allocator: Allocator, repl: bool) void {
     self.arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = self.arena.allocator();
 
@@ -202,29 +194,26 @@ pub fn init(self: *Self, allocator: Allocator, repl: bool) !void {
     self.errs = .init(self.allocator);
     self.globals = .init(self.allocator);
     self.locals = .init(self.allocator);
-    // self.node_idx = 0;
     self.scope_depth = 0;
     self.heap_count = 0;
 
-    // self.states = .init(self.allocator);
     self.state = .{};
     self.main = null;
     self.local_offset = 0;
     self.type_manager = TypeManager.init(self.allocator);
     self.interner = Interner.init(self.allocator);
 
-    self.main_interned = try self.interner.intern("main");
-    self.std_interned = try self.interner.intern("std");
-    self.self_interned = try self.interner.intern("self");
-    self.init_interned = try self.interner.intern("init");
+    self.main_interned = self.interner.intern("main");
+    self.std_interned = self.interner.intern("std");
+    self.self_interned = self.interner.intern("self");
+    self.init_interned = self.interner.intern("init");
 
-    try self.type_manager.init_builtins(&self.interner);
+    self.type_manager.init_builtins(&self.interner);
     self.repl = repl;
 }
 
 /// For REPL
 pub fn reinit(self: *Self) void {
-    // self.node_idx = 0;
     self.scope_depth = 0;
     self.local_offset = 0;
 }
@@ -233,20 +222,35 @@ pub fn deinit(self: *Self) void {
     self.arena.deinit();
 }
 
-pub fn analyze(
-    self: *Self,
-    ast: *const Ast,
-    // source: []const u8,
-    // tokens: *const MultiArrayList(Token),
-    // nodes: *const MultiArrayList(Node),
-) !void {
-    // self.source = source;
-    // self.token_tags = tokens.items(.tag);
-    // self.token_spans = tokens.items(.span);
-    // self.node_tags = nodes.items(.tag);
-    // self.node_mains = nodes.items(.main);
-    // self.node_data = nodes.items(.data);
-    // self.node_ends = nodes.items(.end);
+/// Adds a new instruction and add it's `start` field and returns its index.
+fn addInstr(self: *Self, instr: Instruction) usize {
+    self.instructions.append(self.allocator, .{
+        .tag = instr.tag,
+        .data = instr.data,
+    }) catch oom();
+
+    return self.instructions.len - 1;
+}
+
+fn isNumeric(self: *Self, expr: *const Expr, t: Type) Error!void {
+    if (t != .int and t != .float) {
+        return self.err(
+            AnalyzerMsg.invalid_arithmetic(self.getTypeName(t)),
+            expr.getSpan(self.ast),
+        );
+    }
+}
+
+fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
+    self.errs.append(AnalyzerReport.err(kind, span)) catch oom();
+    return error.Err;
+}
+
+fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
+    self.warns.append(AnalyzerReport.warn(kind, span)) catch oom();
+}
+
+pub fn analyze(self: *Self, ast: *const Ast) !void {
     self.ast = ast;
 
     for (ast.nodes) |*node| {
@@ -310,7 +314,7 @@ fn analyzeNode(self: *Self, node: *const Node) Error!Type {
     //     .string => final = try self.string(node),
     //     .StructDecl => final = try self.structure(node),
     //     .struct_literal => final = try self.struct_literal(node),
-    //     .Unary => final = try self.unary(node),
+    //     .unary => final = try self.unary(node),
     //     .use => try self.use(node),
     //     .VarDecl => try self.var_decl(node),
     //     .@"while" => try self.while_stmt(node),
@@ -324,33 +328,215 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     var final: Type = .void;
 
     switch (expr.*) {
+        .binop => |*e| final = try self.binop(e),
+        .grouping => |*e| final = try self.analyzeExpr(e.expr),
         .literal => |*e| final = try self.literal(e),
+        .unary => |*e| final = try self.unary(e),
         else => {},
     }
 
     return final;
 }
 
-/// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstr(self: *Self, instr: Instruction) !usize {
-    try self.instructions.append(self.allocator, .{
-        .tag = instr.tag,
-        .data = instr.data,
-    });
-    return self.instructions.len - 1;
-}
+fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
+    const op = self.ast.token_tags[expr.op];
+    const idx = self.addInstr(.{ .tag = .binop });
 
-fn is_numeric(t: Type) bool {
-    return t == .int or t == .float;
-}
+    const lhs = try self.analyzeExpr(expr.lhs);
+    const rhs = try self.analyzeExpr(expr.rhs);
 
-fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
-    try self.errs.append(AnalyzerReport.err(kind, span));
-    return error.Err;
-}
+    var res = lhs;
 
-fn warn(self: *Self, kind: AnalyzerMsg, span: Span) !void {
-    try self.warns.append(AnalyzerReport.warn(kind, span));
+    // String operations
+    if (op == .plus and lhs == .str and rhs == .str) {
+        self.instructions.items(.data)[idx] = .{ .binop = .{ .op = .add_str } };
+        return .str;
+    } else if (op == .star) {
+        if ((lhs == .str and rhs == .int) or (lhs == .int and rhs == .str)) {
+            self.instructions.items(.data)[idx] = .{ .binop = .{
+                .cast = if (rhs == .int) .rhs else .lhs,
+                .op = .mul_str,
+            } };
+
+            return .str;
+        }
+    }
+
+    // Error check
+    switch (op) {
+        .plus, .slash, .star, .minus, .greater_equal, .greater, .less_equal, .less => {
+            try self.isNumeric(expr.lhs, lhs);
+            try self.isNumeric(expr.rhs, rhs);
+        },
+        else => {},
+    }
+
+    var data: Instruction.Binop = .{ .op = undefined };
+
+    switch (op) {
+        // Arithmetic binop
+        .plus, .slash, .star, .minus => {
+            switch (op) {
+                .plus => data.op = .add_float,
+                .slash => data.op = .div_float,
+                .star => data.op = .mul_float,
+                .minus => data.op = .sub_float,
+                else => unreachable,
+            }
+
+            switch (lhs) {
+                .float => {
+                    switch (rhs) {
+                        .float => {},
+                        .int => {
+                            self.warn(
+                                AnalyzerMsg.implicit_cast("right hand side", self.getTypeName(lhs)),
+                                expr.rhs.getSpan(self.ast),
+                            );
+
+                            data.cast = .rhs;
+                        },
+                        else => unreachable,
+                    }
+                },
+                .int => {
+                    switch (rhs) {
+                        .float => {
+                            self.warn(
+                                AnalyzerMsg.implicit_cast("left hand side", self.getTypeName(rhs)),
+                                expr.lhs.getSpan(self.ast),
+                            );
+
+                            data.cast = .lhs;
+                            res = .float;
+                        },
+                        .int => switch (op) {
+                            .plus => data.op = .add_int,
+                            .slash => data.op = .div_int,
+                            .star => data.op = .mul_int,
+                            .minus => data.op = .sub_int,
+                            else => unreachable,
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        .equal, .bang_equal => {
+            switch (op) {
+                .equal => data.op = switch (lhs) {
+                    .bool => .eq_bool,
+                    .float => .eq_float,
+                    .int => .eq_int,
+                    else => .eq_str,
+                },
+                .bang_equal => data.op = switch (lhs) {
+                    .bool => .ne_bool,
+                    .float => .ne_float,
+                    .int => .ne_int,
+                    else => .ne_str,
+                },
+                else => unreachable,
+            }
+
+            // If different value types
+            if (lhs != rhs) {
+                // Check for implicit casts
+                if ((lhs == .int and rhs == .float) or (lhs == .float and rhs == .int)) {
+                    if (lhs == .int) {
+                        data.cast = .lhs;
+                        self.warn(.FloatEqualCast, expr.rhs.getSpan(self.ast));
+                    } else {
+                        data.cast = .rhs;
+                        self.warn(.FloatEqualCast, expr.rhs.getSpan(self.ast));
+                    }
+
+                    switch (op) {
+                        .equal => data.op = .eq_float,
+                        .bang_equal => data.op = .ne_float,
+                        else => unreachable,
+                    }
+                } else {
+                    return self.err(
+                        AnalyzerMsg.invalid_cmp(self.getTypeName(lhs), self.getTypeName(rhs)),
+                        expr.getSpan(self.ast),
+                    );
+                }
+            } else {
+                // Check for unsafe float comparisons or int comparison
+                if (lhs == .float) {
+                    self.warn(.FloatEqual, expr.getSpan(self.ast));
+                }
+            }
+
+            res = .bool;
+        },
+        .greater_equal, .greater, .less_equal, .less => {
+            switch (op) {
+                .greater_equal => data.op = .ge_float,
+                .greater => data.op = .gt_float,
+                .less_equal => data.op = .le_float,
+                .less => data.op = .lt_float,
+                else => unreachable,
+            }
+
+            switch (lhs) {
+                .float => {
+                    switch (rhs) {
+                        .float => self.warn(.FloatEqual, expr.getSpan(self.ast)),
+                        .int => {
+                            data.cast = .rhs;
+                            self.warn(.FloatEqualCast, expr.rhs.getSpan(self.ast));
+                        },
+                        else => unreachable,
+                    }
+                },
+                .int => {
+                    switch (rhs) {
+                        .float => {
+                            data.cast = .lhs;
+                            self.warn(.FloatEqualCast, expr.lhs.getSpan(self.ast));
+                        },
+                        .int => switch (op) {
+                            .greater_equal => data.op = .ge_int,
+                            .greater => data.op = .gt_int,
+                            .less_equal => data.op = .le_int,
+                            .less => data.op = .lt_int,
+                            else => unreachable,
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+
+            res = .bool;
+        },
+        // Logical binop
+        .@"and", .@"or" => {
+            if (lhs != .bool) return self.err(
+                .{ .InvalidLogical = .{ .found = self.getTypeName(lhs) } },
+                expr.lhs.getSpan(self.ast),
+            );
+
+            if (rhs != .bool) return self.err(
+                .{ .InvalidLogical = .{ .found = self.getTypeName(rhs) } },
+                expr.rhs.getSpan(self.ast),
+            );
+
+            switch (op) {
+                .@"and" => data.op = .@"and",
+                .@"or" => data.op = .@"or",
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+
+    self.instructions.items(.data)[idx] = .{ .binop = data };
+
+    return res;
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
@@ -358,8 +544,8 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
 
     switch (expr.tag) {
         .bool => {
-            _ = try self.addInstr(.{ .tag = .Bool, .data = .{
-                .Bool = if (self.ast.tokens.items(.tag)[expr.idx] == .true) true else false,
+            _ = self.addInstr(.{ .tag = .bool, .data = .{
+                .bool = if (self.ast.token_tags[expr.idx] == .true) true else false,
             } });
 
             return .bool;
@@ -379,7 +565,7 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
                 std.debug.print("Error parsing integer\n", .{});
                 break :blk 0;
             };
-            _ = try self.addInstr(.{ .tag = .Int, .data = .{ .Int = value } });
+            _ = self.addInstr(.{ .tag = .int, .data = .{ .int = value } });
 
             return .int;
         },
@@ -389,19 +575,19 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
                 std.debug.print("Error parsing float\n", .{});
                 break :blk 0.0;
             };
-            _ = try self.addInstr(.{ .tag = .Float, .data = .{ .Float = value } });
+            _ = self.addInstr(.{ .tag = .float, .data = .{ .float = value } });
 
             return .float;
         },
         .null => {
-            _ = try self.addInstr(.{ .tag = .null, .data = undefined });
+            _ = self.addInstr(.{ .tag = .null, .data = undefined });
 
             return .null;
         },
         .string => {
             // Removes the quotes
-            const value = try self.interner.intern(text[1 .. text.len - 1]);
-            _ = try self.addInstr(.{ .tag = .string, .data = .{ .Id = value } });
+            const value = self.interner.intern(text[1 .. text.len - 1]);
+            _ = self.addInstr(.{ .tag = .string, .data = .{ .id = value } });
 
             return .str;
         },
@@ -413,12 +599,12 @@ fn identifier(self: *Self, name: []const u8, initialized: bool) Error!*Variable 
 
     if (variable.kind == .normal) {
         self.checkCapture(variable);
-        _ = try self.addInstr(.{ .tag = .IdentifierId, .data = .{ .Id = variable.decl } });
+        _ = self.addInstr(.{ .tag = .identifier_id, .data = .{ .id = variable.decl } });
     } else {
         // Params and imports aren't declared so we can't reference them, they just live on stack
         // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
-        _ = try self.addInstr(
-            .{ .tag = .Identifier, .data = .{ .Variable = .{
+        _ = self.addInstr(
+            .{ .tag = .identifier, .data = .{ .variable = .{
                 .index = @intCast(variable.index),
                 .scope = if (variable.depth > 0) .local else .global,
             } } },
@@ -431,7 +617,7 @@ fn identifier(self: *Self, name: []const u8, initialized: bool) Error!*Variable 
 /// Checks if a variable is in local scope, enclosing scope or global scope. Check if its state
 /// is `initialized`, otherwise return an error.
 fn resolveIdentifier(self: *Self, name: []const u8, initialized: bool) Error!*Variable {
-    const name_idx = try self.interner.intern(name);
+    const name_idx = self.interner.intern(name);
 
     // We first check in locals
     if (self.locals.items.len > 0) {
@@ -480,50 +666,65 @@ fn checkCapture(self: *Self, variable: *Variable) void {
     self.heap_count += 1;
 }
 
-fn get_fn_type_name(self: *const Self, typ: Type) ![]const u8 {
-    const value = TypeSys.get_value(typ);
-    const decl = self.type_manager.type_infos.items[value].func;
+fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
+    const op = self.ast.token_tags[expr.op];
+    const idx = self.addInstr(.{
+        .tag = .unary,
+        .data = .{ .unary = .{
+            .op = if (op == .not) .bang else .minus,
+            .typ = .float,
+        } },
+    });
 
-    var res: std.ArrayListUnmanaged(u8) = .{};
-    var writer = res.writer(self.allocator);
-    try writer.writeAll("fn(");
+    const rhs = try self.analyzeExpr(expr.expr);
 
-    for (0..decl.arity) |i| {
-        try writer.print("{s}{s}", .{
-            self.interner.get_key(decl.params[i].to_idx()).?,
-            if (i < decl.arity - 1) ", " else "",
-        });
+    if (op == .not and rhs != .bool) {
+        return self.err(
+            .{ .InvalidUnary = .{ .found = self.getTypeName(rhs) } },
+            expr.getSpan(self.ast),
+        );
+    } else if (op == .minus and rhs != .int and rhs != .float) {
+        return self.err(
+            AnalyzerMsg.invalid_arithmetic(self.getTypeName(rhs)),
+            expr.getSpan(self.ast),
+        );
     }
-    try writer.print(") -> {s}", .{self.get_type_name(decl.return_type)});
 
-    return try res.toOwnedSlice(self.allocator);
+    if (rhs == .int) self.instructions.items(.data)[idx].unary.typ = .int;
+
+    return rhs;
 }
+
+//
+//
+//
+//
+//
+//
+//
+//
 
 fn source_from_node(self: *const Self, node: Node.Index) []const u8 {
     const span = self.token_spans[self.node_mains[node]];
     return self.source[span.start..span.end];
 }
 
-// fn last_state(self: *Self) *State {
-//     return &self.states.items[self.states.items.len - 1];
-// }
-
 /// Unincrement scope depth, discards all locals and return the number
 /// of discarded locals
-fn end_scope(self: *Self) !usize {
+fn end_scope(self: *Self) usize {
     self.scope_depth -= 1;
 
     var pop_count: usize = 0;
     // Discards all the local variables
     if (self.locals.items.len > 0) {
-        var i: usize = self.locals.items.len;
+        var i = self.locals.items.len;
 
         while (i > 0 and self.locals.items[i - 1].depth > self.scope_depth) {
             i -= 1;
         }
 
         pop_count = self.locals.items.len - i;
-        try self.locals.resize(i);
+        self.locals.resize(i) catch oom();
     }
 
     return pop_count;
@@ -561,7 +762,7 @@ fn check_name(self: *Self) !usize {
 
     if (self.ident_in_scope(name)) {
         return self.err(
-            .{ .AlreadyDeclared = .{ .name = self.interner.get_key(name).? } },
+            .{ .AlreadyDeclared = .{ .name = self.interner.getKey(name).? } },
             self.to_span(self.node_idx),
         );
     }
@@ -678,7 +879,7 @@ fn is_pure(self: *const Self, node: Node.Index) bool {
             return lhs and self.is_pure(node + 2);
         },
         .Grouping => self.is_pure(node + 1),
-        .Unary => self.is_pure(node + 1),
+        .unary => self.is_pure(node + 1),
         // Checks the value
         .VarDecl => if (self.node_tags[node + 2] == .Empty)
             true
@@ -731,8 +932,8 @@ fn assignment(self: *Self, _: Node.Index) !void {
     //             } else {
     //                 return self.err(
     //                     .{ .InvalidAssignType = .{
-    //                         .expect = self.get_type_name(assigne.typ),
-    //                         .found = self.get_type_name(value_type),
+    //                         .expect = self.getTypeName(assigne.typ),
+    //                         .found = self.getTypeName(value_type),
     //                     } },
     //                     self.to_span(assigne_idx),
     //                 );
@@ -795,8 +996,8 @@ fn assignment(self: *Self, _: Node.Index) !void {
         } else {
             return self.err(
                 .{ .InvalidAssignType = .{
-                    .expect = self.get_type_name(assigne_type),
-                    .found = self.get_type_name(value_type),
+                    .expect = self.getTypeName(assigne_type),
+                    .found = self.getTypeName(value_type),
                 } },
                 self.to_span(assigne_idx),
             );
@@ -807,227 +1008,6 @@ fn assignment(self: *Self, _: Node.Index) !void {
 
     // Restore state
     self.state.allow_partial = last;
-}
-
-fn binop(self: *Self, node: Node.Index) Error!Type {
-    const op = self.node_tags[node];
-    const idx = try self.addInstr(.{ .tag = .Binop }, node);
-
-    self.node_idx += 1;
-    const lhs_index = self.node_idx;
-    const lhs = try self.analyze_node(lhs_index);
-
-    const rhs_index = self.node_idx;
-    const rhs = try self.analyze_node(rhs_index);
-
-    var res = lhs;
-
-    // String operations
-    if (op == .Add and lhs == .str and rhs == .str) {
-        self.instructions.items(.data)[idx] = .{ .Binop = .{ .op = .AddStr } };
-        return .str;
-    } else if (op == .Mul) {
-        if ((lhs == .str and rhs == .int) or (lhs == .int and rhs == .str)) {
-            self.instructions.items(.data)[idx] = .{ .Binop = .{
-                .cast = if (rhs == .int) .rhs else .lhs,
-                .op = .MulStr,
-            } };
-
-            return .str;
-        }
-    }
-
-    // Error check
-    switch (op) {
-        .Add, .Div, .Mul, .Sub, .Ge, .Gt, .Le, .Lt => {
-            if (!is_numeric(lhs)) {
-                return self.err(
-                    AnalyzerMsg.invalid_arithmetic(self.get_type_name(lhs)),
-                    self.to_span(lhs_index),
-                );
-            }
-
-            if (!is_numeric(rhs)) {
-                return self.err(
-                    AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
-                    self.to_span(rhs_index),
-                );
-            }
-        },
-        else => {},
-    }
-
-    var data: Instruction.Binop = .{ .op = undefined };
-
-    switch (op) {
-        // Arithmetic binop
-        .Add, .Div, .Mul, .Sub => {
-            switch (op) {
-                .Add => data.op = .AddFloat,
-                .Div => data.op = .DivFloat,
-                .Mul => data.op = .MulFloat,
-                .Sub => data.op = .SubFloat,
-                else => unreachable,
-            }
-
-            switch (lhs) {
-                .float => {
-                    switch (rhs) {
-                        .float => {},
-                        .int => {
-                            try self.warn(
-                                AnalyzerMsg.implicit_cast("right hand side", self.get_type_name(lhs)),
-                                self.to_span(rhs_index),
-                            );
-
-                            data.cast = .rhs;
-                        },
-                        else => unreachable,
-                    }
-                },
-                .int => {
-                    switch (rhs) {
-                        .float => {
-                            try self.warn(
-                                AnalyzerMsg.implicit_cast("left hand side", self.get_type_name(rhs)),
-                                self.to_span(lhs_index),
-                            );
-
-                            data.cast = .lhs;
-                            res = .float;
-                        },
-                        .int => switch (op) {
-                            .Add => data.op = .AddInt,
-                            .Div => data.op = .DivInt,
-                            .Mul => data.op = .MulInt,
-                            .Sub => data.op = .SubInt,
-                            else => unreachable,
-                        },
-                        else => unreachable,
-                    }
-                },
-                else => unreachable,
-            }
-        },
-        .Eq, .Ne => {
-            switch (op) {
-                .Eq => data.op = switch (lhs) {
-                    .bool => .EqBool,
-                    .float => .EqFloat,
-                    .int => .EqInt,
-                    else => .EqStr,
-                },
-                .Ne => data.op = switch (lhs) {
-                    .bool => .NeBool,
-                    .float => .NeFloat,
-                    .int => .NeInt,
-                    else => .NeStr,
-                },
-                else => unreachable,
-            }
-
-            // If different value types
-            if (lhs != rhs) {
-                // Check for implicit casts
-                if ((lhs == .int and rhs == .float) or (lhs == .float and rhs == .int)) {
-                    if (lhs == .int) {
-                        data.cast = .lhs;
-
-                        try self.warn(.FloatEqualCast, self.to_span(lhs_index));
-                    } else {
-                        data.cast = .rhs;
-
-                        try self.warn(.FloatEqualCast, self.to_span(rhs_index));
-                    }
-
-                    switch (op) {
-                        .Eq => data.op = .EqFloat,
-                        .Ne => data.op = .NeFloat,
-                        else => unreachable,
-                    }
-                } else {
-                    return self.err(
-                        AnalyzerMsg.invalid_cmp(
-                            self.get_type_name(lhs),
-                            self.get_type_name(rhs),
-                        ),
-                        self.to_span(node),
-                    );
-                }
-            } else {
-                // Check for unsafe float comparisons or int comparison
-                if (lhs == .float) {
-                    try self.warn(.FloatEqual, self.to_span(node));
-                }
-            }
-
-            res = .bool;
-        },
-        .Ge, .Gt, .Le, .Lt => {
-            switch (op) {
-                .Ge => data.op = .GeFloat,
-                .Gt => data.op = .GtFloat,
-                .Le => data.op = .LeFloat,
-                .Lt => data.op = .LtFloat,
-                else => unreachable,
-            }
-
-            switch (lhs) {
-                .float => {
-                    switch (rhs) {
-                        .float => try self.warn(.FloatEqual, self.to_span(node)),
-                        .int => {
-                            try self.warn(.FloatEqualCast, self.to_span(rhs_index));
-
-                            data.cast = .rhs;
-                        },
-                        else => unreachable,
-                    }
-                },
-                .int => {
-                    switch (rhs) {
-                        .float => {
-                            try self.warn(.FloatEqualCast, self.to_span(lhs_index));
-
-                            data.cast = .lhs;
-                        },
-                        .int => switch (op) {
-                            .Ge => data.op = .GeInt,
-                            .Gt => data.op = .GtInt,
-                            .Le => data.op = .LeInt,
-                            .Lt => data.op = .LtInt,
-                            else => unreachable,
-                        },
-                        else => unreachable,
-                    }
-                },
-                else => unreachable,
-            }
-
-            res = .bool;
-        },
-        // Logical binop
-        .@"and", .@"or" => {
-            if (lhs != .bool) return self.err(.{ .InvalidLogical = .{
-                .found = self.get_type_name(lhs),
-            } }, self.to_span(lhs_index));
-
-            if (rhs != .bool) return self.err(.{ .InvalidLogical = .{
-                .found = self.get_type_name(rhs),
-            } }, self.to_span(rhs_index));
-
-            switch (op) {
-                .@"and" => data.op = .@"and",
-                .@"or" => data.op = .@"or",
-                else => unreachable,
-            }
-        },
-        else => unreachable,
-    }
-
-    self.instructions.items(.data)[idx] = .{ .Binop = data };
-
-    return res;
 }
 
 fn block(self: *Self, node: Node.Index) Error!Type {
@@ -1171,8 +1151,8 @@ fn fn_call(self: *Self, instr: usize, infos: TypeSys.FnInfo) Error!Type {
             } else {
                 return self.err(
                     .{ .TypeMismatch = .{
-                        .expect = self.get_type_name(infos.params[i]),
-                        .found = self.get_type_name(arg_type),
+                        .expect = self.getTypeName(infos.params[i]),
+                        .found = self.getTypeName(arg_type),
                     } },
                     self.to_span(arg_idx),
                 );
@@ -1209,7 +1189,7 @@ fn fn_declaration(self: *Self, node: Node.Index) Error!void {
 
         if (self.scope_depth > save_scope_depth) {
             for (0..self.scope_depth - save_scope_depth) |_| {
-                _ = self.end_scope() catch @panic("oom");
+                _ = self.end_scope();
             }
         }
 
@@ -1356,8 +1336,8 @@ fn fn_declaration(self: *Self, node: Node.Index) Error!void {
     if (!body_err and body_type != return_type and !self.check_equal_fn_types(body_type, return_type)) {
         return self.err(
             .{ .IncompatibleFnType = .{
-                .expect = self.get_type_name(return_type),
-                .found = self.get_type_name(body_type),
+                .expect = self.getTypeName(return_type),
+                .found = self.getTypeName(body_type),
             } },
             // If the block was empty, we're on 'FnDeclEnd' so we take the span
             // of the previous node
@@ -1456,7 +1436,7 @@ fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
 //                 // Checks the initialization if asked
 //                 if (initialized and !local.initialized) {
 //                     return self.err(
-//                         .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+//                         .{ .UseUninitVar = .{ .name = self.interner.getKey(name_idx).? } },
 //                         self.to_span(node),
 //                     );
 //                 }
@@ -1471,7 +1451,7 @@ fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
 //         if (name_idx == glob.name) {
 //             if (initialized and !glob.initialized) {
 //                 return self.err(
-//                     .{ .UseUninitVar = .{ .name = self.interner.get_key(name_idx).? } },
+//                     .{ .UseUninitVar = .{ .name = self.interner.getKey(name_idx).? } },
 //                     self.to_span(node),
 //                 );
 //             }
@@ -1482,7 +1462,7 @@ fn check_equal_fn_types(self: *const Self, t1: Type, t2: Type) bool {
 //
 //     // Else, it's undeclared
 //     return self.err(
-//         .{ .UndeclaredVar = .{ .name = self.interner.get_key(name_idx).? } },
+//         .{ .UndeclaredVar = .{ .name = self.interner.getKey(name_idx).? } },
 //         self.to_span(node),
 //     );
 // }
@@ -1513,7 +1493,7 @@ fn if_expr(self: *Self, node: Node.Index) Error!Type {
     if (cond_type != .bool) self.err(
         .{ .NonBoolCond = .{
             .what = "if",
-            .found = self.get_type_name(cond_type),
+            .found = self.getTypeName(cond_type),
         } },
         self.to_span(cond_idx),
     ) catch {};
@@ -1573,8 +1553,8 @@ fn if_expr(self: *Self, node: Node.Index) Error!Type {
                 );
             } else return self.err(
                 .{ .IncompatibleIfType = .{
-                    .found1 = self.get_type_name(then_type),
-                    .found2 = self.get_type_name(else_type),
+                    .found1 = self.getTypeName(then_type),
+                    .found2 = self.getTypeName(else_type),
                 } },
                 self.to_span(node),
             );
@@ -1584,7 +1564,7 @@ fn if_expr(self: *Self, node: Node.Index) Error!Type {
         self.node_idx += 1;
 
         return self.err(
-            .{ .MissingElseClause = .{ .if_type = self.get_type_name(then_type) } },
+            .{ .MissingElseClause = .{ .if_type = self.getTypeName(then_type) } },
             self.to_span(node),
         );
     } else self.node_idx += 1;
@@ -1663,8 +1643,8 @@ fn return_expr(self: *Self, node: Node.Index) Error!Type {
             _ = try self.addInstr(.{ .tag = .Cast, .data = .{ .CastTo = .Float } }, value_idx);
         } else return self.err(
             .{ .IncompatibleFnType = .{
-                .expect = self.get_type_name(self.state.fn_type),
-                .found = self.get_type_name(return_type),
+                .expect = self.getTypeName(self.state.fn_type),
+                .found = self.getTypeName(return_type),
             } },
             self.to_span(node),
         );
@@ -1703,7 +1683,7 @@ fn structure(self: *Self, node: Node.Index) !Type {
     _ = try self.addInstr(.{ .tag = .VarDecl, .data = .{ .VarDecl = .{ .variable = struct_var, .cast = false } } }, node);
 
     self.scope_depth += 1;
-    errdefer _ = self.end_scope() catch @panic("oom");
+    errdefer _ = self.end_scope() catch oom();
 
     var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{}, .default_value_fields = 0 };
 
@@ -1845,7 +1825,7 @@ fn struct_literal(self: *Self, node: Node.Index) !Type {
             while (kv.next()) |entry| {
                 if (!entry.value_ptr.*) {
                     // TODO: Error for each non init field
-                    std.debug.print("Uninit filed: {s}\n", .{self.interner.get_key(entry.key_ptr.*).?});
+                    std.debug.print("Uninit filed: {s}\n", .{self.interner.getKey(entry.key_ptr.*).?});
                 }
             }
         }
@@ -1861,36 +1841,6 @@ fn struct_literal(self: *Self, node: Node.Index) !Type {
 
         return .void;
     }
-}
-
-fn unary(self: *Self, node: Node.Index) Error!Type {
-    const op = self.token_tags[self.node_mains[node]];
-    const idx = try self.addInstr(.{
-        .tag = .Unary,
-        .data = .{ .Unary = .{
-            .op = if (op == .not) .bang else .minus,
-            .typ = .Float,
-        } },
-    }, node);
-
-    self.node_idx += 1;
-    const rhs = try self.analyze_node(self.node_idx);
-
-    if (op == .not and rhs != .bool) {
-        return self.err(
-            .{ .InvalidUnary = .{ .found = self.get_type_name(rhs) } },
-            self.to_span(node),
-        );
-    } else if (op == .minus and rhs != .int and rhs != .float) {
-        return self.err(
-            AnalyzerMsg.invalid_arithmetic(self.get_type_name(rhs)),
-            self.to_span(node),
-        );
-    }
-
-    if (rhs == .int) self.instructions.items(.data)[idx].Unary.typ = .Int;
-
-    return rhs;
 }
 
 fn use(self: *Self, node: Node.Index) !void {
@@ -1995,8 +1945,8 @@ fn var_decl(self: *Self, node: Node.Index) !void {
             } else {
                 return self.err(
                     .{ .InvalidAssignType = .{
-                        .expect = self.get_type_name(checked_type),
-                        .found = self.get_type_name(value_type),
+                        .expect = self.getTypeName(checked_type),
+                        .found = self.getTypeName(value_type),
                     } },
                     self.to_span(value_idx),
                 );
@@ -2022,7 +1972,7 @@ fn while_stmt(self: *Self, _: Node.Index) Error!void {
     if (cond_type != .bool) return self.err(
         .{ .NonBoolCond = .{
             .what = "while",
-            .found = self.get_type_name(cond_type),
+            .found = self.getTypeName(cond_type),
         } },
         self.to_span(cond_idx),
     );
@@ -2032,82 +1982,37 @@ fn while_stmt(self: *Self, _: Node.Index) Error!void {
 
     if (body_type != .void) return self.err(
         .{ .NonVoidWhile = .{
-            .found = self.get_type_name(body_type),
+            .found = self.getTypeName(body_type),
         } },
         self.to_span(body_idx),
     );
 }
 
-// fn to_span(self: *const Self, node: Node.Index) Span {
-//     return switch (self.node_tags[node]) {
-//         .Add, .@"and", .Div, .Mul, .@"or", .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => .{
-//             .start = self.token_spans[self.node_mains[node + 1]].start,
-//             .end = self.to_span(node + 2).end,
-//         },
-//         .Assignment => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + 1]].end,
-//         },
-//         .Block => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node]].start + 1,
-//         },
-//         .Bool, .Float, .Identifier, .Int, .null, .string => self.token_spans[self.node_mains[node]],
-//         .call => self.token_spans[self.node_mains[node + 1]],
-//         .Discard => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + 1]].end,
-//         },
-//         .Empty => self.to_span(node - 1),
-//         .field => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + 1]].end,
-//         },
-//         .FnDecl => self.token_spans[self.node_mains[node]],
-//         .Grouping => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_data[node]].end,
-//         },
-//         .@"if" => self.token_spans[self.node_mains[node]],
-//         .Parameter => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + 1]].end,
-//         },
-//         .print => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.to_span(node + 1).end,
-//         },
-//         .@"return" => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = if (self.node_tags[node + 1] == .Empty)
-//                 self.token_spans[self.node_mains[node]].end
-//             else
-//                 self.to_span(node + 1).end,
-//         },
-//         .self, .StructDecl, .Type => self.token_spans[self.node_mains[node]],
-//         .struct_literal => unreachable,
-//         .Unary => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + 1]].end,
-//         },
-//         .use => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
-//         },
-//         .VarDecl => .{
-//             .start = self.token_spans[self.node_mains[node]].start,
-//             .end = self.token_spans[self.node_mains[node + self.node_data[node]]].end,
-//         },
-//         .@"while" => self.token_spans[self.node_mains[node]],
-//         .MultiVarDecl, .count => unreachable,
-//     };
-// }
-//
-fn get_type_name(self: *const Self, typ: Type) []const u8 {
+// Helpers used for errors
+fn getTypeName(self: *const Self, typ: Type) []const u8 {
     if (TypeSys.is(typ, .func)) {
-        return self.get_fn_type_name(typ) catch @panic("oom");
+        return self.getFnTypeName(typ) catch oom();
     } else {
         const idx = self.type_manager.idx(typ);
-        return self.interner.get_key(idx).?;
+        return self.interner.getKey(idx).?;
     }
+}
+
+fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
+    const value = TypeSys.get_value(typ);
+    const decl = self.type_manager.type_infos.items[value].func;
+
+    var res: std.ArrayListUnmanaged(u8) = .{};
+    var writer = res.writer(self.allocator);
+    try writer.writeAll("fn(");
+
+    for (0..decl.arity) |i| {
+        try writer.print("{s}{s}", .{
+            self.interner.getKey(decl.params[i].to_idx()).?,
+            if (i < decl.arity - 1) ", " else "",
+        });
+    }
+    try writer.print(") -> {s}", .{self.getTypeName(decl.return_type)});
+
+    return try res.toOwnedSlice(self.allocator);
 }

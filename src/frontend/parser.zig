@@ -89,7 +89,12 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
         self.skipNewLines();
     }
 
-    return .{ .source = source, .tokens = tokens, .nodes = try self.nodes.toOwnedSlice(self.allocator) };
+    return .{
+        .source = source,
+        .token_tags = self.token_tags,
+        .token_spans = self.token_spans,
+        .nodes = try self.nodes.toOwnedSlice(self.allocator),
+    };
 }
 
 const TokenField = enum { span, tag };
@@ -680,10 +685,7 @@ fn grouping(self: *Self) Error!*Expr {
     self.skipNewLines();
 
     const expr = try self.allocator.create(Expr);
-    const value = if (self.check(.right_paren))
-        null
-    else
-        try self.parsePrecedenceExpr(0);
+    const value = try self.parsePrecedenceExpr(0);
 
     try self.expectOrErrAtToken(.right_paren, .unclosed_paren, start);
 

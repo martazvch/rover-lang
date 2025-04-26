@@ -44,13 +44,13 @@ pub const Pipeline = struct {
         .code_count = 0,
     };
 
-    pub fn init(self: *Self, vm: *Vm, config: Vm.Config) !void {
+    pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
         self.vm = vm;
         self.arena = .init(vm.allocator);
         self.allocator = self.arena.allocator();
         self.config = config;
         self.analyzer = undefined;
-        try self.analyzer.init(self.allocator, config.embedded);
+        self.analyzer.init(self.allocator, config.embedded);
     }
 
     pub fn deinit(self: *Self) void {
@@ -98,7 +98,7 @@ pub const Pipeline = struct {
 
         // Analyzed Ast printer
         if (options.test_mode and self.config.print_ir) {
-            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+            // try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
             return error.ExitOnPrint;
         }
 
@@ -157,8 +157,8 @@ fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void 
             try stdout.writeAll("\n");
         }
     } else {
-        var renderer: AstRender = .init(allocator, ast.source, ast.tokens.items(.span));
-        try renderer.render(ast);
+        var renderer: AstRender = .init(allocator, ast);
+        try renderer.render();
         try stdout.writeAll(renderer.output.items);
     }
 }
