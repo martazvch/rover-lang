@@ -272,7 +272,7 @@ fn fnDecl(self: *Self) Error!Node {
 
             // TODO: Allocate only one `Self` type for all
             const typ = try self.allocator.create(Ast.Type);
-            typ.* = .{ .self = {} };
+            typ.* = .{ .self = self.token_idx - 1 };
             param.typ = typ;
         } else {
             try self.expect(.identifier, .{ .ExpectName = .{ .kind = "parameter" } });
@@ -635,7 +635,7 @@ fn block(self: *Self) Error!*Expr {
 
     try self.expectOrErrAtToken(.right_brace, .unclosed_brace, openning_brace);
     expr.* = .{ .block = .{
-        .exprs = try exprs.toOwnedSlice(self.allocator),
+        .nodes = try exprs.toOwnedSlice(self.allocator),
         .span = .{ .start = openning_brace, .end = self.prev(.span).start },
     } };
 

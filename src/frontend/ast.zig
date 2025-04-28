@@ -74,18 +74,20 @@ pub const Param = struct {
 };
 
 pub const Type = union(enum) {
-    function: struct {
+    function: Fn,
+    scalar: TokenIndex,
+    self: TokenIndex,
+
+    pub const Fn = struct {
         params: []*Type,
         return_type: ?*Type,
         span: Span,
-    },
-    scalar: TokenIndex,
-    self: void,
+    };
 
     pub fn getSpan(self: *const Type, ast: *const Ast) Span {
         return switch (self.*) {
             .function => |t| t.span,
-            .scalar, .void => |t| ast.token_spans[t],
+            .scalar, .self => |t| ast.token_spans[t],
         };
     }
 };
@@ -150,7 +152,7 @@ pub const Expr = union(enum) {
 };
 
 pub const Block = struct {
-    exprs: []Node,
+    nodes: []Node,
     span: Span,
 
     pub fn getSpan(self: *const Block, _: *const Ast) Span {
@@ -174,6 +176,7 @@ pub const Binop = struct {
 pub const Field = struct {
     structure: *Expr,
     field: TokenIndex,
+
     pub fn getSpan(self: *const Field, ast: *const Ast) Span {
         return .{
             .start = self.structure.getSpan(ast).start,
@@ -256,8 +259,13 @@ pub const Unary = struct {
     }
 };
 
+/// Can be used with any `Node`, `Expr` or a `token index`
 pub fn toSource(self: *const Ast, node: anytype) []const u8 {
-    const span = node.getSpan(self);
+    const span = if (@TypeOf(node) == usize)
+        self.token_spans[node]
+    else
+        node.getSpan(self);
+
     return self.source[span.start..span.end];
 }
 

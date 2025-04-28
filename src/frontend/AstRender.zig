@@ -289,12 +289,12 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
 }
 
 fn renderBlock(self: *Self, block: *const Ast.Block, comma: bool) !void {
-    if (block.exprs.len == 0) {
+    if (block.nodes.len == 0) {
         try self.emptyKey("block", .list, comma);
     } else {
         try self.openKey("block", .list);
-        for (block.exprs, 0..) |*data, i| {
-            try self.renderNode(data, i != block.exprs.len - 1);
+        for (block.nodes, 0..) |*data, i| {
+            try self.renderNode(data, i != block.nodes.len - 1);
         }
         try self.closeKey(.list, comma);
     }

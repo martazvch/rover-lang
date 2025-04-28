@@ -98,7 +98,7 @@ pub const Pipeline = struct {
 
         // Analyzed Ast printer
         if (options.test_mode and self.config.print_ir) {
-            // try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+            try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
             return error.ExitOnPrint;
         }
 
@@ -116,35 +116,34 @@ pub const Pipeline = struct {
         } else if (self.config.print_ir)
             try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
-        std.process.exit(0);
+        // std.process.exit(0);
 
-        //
-        // // Analyzer warnings
-        // if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
-        //     var reporter = GenReporter(AnalyzerMsg).init(source);
-        //     try reporter.report_all(filename, self.analyzer.warns.items);
-        //     return error.ExitOnPrint;
-        // }
-        //
-        // // Compiler
-        // var compiler = CompilationManager.init(
-        //     self.vm,
-        //     self.analyzer.type_manager.natives.functions,
-        //     &self.analyzer.interner,
-        //     self.instr_count,
-        //     &self.analyzer.instructions,
-        //     if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
-        //     if (self.config.embedded) 0 else self.analyzer.main.?,
-        //     self.config.embedded,
-        // );
-        // defer compiler.deinit();
-        // self.instr_count = self.analyzer.instructions.len;
-        // const function = try compiler.compile();
-        //
-        // return if (options.test_mode and self.config.print_bytecode)
-        //     error.ExitOnPrint
-        // else
-        //     function;
+        // Analyzer warnings
+        if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
+            var reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.report_all(filename, self.analyzer.warns.items);
+            return error.ExitOnPrint;
+        }
+
+        // Compiler
+        var compiler = CompilationManager.init(
+            self.vm,
+            self.analyzer.type_manager.natives.functions,
+            &self.analyzer.interner,
+            self.instr_count,
+            &self.analyzer.instructions,
+            if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
+            if (self.config.embedded) 0 else self.analyzer.main.?,
+            self.config.embedded,
+        );
+        defer compiler.deinit();
+        self.instr_count = self.analyzer.instructions.len;
+        const function = try compiler.compile();
+
+        return if (options.test_mode and self.config.print_bytecode)
+            error.ExitOnPrint
+        else
+            function;
     }
 };
 

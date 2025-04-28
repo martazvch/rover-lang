@@ -114,23 +114,23 @@ pub const RirRenderer = struct {
 
     fn parse_instr(self: *Self, index: usize) !void {
         try switch (self.instr_tags[index]) {
-            .Assignment => self.assignment(index),
+            .assignment => self.assignment(index),
             .binop => self.binop(index),
-            .Block => self.block(index),
+            .block => self.block(index),
             .bool => self.bool_instr(index),
-            .Cast => self.cast(index),
-            .Discard => self.discard(),
+            .cast => self.cast(index),
+            .discard => self.discard(),
             .float => self.float_instr(index),
             .call => self.fn_call(index),
             .field => self.get_field(index),
-            .FnDecl => self.fn_declaration(index),
-            .Name => unreachable,
+            .fn_decl => self.fn_declaration(index),
+            .name => unreachable,
             .identifier => self.identifier(index, false),
             .identifier_id => self.identifier(index, true),
             .@"if" => self.if_instr(index),
-            .Imported => unreachable,
+            .imported => unreachable,
             .int => self.int_instr(),
-            .MultipleVarDecl => self.multiple_var_decl(),
+            .multiple_var_decl => self.multiple_var_decl(),
             .null => {
                 try self.indent();
                 try self.tree.appendSlice("[Null]\n");
@@ -150,17 +150,17 @@ pub const RirRenderer = struct {
             .struct_literal => self.struct_literal(),
             .unary => self.unary(index),
             .use => self.use(index),
-            .VarDecl => self.var_decl(index),
+            .var_decl => self.var_decl(index),
             .@"while" => self.while_instr(),
         };
     }
 
     fn assignment(self: *Self, instr: usize) Error!void {
-        const assign_data = self.instr_data[instr].Assignment;
+        const assign_data = self.instr_data[instr].assignment;
         self.instr_idx += 1;
 
         const data = if (self.instr_tags[instr + 1] == .identifier_id)
-            self.instr_data[self.instr_data[instr + 1].id].VarDecl.variable
+            self.instr_data[self.instr_data[instr + 1].id].var_decl.variable
         else if (self.instr_tags[instr + 1] == .field) {
             return self.field_assignment(assign_data);
         } else self.instr_data[instr + 1].variable;
@@ -211,7 +211,7 @@ pub const RirRenderer = struct {
     }
 
     fn block(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].Block;
+        const data = self.instr_data[instr].block;
 
         var writer = self.tree.writer();
         try self.indent();
@@ -240,7 +240,7 @@ pub const RirRenderer = struct {
     }
 
     fn cast(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].CastTo;
+        const data = self.instr_data[instr].cast_to;
 
         try self.indent();
         var writer = self.tree.writer();
@@ -287,7 +287,7 @@ pub const RirRenderer = struct {
             for (0..data.arity) |_| {
                 try self.parse_instr(self.instr_idx);
 
-                if (self.instr_idx < self.instr_tags.len and self.instr_tags[self.instr_idx] == .Cast)
+                if (self.instr_idx < self.instr_tags.len and self.instr_tags[self.instr_idx] == .cast)
                     try self.parse_instr(self.instr_idx);
             }
         }
@@ -310,12 +310,12 @@ pub const RirRenderer = struct {
     }
 
     fn fn_declaration(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].FnDecl;
+        const data = self.instr_data[instr].fn_decl;
         self.instr_idx += 1;
 
         const fn_name = self.interner.getKey(self.instr_data[self.instr_idx].id).?;
         self.instr_idx += 1;
-        const fn_var = self.instr_data[self.instr_idx].VarDecl.variable;
+        const fn_var = self.instr_data[self.instr_idx].var_decl.variable;
         self.instr_idx += 1;
 
         try self.indent();
@@ -334,7 +334,7 @@ pub const RirRenderer = struct {
 
     fn identifier(self: *Self, instr: usize, is_id: bool) Error!void {
         const data = if (is_id)
-            self.instr_data[self.instr_data[instr].id].VarDecl.variable
+            self.instr_data[self.instr_data[instr].id].var_decl.variable
         else
             self.instr_data[instr].variable;
 
@@ -421,7 +421,7 @@ pub const RirRenderer = struct {
         var writer = self.tree.writer();
         const data = self.next(.data).struct_decl;
         const name = self.next(.data).id;
-        const struct_var = self.next(.data).VarDecl.variable;
+        const struct_var = self.next(.data).var_decl.variable;
 
         try self.indent();
         try writer.print("[Structure declaration {s}, index: {}, scope: {s}]\n", .{
@@ -507,7 +507,7 @@ pub const RirRenderer = struct {
     }
 
     fn var_decl(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].VarDecl;
+        const data = self.instr_data[instr].var_decl;
         var writer = self.tree.writer();
 
         try self.indent();

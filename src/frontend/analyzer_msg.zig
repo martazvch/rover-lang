@@ -1,4 +1,5 @@
 const std = @import("std");
+const oom = @import("../utils.zig").oom;
 
 pub const AnalyzerMsg = union(enum) {
     AlreadyDeclared: struct { name: []const u8 },
@@ -232,18 +233,18 @@ pub const AnalyzerMsg = union(enum) {
     }
 
     // TODO: No other way to take ownership of string??
-    pub fn wrong_args_count(expect: usize, found: usize) !Self {
+    pub fn wrongArgsCount(expect: usize, found: usize) Self {
         var list = std.ArrayList(u8).init(std.heap.page_allocator);
         const writer = list.writer();
-        try writer.print("{}", .{expect});
+        writer.print("{}", .{expect}) catch oom();
 
         var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
         const writer1 = list1.writer();
-        try writer1.print("{}", .{found});
+        writer1.print("{}", .{found}) catch oom();
 
         const tmp: AnalyzerMsg = .{ .WrongFnArgsCount = .{
-            .expect = try list.toOwnedSlice(),
-            .found = try list1.toOwnedSlice(),
+            .expect = list.toOwnedSlice() catch oom(),
+            .found = list1.toOwnedSlice() catch oom(),
         } };
 
         return tmp;
