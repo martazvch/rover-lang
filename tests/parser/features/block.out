@@ -5,14 +5,14 @@
     "block": [
         "var_decl": {
             "name": "a",
-            "type": {},
+            "type": "float",
             "value": {}
         }
     ],
     "block": [
         "var_decl": {
             "name": "a",
-            "type": {},
+            "type": "int",
             "value": {}
         },
         "assignment": {

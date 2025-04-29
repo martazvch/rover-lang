@@ -1,7 +1,7 @@
 {
     "var_decl": {
         "name": "a",
-        "type": {},
+        "type": "any",
         "value": {}
     },
     "assignment": {

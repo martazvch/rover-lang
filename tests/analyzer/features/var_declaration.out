@@ -6,17 +6,17 @@
     [Float 56.7]
 
 [Variable declaration index: 3, scope: global]
-    [Binop type: DivInt, cast: none]
+    [Binop type: div_int, cast: none]
         [Int 12]
         [Int 34]
 
 [Variable declaration index: 4, scope: global]
-    [Binop type: DivInt, cast: none]
+    [Binop type: div_int, cast: none]
         [Int 12]
         [Int 34]
-    [Cast to Float]
+    [Cast to float]
 [Variable declaration index: 5, scope: global]
-    [Binop type: DivFloat, cast: rhs]
+    [Binop type: div_float, cast: rhs]
         [Float 4]
         [Int 3]
 

@@ -1,10 +1,10 @@
-var noval
+var noval: int
 noval = 1
 
 var noval_type : float
 noval_type = .7
 
-var noval_binop
+var noval_binop: float
 noval_binop = 12/-.7
 
 var noval_binop_typed: float

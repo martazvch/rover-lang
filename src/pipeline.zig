@@ -6,7 +6,6 @@ const options = @import("options");
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
-// const Analyzer = @import("frontend/analyzer.zig").Analyzer;
 const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("frontend/Ast.zig");
@@ -21,7 +20,6 @@ const GenReporter = @import("reporter.zig").GenReporter;
 const ObjFunction = @import("runtime/obj.zig").ObjFunction;
 const Vm = @import("runtime/vm.zig").Vm;
 
-// const Parser = @import("frontend/parser.zig").Parser;
 pub const Pipeline = struct {
     vm: *Vm,
     arena: std.heap.ArenaAllocator,
@@ -115,8 +113,6 @@ pub const Pipeline = struct {
             return error.ExitOnPrint;
         } else if (self.config.print_ir)
             try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
-
-        // std.process.exit(0);
 
         // Analyzer warnings
         if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {

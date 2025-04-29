@@ -6,12 +6,12 @@
     [Bool true]
 
 [Fn declaration get_bool, index: 3, scope: global, return kind: explicit]
-    [@"return" expr: true, cast: false]
+    [Return expr: true, cast: false]
         [Bool true]
 
 [Fn declaration main, index: 4, scope: global, return kind: implicit_void]
     [Print]
-        [Binop type: AddFloat, cast: none]
+        [Binop type: add_float, cast: none]
             [Variable index: 0, scope: global]
             [Variable index: 1, scope: global]
 

@@ -5,7 +5,7 @@
         [Fn declaration another_bool, index: 1, scope: local, return kind: implicit_value]
             [Variable declaration index: 3, scope: local]
                 [Int 5]
-            [Binop type: Or, cast: none]
+            [Binop type: or, cast: none]
                 [Bool true]
                 [Bool false]
 
@@ -21,12 +21,12 @@
                 - args:
                 [Int 1]
 
-// @"return" kinds
+// Return kinds
 [Fn declaration add1, index: 2, scope: global, return kind: explicit]
-    [@"return" expr: false, cast: false]
+    [Return expr: false, cast: false]
 [Fn declaration add2, index: 3, scope: global, return kind: implicit_value]
     [Int 5]
 [Fn declaration add3, index: 4, scope: global, return kind: implicit_void]
 [Fn declaration add4, index: 5, scope: global, return kind: explicit]
-    [@"return" expr: true, cast: false]
+    [Return expr: true, cast: false]
         [Int 5]

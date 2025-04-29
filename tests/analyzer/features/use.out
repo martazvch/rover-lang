@@ -12,7 +12,7 @@
                 - args:
                 [Bool true]
                 [Int 5]
-                [Cast to Float]
+                [Cast to float]
 
     [Block pop count: 2, is_expr: false]
         [Use count: 2]

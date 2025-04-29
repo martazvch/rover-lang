@@ -121,6 +121,7 @@ pub const FnInfo = struct {
     params: []const Type,
     return_type: Type,
     builtin: bool = false,
+    is_var: bool = false,
 };
 
 pub const StructInfo = struct {

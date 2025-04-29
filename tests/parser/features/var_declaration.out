@@ -1,11 +1,6 @@
 {
     "var_decl": {
         "name": "home",
-        "type": {},
-        "value": {}
-    },
-    "var_decl": {
-        "name": "home",
         "type": "House",
         "value": {}
     },

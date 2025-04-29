@@ -358,8 +358,8 @@ fn structDecl(self: *Self) !Node {
 }
 
 fn varDecl(self: *Self) !Node {
+    const name = self.token_idx;
     try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
-    const name = self.token_idx - 1;
 
     if (self.check(.comma))
         return self.multiVarDecl(name);
@@ -370,6 +370,10 @@ fn varDecl(self: *Self) !Node {
         try self.parsePrecedenceExpr(0)
     else
         null;
+
+    if (typ == null and value == null) {
+        return self.errAt(name, .exepct_type_or_value_in_decl);
+    }
 
     return .{ .var_decl = .{ .name = name, .typ = typ, .value = value } };
 }

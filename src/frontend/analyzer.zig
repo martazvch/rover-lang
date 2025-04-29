@@ -5,17 +5,17 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 
-const oom = @import("../utils.zig").oom;
 const Interner = @import("../interner.zig").Interner;
 const GenReport = @import("../reporter.zig").GenReport;
+const oom = @import("../utils.zig").oom;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
+const Ast = @import("Ast.zig");
+const Node = Ast.Node;
+const Expr = Ast.Expr;
 const BA = @import("builtins_analyzer.zig");
 const BuiltinAnalyzer = BA.BuiltinAnalyzer;
 const FnDeclaration = BA.FnDeclaration;
 const builtin_init = BA.init;
-const Ast = @import("Ast.zig");
-const Node = Ast.Node;
-const Expr = Ast.Expr;
 const Rir = @import("rir.zig");
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
@@ -271,13 +271,13 @@ pub fn analyze(self: *Self, ast: *const Ast) !void {
 }
 
 fn analyzeNode(self: *Self, node: *const Node) Error!Type {
-    // if (self.scope_depth == 0 and !self.repl and !self.is_pure(node)) {
-    //     // TODO: add block, not allowed to have local scopes in global scope
-    //     return if (self.node_tags[node] == .@"return")
-    //         self.err(.ReturnOutsideFn, self.to_span(node))
-    //     else
-    //         self.err(.UnpureInGlobal, self.to_span(node));
-    // }
+    if (self.scope_depth == 0 and !self.repl and !self.isPure(node.*)) {
+        // TODO: add block, not allowed to have local scopes in global scope
+        return if (std.meta.activeTag(node.*) == .expr and std.meta.activeTag(node.expr.*) == .@"return")
+            self.err(.ReturnOutsideFn, node.getSpan(self.ast))
+        else
+            self.err(.UnpureInGlobal, node.getSpan(self.ast));
+    }
 
     var final: Type = .void;
 
@@ -305,13 +305,36 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     var cast = false;
     const idx = self.addInstr(.{ .tag = .assignment });
 
-    var assigne_type = try self.analyzeExpr(node.assigne);
+    var assigne_type = switch (node.assigne.*) {
+        .literal => |*e| blk: {
+            if (e.tag != .identifier) {
+                return self.err(.InvalidAssignTarget, node.assigne.getSpan(self.ast));
+            }
+
+            // TODO: check if this is a function's parameter (there are constant by defninition)
+            const assigne = try self.identifier(e.idx, false);
+
+            if (!assigne.initialized) assigne.initialized = true;
+
+            break :blk assigne.typ;
+        },
+        .field => |*e| try self.field(e),
+        else => return self.err(.InvalidAssignTarget, node.assigne.getSpan(self.ast)),
+    };
     const assigne_kind = TypeSys.getKind(assigne_type);
 
-    if (assigne_kind != .variable) {
-        return self.err(.InvalidAssignTarget, node.assigne.getSpan(self.ast));
-    }
+    b: {
+        if (assigne_kind != .variable) {
+            if (assigne_kind == .func) {
+                const value = TypeSys.getValue(assigne_type);
+                if (self.type_manager.type_infos.items[value].func.is_var) {
+                    break :b;
+                }
+            }
 
+            return self.err(.InvalidAssignTarget, node.assigne.getSpan(self.ast));
+        }
+    }
     const value_type = try self.analyzeExpr(node.value);
 
     if (value_type == .void) {
@@ -321,7 +344,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     // If type is unknown, we update it
     if (assigne_type == .void) {
         assigne_type = value_type;
-    } else if (assigne_type != value_type) {
+    } else if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
         // One case in wich we can coerce; int -> float
         if (assigne_type == .float and value_type == .int) {
             cast = true;
@@ -581,7 +604,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         const field_type = try self.checkAndGetType(f.typ);
 
         const field_value_type = if (f.value) |value| blk: {
-            // if (!self.is_pure(self.node_idx)) {
+            // if (!self.isPure(self.node_idx)) {
             //     std.debug.print("Unpure default value\n", .{});
             //     // TODO: error, non-constant default value
             // }
@@ -688,7 +711,10 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 );
             }
         }
-    }
+    } else return self.err(
+        .{ .UnknownModule = .{ .name = self.ast.toSource(node.names[0]) } },
+        self.ast.token_spans[node.names[0]],
+    );
 }
 
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
@@ -734,6 +760,13 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         initialized = true;
     } else {
         _ = self.addInstr(.{ .tag = .null });
+    }
+
+    // If it was a function type, we mark it as assignable. Allow to assign to variable that of a function type like:
+    // var a: fn(int) -> bool
+    if (TypeSys.getKind(checked_type) == .func) {
+        const value = TypeSys.getValue(checked_type);
+        self.type_manager.type_infos.items[value].func.is_var = true;
     }
 
     const variable = try self.declareVariable(name, checked_type, initialized, idx, .normal, node.name);
@@ -862,9 +895,9 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                 else => unreachable,
             }
         },
-        .equal, .bang_equal => {
+        .equal_equal, .bang_equal => {
             switch (op) {
-                .equal => data.op = switch (lhs) {
+                .equal_equal => data.op = switch (lhs) {
                     .bool => .eq_bool,
                     .float => .eq_float,
                     .int => .eq_int,
@@ -892,7 +925,7 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                     }
 
                     switch (op) {
-                        .equal => data.op = .eq_float,
+                        .equal_equal => data.op = .eq_float,
                         .bang_equal => data.op = .ne_float,
                         else => unreachable,
                     }
@@ -1299,10 +1332,10 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
         .cast = false,
     } } });
 
-    const return_type = if (expr.expr) |e|
-        try self.analyzeExpr(e)
-    else
-        .void;
+    const return_type = if (expr.expr) |e| blk: {
+        self.instructions.items(.data)[idx].@"return".value = true;
+        break :blk try self.analyzeExpr(e);
+    } else .void;
 
     // We check after to advance node idx
     if (!self.state.in_fn) {
@@ -1489,9 +1522,7 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
             .{ .UndeclaredType = .{ .found = self.ast.toSource(t) } },
             t.getSpan(self.ast),
         ),
-        .function => fn_type: {
-            break :fn_type .void;
-        },
+        .function => |*fn_type| self.createAnonymousFnType(fn_type),
         .self => .self,
     } else .void;
 }
@@ -1500,23 +1531,23 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
 /// of functions
 fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
     const type_idx = try self.type_manager.reserveInfo();
-    var params_type: [256]Type = undefined;
+    var params_type: ArrayListUnmanaged(Type) = .{};
+    params_type.ensureTotalCapacity(self.allocator, fn_type.params.len) catch oom();
 
-    for (fn_type.params, 0..) |p, i| {
+    for (fn_type.params) |p| {
         const param_type = try self.checkAndGetType(p);
 
         if (param_type == .void) {
             return self.err(.VoidParam, fn_type.span);
         }
 
-        params_type[i] = param_type;
+        params_type.appendAssumeCapacity(param_type);
     }
 
     // Set all the informations now that we have every thing
     self.type_manager.setInfo(type_idx, .{
         .func = .{
-            .arity = fn_type.params.len,
-            .params = params_type,
+            .params = params_type.toOwnedSlice(self.allocator) catch oom(),
             .return_type = try self.checkAndGetType(fn_type.return_type),
         },
     });
@@ -1565,26 +1596,24 @@ fn declareVariable(
     }
 }
 
-fn is_pure(self: *const Self, node: Node.Index) bool {
-    // TODO: manage those
-    // call: call,
-    // Identifier: Identifier,
-    // If: If,
-    return switch (self.node_tags[node]) {
-        // Skips assign node and identifier
-        .Assignment => self.is_pure(node + 2),
-        .Bool, .Float, .Int, .null, .string, .FnDecl, .StructDecl, .use => true,
-        .Add, .Div, .Mul, .Sub, .@"and", .@"or", .Eq, .Ge, .Gt, .Le, .Lt, .Ne => {
-            const lhs = self.is_pure(node + 1);
-            return lhs and self.is_pure(node + 2);
+fn isPure(self: *const Self, node: anytype) bool {
+    return switch (@TypeOf(node)) {
+        Ast.Node => switch (node) {
+            inline else => |*e| self.isPure(e.*),
         },
-        .Grouping => self.is_pure(node + 1),
-        .unary => self.is_pure(node + 1),
-        // Checks the value
-        .VarDecl => if (self.node_tags[node + 2] == .Empty)
-            true
-        else
-            self.is_pure(node + 2),
+        Ast.FnDecl, Ast.StructDecl, Ast.Use => true,
+        Ast.VarDecl => return if (node.value) |val| self.isPure(val.*) else true,
+        Ast.Expr => return switch (node) {
+            inline else => |*sub| return self.isPure(sub.*),
+        },
+        Ast.Literal => {
+            std.debug.print("Literal: {any}\n", .{node});
+            return node.tag != .identifier;
+        },
+        Ast.Grouping => self.isPure(node.expr.*),
+        Ast.Unary => self.isPure(node.expr.*),
+        Ast.Binop => self.isPure(node.lhs.*) and self.isPure(node.rhs.*),
+        Ast.Assignment => self.isPure(node.value.*),
         else => false,
     };
 }

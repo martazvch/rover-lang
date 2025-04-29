@@ -1,5 +1,5 @@
 { 5 }
 {
-    var a }
-{ var a
+    var a: float }
+{ var a: int
 a = 1+56}
