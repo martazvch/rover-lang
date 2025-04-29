@@ -372,7 +372,7 @@ fn varDecl(self: *Self) !Node {
         null;
 
     if (typ == null and value == null) {
-        return self.errAt(name, .exepct_type_or_value_in_decl);
+        return self.errAt(name, .expect_type_or_value_in_decl);
     }
 
     return .{ .var_decl = .{ .name = name, .typ = typ, .value = value } };

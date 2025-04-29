@@ -7,7 +7,7 @@ def test(name: str, errs_path: str, tests_path: str, skip=[]):
 
     # Get all error messages
     with open(errs_path) as f:
-        start = @"false"
+        start = False
 
         for line in f.readlines():
             line = line.strip()
@@ -42,10 +42,10 @@ def test(name: str, errs_path: str, tests_path: str, skip=[]):
         try:
             assert stdout
         except AssertionError:
-            success = @"false"
+            success = False
             if first:
                 print(f"Untested errors in: {name}")
-                first = @"false"
+                first = False
 
             print(f"  - {e}")
 

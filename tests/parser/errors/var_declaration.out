@@ -1,4 +1,5 @@
 ExpectName, variable
+expect_type_or_value_in_decl
 ExpectName, variable
 expect_colon_before_type
 expect_type_name

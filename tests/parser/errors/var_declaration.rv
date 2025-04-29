@@ -1,4 +1,5 @@
 var
+var no_type_no_value
 var : House
 var home House
 var home : 12+4
