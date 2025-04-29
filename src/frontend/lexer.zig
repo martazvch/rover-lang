@@ -7,6 +7,15 @@ const expect = std.testing.expect;
 const GenReport = @import("../reporter.zig").GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
 
+source: [:0]const u8,
+index: usize,
+tokens: std.MultiArrayList(Token),
+errs: ArrayList(LexerReport),
+allocator: Allocator,
+
+const Self = @This();
+pub const LexerReport = GenReport(LexerMsg);
+
 pub const Span = struct {
     start: usize,
     end: usize,
@@ -21,544 +30,460 @@ pub const Token = struct {
     span: Span,
 
     const keywords = std.StaticStringMap(Tag).initComptime(.{
-        .{ "and", .And },
-        .{ "as", .As },
-        .{ "bool", .Bool },
-        .{ "do", .Do },
+        .{ "and", .@"and" },
+        .{ "as", .as },
+        .{ "bool", .bool },
+        .{ "do", .do },
         .{ "else", .@"else" },
-        .{ "error", .Error },
-        .{ "false", .False },
-        .{ "float", .FloatKw },
-        .{ "fn", .Fn },
-        .{ "for", .For },
-        .{ "if", .If },
-        .{ "ifnull", .IfNull },
-        .{ "in", .In },
-        .{ "int", .IntKw },
-        .{ "not", .Not },
-        .{ "null", .Null },
-        .{ "or", .Or },
-        .{ "print", .Print },
-        .{ "return", .Return },
-        .{ "self", .Self },
-        .{ "str", .StrKw },
-        .{ "struct", .Struct },
-        .{ "true", .True },
-        .{ "use", .Use },
-        .{ "var", .Var },
-        .{ "while", .While },
+        .{ "error", .@"error" },
+        .{ "false", .false },
+        .{ "float", .float_kw },
+        .{ "fn", .@"fn" },
+        .{ "for", .@"for" },
+        .{ "if", .@"if" },
+        .{ "ifnull", .if_null },
+        .{ "in", .in },
+        .{ "int", .int_kw },
+        .{ "not", .not },
+        .{ "null", .null },
+        .{ "or", .@"or" },
+        .{ "print", .print },
+        .{ "return", .@"return" },
+        .{ "self", .self },
+        .{ "str", .str_kw },
+        .{ "struct", .@"struct" },
+        .{ "true", .true },
+        .{ "use", .use },
+        .{ "var", .@"var" },
+        .{ "while", .@"while" },
     });
 
     pub const Tag = enum {
-        And,
-        As,
+        @"and",
+        as,
         bang,
-        BangEqual,
-        Bool,
-        Colon,
-        Comma,
-        Do,
-        Dot,
-        DotBang,
-        DotDot,
-        DotDotDot,
-        DotQuestionMark,
-        DotStar,
+        bang_equal,
+        bool,
+        colon,
+        comma,
+        do,
+        dot,
+        dot_bang,
+        dot_dot,
+        dot_dot_dot,
+        dot_question_mark,
+        dot_star,
         @"else",
-        Eof,
-        Equal,
-        EqualEqual,
-        Error,
-        False,
-        Float,
-        FloatKw,
-        Fn,
-        For,
-        Greater,
-        GreaterEqual,
-        Identifier,
-        If,
-        IfNull,
-        In,
-        Int,
-        IntKw,
-        LeftBrace,
-        LeftParen,
-        Less,
-        LessEqual,
+        eof,
+        equal,
+        equal_equal,
+        @"error",
+        false,
+        float,
+        float_kw,
+        @"fn",
+        @"for",
+        greater,
+        greater_equal,
+        identifier,
+        @"if",
+        if_null,
+        in,
+        int,
+        int_kw,
+        left_brace,
+        left_paren,
+        less,
+        less_equal,
         minus,
-        Modulo,
-        NewLine,
-        Not,
-        Null,
-        Or,
-        Plus,
-        Print,
-        QuestionMark,
-        Return,
-        RightBrace,
-        RightParen,
-        Self,
-        Slash,
-        SmallArrow,
-        Star,
-        StrKw,
-        String,
-        Struct,
-        True,
-        Underscore,
-        Use,
-        Var,
-        While,
+        modulo,
+        new_line,
+        not,
+        null,
+        @"or",
+        plus,
+        print,
+        question_mark,
+        @"return",
+        right_brace,
+        right_paren,
+        self,
+        slash,
+        small_arrow,
+        star,
+        str_kw,
+        string,
+        @"struct",
+        true,
+        underscore,
+        use,
+        @"var",
+        @"while",
 
-        LeadingZeros,
-        UnterminatedStr,
-        UnexpectedChar,
-
-        // Only used by AST printer for binop and unary nodes
-        pub fn symbol(self: Tag) []const u8 {
-            return switch (self) {
-                .And => "and",
-                // .As => "as",
-                .bang => "!",
-                .BangEqual => "!=",
-                // .Bool => "bool",
-                // .Colon => ":",
-                // .Comma => ",",
-                // .Do => "do",
-                // .Dot => ".",
-                // .DotBang => ".!",
-                // .DotDot => "..",
-                // .DotDotDot => "...",
-                // .DotQuestionMark => ".?",
-                // .DotStar => ".*",
-                // .@"else" => "else",
-                // .Eof => "eof",
-                // .Equal => "=",
-                // .EqualEqual => "==",
-                // .Error => "error",
-                // .False => "false",
-                // .Float => "float value",
-                // .FloatKw => "float",
-                // .Fn => "fn",
-                // .For => "for",
-                .Greater => ">",
-                .GreaterEqual => ">=",
-                // .Identifier => "identifier",
-                // .If => "if",
-                // .IfNull => "ifnull",
-                // .In => "in",
-                // .Int => "int value",
-                // .IntKw => "int",
-                // .LeftBrace => "{",
-                // .LeftParen => "(",
-                .Less => "<",
-                .LessEqual => "<=",
-                .minus => "-",
-                // .Modulo => "%",
-                // .NewLine => "newline",
-                .Not => "not",
-                // .Null => "null",
-                .Or => "or",
-                .Plus => "+",
-                // .Print => "print",
-                // .QuestionMark => "?",
-                // .Return => "return",
-                // .RightBrace => "}",
-                // .RightParen => ")",
-                // .Self => "self",
-                .Slash => "/",
-                // .SmallArrow => "->",
-                .Star => "*",
-                // .StrKw => "str",
-                // .String => "string value",
-                // .Struct => "struct",
-                // .True => "true",
-                // .Underscore => "_",
-                // .Use => "use",
-                // .Var => "var",
-                // .While => "while",
-
-                // .LeadingZeros, .UnexpectedChar, .UnterminatedStr => unreachable,
-                else => unreachable,
-            };
-        }
+        leading_zeroes,
+        unterminated_str,
+        unexpected_char,
     };
 
-    pub fn from_source(self: *const Token, source: []const u8) []const u8 {
-        return source[self.span.start..self.span.end];
-    }
-
-    pub fn get_keyword(ident: []const u8) ?Tag {
+    pub fn getKeyword(ident: []const u8) ?Tag {
         return keywords.get(ident);
     }
 };
 
-pub const Lexer = struct {
-    source: [:0]const u8,
-    index: usize,
-    tokens: std.MultiArrayList(Token),
-    errs: ArrayList(LexerReport),
-    allocator: Allocator,
+const State = enum {
+    bang,
+    comment,
+    dot,
+    dot_dot,
+    equal,
+    float,
+    greater,
+    identifier,
+    int,
+    invalid,
+    less,
+    slash,
+    start,
+    string,
+};
 
-    const Self = @This();
-    pub const LexerReport = GenReport(LexerMsg);
+pub fn init(allocator: Allocator) Self {
+    return .{
+        .source = undefined,
+        .index = 0,
+        .tokens = .{},
+        .errs = .init(allocator),
+        .allocator = allocator,
+    };
+}
 
-    const State = enum {
-        bang,
-        Comment,
-        Dot,
-        DotDot,
-        Equal,
-        Float,
-        Greater,
-        Identifier,
-        Int,
-        Invalid,
-        Less,
-        Slash,
-        Start,
-        String,
+pub fn deinit(self: *Self) void {
+    self.tokens.deinit(self.allocator);
+    self.errs.deinit();
+}
+
+pub fn lex(self: *Self, source: [:0]const u8) !void {
+    self.source = source;
+
+    while (true) {
+        const tk = self.next();
+
+        // TODO: redo this part. As we lex every thing at once, use arraylist for
+        // errors like parser, analyzer, ...? Or use compitme to associate both sides
+        try switch (tk.tag) {
+            .leading_zeroes => self.errorAt(.leading_zeroes, &tk),
+            .unterminated_str => self.errorAt(.unterminated_str, &tk),
+            .unexpected_char => self.errorAt(.unexpected_char, &tk),
+            else => self.tokens.append(self.allocator, tk),
+        };
+
+        if (tk.tag == .eof) break;
+    }
+}
+
+fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) !void {
+    const report = LexerReport.err(tag, token.span);
+    try self.errs.append(report);
+}
+
+pub fn next(self: *Self) Token {
+    var res = Token{
+        .tag = undefined,
+        .span = .{
+            .start = self.index,
+            .end = undefined,
+        },
     };
 
-    pub fn init(allocator: Allocator) Self {
-        return .{
-            .source = undefined,
-            .index = 0,
-            .tokens = .{},
-            .errs = .init(allocator),
-            .allocator = allocator,
-        };
-    }
+    state: switch (State.start) {
+        .start => {
+            switch (self.source[self.index]) {
+                'a'...'z', 'A'...'Z' => {
+                    res.tag = .identifier;
+                    continue :state .identifier;
+                },
+                ' ', '\t', '\r' => {
+                    self.index += 1;
+                    res.span.start = self.index;
+                    continue :state .start;
+                },
+                '(' => {
+                    res.tag = .left_paren;
+                    self.index += 1;
+                },
+                ')' => {
+                    res.tag = .right_paren;
+                    self.index += 1;
+                },
+                '{' => {
+                    res.tag = .left_brace;
+                    self.index += 1;
+                },
+                '}' => {
+                    res.tag = .right_brace;
+                    self.index += 1;
+                },
+                ':' => {
+                    res.tag = .colon;
+                    self.index += 1;
+                },
+                ',' => {
+                    res.tag = .comma;
+                    self.index += 1;
+                },
+                '+' => {
+                    res.tag = .plus;
+                    self.index += 1;
+                },
+                '-' => {
+                    self.index += 1;
 
-    pub fn deinit(self: *Self) void {
-        self.tokens.deinit(self.allocator);
-        self.errs.deinit();
-    }
-
-    pub fn lex(self: *Self, source: [:0]const u8) !void {
-        self.source = source;
-
-        while (true) {
-            const tk = self.next();
-
-            // TODO: redo this part. As we lex every thing at once, use arraylist for
-            // errors like parser, analyzer, ...? Or use compitme to associate both sides
-            try switch (tk.tag) {
-                .LeadingZeros => self.error_at(.LeadingZeros, &tk),
-                .UnterminatedStr => self.error_at(.UnterminatedStr, &tk),
-                .UnexpectedChar => self.error_at(.UnexpectedChar, &tk),
-                else => self.tokens.append(self.allocator, tk),
-            };
-
-            if (tk.tag == .Eof) break;
-        }
-    }
-
-    fn error_at(self: *Self, tag: LexerMsg, token: *const Token) !void {
-        const report = LexerReport.err(tag, token.span);
-        try self.errs.append(report);
-    }
-
-    pub fn next(self: *Self) Token {
-        var res = Token{
-            .tag = undefined,
-            .span = .{
-                .start = self.index,
-                .end = undefined,
-            },
-        };
-
-        state: switch (State.Start) {
-            .Start => {
-                switch (self.source[self.index]) {
-                    'a'...'z', 'A'...'Z' => {
-                        res.tag = .Identifier;
-                        continue :state .Identifier;
-                    },
-                    ' ', '\t', '\r' => {
+                    if (self.source[self.index] == '>') {
                         self.index += 1;
-                        res.span.start = self.index;
-                        continue :state .Start;
-                    },
-                    '(' => {
-                        res.tag = .LeftParen;
+                        res.tag = .small_arrow;
+                    } else res.tag = .minus;
+                },
+                '*' => {
+                    res.tag = .star;
+                    self.index += 1;
+                },
+                '/' => continue :state .slash,
+                '\n' => {
+                    res.tag = .new_line;
+                    self.index += 1;
+                },
+                '<' => continue :state .less,
+                '>' => continue :state .greater,
+                '!' => continue :state .bang,
+                '=' => continue :state .equal,
+                '.' => continue :state .dot,
+                '"' => {
+                    res.tag = .string;
+                    continue :state .string;
+                },
+                '0' => {
+                    if (self.source[self.index + 1] == '.') {
                         self.index += 1;
-                    },
-                    ')' => {
-                        res.tag = .RightParen;
-                        self.index += 1;
-                    },
-                    '{' => {
-                        res.tag = .LeftBrace;
-                        self.index += 1;
-                    },
-                    '}' => {
-                        res.tag = .RightBrace;
-                        self.index += 1;
-                    },
-                    ':' => {
-                        res.tag = .Colon;
-                        self.index += 1;
-                    },
-                    ',' => {
-                        res.tag = .Comma;
-                        self.index += 1;
-                    },
-                    '+' => {
-                        res.tag = .Plus;
-                        self.index += 1;
-                    },
-                    '-' => {
-                        self.index += 1;
-
-                        if (self.source[self.index] == '>') {
-                            self.index += 1;
-                            res.tag = .SmallArrow;
-                        } else res.tag = .minus;
-                    },
-                    '*' => {
-                        res.tag = .Star;
-                        self.index += 1;
-                    },
-                    '/' => continue :state .Slash,
-                    '\n' => {
-                        res.tag = .NewLine;
-                        self.index += 1;
-                    },
-                    '<' => continue :state .Less,
-                    '>' => continue :state .Greater,
-                    '!' => continue :state .bang,
-                    '=' => continue :state .Equal,
-                    '.' => continue :state .Dot,
-                    '"' => {
-                        res.tag = .String;
-                        continue :state .String;
-                    },
-                    '0' => {
-                        if (self.source[self.index + 1] == '.') {
-                            self.index += 1;
-                            continue :state .Float;
-                        } else {
-                            self.index += 1;
-                            switch (self.source[self.index]) {
-                                '0'...'9' => return .{
-                                    .tag = .LeadingZeros,
-                                    .span = .{
-                                        .start = self.index - 1,
-                                        .end = self.index,
-                                    },
-                                },
-                                else => res.tag = .Int,
-                            }
-                        }
-                    },
-                    '1'...'9' => {
-                        res.tag = .Int;
-                        self.index += 1;
-                        continue :state .Int;
-                    },
-                    '_' => {
+                        continue :state .float;
+                    } else {
                         self.index += 1;
                         switch (self.source[self.index]) {
-                            'a'...'z', 'A'...'Z', '0'...'9', '_' => {
-                                res.tag = .Identifier;
-                                continue :state .Identifier;
-                            },
-                            else => res.tag = .Underscore,
-                        }
-                    },
-                    0 => {
-                        if (self.index == self.source.len) {
-                            return .{
-                                .tag = .Eof,
-                                .span = .{ .start = self.index, .end = self.index },
-                            };
-                        } else continue :state .Invalid;
-                    },
-                    else => {
-                        res.tag = .UnexpectedChar;
-                        self.index += 1;
-                    },
-                }
-            },
-            .bang => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '=' => {
-                        res.tag = .BangEqual;
-                        self.index += 1;
-                    },
-                    else => res.tag = .bang,
-                }
-            },
-            .Comment => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '\n' => continue :state .Start,
-                    else => continue :state .Comment,
-                }
-            },
-            .Dot => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '0'...'9' => continue :state .Float,
-                    '.' => continue :state .DotDot,
-                    '*' => {
-                        res.tag = .DotStar;
-                        self.index += 1;
-                    },
-                    '?' => {
-                        res.tag = .DotQuestionMark;
-                        self.index += 1;
-                    },
-                    '!' => {
-                        res.tag = .DotBang;
-                        self.index += 1;
-                    },
-                    else => res.tag = .Dot,
-                }
-            },
-            .DotDot => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '.' => {
-                        res.tag = .DotDotDot;
-                        self.index += 1;
-                    },
-                    else => res.tag = .DotDot,
-                }
-            },
-            .Equal => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '=' => {
-                        res.tag = .EqualEqual;
-                        self.index += 1;
-                    },
-                    else => res.tag = .Equal,
-                }
-            },
-            .Float => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '0'...'9' => continue :state .Float,
-                    else => res.tag = .Float,
-                }
-            },
-            .Greater => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '=' => {
-                        res.tag = .GreaterEqual;
-                        self.index += 1;
-                    },
-                    else => res.tag = .Greater,
-                }
-            },
-            .Identifier => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .Identifier,
-                    else => {
-                        const ident = self.source[res.span.start..self.index];
-
-                        if (Token.get_keyword(ident)) |kw| {
-                            res.tag = kw;
-                        }
-                    },
-                }
-            },
-            .Int => {
-                switch (self.source[self.index]) {
-                    '0'...'9' => {
-                        self.index += 1;
-                        continue :state .Int;
-                    },
-                    '.' => continue :state .Float,
-                    else => {},
-                }
-            },
-            .Invalid => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    0 => {
-                        if (self.index == self.source.len) {
-                            res.tag = .Eof;
-                        } else continue :state .Invalid;
-                    },
-                    ' ' => res.tag = .Error,
-                    else => continue :state .Invalid,
-                }
-            },
-            .Less => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '=' => {
-                        res.tag = .LessEqual;
-                        self.index += 1;
-                    },
-                    else => res.tag = .Less,
-                }
-            },
-            .Slash => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    '/' => continue :state .Comment,
-                    else => res.tag = .Slash,
-                }
-            },
-            .String => {
-                self.index += 1;
-
-                switch (self.source[self.index]) {
-                    0 => {
-                        if (self.index == self.source.len) {
-                            // For error reporting, one byte length
-                            return .{
-                                .tag = .UnterminatedStr,
+                            '0'...'9' => return .{
+                                .tag = .leading_zeroes,
                                 .span = .{
-                                    .start = res.span.start,
-                                    .end = res.span.start + 1,
+                                    .start = self.index - 1,
+                                    .end = self.index,
                                 },
-                            };
+                            },
+                            else => res.tag = .int,
                         }
-                    },
-                    '"' => self.index += 1,
-                    else => continue :state .String,
-                }
-            },
-        }
+                    }
+                },
+                '1'...'9' => {
+                    res.tag = .int;
+                    self.index += 1;
+                    continue :state .int;
+                },
+                '_' => {
+                    self.index += 1;
+                    switch (self.source[self.index]) {
+                        'a'...'z', 'A'...'Z', '0'...'9', '_' => {
+                            res.tag = .identifier;
+                            continue :state .identifier;
+                        },
+                        else => res.tag = .underscore,
+                    }
+                },
+                0 => {
+                    if (self.index == self.source.len) {
+                        return .{
+                            .tag = .eof,
+                            .span = .{ .start = self.index, .end = self.index },
+                        };
+                    } else continue :state .invalid;
+                },
+                else => {
+                    res.tag = .unexpected_char;
+                    self.index += 1;
+                },
+            }
+        },
+        .bang => {
+            self.index += 1;
 
-        res.span.end = self.index;
-        return res;
+            switch (self.source[self.index]) {
+                '=' => {
+                    res.tag = .bang_equal;
+                    self.index += 1;
+                },
+                else => res.tag = .bang,
+            }
+        },
+        .comment => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '\n' => continue :state .start,
+                else => continue :state .comment,
+            }
+        },
+        .dot => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '0'...'9' => continue :state .float,
+                '.' => continue :state .dot_dot,
+                '*' => {
+                    res.tag = .dot_star;
+                    self.index += 1;
+                },
+                '?' => {
+                    res.tag = .dot_question_mark;
+                    self.index += 1;
+                },
+                '!' => {
+                    res.tag = .dot_bang;
+                    self.index += 1;
+                },
+                else => res.tag = .dot,
+            }
+        },
+        .dot_dot => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '.' => {
+                    res.tag = .dot_dot_dot;
+                    self.index += 1;
+                },
+                else => res.tag = .dot_dot,
+            }
+        },
+        .equal => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '=' => {
+                    res.tag = .equal_equal;
+                    self.index += 1;
+                },
+                else => res.tag = .equal,
+            }
+        },
+        .float => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '0'...'9' => continue :state .float,
+                else => res.tag = .float,
+            }
+        },
+        .greater => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '=' => {
+                    res.tag = .greater_equal;
+                    self.index += 1;
+                },
+                else => res.tag = .greater,
+            }
+        },
+        .identifier => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                'a'...'z', 'A'...'Z', '_', '0'...'9' => continue :state .identifier,
+                else => {
+                    const ident = self.source[res.span.start..self.index];
+
+                    if (Token.getKeyword(ident)) |kw| {
+                        res.tag = kw;
+                    }
+                },
+            }
+        },
+        .int => {
+            switch (self.source[self.index]) {
+                '0'...'9' => {
+                    self.index += 1;
+                    continue :state .int;
+                },
+                '.' => continue :state .float,
+                else => {},
+            }
+        },
+        .invalid => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                0 => {
+                    if (self.index == self.source.len) {
+                        res.tag = .eof;
+                    } else continue :state .invalid;
+                },
+                ' ' => res.tag = .@"error",
+                else => continue :state .invalid,
+            }
+        },
+        .less => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '=' => {
+                    res.tag = .less_equal;
+                    self.index += 1;
+                },
+                else => res.tag = .less,
+            }
+        },
+        .slash => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '/' => continue :state .comment,
+                else => res.tag = .slash,
+            }
+        },
+        .string => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                0 => {
+                    if (self.index == self.source.len) {
+                        // For error reporting, one byte length
+                        return .{
+                            .tag = .unterminated_str,
+                            .span = .{
+                                .start = res.span.start,
+                                .end = res.span.start + 1,
+                            },
+                        };
+                    }
+                },
+                '"' => self.index += 1,
+                else => continue :state .string,
+            }
+        },
     }
-};
+
+    res.span.end = self.index;
+    return res;
+}
 
 // ------------
 //  Tests
 // ------------
 test "ident and strings" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
-        .{ .tag = .Identifier, .span = .{ .start = 0, .end = 3 } },
-        .{ .tag = .Identifier, .span = .{ .start = 4, .end = 7 } },
-        .{ .tag = .Identifier, .span = .{ .start = 8, .end = 16 } },
-        .{ .tag = .Identifier, .span = .{ .start = 18, .end = 23 } },
+        .{ .tag = .identifier, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .identifier, .span = .{ .start = 4, .end = 7 } },
+        .{ .tag = .identifier, .span = .{ .start = 8, .end = 16 } },
+        .{ .tag = .identifier, .span = .{ .start = 18, .end = 23 } },
     };
 
     for (0..res.len) |i| {
@@ -572,15 +497,15 @@ test "ident and strings" {
 }
 
 test "numbers" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("123 45.6 7. .86");
 
     const res = [_]Token{
-        .{ .tag = .Int, .span = .{ .start = 0, .end = 3 } },
-        .{ .tag = .Float, .span = .{ .start = 4, .end = 8 } },
-        .{ .tag = .Float, .span = .{ .start = 9, .end = 11 } },
-        .{ .tag = .Float, .span = .{ .start = 12, .end = 15 } },
+        .{ .tag = .int, .span = .{ .start = 0, .end = 3 } },
+        .{ .tag = .float, .span = .{ .start = 4, .end = 8 } },
+        .{ .tag = .float, .span = .{ .start = 9, .end = 11 } },
+        .{ .tag = .float, .span = .{ .start = 12, .end = 15 } },
     };
 
     for (0..res.len) |i| {
@@ -594,14 +519,14 @@ test "numbers" {
 }
 
 test "tokens" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("(){}.:,=!< ><= >= !=+-*/");
 
     const res = [_]Token.Tag{
-        .LeftParen,    .RightParen, .LeftBrace, .RightBrace, .Dot,     .Colon,
-        .Comma,        .Equal,      .bang,      .Less,       .Greater, .LessEqual,
-        .GreaterEqual, .BangEqual,  .Plus,      .minus,      .Star,    .Slash,
+        .left_paren,    .right_paren, .left_brace, .right_brace, .dot,     .colon,
+        .comma,         .equal,       .bang,       .less,        .greater, .less_equal,
+        .greater_equal, .bang_equal,  .plus,       .minus,       .star,    .slash,
     };
 
     for (0..res.len) |i| {
@@ -611,7 +536,7 @@ test "tokens" {
 }
 
 test "keywords" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex(
         \\\and else false for fn if in null or print return 
@@ -619,9 +544,9 @@ test "keywords" {
     );
 
     const res = [_]Token.Tag{
-        .And,    .@"else", .False, .For,    .Fn,   .If,  .In,    .Null, .Or,    .Print,
-        .Return, .NewLine, .Self,  .Struct, .True, .Var, .While, .Not,  .IntKw, .FloatKw,
-        .StrKw,  .Do,      .Use,   .Eof,
+        .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .in,       .null, .@"or",  .print,
+        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .int_kw, .float_kw,
+        .str_kw,    .do,       .use,   .eof,
     };
 
     for (0..res.len) |i| {
@@ -631,31 +556,31 @@ test "keywords" {
 }
 
 test "unterminated string" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("\"blabla bli blop");
 
     const err = lexer.errs.items[0];
-    try expect(err.report == .UnterminatedStr);
+    try expect(err.report == .unterminated_str);
 }
 
 test "leading zeros" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("var e = 01\n var b = 00002");
 
-    try expect(lexer.errs.items[0].report == .LeadingZeros);
-    try expect(lexer.errs.items[1].report == .LeadingZeros);
+    try expect(lexer.errs.items[0].report == .leading_zeroes);
+    try expect(lexer.errs.items[1].report == .leading_zeroes);
 }
 
 test "underscore" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("var _under   _=1   var _1art   var ___yo");
 
     const res = [_]Token.Tag{
-        .Var, .Identifier, .Underscore, .Equal,      .Int,
-        .Var, .Identifier, .Var,        .Identifier, .Eof,
+        .@"var", .identifier, .underscore, .equal,      .int,
+        .@"var", .identifier, .@"var",     .identifier, .eof,
     };
 
     for (0..res.len) |i| {
@@ -665,13 +590,13 @@ test "underscore" {
 }
 
 test "arrow" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex("- > -5> >- -< ->");
 
     const res = [_]Token.Tag{
-        .minus, .Greater, .minus,      .Int, .Greater, .Greater, .minus,
-        .minus, .Less,    .SmallArrow,
+        .minus, .greater, .minus,       .int, .greater, .greater, .minus,
+        .minus, .less,    .small_arrow,
     };
 
     for (0..res.len) |i| {
@@ -681,13 +606,13 @@ test "arrow" {
 }
 
 test "dot" {
-    var lexer = Lexer.init(std.testing.allocator);
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     try lexer.lex(". .. ... .! .? .* ....!");
 
     const res = [_]Token.Tag{
-        .Dot,     .DotDot,    .DotDotDot, .DotBang, .DotQuestionMark,
-        .DotStar, .DotDotDot, .DotBang,
+        .dot,      .dot_dot,     .dot_dot_dot, .dot_bang, .dot_question_mark,
+        .dot_star, .dot_dot_dot, .dot_bang,
     };
 
     for (0..res.len) |i| {

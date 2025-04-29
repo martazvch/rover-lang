@@ -1,6 +1,4 @@
 while true {}
-while true do {}
-while true and false do var a = 1
 while {true} {
     var tmp = 1+5
 }

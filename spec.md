@@ -312,7 +312,7 @@ aliases without any confusion:
 
 let last = @outter loop {
     while get_token() :: tk {
-        if tk.kind == .Plus do break @outter tk
+        if tk.kind == .plus do break @outter tk
     }
 }
 ```

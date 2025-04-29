@@ -4,8 +4,8 @@ const Allocator = std.mem.Allocator;
 const Ast = @import("ast.zig");
 const Node = @import("ast.zig").Node;
 const ParserReport = @import("parser.zig").Parser.ParserReport;
-const Span = @import("lexer.zig").Span;
-const Token = @import("lexer.zig").Token;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
 
 pub const AstPrinter = struct {
     allocator: Allocator,
@@ -86,7 +86,7 @@ pub const AstPrinter = struct {
 
     fn parse_node(self: *Self, index: Node.Index) !void {
         try switch (self.node_tags[index]) {
-            .Add, .And, .Div, .Mul, .Or, .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => self.binop_expr(),
+            .Add, .@"and", .Div, .Mul, .@"or", .Sub, .Eq, .Ge, .Gt, .Le, .Lt, .Ne => self.binop_expr(),
             .Assignment => self.assignment(),
             .Block => self.block_expr(),
             .Bool => self.literal("Bool literal"),
@@ -99,22 +99,22 @@ pub const AstPrinter = struct {
             .FnDecl => self.fn_decl(),
             .Grouping => self.grouping(),
             .Identifier => self.literal("Identifier"),
-            .If => self.if_expr(),
+            .@"if" => self.if_expr(),
             .Int => self.literal("Int literal"),
             .MultiVarDecl => self.multi_var_decl(),
-            .Null => self.null_(),
+            .null => self.null_(),
             .Parameter => self.parameter(),
-            .Print => self.print_stmt(),
-            .Return => self.return_expr(),
+            .print => self.print_stmt(),
+            .@"return" => self.return_expr(),
             .self => unreachable,
-            .String => self.literal("String literal"),
+            .string => self.literal("String literal"),
             .StructDecl => self.structure(),
             .struct_literal => self.struct_literal(),
             .Type => unreachable,
             .Unary => self.unary_expr(),
-            .Use => self.use_stmt(),
+            .use => self.use_stmt(),
             .VarDecl => self.var_decl(),
-            .While => self.while_stmt(),
+            .@"while" => self.while_stmt(),
         };
     }
 
@@ -141,7 +141,7 @@ pub const AstPrinter = struct {
         var writer = self.tree.writer();
         try writer.print("[Binop {s}]\n", .{switch (self.node_tags[self.node_idx]) {
             .Add => "+",
-            .And => "and",
+            .@"and" => "and",
             .Div => "/",
             .Eq => "==",
             .Ge => ">=",
@@ -150,7 +150,7 @@ pub const AstPrinter = struct {
             .Lt => "<",
             .Mul => "*",
             .Ne => "!=",
-            .Or => "or",
+            .@"or" => "or",
             .Sub => "-",
             else => unreachable,
         }});
@@ -520,7 +520,7 @@ pub const AstPrinter = struct {
         if (self.node_tags[index] == .Empty) {
             self.node_idx += 1;
             return "void";
-        } else if (self.token_tags[self.node_mains[index]] == .Fn)
+        } else if (self.token_tags[self.node_mains[index]] == .nf)
             return self.get_fn_type(index) catch @panic("oom");
 
         defer self.node_idx += 1;

@@ -55,7 +55,7 @@ pub fn main() !void {
     };
 
     var vm: Vm = .empty;
-    try vm.init(allocator, config);
+    vm.init(allocator, config);
     defer vm.deinit();
 
     if (res.positionals[0]) |f| {

@@ -6,12 +6,14 @@ const options = @import("options");
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/disassembler.zig").Disassembler;
-const Analyzer = @import("frontend/analyzer.zig").Analyzer;
+const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
+const Ast = @import("frontend/Ast.zig");
 const AstPrinter = @import("frontend/ast_print.zig").AstPrinter;
-const Lexer = @import("frontend/lexer.zig").Lexer;
+const AstRender = @import("frontend/AstRender.zig");
+const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const Parser = @import("frontend/parser.zig").Parser;
+const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const GenReporter = @import("reporter.zig").GenReporter;
@@ -40,13 +42,13 @@ pub const Pipeline = struct {
         .code_count = 0,
     };
 
-    pub fn init(self: *Self, vm: *Vm, config: Vm.Config) !void {
+    pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
         self.vm = vm;
         self.arena = .init(vm.allocator);
         self.allocator = self.arena.allocator();
         self.config = config;
         self.analyzer = undefined;
-        try self.analyzer.init(self.allocator, config.embedded);
+        self.analyzer.init(self.allocator, config.embedded);
     }
 
     pub fn deinit(self: *Self) void {
@@ -67,20 +69,14 @@ pub const Pipeline = struct {
         }
 
         // Parser
-        // TODO: self.allocator is already an arena, modify Parser
         var parser: Parser = .empty;
         parser.init(self.allocator);
         defer parser.deinit();
 
-        try parser.parse(
-            source,
-            lexer.tokens.items(.tag),
-            lexer.tokens.items(.span),
-        );
+        var ast = try parser.parse(source, &lexer.tokens);
 
-        // Printer
         if (options.test_mode and self.config.print_ast) {
-            try print_ast(self.allocator, source, &lexer, &parser);
+            try printAst(self.allocator, &ast, &parser);
             return error.ExitOnPrint;
         }
 
@@ -88,10 +84,10 @@ pub const Pipeline = struct {
             var reporter = GenReporter(ParserMsg).init(source);
             try reporter.report_all(filename, parser.errs.items);
             return error.ExitOnPrint;
-        } else if (self.config.print_ast) try print_ast(self.allocator, source, &lexer, &parser);
+        } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
         // Analyzer
-        try self.analyzer.analyze(source, &lexer.tokens, &parser.nodes);
+        try self.analyzer.analyze(&ast);
         defer self.analyzer.reinit();
 
         // We don't keep errors/warnings from a prompt to another
@@ -147,21 +143,19 @@ pub const Pipeline = struct {
     }
 };
 
-fn print_ast(allocator: Allocator, source: [:0]const u8, lexer: *const Lexer, parser: *const Parser) !void {
-    var ast_printer = AstPrinter.init(
-        allocator,
-        source,
-        lexer.tokens.items(.tag),
-        lexer.tokens.items(.span),
-        parser.nodes.items(.tag),
-        parser.nodes.items(.main),
-        parser.nodes.items(.data),
-        parser.errs.items,
-    );
-    defer ast_printer.deinit();
+fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
+    var stdout = std.io.getStdOut().writer();
 
-    try ast_printer.parse_ast();
-    try ast_printer.display();
+    if (parser.errs.items.len > 0) {
+        for (parser.errs.items) |err| {
+            try err.to_str(stdout);
+            try stdout.writeAll("\n");
+        }
+    } else {
+        var renderer: AstRender = .init(allocator, ast);
+        try renderer.render();
+        try stdout.writeAll(renderer.output.items);
+    }
 }
 
 fn render_ir(

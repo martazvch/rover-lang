@@ -1,19 +1,37 @@
-[Var declaration home, type void, value
-    none
-]
-
-[Var declaration home, type House, value
-    none
-]
-
-[Var declaration home, type void, value
-    [Binop +]
-        [Int literal 12]
-        [Float literal 4.]
-]
-
-[Var declaration home, type House, value
-    [Binop +]
-        [Int literal 12]
-        [Float literal 4.]
-]
+{
+    "var_decl": {
+        "name": "home",
+        "type": "House",
+        "value": {}
+    },
+    "var_decl": {
+        "name": "home",
+        "type": {},
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "12"
+                },
+                "rhs": {
+                    "literal": "4."
+                },
+                "op": "+"
+            }
+        }
+    },
+    "var_decl": {
+        "name": "home",
+        "type": "House",
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "12"
+                },
+                "rhs": {
+                    "literal": "4."
+                },
+                "op": "+"
+            }
+        }
+    }
+}

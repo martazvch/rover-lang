@@ -4,10 +4,10 @@ fn main() {
         var integer = 1
     }
 
-    var void_post_assign
+    var void_post_assign: int
     void_post_assign = {
         _ = 3 + 4
-        var empty
+        var empty: bool
     }
 
     // Unused value

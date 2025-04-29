@@ -18,7 +18,7 @@ pub const OpCode = enum(u8) {
     EqInt,
     EqStr,
     ExitRepl,
-    False,
+    false,
     call,
     get_field,
     GetGlobal,
@@ -46,11 +46,11 @@ pub const OpCode = enum(u8) {
     NeStr,
     NegateFloat,
     NegateInt,
-    Not,
-    Null,
+    not,
+    null,
     Pop,
-    Print,
-    Return,
+    print,
+    @"return",
     ScopeReturn,
     SetGlobal,
     SetHeap,
@@ -61,7 +61,7 @@ pub const OpCode = enum(u8) {
     struct_literal,
     SubFloat,
     SubInt,
-    True,
+    true,
 };
 
 pub const Chunk = struct {
@@ -90,17 +90,17 @@ pub const Chunk = struct {
         self.offsets.deinit();
     }
 
-    pub fn write_op(self: *Self, op: OpCode, offset: usize) Error!void {
+    pub fn writeOp(self: *Self, op: OpCode, offset: usize) Error!void {
         try self.code.append(@intFromEnum(op));
         try self.offsets.append(offset);
     }
 
-    pub fn write_byte(self: *Self, byte: u8, offset: usize) Error!void {
+    pub fn writeByte(self: *Self, byte: u8, offset: usize) Error!void {
         try self.code.append(byte);
         try self.offsets.append(offset);
     }
 
-    pub fn write_constant(self: *Self, value: Value) Error!u8 {
+    pub fn writeConstant(self: *Self, value: Value) Error!u8 {
         if (self.constant_count == CONST_MAX) {
             // if (self.constants.items.len == CONST_MAX) {
             return error.TooManyConst;

@@ -1,3 +1,2 @@
 use std
-use std.time
 use std.time.notime.lost

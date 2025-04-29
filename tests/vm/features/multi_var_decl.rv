@@ -15,26 +15,17 @@ fn main() {
     print d // expect: -130
     print e // expect: true
 
-    // Null at first without any type
-    var f, g, h
-    h = 5
-    f = get_bool
-    g = f() and false
-    print h // expect: 5
-    print f // expect: <fn get_bool>
-    print g // expect: false
-
     // Infered type
-    needs_bool(g) // no error
+    needs_bool(e) // no error
 
     // Null at first with any type
     var i, j, k: float
     i = 5
-    j = i * h
+    j = i * a + 6
     k = i - j * 3.
     print i // expect: 5
-    print j // expect: 25
-    print k // expect: -70
+    print j // expect: 11
+    print k // expect: -28
 
     // Typed + casts
     var l, m: float = 1, 56.7

@@ -32,7 +32,7 @@
                 [Bool true]
             - then:
                 [Return expr: true, cast: false]
-                    [Binop type: AddInt, cast: none]
+                    [Binop type: add_int, cast: none]
                         [Variable index: 1, scope: local]
                         [Int 2]
             - else:

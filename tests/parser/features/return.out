@@ -1,4 +1,7 @@
-[Return]
-[Return
-    [Int literal 56]
-]
+{
+    "return": {},
+    "return": {
+        "literal": "56"
+    }
+}
+

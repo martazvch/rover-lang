@@ -4,7 +4,7 @@ fn main() {
     // A OP_POP will be triggered as an expression statement
     _ = {5}
     { var a = 5 }
-    { var a }
+    { var a: int }
 
     {
         var a = 1

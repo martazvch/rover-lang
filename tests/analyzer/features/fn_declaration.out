@@ -5,7 +5,7 @@
         [Fn declaration another_bool, index: 1, scope: local, return kind: implicit_value]
             [Variable declaration index: 3, scope: local]
                 [Int 5]
-            [Binop type: Or, cast: none]
+            [Binop type: or, cast: none]
                 [Bool true]
                 [Bool false]
 

@@ -1,26 +1,36 @@
-[Var declaration a, type void, value
-    none
-]
-[Assignment
-    assigne:
-    [Identifier a]
-    value:
-    [Int literal 1]
-]
-[Assignment
-    assigne:
-    [Identifier a]
-    value:
-    [Fn call
-        callee:
-        [Identifier add]
-        args:
-    ]
-]
-[Assignment
-    assigne:
-    [Identifier a]
-    value:
-    [Block]
-]
-
+{
+    "var_decl": {
+        "name": "a",
+        "type": "any",
+        "value": {}
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "literal": "1"
+        }
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "fn_call": {
+                "callee": {
+                    "literal": "add"
+                },
+                "args": []
+            }
+        }
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "block": []
+        }
+    }
+}

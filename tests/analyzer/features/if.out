@@ -70,7 +70,7 @@
                     [Float 5.5]
                 [Variable declaration index: 5, scope: local]
                     [Float 8.7]
-                [Binop type: AddFloat, cast: none]
+                [Binop type: add_float, cast: none]
                     [Variable index: 4, scope: local]
                     [Variable index: 5, scope: local]
         - else:

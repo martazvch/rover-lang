@@ -19,11 +19,11 @@ fn main() {
     var last = 9
 
     fn nested() {
-        var mach
+        var mach: int
         var mach2 = c
 
         fn nested2() {
-            var mach3
+            var mach3: int
 
             fn capture1() { print b }
         }

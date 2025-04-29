@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
 const ObjString = @import("obj.zig").ObjString;
 const Value = @import("values.zig").Value;
 
@@ -38,7 +39,7 @@ pub const Table = struct {
         const is_new = entry.key == null;
 
         // Don't increment if it was a tombstone
-        if (is_new and entry.value == .Null) self.count += 1;
+        if (is_new and entry.value == .null) self.count += 1;
 
         entry.key = key;
         entry.value = value;
@@ -77,7 +78,7 @@ pub const Table = struct {
             const entry = &entries[index];
 
             if (entry.key == null) {
-                if (entry.value == .Null) {
+                if (entry.value == .null) {
                     return if (tombstone) |t| t else entry;
                 } else {
                     // Tombstone
@@ -103,7 +104,7 @@ pub const Table = struct {
                 }
             } else {
                 // We found a non-tombstone empty entry
-                if (entry.value == .Null) return null;
+                if (entry.value == .null) return null;
             }
         }
     }

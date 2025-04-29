@@ -1,12 +1,13 @@
 const std = @import("std");
 const print = std.debug.print;
+
 const Obj = @import("obj.zig").Obj;
 
 pub const Value = union(enum) {
     Bool: bool,
     Float: f64,
     Int: i64,
-    Null,
+    null,
     Obj: *Obj,
 
     const Self = @This();
@@ -24,7 +25,7 @@ pub const Value = union(enum) {
     }
 
     pub fn null_() Self {
-        return .{ .Null = undefined };
+        return .{ .null = undefined };
     }
 
     pub fn obj(object: *Obj) Value {
@@ -48,7 +49,7 @@ pub const Value = union(enum) {
             .Bool => |v| writer.print("{}", .{v}),
             .Float => |v| writer.print("{d}", .{v}),
             .Int => |v| writer.print("{}", .{v}),
-            .Null => writer.print("null", .{}),
+            .null => writer.print("null", .{}),
             .Obj => |v| v.print(writer),
         };
     }

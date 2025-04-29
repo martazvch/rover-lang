@@ -20,10 +20,10 @@
         [Variable index: 2, scope: local]
         - args:
         [Int 2]
-        [Cast to Float]
+        [Cast to float]
         [Int 3]
         [Int 45]
-        [Cast to Float]
+        [Cast to float]
         [Float 67]
         [String yup]
     [Fn call arity: 5, builtin: false]
@@ -31,8 +31,8 @@
         - args:
         [Int 2]
         [Int 3]
-        [Cast to Float]
+        [Cast to float]
         [Int 45]
-        [Cast to Float]
+        [Cast to float]
         [Bool true]
         [String yup]

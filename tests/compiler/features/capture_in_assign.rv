@@ -1,5 +1,5 @@
-var globalSet
-var globalGet
+var globalSet: fn() -> void
+var globalGet: fn() -> void
 
 fn set_vars() {
     var a = "init"

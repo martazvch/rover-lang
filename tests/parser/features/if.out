@@ -1,133 +1,165 @@
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal "ok"]
-    else body:
-    none
-]
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal "ok"]
-    else body:
-    none
-]
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal "ok"]
-    else body:
-    [Print]
-        [String literal "ko"]
-]
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Block]
-        [Print]
-            [String literal "ok"]
-    else body:
-    [Block]
-        [Print]
-            [String literal "ko"]
-]
-
-
-// Condition as block
-
-[If
-    condition:
-    [Block]
-        [Print]
-            [String literal "in cond"]
-        [Bool literal false]
-    then body:
-    [Block]
-        [Print]
-            [String literal "ok"]
-    else body:
-    none
-]
-
-// Do syntax
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Print]
-        [String literal "ok"]
-    else body:
-    none
-]
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Print]
-        [String literal "ok"]
-    else body:
-    [Print]
-        [String literal "ko"]
-]
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Print]
-        [String literal "ok"]
-    else body:
-    [Block]
-        [Print]
-            [String literal "ko"]
-]
-
-
-// Else if
-
-[If
-    condition:
-    [Bool literal true]
-    then body:
-    [Print]
-        [String literal "ok"]
-    else body:
-    [If
-        condition:
-        [Bool literal true]
-        then body:
-        [Print]
-            [String literal "elseif"]
-        else body:
-        [Print]
-            [String literal "ko"]
-    ]
-]
-
-
-// If as expression
-
-[Var declaration _res, type void, value
-    [If
-        condition:
-        [Bool literal true]
-        then body:
-        [Int literal 5]
-        else body:
-        [Int literal 10]
-    ]
-]
+{
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "block": [
+                "print": {
+                    "literal": "ok"
+                }
+            ]
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "block": [
+                "print": {
+                    "literal": "ok"
+                }
+            ]
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "block": [
+                "print": {
+                    "literal": "ok"
+                }
+            ]
+        },
+        "else": {
+            "print": {
+                "literal": "ko"
+            }
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "block": [
+                "print": {
+                    "literal": "ok"
+                }
+            ]
+        },
+        "else": {
+            "block": [
+                "print": {
+                    "literal": "ko"
+                }
+            ]
+        },
+    },
+    "if": {
+        "condition": {
+            "block": [
+                "print": {
+                    "literal": "in cond"
+                },
+                "literal": "false"
+            ]
+        },
+        "then": {
+            "block": [
+                "print": {
+                    "literal": "ok"
+                }
+            ]
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "print": {
+                "literal": "ok"
+            }
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "print": {
+                "literal": "ok"
+            }
+        },
+        "else": {
+            "print": {
+                "literal": "ko"
+            }
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "print": {
+                "literal": "ok"
+            }
+        },
+        "else": {
+            "block": [
+                "print": {
+                    "literal": "ko"
+                }
+            ]
+        },
+    },
+    "if": {
+        "condition": {
+            "literal": "true"
+        },
+        "then": {
+            "print": {
+                "literal": "ok"
+            }
+        },
+        "else": {
+            "if": {
+                "condition": {
+                    "literal": "true"
+                },
+                "then": {
+                    "print": {
+                        "literal": "elseif"
+                    }
+                },
+                "else": {
+                    "print": {
+                        "literal": "ko"
+                    }
+                }
+            }
+        },
+    },
+    "var_decl": {
+        "name": "_res",
+        "type": {},
+        "value": {
+            "if": {
+                "condition": {
+                    "literal": "true"
+                },
+                "then": {
+                    "literal": "5"
+                },
+                "else": {
+                    "literal": "10"
+                }
+            }
+        }
+    }
+}

@@ -140,7 +140,7 @@ pub const Vm = struct {
         .heap_vars = undefined,
     };
 
-    pub fn init(self: *Self, allocator: Allocator, config: Config) !void {
+    pub fn init(self: *Self, allocator: Allocator, config: Config) void {
         self.allocator = allocator;
         // TODO: pass self instead of calling link after
         // TODO: pass an ObjectPoolAlloc?
@@ -148,7 +148,7 @@ pub const Vm = struct {
         self.gc_alloc = self.gc.allocator();
         self.stdout = std.io.getStdOut().writer();
         self.gc.link(self);
-        try self.pipeline.init(self, config);
+        self.pipeline.init(self, config);
         self.stack.init();
         self.strings = .init(self.allocator);
 
@@ -308,7 +308,7 @@ pub const Vm = struct {
                 .EqFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
                 .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
                 .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
-                .False => self.stack.push(Value.bool_(false)),
+                .false => self.stack.push(Value.bool_(false)),
                 .get_field => {
                     const value = self.get_field(frame);
                     self.stack.push(value.*);
@@ -376,10 +376,10 @@ pub const Vm = struct {
                 .NeStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) != self.stack.pop().Obj.as(ObjString))),
                 .NegateFloat => self.stack.peek_ref(0).Float *= -1,
                 .NegateInt => self.stack.peek_ref(0).Int *= -1,
-                .Not => self.stack.peek_ref(0).not(),
-                .Null => self.stack.push(Value.null_()),
+                .not => self.stack.peek_ref(0).not(),
+                .null => self.stack.push(Value.null_()),
                 .Pop => _ = self.stack.pop(),
-                .Print => {
+                .print => {
                     try self.stack.pop().print(self.stdout);
                     _ = try self.stdout.write("\n");
                 },
@@ -399,7 +399,7 @@ pub const Vm = struct {
 
                     break;
                 },
-                .Return => {
+                .@"return" => {
                     const result = self.stack.pop();
                     self.frame_stack.count -= 1;
 
@@ -457,7 +457,7 @@ pub const Vm = struct {
                     self.stack.peek_ref(0).Int -= rhs;
                 },
                 // PERF: we could avoid a function call here
-                .True => self.stack.push(Value.bool_(true)),
+                .true => self.stack.push(Value.bool_(true)),
             }
         }
     }

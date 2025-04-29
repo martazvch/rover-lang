@@ -1,4 +1,4 @@
-TypedSelf
-SelfAsNonFirstParam
+typed_self
+self_as_non_first_param
 // Because of how synchronize works in parser
 ExpectExpr, }

@@ -1,10 +1,10 @@
-ExpectFnName
-ExpectParenAfterFnName
+expect_fn_name
+expect_paren_after_fn_name
 ExpectName, parameter
 ExpectName, parameter
-MissingFnParamType
-ExpectParenAfterFnParams
-ExpectArrowBeforeFnType
-ExpectBraceBeforeFnBody
-TooManyFnArgs, parameter
+missing_fn_param_type
+expect_paren_after_fn_params
+expect_arrow_before_fn_type
+expect_brace_before_fn_body
+too_many_fn_args, parameter
 

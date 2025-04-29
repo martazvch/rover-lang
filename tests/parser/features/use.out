@@ -1,3 +1,11 @@
-[Use std]
-[Use std time]
-[Use std time notime lost]
+{
+    "use": [
+        "std"
+    ],
+    "use": [
+        "std",
+        "time",
+        "notime",
+        "lost"
+    ]
+}
