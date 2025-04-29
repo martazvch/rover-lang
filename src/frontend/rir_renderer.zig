@@ -4,10 +4,10 @@ const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
 const Interner = @import("../interner.zig").Interner;
-const AnalyzerReport = @import("analyzer.zig").AnalyzerReport;
-const Ast = @import("ast.zig");
+const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
+const Ast = @import("Ast.zig");
 const Instruction = @import("rir.zig").Instruction;
-const Node = @import("ast.zig").Node;
+const Node = @import("Ast.zig").Node;
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
 
