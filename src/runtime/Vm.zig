@@ -4,10 +4,10 @@ const Allocator = std.mem.Allocator;
 
 const options = @import("options");
 
-const Chunk = @import("../backend/chunk.zig").Chunk;
-const OpCode = @import("../backend/chunk.zig").OpCode;
+const Chunk = @import("../backend/Chunk.zig");
+const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
-const Pipeline = @import("../pipeline.zig");
+const Pipeline = @import("../Pipeline.zig");
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const ObjFunction = Obj.ObjFunction;
