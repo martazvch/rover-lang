@@ -5,7 +5,7 @@ const options = @import("options");
 
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
-const Disassembler = @import("backend/disassembler.zig").Disassembler;
+const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("frontend/Ast.zig");
