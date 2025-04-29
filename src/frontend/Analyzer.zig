@@ -5,7 +5,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMap = std.AutoHashMap;
 
-const Interner = @import("../interner.zig").Interner;
+const Interner = @import("../Interner.zig");
 const GenReport = @import("../reporter.zig").GenReport;
 const oom = @import("../utils.zig").oom;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;

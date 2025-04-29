@@ -1,115 +1,114 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
 const options = @import("options");
 
-const Chunk = @import("../backend/chunk.zig").Chunk;
+const Chunk = @import("../backend/Chunk.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
 const Value = @import("values.zig").Value;
-const Vm = @import("vm.zig").Vm;
+const Vm = @import("Vm.zig");
 
-pub const Obj = struct {
-    kind: ObjKind,
-    next: ?*Obj,
-    is_marked: bool,
+kind: ObjKind,
+next: ?*Obj,
+is_marked: bool,
 
-    const ObjKind = enum {
-        // BoundMethod,
-        func,
-        instance,
-        // Iter,
-        native_fn,
-        string,
-        @"struct",
+const Obj = @This();
+
+const ObjKind = enum {
+    // BoundMethod,
+    func,
+    instance,
+    // Iter,
+    native_fn,
+    string,
+    @"struct",
+};
+
+pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
+    comptime assert(@hasField(T, "obj"));
+    comptime assert(@hasDecl(T, "asObj"));
+
+    const ptr = try vm.gc_alloc.create(T);
+    ptr.obj = .{
+        .kind = kind,
+        .next = vm.objects,
+        .is_marked = false,
     };
 
-    pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
-        comptime assert(@hasField(T, "obj"));
-        comptime assert(@hasDecl(T, "as_obj"));
+    vm.objects = &ptr.obj;
 
-        const ptr = try vm.gc_alloc.create(T);
-        ptr.obj = .{
-            .kind = kind,
-            .next = vm.objects,
-            .is_marked = false,
-        };
-
-        vm.objects = &ptr.obj;
-
-        if (comptime options.log_gc) {
-            std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
-        }
-
-        return ptr;
+    if (comptime options.log_gc) {
+        std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
     }
 
-    pub fn destroy(self: *Obj, vm: *Vm) void {
-        switch (self.kind) {
-            // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
-            .func => {
-                const function = self.as(ObjFunction);
-                function.deinit(vm.gc_alloc);
-            },
-            .instance => {
-                const instance = self.as(ObjInstance);
-                instance.deinit(vm.gc_alloc);
-            },
-            // .Iter => {
-            //     const iter = self.as(ObjIter);
-            //     vm.allocator.destroy(iter);
-            // },
-            .native_fn => {
-                const function = self.as(ObjNativeFn);
-                function.deinit(vm.gc_alloc);
-            },
-            .string => self.as(ObjString).deinit(vm.gc_alloc),
-            .@"struct" => {
-                const structure = self.as(ObjStruct);
-                structure.deinit(vm.gc_alloc);
-            },
-        }
-    }
+    return ptr;
+}
 
-    pub fn as(self: *Obj, comptime T: type) *T {
-        comptime assert(@hasField(T, "obj"));
-
-        return @alignCast(@fieldParentPtr("obj", self));
+pub fn destroy(self: *Obj, vm: *Vm) void {
+    switch (self.kind) {
+        // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
+        .func => {
+            const function = self.as(ObjFunction);
+            function.deinit(vm.gc_alloc);
+        },
+        .instance => {
+            const instance = self.as(ObjInstance);
+            instance.deinit(vm.gc_alloc);
+        },
+        // .Iter => {
+        //     const iter = self.as(ObjIter);
+        //     vm.allocator.destroy(iter);
+        // },
+        .native_fn => {
+            const function = self.as(ObjNativeFn);
+            function.deinit(vm.gc_alloc);
+        },
+        .string => self.as(ObjString).deinit(vm.gc_alloc),
+        .@"struct" => {
+            const structure = self.as(ObjStruct);
+            structure.deinit(vm.gc_alloc);
+        },
     }
+}
 
-    pub fn print(self: *Obj, writer: anytype) !void {
-        try switch (self.kind) {
-            // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
-            // .Closure => self.as(ObjClosure).function.print(writer),
-            .func => self.as(ObjFunction).print(writer),
-            .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
-            // .Iter => {
-            //     const iter = self.as(ObjIter);
-            //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
-            // },
-            .native_fn => writer.print("<native fn>", .{}),
-            .string => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
-            .@"struct" => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
-        };
-    }
+pub fn as(self: *Obj, comptime T: type) *T {
+    comptime assert(@hasField(T, "obj"));
 
-    pub fn log(self: *Obj) void {
-        switch (self.kind) {
-            // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
-            // .Closure => self.as(ObjClosure).function.print(writer),
-            .func => self.as(ObjFunction).log(),
-            .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
-            // .Iter => {
-            //     const iter = self.as(ObjIter);
-            //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
-            // },
-            .native_fn => std.debug.print("<native fn>", .{}),
-            .string => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
-            .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
-        }
+    return @alignCast(@fieldParentPtr("obj", self));
+}
+
+pub fn print(self: *Obj, writer: anytype) !void {
+    try switch (self.kind) {
+        // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
+        // .Closure => self.as(ObjClosure).function.print(writer),
+        .func => self.as(ObjFunction).print(writer),
+        .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
+        // .Iter => {
+        //     const iter = self.as(ObjIter);
+        //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
+        // },
+        .native_fn => writer.print("<native fn>", .{}),
+        .string => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
+        .@"struct" => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
+    };
+}
+
+pub fn log(self: *Obj) void {
+    switch (self.kind) {
+        // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
+        // .Closure => self.as(ObjClosure).function.print(writer),
+        .func => self.as(ObjFunction).log(),
+        .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
+        // .Iter => {
+        //     const iter = self.as(ObjIter);
+        //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
+        // },
+        .native_fn => std.debug.print("<native fn>", .{}),
+        .string => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
+        .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
     }
-};
+}
 
 pub const ObjString = struct {
     obj: Obj,
@@ -127,7 +126,7 @@ pub const ObjString = struct {
         // The set method can trigger a GC to grow hashmap before
         // inserting. We put the value on the stack so that it is marked
         // as a root
-        vm.stack.push(Value.obj(obj.as_obj()));
+        vm.stack.push(Value.obj(obj.asObj()));
         _ = try vm.strings.set(obj, Value.null_());
         _ = vm.stack.pop();
 
@@ -139,8 +138,8 @@ pub const ObjString = struct {
     }
 
     pub fn copy(vm: *Vm, str: []const u8) Allocator.Error!*ObjString {
-        const hash = ObjString.hash_string(str);
-        const interned = vm.strings.find_string(str, hash);
+        const hash = ObjString.hashString(str);
+        const interned = vm.strings.findString(str, hash);
 
         if (interned) |i| return i;
 
@@ -160,8 +159,8 @@ pub const ObjString = struct {
     // Take a string allocated by calling Vm. If interned already, free
     // the memory and return the interned one
     pub fn take(vm: *Vm, str: []const u8) Allocator.Error!*ObjString {
-        const hash = ObjString.hash_string(str);
-        const interned = vm.strings.find_string(str, hash);
+        const hash = ObjString.hashString(str);
+        const interned = vm.strings.findString(str, hash);
 
         if (interned) |i| {
             vm.gc_alloc.free(str);
@@ -171,11 +170,11 @@ pub const ObjString = struct {
         return ObjString.create(vm, str, hash);
     }
 
-    pub fn as_obj(self: *ObjString) *Obj {
+    pub fn asObj(self: *ObjString) *Obj {
         return &self.obj;
     }
 
-    fn hash_string(chars: []const u8) u32 {
+    fn hashString(chars: []const u8) u32 {
         var hash: u32 = 2166136261;
         for (chars) |c| {
             hash ^= c;
@@ -214,7 +213,7 @@ pub const ObjFunction = struct {
         return obj;
     }
 
-    pub fn as_obj(self: *Self) *Obj {
+    pub fn asObj(self: *Self) *Obj {
         return &self.obj;
     }
 
@@ -259,7 +258,7 @@ pub const ObjNativeFn = struct {
         allocator.destroy(self);
     }
 
-    pub fn as_obj(self: *ObjNativeFn) *Obj {
+    pub fn asObj(self: *ObjNativeFn) *Obj {
         return &self.obj;
     }
 };
@@ -283,7 +282,7 @@ pub const ObjStruct = struct {
         return obj;
     }
 
-    pub fn as_obj(self: *Self) *Obj {
+    pub fn asObj(self: *Self) *Obj {
         return &self.obj;
     }
 
@@ -312,7 +311,7 @@ pub const ObjInstance = struct {
         return obj;
     }
 
-    pub fn as_obj(self: *Self) *Obj {
+    pub fn asObj(self: *Self) *Obj {
         return &self.obj;
     }
 

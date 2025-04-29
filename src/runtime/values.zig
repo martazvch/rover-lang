@@ -1,7 +1,7 @@
 const std = @import("std");
 const print = std.debug.print;
 
-const Obj = @import("obj.zig").Obj;
+const Obj = @import("Obj.zig");
 
 pub const Value = union(enum) {
     Bool: bool,

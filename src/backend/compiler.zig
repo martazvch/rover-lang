@@ -3,23 +3,23 @@ const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 
-const Disassembler = @import("../backend/disassembler.zig").Disassembler;
+const Disassembler = @import("../backend/Disassembler.zig");
 const Rir = @import("../frontend/rir.zig");
 const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
-const Interner = @import("../interner.zig").Interner;
+const Interner = @import("../Interner.zig");
 const GenReport = @import("../reporter.zig").GenReport;
-const ObjString = @import("../runtime/obj.zig").ObjString;
-const ObjFunction = @import("../runtime/obj.zig").ObjFunction;
-const ObjNativeFn = @import("../runtime/obj.zig").ObjNativeFn;
-const ObjStruct = @import("../runtime/obj.zig").ObjStruct;
+const ObjString = @import("../runtime/Obj.zig").ObjString;
+const ObjFunction = @import("../runtime/Obj.zig").ObjFunction;
+const ObjNativeFn = @import("../runtime/Obj.zig").ObjNativeFn;
+const ObjStruct = @import("../runtime/Obj.zig").ObjStruct;
 const Value = @import("../runtime/values.zig").Value;
-const Vm = @import("../runtime/vm.zig").Vm;
+const Vm = @import("../runtime/Vm.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
-const Chunk = @import("chunk.zig").Chunk;
+const Chunk = @import("Chunk.zig");
+const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const OpCode = @import("chunk.zig").OpCode;
 
 pub const CompilationManager = struct {
     vm: *Vm,
@@ -100,6 +100,7 @@ pub const CompilationManager = struct {
 
 const Compiler = struct {
     manager: *CompilationManager,
+    // TODO: need an enclosing? Not used for now. If not, Need a Compilation manager?
     enclosing: ?*Compiler,
     function: *ObjFunction,
     // TODO: useless information
@@ -208,7 +209,7 @@ const Compiler = struct {
         chunk.code.items[offset + 1] = @intCast(jump & 0xff);
     }
 
-    fn emit_loop(self: *Self, loop_start: usize, offset: usize) !void {
+    fn emitLoop(self: *Self, loop_start: usize, offset: usize) !void {
         const chunk = self.getChunk();
         try chunk.writeOp(.Loop, offset);
         // +2 for loop own operands (jump offset on 16bits)
@@ -229,7 +230,7 @@ const Compiler = struct {
         if (self.manager.render_mode != .none) {
             var dis = Disassembler.init(&self.function.chunk, self.manager.vm.allocator, self.manager.render_mode);
             defer dis.deinit();
-            dis.dis_chunk(if (self.function.name) |n| n.chars else "Script") catch unreachable;
+            dis.disChunk(if (self.function.name) |n| n.chars else "Script") catch unreachable;
             const stdout = std.io.getStdOut().writer();
             try stdout.print("{s}", .{dis.disassembled.items});
             if (self.enclosing != null) try stdout.writeAll("\n");
@@ -278,7 +279,7 @@ const Compiler = struct {
         const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
             self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
         else if (self.manager.instr_tags[data_idx] == .field) {
-            return self.field_assignment(assign_data);
+            return self.fieldAssignment(assign_data);
         } else self.manager.instr_data[data_idx].variable;
 
         self.manager.instr_idx += 2;
@@ -303,12 +304,10 @@ const Compiler = struct {
         );
     }
 
-    fn field_assignment(self: *Self, assign_data: Rir.Instruction.Assignment) Error!void {
+    fn fieldAssignment(self: *Self, assign_data: Rir.Instruction.Assignment) Error!void {
         try self.getField();
-
         // Value
         try self.compileInstr();
-
         // We cast the value on top of stack if needed
         if (assign_data.cast) try self.compileInstr();
     }
@@ -319,7 +318,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         // Special handle for logicals
-        if (data.op == .@"and" or data.op == .@"or") return self.logical_binop(start, data);
+        if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
 
         try self.compileInstr();
         if (data.cast == .lhs and data.op != .mul_str) try self.writeOp(.CastToFloat, start);
@@ -372,7 +371,7 @@ const Compiler = struct {
         };
     }
 
-    fn logical_binop(self: *Self, start: usize, data: Instruction.Binop) !void {
+    fn logicalBinop(self: *Self, start: usize, data: Instruction.Binop) !void {
         switch (data.op) {
             .@"and" => {
                 try self.compileInstr();
@@ -503,7 +502,7 @@ const Compiler = struct {
         }
 
         const func = try compiler.end();
-        try self.emitConstant(Value.obj(func.as_obj()), 0);
+        try self.emitConstant(Value.obj(func.asObj()), 0);
     }
 
     fn identifier(self: *Self, is_id: bool) !void {
@@ -592,7 +591,7 @@ const Compiler = struct {
             Value.obj((try ObjString.copy(
                 self.manager.vm,
                 self.manager.interner.getKey(self.getData().id).?,
-            )).as_obj()),
+            )).asObj()),
             self.getStart(),
         );
         self.manager.instr_idx += 1;
@@ -611,7 +610,7 @@ const Compiler = struct {
                 self.manager.vm,
                 try ObjString.copy(self.manager.vm, self.manager.interner.getKey(name).?),
                 data.fields_count,
-            )).as_obj()),
+            )).asObj()),
             self.getStart(),
         );
         try self.defineVariable(struct_var.variable, start);
@@ -674,7 +673,7 @@ const Compiler = struct {
                     (try ObjNativeFn.create(
                         self.manager.vm,
                         self.manager.natives[imported.index],
-                    )).as_obj(),
+                    )).asObj(),
                 ),
                 start,
             );
@@ -721,7 +720,7 @@ const Compiler = struct {
         // If true
         try chunk.writeOp(.Pop, start);
         try self.compileInstr();
-        try self.emit_loop(loop_start, start);
+        try self.emitLoop(loop_start, start);
 
         try self.patchJump(exit_jump);
         // If false

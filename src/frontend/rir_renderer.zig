@@ -3,7 +3,7 @@ const ArrayList = std.ArrayList;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
-const Interner = @import("../interner.zig").Interner;
+const Interner = @import("../Interner.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Ast = @import("Ast.zig");
 const Instruction = @import("rir.zig").Instruction;
