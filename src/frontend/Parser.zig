@@ -538,7 +538,7 @@ fn whileStmt(self: *Self) !Node {
     else
         return self.errAtCurrent(.expect_brace_after_while_cond);
 
-    return .{ .@"while" = .{ .cond = cond, .body = body } };
+    return .{ .@"while" = .{ .condition = cond, .body = body } };
 }
 
 const Assoc = enum { left, none };

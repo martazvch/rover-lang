@@ -22,24 +22,11 @@ pub const Node = union(enum) {
     var_decl: VarDecl,
     @"while": While,
     expr: *Expr,
-
-    pub fn getSpan(self: *const Node, ast: *const Ast) Span {
-        return switch (self.*) {
-            inline else => |e| e.getSpan(ast),
-        };
-    }
 };
 
 pub const Assignment = struct {
     assigne: *Expr,
     value: *Expr,
-
-    pub fn getSpan(self: *const Assignment, ast: *const Ast) Span {
-        return .{
-            .start = self.assigne.getSpan(ast).start,
-            .end = self.value.getSpan(ast).end,
-        };
-    }
 };
 
 pub const FnDecl = struct {
@@ -47,30 +34,15 @@ pub const FnDecl = struct {
     params: []Param,
     body: Block,
     return_type: ?*Type,
-
-    pub fn getSpan(self: *const FnDecl, ast: *const Ast) Span {
-        return ast.token_spans[self.name];
-    }
 };
 
 pub const MultiVarDecl = struct {
     decls: []VarDecl,
-
-    pub fn getSpan(self: *const MultiVarDecl, ast: *const Ast) Span {
-        return .{
-            .start = self.decls[0].getSpan(ast).start,
-            .end = self.decls[self.decls.len - 1].getSpan(ast).end,
-        };
-    }
 };
 
 pub const Param = struct {
     name: TokenIndex,
     typ: *Type,
-
-    pub fn getSpan(self: *const Param, ast: *const Ast) Span {
-        return ast.token_spans[self.name];
-    }
 };
 
 pub const Type = union(enum) {
@@ -83,53 +55,27 @@ pub const Type = union(enum) {
         return_type: ?*Type,
         span: Span,
     };
-
-    pub fn getSpan(self: *const Type, ast: *const Ast) Span {
-        return switch (self.*) {
-            .function => |t| t.span,
-            .scalar, .self => |t| ast.token_spans[t],
-        };
-    }
 };
 
 pub const StructDecl = struct {
     name: TokenIndex,
     fields: []VarDecl,
     functions: []FnDecl,
-
-    pub fn getSpan(self: *const StructDecl, ast: *const Ast) Span {
-        return ast.token_spans[self.name];
-    }
 };
 
 pub const Use = struct {
     names: []const TokenIndex,
-
-    pub fn getSpan(self: *const Use, ast: *const Ast) Span {
-        return .{
-            .start = ast.token_spans[self.names[0]].start,
-            .end = ast.token_spans[self.names[self.names.len - 1]].end,
-        };
-    }
 };
 
 pub const VarDecl = struct {
     name: TokenIndex,
     typ: ?*Type,
     value: ?*Expr,
-
-    pub fn getSpan(self: *const VarDecl, ast: *const Ast) Span {
-        return ast.token_spans[self.name];
-    }
 };
 
 pub const While = struct {
-    cond: *Expr,
+    condition: *Expr,
     body: Block,
-
-    pub fn getSpan(self: *const While, ast: *const Ast) Span {
-        return self.cond.getSpan(ast);
-    }
 };
 
 pub const Expr = union(enum) {
@@ -143,74 +89,38 @@ pub const Expr = union(enum) {
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
-
-    pub fn getSpan(self: *const Expr, ast: *const Ast) Span {
-        return switch (self.*) {
-            inline else => |e| e.getSpan(ast),
-        };
-    }
 };
 
 pub const Block = struct {
     nodes: []Node,
     span: Span,
-
-    pub fn getSpan(self: *const Block, _: *const Ast) Span {
-        return self.span;
-    }
 };
 
 pub const Binop = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: TokenIndex,
-
-    pub fn getSpan(self: *const Binop, ast: *const Ast) Span {
-        return .{
-            .start = self.lhs.getSpan(ast).start,
-            .end = self.rhs.getSpan(ast).end,
-        };
-    }
 };
 
 pub const Field = struct {
     structure: *Expr,
     field: TokenIndex,
-
-    pub fn getSpan(self: *const Field, ast: *const Ast) Span {
-        return .{
-            .start = self.structure.getSpan(ast).start,
-            .end = ast.token_spans[self.field].end,
-        };
-    }
 };
 
 pub const FnCall = struct {
     callee: *Expr,
     args: []*Expr,
-
-    pub fn getSpan(self: *const FnCall, ast: *const Ast) Span {
-        return self.callee.getSpan(ast);
-    }
 };
 
 pub const Grouping = struct {
     expr: *Expr,
     span: Span,
-
-    pub fn getSpan(self: *const Grouping, _: *const Ast) Span {
-        return self.span;
-    }
 };
 
 pub const If = struct {
     condition: *Expr,
     then: Node,
     @"else": ?Node,
-
-    pub fn getSpan(self: *const If, ast: *const Ast) Span {
-        return self.condition.getSpan(ast);
-    }
 };
 
 pub const Literal = struct {
@@ -218,28 +128,16 @@ pub const Literal = struct {
     idx: TokenIndex,
 
     pub const Tag = enum { bool, float, identifier, int, null, string };
-
-    pub fn getSpan(self: *const Literal, ast: *const Ast) Span {
-        return ast.token_spans[self.idx];
-    }
 };
 
 pub const Return = struct {
     expr: ?*Expr,
     kw: TokenIndex,
-
-    pub fn getSpan(self: *const Return, ast: *const Ast) Span {
-        return ast.token_spans[self.kw];
-    }
 };
 
 pub const StructLiteral = struct {
     name: TokenIndex,
     fields: []FieldAndValue,
-
-    pub fn getSpan(self: *const StructLiteral, ast: *const Ast) Span {
-        return ast.token_spans[self.name];
-    }
 };
 
 pub const FieldAndValue = struct {
@@ -250,23 +148,70 @@ pub const FieldAndValue = struct {
 pub const Unary = struct {
     op: TokenIndex,
     expr: *Expr,
-
-    pub fn getSpan(self: *const Unary, ast: *const Ast) Span {
-        return .{
-            .start = ast.token_spans[self.op].start,
-            .end = self.expr.getSpan(ast).end,
-        };
-    }
 };
 
-/// Can be used with any `Node`, `Expr` or a `token index`
+/// Can be used with any `*Node`, `*Expr` or a `token index`
 pub fn toSource(self: *const Ast, node: anytype) []const u8 {
     const span = if (@TypeOf(node) == usize)
         self.token_spans[node]
     else
-        node.getSpan(self);
+        self.getSpan(node.*);
 
     return self.source[span.start..span.end];
+}
+
+pub fn getSpan(self: *const Ast, anynode: anytype) Span {
+    const NodeType, const node = switch (@typeInfo(@TypeOf(anynode))) {
+        .pointer => |ptr| .{ ptr.child, anynode.* },
+        else => .{ @TypeOf(anynode), anynode },
+    };
+
+    return switch (NodeType) {
+        Node => switch (node) {
+            inline else => |*n| self.getSpan(n.*),
+        },
+        Assignment => .{
+            .start = self.getSpan(node.assigne.*).start,
+            .end = self.getSpan(node.value.*).end,
+        },
+        FnDecl, Param, StructDecl, VarDecl => self.token_spans[node.name],
+        MultiVarDecl => .{
+            .start = self.getSpan(node.decls[0]).start,
+            .end = self.getSpan(node.decls[node.decls.len - 1]).end,
+        },
+        Type => switch (node) {
+            .function => |t| t.span,
+            .scalar, .self => |t| self.token_spans[t],
+        },
+        Use => .{
+            .start = self.token_spans[node.names[0]].start,
+            .end = self.token_spans[node.names[node.names.len - 1]].end,
+        },
+        While => self.getSpan(node.condition.*),
+        Expr => switch (node) {
+            inline else => |*e| self.getSpan(e.*),
+        },
+        Block => node.span,
+        Binop => .{
+            .start = self.getSpan(node.lhs.*).start,
+            .end = self.getSpan(node.rhs.*).end,
+        },
+        Field => .{
+            .start = self.getSpan(node.structure.*).start,
+            .end = self.token_spans[node.field].end,
+        },
+        FnCall => self.getSpan(node.callee),
+        Grouping => node.span,
+        If => self.getSpan(node.condition),
+        Literal => self.token_spans[node.idx],
+        Return => self.token_spans[node.kw],
+        StructLiteral => self.token_spans[node.name],
+        Unary => .{
+            .start = self.token_spans[node.op].start,
+            .end = self.getSpan(node.expr).end,
+        },
+        else => @compileError("Trying to get span on a non Node object"),
+    };
 }
 
 // comptime {

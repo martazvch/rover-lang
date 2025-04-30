@@ -113,7 +113,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         .@"while" => |*n| {
             try self.openKey("while", .block);
             try self.openKey("condition", .block);
-            try self.renderExpr(n.cond, false);
+            try self.renderExpr(n.condition, false);
             try self.closeKey(.block, true);
             try self.renderBlock(&n.body, false);
             try self.closeKey(.block, comma);
