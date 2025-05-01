@@ -1,10 +1,17 @@
-use std.blender
-use ctd.blender
+struct Human {
+    age: int,
+    name: str,
+}
+
+var answer = 42
 
 fn main() {
-    {
-        use std.time
+    var human = Human.{ age = 5, name = "Tom" }
+    
+    struct Local {
+        answer: int
     }
 
-    print clock()
+    var adr = Local.{answer}
 }
+

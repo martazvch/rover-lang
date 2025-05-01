@@ -1,0 +1,20 @@
+{
+    "field": {
+        "structure": {
+            "literal": "person"
+        },
+        "field_name": "name"
+    },
+    "field": {
+        "structure": {
+            "field": {
+                "structure": {
+                    "literal": "person"
+                },
+                "field_name": "pet"
+            }
+        },
+        "field_name": "name"
+    }
+}
+

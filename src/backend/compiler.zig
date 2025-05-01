@@ -613,7 +613,9 @@ const Compiler = struct {
             )).asObj()),
             self.getStart(),
         );
-        try self.defineVariable(struct_var.variable, start);
+
+        if (struct_var.variable.scope != .local)
+            try self.defineVariable(struct_var.variable, start);
 
         self.manager.instr_idx += 1;
     }

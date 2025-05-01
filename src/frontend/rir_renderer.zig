@@ -466,14 +466,11 @@ pub const RirRenderer = struct {
             const save = self.instr_idx;
             const field_data = self.next(.data).field;
             self.instr_idx = field_data;
-            self.indent_level += 1;
             try self.parse_instr(self.instr_idx);
-            self.indent_level -= 1;
             self.instr_idx = save + 1;
         }
 
         self.instr_idx = data.end;
-
         self.indent_level -= 1;
     }
 

@@ -360,7 +360,8 @@ fn execute(self: *Self) !void {
                 const idx = frame.readByte();
 
                 const structure = switch (scope) {
-                    .GetLocal => self.stack.peekRef(idx).Obj.as(ObjStruct),
+                    .GetLocal => self.stack.peekRef(idx + arity).Obj.as(ObjStruct),
+                    // .GetLocal => self.stack.peekRef(idx).Obj.as(ObjStruct),
                     .GetGlobal => self.globals[idx].Obj.as(ObjStruct),
                     else => unreachable,
                 };

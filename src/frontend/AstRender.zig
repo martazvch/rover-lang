@@ -203,10 +203,10 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         },
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
-            try self.openKey("structre", .block);
+            try self.openKey("structure", .block);
             try self.renderExpr(e.structure, false);
             try self.closeKey(.block, true);
-            try self.pushKeyValue("field", self.spanToSrc(e.field), false);
+            try self.pushKeyValue("field_name", self.spanToSrc(e.field), false);
             try self.closeKey(.block, comma);
         },
         .fn_call => |e| {
