@@ -274,15 +274,16 @@ const Compiler = struct {
     fn assignment(self: *Self) Error!void {
         const assign_data = self.getData().assignment;
         const start = self.getStart();
-        const data_idx = self.manager.instr_idx + 1;
+        self.manager.instr_idx += 1;
+        const data_idx = self.manager.instr_idx;
 
         const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
             self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
         else if (self.manager.instr_tags[data_idx] == .field) {
-            return self.fieldAssignment(assign_data);
+            return self.fieldAssignment(assign_data, start);
         } else self.manager.instr_data[data_idx].variable;
 
-        self.manager.instr_idx += 2;
+        self.manager.instr_idx += 1;
 
         // Value
         try self.compileInstr();
@@ -304,7 +305,8 @@ const Compiler = struct {
         );
     }
 
-    fn fieldAssignment(self: *Self, assign_data: Rir.Instruction.Assignment) Error!void {
+    fn fieldAssignment(self: *Self, assign_data: Rir.Instruction.Assignment, start: usize) Error!void {
+        try self.writeOp(.field_assign, start);
         try self.getField();
         // Value
         try self.compileInstr();

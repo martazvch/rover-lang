@@ -3,6 +3,8 @@ struct Human {
     name: str,
 }
 
+var answer = 42
+
 fn main() {
     var human = Human.{ age = 5, name = "Tom" }
     print human
@@ -35,5 +37,13 @@ fn main() {
     print human
     print human.age
     print human.name
+
+    struct Local {
+        answer: int
+    }
+
+    var adr = Local.{answer}
+    print adr
+    print adr.answer
 }
 

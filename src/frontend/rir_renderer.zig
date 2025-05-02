@@ -184,11 +184,9 @@ pub const RirRenderer = struct {
         try self.indent();
         try writer.writeAll("[Field assignment]\n");
 
-        try self.get_field(self.instr_idx);
-
         self.indent_level += 1;
+        try self.get_field(self.instr_idx);
         try self.parse_instr(self.instr_idx);
-
         if (assign_data.cast) try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }

@@ -92,6 +92,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
+        .field_assign => self.fieldAssign(offset, writer),
         .get_field => self.getField(offset, writer),
         .GetGlobal => self.indexInstruction("OP_GET_GLOBAL", offset, writer),
         .GetHeap => self.indexInstruction("OP_GET_HEAP", offset, writer),
@@ -226,6 +227,16 @@ fn for_instruction(
     }
 
     return offset + 4;
+}
+
+fn fieldAssign(self: *const Self, offset: usize, writer: anytype) !usize {
+    if (self.render_mode == .Test) {
+        try writer.print("{s}", .{"OP_FIELD_ASSIGN"});
+    } else {
+        try writer.print("{s:<24}", .{"OP_GET_FIELD"});
+    }
+
+    return offset;
 }
 
 fn getField(self: *const Self, offset: usize, writer: anytype) !usize {

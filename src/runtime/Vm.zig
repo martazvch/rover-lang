@@ -235,6 +235,7 @@ fn execute(self: *Self) !void {
             .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
             .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
             .false => self.stack.push(Value.bool_(false)),
+            .field_assign => {},
             .get_field => {
                 const value = self.getField(frame);
                 self.stack.push(value.*);
@@ -242,6 +243,7 @@ fn execute(self: *Self) !void {
             // Compiler bug: https://github.com/ziglang/zig/issues/13938
             .GetGlobal => self.stack.push((&self.globals)[frame.readByte()]),
             .GetHeap => self.stack.push(self.heap_vars[frame.readByte()]),
+            // TODO: see if same compiler bug as GetGlobal
             .GetLocal => self.stack.push(frame.slots[frame.readByte()]),
             .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
             .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
@@ -360,8 +362,8 @@ fn execute(self: *Self) !void {
                 const idx = frame.readByte();
 
                 const structure = switch (scope) {
-                    .GetLocal => self.stack.peekRef(idx + arity).Obj.as(ObjStruct),
-                    // .GetLocal => self.stack.peekRef(idx).Obj.as(ObjStruct),
+                    // .GetLocal => self.stack.peekRef(idx + arity).Obj.as(ObjStruct),
+                    .GetLocal => frame.slots[idx].Obj.as(ObjStruct),
                     .GetGlobal => self.globals[idx].Obj.as(ObjStruct),
                     else => unreachable,
                 };

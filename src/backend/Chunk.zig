@@ -69,6 +69,7 @@ pub const OpCode = enum(u8) {
     ExitRepl,
     false,
     call,
+    field_assign,
     get_field,
     GetGlobal,
     GetHeap,

@@ -3,15 +3,9 @@ struct Human {
     name: str,
 }
 
-var answer = 42
-
 fn main() {
-    var human = Human.{ age = 5, name = "Tom" }
-    
-    struct Local {
-        answer: int
-    }
-
-    var adr = Local.{answer}
+    var human = Human.{age = 5, name = "Tom" }
+    human.age = 98
+    print human.age
 }
 
