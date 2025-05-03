@@ -1,6 +1,11 @@
 struct Name {}
 struct Name {}
 
+struct DoubleField {
+    score: int,
+    score: int,
+}
+
 fn main() {
     {
         var loc1 = "local"

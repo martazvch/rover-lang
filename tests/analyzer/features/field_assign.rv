@@ -1,0 +1,8 @@
+struct Person {
+    name: str,
+}
+
+fn main() {
+    var tom = Person.{name = "Tom"}
+    tom.name = "Martin"
+}

@@ -39,5 +39,5 @@
         [Print]
             [Variable index: 3, scope: heap]
 
+    [Int 2]
     [Assignment index: 3, scope: heap]
-        [Int 2]

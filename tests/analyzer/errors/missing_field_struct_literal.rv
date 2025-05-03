@@ -1,5 +1,6 @@
 struct Person {
     age: int,
+    name: str,
 }
 
 fn main() {

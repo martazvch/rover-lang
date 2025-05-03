@@ -1,0 +1,10 @@
+[Structure declaration Person, index: 0, scope: global]
+    [field 1 default value
+        [Int 6]
+    ]
+[Fn declaration main, index: 1, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [Structure literal, index: 0, scope: global]
+            [String Tom]
+            [Int 8]
+

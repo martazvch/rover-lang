@@ -1,0 +1,5 @@
+struct Person {
+    age: int = "42"
+}
+
+fn main() {}

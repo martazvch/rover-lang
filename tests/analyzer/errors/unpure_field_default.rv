@@ -1,0 +1,6 @@
+struct Person {
+    age: int = getValue(),
+}
+
+fn main() { }
+

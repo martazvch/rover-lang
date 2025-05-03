@@ -211,6 +211,7 @@ fn execute(self: *Self) !void {
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
 
+            // TODO: Cast could only 'transmute' or bitcast the value on stack to change the union tag
             .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
             .Constant => self.stack.push(frame.readConstant()),
             .DefineHeapVar => {
@@ -235,7 +236,11 @@ fn execute(self: *Self) !void {
             .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
             .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
             .false => self.stack.push(Value.bool_(false)),
-            .field_assign => {},
+            .field_assign => {
+                frame.ip += 1;
+                const field = self.getField(frame);
+                field.* = self.stack.pop();
+            },
             .get_field => {
                 const value = self.getField(frame);
                 self.stack.push(value.*);
@@ -392,6 +397,8 @@ fn execute(self: *Self) !void {
 }
 
 // TODO: make this treatment in earlier stages to avoid runtime checks?
+// Rucursion here avoid to push and pop from stack like: a.b.c pushing a.b on stack
+// then pop it to access c to push it back
 fn getField(self: *Self, frame: *CallFrame) *Value {
     const field_idx = frame.readByte();
 

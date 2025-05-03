@@ -16,9 +16,9 @@ const BA = @import("builtins_analyzer.zig");
 const BuiltinAnalyzer = BA.BuiltinAnalyzer;
 const FnDeclaration = BA.FnDeclaration;
 const builtin_init = BA.init;
-const Rir = @import("rir.zig");
-const ReturnKind = Rir.ReturnKind;
-const Instruction = Rir.Instruction;
+const rir = @import("rir.zig");
+const ReturnKind = rir.ReturnKind;
+const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
@@ -156,7 +156,7 @@ const Variable = struct {
 
     pub const Tag = enum { normal, func, param, import, @"struct" };
 
-    pub fn scope(self: *const Variable) Rir.Scope {
+    pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
     }
 
@@ -300,17 +300,23 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     var cast = false;
     const idx = self.addInstr(.{ .tag = .assignment });
 
+    const value_type = try self.analyzeExpr(node.value);
+
+    if (value_type == .void) {
+        return self.err(.VoidAssignment, self.ast.getSpan(node.value));
+    }
+
     var assigne_type = switch (node.assigne.*) {
         .literal => |*e| blk: {
             if (e.tag != .identifier) {
                 return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
             }
 
-            // TODO: check if this is a function's parameter (there are constant by defninition)
             const assigne = try self.identifier(e.idx, false);
 
             if (!assigne.initialized) assigne.initialized = true;
 
+            // TODO: later, when function's parameters will maybe be a reference, allow it
             if (assigne.kind != .normal) {
                 return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
             }
@@ -320,11 +326,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         .field => |*e| try self.field(e),
         else => return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne)),
     };
-    const value_type = try self.analyzeExpr(node.value);
-
-    if (value_type == .void) {
-        return self.err(.VoidAssignment, self.ast.getSpan(node.value));
-    }
 
     // If type is unknown, we update it
     if (assigne_type == .void) {
@@ -333,7 +334,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         // One case in wich we can coerce; int -> float
         if (assigne_type == .float and value_type == .int) {
             cast = true;
-            _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
         } else {
             return self.err(
                 .{ .InvalidAssignType = .{
@@ -404,7 +404,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
     // it's the returned address for the function
     self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true, .kind = .func }) catch oom();
 
-    // TODO: ArrayList with init capacity of arity
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
 
@@ -511,7 +510,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
     }
 
     // We strip unused instructions for them not to be compiled
-    // TODO: test
     if (deadcode_start > 0)
         self.instructions.shrinkRetainingCapacity(deadcode_start);
 
@@ -582,17 +580,18 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (infos.fields.get(field_name) != null) {
-            // TODO: Error, already declared field
-            std.debug.print("Already declared field\n", .{});
+            return self.err(
+                .{ .already_declared_field = .{ .name = self.ast.toSource(f.name) } },
+                self.ast.token_spans[f.name],
+            );
         }
 
         const field_type = try self.checkAndGetType(f.typ);
 
         const field_value_type = if (f.value) |value| blk: {
-            // if (!self.isPure(self.node_idx)) {
-            //     std.debug.print("Unpure default value\n", .{});
-            //     // TODO: error, non-constant default value
-            // }
+            if (!self.isPure(value.*)) {
+                return self.err(.unpure_field_default, self.ast.getSpan(value));
+            }
 
             field_infos.default = true;
             infos.default_value_fields += 1;
@@ -602,11 +601,16 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         } else .void;
 
         if (field_value_type != .void and field_type != .void and field_value_type != field_type) {
-            // TODO: Error
-            std.debug.print("Wrong type default value\n", .{});
+            return self.err(
+                .{ .default_value_type_mismatch = .{
+                    .expect = self.getTypeName(field_type),
+                    .found = self.getTypeName(field_value_type),
+                } },
+                self.ast.token_spans[f.name],
+            );
         }
 
-        // Fro mparsing, we know that there is either a type or default value. If no declared type, we take
+        // From parsing, we know that there is either a type or default value. If no declared type, we take
         // the one from the default value
         field_infos.type = if (field_type == .void) field_value_type else field_type;
         infos.fields.putAssumeCapacity(field_name, field_infos);
@@ -633,7 +637,6 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.type_manager.addType(name, struct_type);
 
     _ = self.endScope();
-    // _ = try self.declareVariable(name, struct_type, true, struct_idx, .@"struct");
     self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
         .fields_count = node.fields.len,
         .default_fields = infos.default_value_fields,
@@ -1042,10 +1045,8 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
         return f.type;
     } else {
         // TODO: Error
-        std.debug.print("Undeclared field during access", .{});
+        @panic("Undeclared field during access");
     }
-
-    unreachable;
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1380,8 +1381,10 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                     _ = try self.identifier(fv.name, true);
                 }
             } else {
-                // TODO: Error
-                std.debug.print("Unknown structure field\n", .{});
+                return self.err(
+                    .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
+                    self.ast.token_spans[fv.name],
+                );
             }
         }
 
@@ -1389,10 +1392,14 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
             var kv = proto.iterator();
             while (kv.next()) |entry| {
                 if (!entry.value_ptr.*) {
-                    // TODO: Error for each non init field
-                    std.debug.print("Uninit filed: {s}\n", .{self.interner.getKey(entry.key_ptr.*).?});
+                    self.err(
+                        .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
+                        self.ast.token_spans[expr.name],
+                    ) catch {};
                 }
             }
+
+            return error.Err;
         }
 
         // As the compiler is gonna jump around to compile in the correct order, we need a way

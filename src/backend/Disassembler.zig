@@ -231,12 +231,12 @@ fn for_instruction(
 
 fn fieldAssign(self: *const Self, offset: usize, writer: anytype) !usize {
     if (self.render_mode == .Test) {
-        try writer.print("{s}", .{"OP_FIELD_ASSIGN"});
+        try writer.print("{s}\n", .{"OP_FIELD_ASSIGN"});
     } else {
-        try writer.print("{s:<24}", .{"OP_GET_FIELD"});
+        try writer.print("{s:<24}\n", .{"OP_FIELD_ASSIGN"});
     }
 
-    return offset;
+    return offset + 1;
 }
 
 fn getField(self: *const Self, offset: usize, writer: anytype) !usize {
@@ -254,7 +254,7 @@ fn getField(self: *const Self, offset: usize, writer: anytype) !usize {
 
     local_offset = try self.disInstruction(local_offset, writer);
 
-    return local_offset + 1;
+    return local_offset;
 }
 
 fn invokeInstruction(

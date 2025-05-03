@@ -1,0 +1,8 @@
+fn dead_code() {
+    var a = 1
+    return
+    // Won't see the declaration of this variable
+    var b = 3
+}
+
+fn main() {}

@@ -156,38 +156,40 @@ pub const RirRenderer = struct {
     }
 
     fn assignment(self: *Self, instr: usize) Error!void {
+        var writer = self.tree.writer();
         const assign_data = self.instr_data[instr].assignment;
         self.instr_idx += 1;
 
-        const data = if (self.instr_tags[instr + 1] == .identifier_id)
-            self.instr_data[self.instr_data[instr + 1].id].var_decl.variable
-        else if (self.instr_tags[instr + 1] == .field) {
-            return self.field_assignment(assign_data);
-        } else self.instr_data[instr + 1].variable;
+        // Value
+        try self.parse_instr(self.instr_idx);
 
-        var writer = self.tree.writer();
+        if (assign_data.cast) {
+            try self.indent();
+            try writer.writeAll("[Cast to float]\n");
+        }
+
+        const data_idx = self.instr_idx;
+
+        const data = if (self.instr_tags[data_idx] == .identifier_id)
+            self.instr_data[self.instr_data[data_idx].id].var_decl.variable
+        else if (self.instr_tags[data_idx] == .field) {
+            return self.field_assignment();
+        } else self.instr_data[data_idx].variable;
+
         try self.indent();
         try writer.print("[Assignment index: {}, scope: {s}]\n", .{
             data.index, @tagName(data.scope),
         });
-
         self.instr_idx += 1;
-        self.indent_level += 1;
-        try self.parse_instr(self.instr_idx);
-
-        if (assign_data.cast) try self.parse_instr(self.instr_idx);
-        self.indent_level -= 1;
     }
 
-    fn field_assignment(self: *Self, assign_data: Instruction.Assignment) Error!void {
+    fn field_assignment(self: *Self) Error!void {
         var writer = self.tree.writer();
         try self.indent();
         try writer.writeAll("[Field assignment]\n");
 
         self.indent_level += 1;
         try self.get_field(self.instr_idx);
-        try self.parse_instr(self.instr_idx);
-        if (assign_data.cast) try self.parse_instr(self.instr_idx);
         self.indent_level -= 1;
     }
 

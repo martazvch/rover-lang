@@ -275,21 +275,22 @@ const Compiler = struct {
         const assign_data = self.getData().assignment;
         const start = self.getStart();
         self.manager.instr_idx += 1;
-        const data_idx = self.manager.instr_idx;
-
-        const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
-            self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
-        else if (self.manager.instr_tags[data_idx] == .field) {
-            return self.fieldAssignment(assign_data, start);
-        } else self.manager.instr_data[data_idx].variable;
-
-        self.manager.instr_idx += 1;
 
         // Value
         try self.compileInstr();
 
         // We cast the value on top of stack if needed
-        if (assign_data.cast) try self.compileInstr();
+        if (assign_data.cast) try self.writeOp(.CastToFloat, start);
+
+        const data_idx = self.manager.instr_idx;
+
+        const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
+            self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
+        else if (self.manager.instr_tags[data_idx] == .field) {
+            return self.fieldAssignment(start);
+        } else self.manager.instr_data[data_idx].variable;
+
+        self.manager.instr_idx += 1;
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
@@ -305,13 +306,9 @@ const Compiler = struct {
         );
     }
 
-    fn fieldAssignment(self: *Self, assign_data: Rir.Instruction.Assignment, start: usize) Error!void {
+    fn fieldAssignment(self: *Self, start: usize) Error!void {
         try self.writeOp(.field_assign, start);
         try self.getField();
-        // Value
-        try self.compileInstr();
-        // We cast the value on top of stack if needed
-        if (assign_data.cast) try self.compileInstr();
     }
 
     fn binop(self: *Self) !void {
@@ -615,9 +612,7 @@ const Compiler = struct {
             )).asObj()),
             self.getStart(),
         );
-
-        if (struct_var.variable.scope != .local)
-            try self.defineVariable(struct_var.variable, start);
+        try self.defineVariable(struct_var.variable, start);
 
         self.manager.instr_idx += 1;
     }
