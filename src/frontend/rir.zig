@@ -15,7 +15,7 @@ pub const Instruction = struct {
         call,
         cast,
         discard,
-        field,
+        member,
         float,
         fn_decl,
         name,
@@ -28,6 +28,7 @@ pub const Instruction = struct {
         null,
         print,
         @"return",
+        self,
         string,
         struct_decl,
         struct_literal,
@@ -45,7 +46,7 @@ pub const Instruction = struct {
         call: Call,
         capture: usize,
         cast_to: Type,
-        field: usize,
+        member: Member,
         float: f64,
         fn_decl: FnDecl,
         id: usize,
@@ -100,7 +101,7 @@ pub const Instruction = struct {
 
     pub const Assignment = struct { cast: bool };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, builtin: bool };
+    pub const Call = struct { arity: u8, method: bool = false, builtin: bool = false };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
         cast: Cast,
@@ -109,6 +110,12 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { then, @"else", none };
     };
     pub const Imported = struct { index: u64, variable: Variable };
+    pub const Member = struct {
+        index: usize,
+        kind: Kind,
+
+        pub const Kind = enum { field, method };
+    };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };

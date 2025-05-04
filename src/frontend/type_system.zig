@@ -125,9 +125,8 @@ pub const FnInfo = struct {
 };
 
 pub const StructInfo = struct {
-    init: ?usize = null,
-    functions: std.AutoHashMapUnmanaged(usize, usize),
-    fields: std.AutoHashMapUnmanaged(usize, FieldInfo),
+    functions: std.AutoHashMapUnmanaged(usize, MemberInfo),
+    fields: std.AutoHashMapUnmanaged(usize, MemberInfo),
     default_value_fields: usize,
 
     pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {
@@ -145,10 +144,13 @@ pub const StructInfo = struct {
     }
 };
 
-pub const FieldInfo = struct {
+pub const MemberInfo = struct {
+    /// Order of declaration
     idx: usize,
+    /// Field's type
     type: Type,
-    default: bool,
+    /// Has a default value
+    default: bool = false,
 };
 
 pub fn str_kind(kind: Kind) []const u8 {

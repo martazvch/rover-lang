@@ -173,10 +173,10 @@ const State = struct {
     in_fn: bool = false,
     /// Current function's type
     fn_type: Type = .void,
+    /// Current structure's type
+    struct_type: Type = .void,
     /// Flag to tell if last statement returned from scope
     returns: bool = false,
-    /// In a structure
-    in_struct: bool = false,
 };
 
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -279,7 +279,7 @@ fn analyzeNode(self: *Self, node: *const Node) Error!Type {
     switch (node.*) {
         .assignment => |*n| try self.assignment(n),
         .discard => |n| try self.discard(n),
-        .fn_decl => |*n| try self.fnDeclaration(n),
+        .fn_decl => |*n| _ = try self.fnDeclaration(n),
         .multi_var_decl => |*n| try self.multiVarDecl(n),
         .print => |n| try self.print(n),
         .struct_decl => |*n| try self.structDecl(n),
@@ -319,7 +319,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             break :blk assigne.typ;
         },
-        .field => |*e| try self.field(e),
+        .field => |*e| (try self.field(e)).@"1",
         else => return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne)),
     };
 
@@ -350,7 +350,7 @@ fn discard(self: *Self, expr: *const Expr) !void {
     if (discarded == .void) return self.err(.VoidDiscard, self.ast.getSpan(expr));
 }
 
-fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
+fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     const save_local_offset = self.local_offset;
     const save_scope_depth = self.scope_depth;
     const save_state = self.state;
@@ -412,10 +412,10 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
         };
 
         const param_type = if (param_idx == self.self_interned) param_type: {
-            if (!self.state.in_struct) return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
+            if (self.state.struct_type == .void) return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
             if (name_idx == self.init_interned) return self.err(.SelfInInit, self.ast.token_spans[p.name]);
 
-            break :param_type .self;
+            break :param_type self.state.struct_type;
         } else try self.checkAndGetType(p.typ);
 
         if (param_type == .void) return self.err(.VoidParam, self.ast.token_spans[p.name]);
@@ -520,6 +520,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
         .body_len = len - deadcode_count,
         .return_kind = return_kind,
     } };
+
+    return fn_type;
 }
 
 fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
@@ -531,7 +533,7 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
 }
 
 fn print(self: *Self, expr: *const Expr) !void {
-    _ = self.addInstr(.{ .tag = .print, .data = undefined });
+    _ = self.addInstr(.{ .tag = .print });
     const typ = try self.analyzeExpr(expr);
 
     if (typ == .void)
@@ -547,9 +549,12 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
     const struct_type = TypeSys.create(.@"struct", .none, type_idx);
+    self.state.struct_type = struct_type;
+    defer self.state.struct_type = .void;
+    errdefer self.state.struct_type = .void;
     const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .@"struct", node.name);
 
-    const struct_idx = self.addInstr(.{ .tag = .struct_decl, .data = undefined });
+    const struct_idx = self.addInstr(.{ .tag = .struct_decl });
     // We add function's name for runtime access
     _ = self.addInstr(.{ .tag = .name, .data = .{ .id = name } });
     _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = struct_var, .cast = false } } });
@@ -562,7 +567,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     infos.fields.ensureTotalCapacity(self.allocator, @intCast(node.fields.len)) catch oom();
 
     for (node.fields, 0..) |*f, i| {
-        var field_infos: TypeSys.FieldInfo = .{ .type = undefined, .default = false, .idx = i };
+        var field_infos: TypeSys.MemberInfo = .{ .type = undefined, .idx = i };
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (infos.fields.get(field_name) != null) {
@@ -582,7 +587,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
             field_infos.default = true;
             infos.default_value_fields += 1;
 
-            _ = self.addInstr(.{ .tag = .field, .data = .{ .field = i } });
+            _ = self.addInstr(.{ .tag = .member, .data = .{ .member = .{ .index = i, .kind = .field } } });
             break :blk try self.analyzeExpr(value);
         } else .void;
 
@@ -602,27 +607,26 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         infos.fields.putAssumeCapacity(field_name, field_infos);
     }
 
-    infos.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
-    self.state.in_struct = true;
-
-    for (node.functions) |*f| {
-        const fn_name = self.interner.intern(self.ast.toSource(f.name));
-        // Function's type infos will be the first added to the manager, even if types are created
-        // in function's body It's safe to save it from here
-        const func_idx = self.type_manager.type_infos.items.len;
-        try self.fnDeclaration(f);
-
-        if (fn_name == self.init_interned) {
-            infos.init = func_idx;
-        } else infos.functions.putAssumeCapacity(fn_name, func_idx);
-    }
-
-    self.state.in_struct = false;
-    const type_info: TypeInfo = .{ .@"struct" = infos };
+    // Create type before functions to allow 'self' to refer to the structure
+    var type_info: TypeInfo = .{ .@"struct" = infos };
     self.type_manager.setInfo(type_idx, type_info);
     self.type_manager.addType(name, struct_type);
 
+    infos.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
+
+    for (node.functions, 0..) |*f, i| {
+        const fn_name = self.interner.intern(self.ast.toSource(f.name));
+        const fn_type = try self.fnDeclaration(f);
+        infos.functions.putAssumeCapacity(fn_name, .{ .idx = i, .type = fn_type });
+
+        // Update type with each new method
+        type_info = .{ .@"struct" = infos };
+        self.type_manager.setInfo(type_idx, type_info);
+        self.type_manager.addType(name, struct_type);
+    }
+
     _ = self.endScope();
+
     self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
         .fields_count = node.fields.len,
         .default_fields = infos.default_value_fields,
@@ -767,7 +771,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
-        .field => |*e| self.field(e),
+        .field => |*e| (try self.field(e)).@"1",
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
@@ -1004,8 +1008,10 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-fn field(self: *Self, expr: *const Ast.Field) Error!Type {
-    const idx = self.addInstr(.{ .tag = .field });
+// FIX: (bound method) maybe add an extra argument to specify if we are in a call.
+// If we are, no need to emit a bound method and keep what's actually done (for optimization)
+fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
+    const idx = self.addInstr(.{ .tag = .member });
     const struct_type = try self.analyzeExpr(expr.structure);
     const field_idx = self.interner.intern(self.ast.toSource(expr.field));
 
@@ -1017,41 +1023,75 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
     const infos_index = TypeSys.getValue(struct_type);
     const infos = self.type_manager.type_infos.items[infos_index].@"struct";
 
-    if (infos.fields.get(field_idx)) |f| {
-        self.instructions.items(.data)[idx] = .{ .field = f.idx };
+    const found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_idx)) |f|
+        .{ f, .field }
+    else if (infos.functions.get(field_idx)) |f|
+        .{ f, .method }
+    else
+        return self.err(
+            .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
+            self.ast.token_spans[expr.field],
+        );
 
-        return f.type;
-    } else return self.err(
-        .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
-        self.ast.token_spans[expr.field],
-    );
+    // FIX: (bound method) implement here bound method instead of giving the kind in data
+    self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.idx, .kind = kind } };
+
+    // FIX: (bound method) Maybe return a single type as before but create a `bounded method` in Type System in case
+    // found_field is a function
+    return .{ struct_type, found_field.type };
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const idx = self.addInstr(.{ .tag = .call, .data = .{ .call = .{
         .arity = @intCast(expr.args.len),
-        .builtin = undefined,
     } } });
 
-    const callee_type = try self.analyzeExpr(expr.callee);
+    // FIX: (bound method) Faire avant l'instruction et decider de l'instruction apres :
+    // - function
+    // - structure
+    // - bound method
+    // Pour bound method, faire comme ce qui est fait actuellement pour optimisation
+    const instance_type, const method_type = switch (expr.callee.*) {
+        .field => |*e| try self.field(e),
+        else => .{ .void, try self.analyzeExpr(expr.callee) },
+    };
 
-    const infos = if (TypeSys.is(callee_type, .func))
-        self.type_manager.type_infos.items[TypeSys.getValue(callee_type)].func
-    else if (TypeSys.is(callee_type, .@"struct")) blk: {
-        const val = TypeSys.getValue(callee_type);
-        const init_idx = self.type_manager.type_infos.items[val].@"struct".init;
+    const infos = if (TypeSys.is(method_type, .func))
+        self.type_manager.type_infos.items[TypeSys.getValue(method_type)].func
+    else if (TypeSys.is(method_type, .@"struct")) blk: {
+        const val = TypeSys.getValue(method_type);
+        const struct_infos = self.type_manager.type_infos.items[val].@"struct";
 
-        if (init_idx) |i| {
-            break :blk self.type_manager.type_infos.items[i].func;
+        if (struct_infos.functions.get(self.init_interned)) |init_fn| {
+            const type_idx = TypeSys.getValue(init_fn.type);
+            break :blk self.type_manager.type_infos.items[type_idx].func;
         } else return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
     } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
 
-    if (infos.params.len != expr.args.len) return self.err(
-        AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
-        self.ast.getSpan(expr),
-    );
+    if (infos.params.len != expr.args.len) {
+        if (infos.params.len - 1 == expr.args.len and instance_type == infos.params[0]) {
+            // If this is a call like: instance.method(arg1, arg2, ...), we flag it as a method
+            // It allows the compiler to add 1 to the arity as `self` is implicitly passed
+            // We also add `self` as the first argument. It's always just before the field that has
+            // been put onto the stack
+            // TODO: test
+            self.instructions.items(.data)[idx].call.method = true;
+
+            _ = self.addInstr(.{
+                .tag = .identifier,
+                .data = .{ .variable = .{
+                    .scope = .local,
+                    .index = @intCast(self.locals.items.len - self.local_offset - 1),
+                } },
+            });
+        } else return self.err(
+            AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
+            self.ast.getSpan(expr),
+        );
+    }
 
     self.instructions.items(.data)[idx].call.builtin = infos.builtin;
+
     return self.fnCall(expr.args, infos);
 }
 
@@ -1090,7 +1130,7 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
 
             return .bool;
         },
-        .identifier => {
+        .identifier, .self => {
             const variable = try self.identifier(expr.idx, true);
 
             return variable.typ;
@@ -1116,7 +1156,7 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
             return .float;
         },
         .null => {
-            _ = self.addInstr(.{ .tag = .null, .data = undefined });
+            _ = self.addInstr(.{ .tag = .null });
 
             return .null;
         },
@@ -1338,7 +1378,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity) catch oom();
 
         for (0..arity) |_| {
-            self.instructions.appendAssumeCapacity(.{ .tag = .field, .data = undefined });
+            self.instructions.appendAssumeCapacity(.{ .tag = .member });
         }
 
         for (expr.fields) |*fv| {
@@ -1346,7 +1386,10 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
             if (infos.fields.get(field_name)) |f| {
                 proto.putAssumeCapacity(field_name, true);
-                self.instructions.items(.data)[start + f.idx] = .{ .field = self.instructions.len };
+                self.instructions.items(.data)[start + f.idx] = .{ .member = .{
+                    .index = self.instructions.len,
+                    .kind = .field,
+                } };
 
                 if (fv.value) |val| {
                     _ = try self.analyzeExpr(val);

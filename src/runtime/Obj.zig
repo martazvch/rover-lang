@@ -68,7 +68,7 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
         .string => self.as(ObjString).deinit(vm.gc_alloc),
         .@"struct" => {
             const structure = self.as(ObjStruct);
-            structure.deinit(vm.gc_alloc);
+            structure.deinit(vm);
         },
     }
 }
@@ -268,15 +268,15 @@ pub const ObjStruct = struct {
     obj: Obj,
     name: *ObjString,
     field_count: usize,
-    functions: []*ObjFunction,
+    methods: []*ObjFunction,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *ObjString, field_count: usize, funcs: []*ObjFunction) *Self {
+    pub fn create(vm: *Vm, name: *ObjString, field_count: usize, methods: []*ObjFunction) *Self {
         const obj = Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         obj.field_count = field_count;
-        obj.functions = funcs;
+        obj.methods = methods;
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
 
@@ -287,12 +287,11 @@ pub const ObjStruct = struct {
         return &self.obj;
     }
 
-    pub fn deinit(self: *Self, allocator: Allocator) void {
-        allocator.destroy(self);
-
-        for (self.functions) |f| {
-            allocator.destroy(f);
-        }
+    // Functions are freed because they are on the main minked list of objects in the VM
+    // The memory of the array is owned though
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        vm.allocator.free(self.methods);
+        vm.gc_alloc.destroy(self);
     }
 };
 

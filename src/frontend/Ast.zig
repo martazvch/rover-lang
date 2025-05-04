@@ -127,7 +127,7 @@ pub const Literal = struct {
     tag: Tag,
     idx: TokenIndex,
 
-    pub const Tag = enum { bool, float, identifier, int, null, string };
+    pub const Tag = enum { bool, float, identifier, int, null, self, string };
 };
 
 pub const Return = struct {

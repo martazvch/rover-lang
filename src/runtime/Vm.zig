@@ -251,6 +251,21 @@ fn execute(self: *Self) !void {
             .GetHeap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as GetGlobal
             .GetLocal => self.stack.push(frame.slots[frame.readByte()]),
+            .get_method => {
+                const method_idx = frame.readByte();
+                const scope_op: OpCode = @enumFromInt(frame.readByte());
+                const var_idx = frame.readByte();
+
+                const value = if (scope_op == .GetGlobal)
+                    &self.globals[var_idx]
+                else if (scope_op == .GetHeap)
+                    &self.heap_vars[var_idx]
+                else
+                    &frame.slots[var_idx];
+
+                var structure = value.Obj.as(ObjInstance).parent;
+                self.stack.push(Value.obj(structure.methods[method_idx].asObj()));
+            },
             .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
             .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
             .GeFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),

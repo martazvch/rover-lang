@@ -75,6 +75,7 @@ pub const OpCode = enum(u8) {
     GetGlobal,
     GetHeap,
     GetLocal,
+    get_method,
     GtFloat,
     GtInt,
     GeFloat,

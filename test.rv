@@ -1,10 +1,17 @@
 struct Person {
-    age: int
+    age: int,
 
-    fn speak(self) {}
+    fn speak(self) {
+        print self.age
+        self.age = 6
+    }
 }
 
 fn main() {
-    var p = Person.{age=8}
+    var p = Person.{age=5}
+    p.speak()
+    p.speak()
+    // var method = p.speak
+    // method()
 }
 

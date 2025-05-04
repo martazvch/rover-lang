@@ -576,6 +576,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
         if (next_rule.prec < prec_min) break;
 
         if (next_rule.prec == banned_prec) {
+            // TODO: why not support it like Python for example?
             return self.errAtCurrent(.chaining_cmp_op);
         }
 
@@ -613,6 +614,7 @@ fn parseExpr(self: *Self) Error!*Expr {
         .left_paren => self.grouping(),
         .null => self.literal(.null),
         .@"return" => self.returnExpr(),
+        .self => self.literal(.self),
         .string => self.literal(.string),
         .true => self.literal(.bool),
         else => {

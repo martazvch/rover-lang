@@ -122,7 +122,7 @@ pub const RirRenderer = struct {
             .discard => self.discard(),
             .float => self.float_instr(index),
             .call => self.fn_call(index),
-            .field => self.get_field(index),
+            .member => self.getField(index),
             .fn_decl => self.fn_declaration(index),
             .name => unreachable,
             .identifier => self.identifier(index, false),
@@ -145,6 +145,11 @@ pub const RirRenderer = struct {
                 self.indent_level -= 1;
             },
             .@"return" => self.return_instr(),
+            .self => {
+                try self.indent();
+                try self.tree.appendSlice("[Self]\n");
+                self.instr_idx += 1;
+            },
             .string => self.string_instr(),
             .struct_decl => self.struct_decl(),
             .struct_literal => self.struct_literal(),
@@ -172,7 +177,7 @@ pub const RirRenderer = struct {
 
         const data = if (self.instr_tags[data_idx] == .identifier_id)
             self.instr_data[self.instr_data[data_idx].id].var_decl.variable
-        else if (self.instr_tags[data_idx] == .field) {
+        else if (self.instr_tags[data_idx] == .member) {
             return self.field_assignment();
         } else self.instr_data[data_idx].variable;
 
@@ -189,7 +194,7 @@ pub const RirRenderer = struct {
         try writer.writeAll("[Field assignment]\n");
 
         self.indent_level += 1;
-        try self.get_field(self.instr_idx);
+        try self.getField(self.instr_idx);
         self.indent_level -= 1;
     }
 
@@ -295,13 +300,19 @@ pub const RirRenderer = struct {
         self.indent_level -= 1;
     }
 
-    fn get_field(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].field;
+    fn getField(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].member;
         self.instr_idx += 1;
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Field access {}]\n", .{data});
+        try writer.print(
+            "[{s} access {}]\n",
+            .{
+                if (data.kind == .field) "Field" else "Method",
+                data.index,
+            },
+        );
         self.indent_level += 1;
 
         // Variable
@@ -434,7 +445,7 @@ pub const RirRenderer = struct {
 
         for (0..data.default_fields) |_| {
             try self.indent();
-            const field_idx = self.next(.data).field;
+            const field_idx = self.next(.data).member.index;
             try writer.print("[field {} default value\n", .{field_idx});
 
             self.indent_level += 1;
@@ -464,7 +475,7 @@ pub const RirRenderer = struct {
 
         for (0..data.arity) |_| {
             const save = self.instr_idx;
-            const field_data = self.next(.data).field;
+            const field_data = self.next(.data).member.index;
             self.instr_idx = field_data;
             try self.parse_instr(self.instr_idx);
             self.instr_idx = save + 1;

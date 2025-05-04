@@ -114,7 +114,10 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         .@"struct" => {
             const structure = obj.as(ObjStruct);
             try self.markObject(structure.name.asObj());
-            // try self.mark_table(&structure.methods);
+
+            for (structure.methods) |m| {
+                try self.blackenObject(m.asObj());
+            }
         },
         // .Iter => {},
         .native_fn, .string => {},

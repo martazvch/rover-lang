@@ -93,10 +93,11 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .call => self.indexInstruction("OP_CALL", offset, writer),
         // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
         .field_assign => self.fieldAssign(offset, writer),
-        .get_field => self.getField(offset, writer),
+        .get_field => self.getMember(offset, writer, "OP_GET_FIELD"),
         .GetGlobal => self.indexInstruction("OP_GET_GLOBAL", offset, writer),
         .GetHeap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .GetLocal => self.indexInstruction("OP_GET_LOCAL", offset, writer),
+        .get_method => self.getMember(offset, writer, "OP_GET_METHOD"),
         // .GetProperty => self.constantInstruction("OP_GET_PROPERTY", offset),
         // .GetUpvalue => self.byte_instruction("OP_GET_UPVALUE", offset),
         .GtFloat => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
@@ -239,7 +240,7 @@ fn fieldAssign(self: *const Self, offset: usize, writer: anytype) !usize {
     return offset + 1;
 }
 
-fn getField(self: *const Self, offset: usize, writer: anytype) !usize {
+fn getMember(self: *const Self, offset: usize, writer: anytype, name: []const u8) !usize {
     // Skips the struct_literal op
     var local_offset = offset;
     local_offset += 1;
@@ -247,9 +248,9 @@ fn getField(self: *const Self, offset: usize, writer: anytype) !usize {
     local_offset += 1;
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} index {} of next variable\n", .{ "OP_GET_FIELD", idx });
+        try writer.print("{s} index {} of next variable\n", .{ name, idx });
     } else {
-        try writer.print("{s:<24} index {:>4} of next variable\n", .{ "OP_GET_FIELD", idx });
+        try writer.print("{s:<24} index {:>4} of next variable\n", .{ name, idx });
     }
 
     local_offset = try self.disInstruction(local_offset, writer);

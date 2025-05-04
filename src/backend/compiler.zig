@@ -253,7 +253,7 @@ const Compiler = struct {
             .bool => self.boolInstr(),
             .cast => self.cast(),
             .discard => self.discard(),
-            .field => self.getField(),
+            .member => self.getMember(),
             .float => self.floatInstr(),
             .call => self.fnCall(),
             .fn_decl => self.fnDecl(),
@@ -267,6 +267,7 @@ const Compiler = struct {
             .null => self.nullInstr(),
             .print => self.print(),
             .@"return" => self.returnInstr(),
+            .self => unreachable,
             .string => self.stringInstr(),
             .struct_decl => self.structDecl(),
             .struct_literal => self.structLiteral(),
@@ -292,7 +293,7 @@ const Compiler = struct {
 
         const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
             self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
-        else if (self.manager.instr_tags[data_idx] == .field) {
+        else if (self.manager.instr_tags[data_idx] == .member) {
             return self.fieldAssignment(start);
         } else self.manager.instr_data[data_idx].variable;
 
@@ -314,7 +315,7 @@ const Compiler = struct {
 
     fn fieldAssignment(self: *Self, start: usize) Error!void {
         self.writeOp(.field_assign, start);
-        try self.getField();
+        try self.getMember();
     }
 
     fn binop(self: *Self) Error!void {
@@ -425,12 +426,16 @@ const Compiler = struct {
         self.writeOp(.Pop, 0);
     }
 
-    fn getField(self: *Self) Error!void {
-        const data = self.getData().field;
+    fn getMember(self: *Self) Error!void {
+        const data = self.getData().member;
         const start = self.getStart();
         self.manager.instr_idx += 1;
 
-        self.writeOpAndByte(.get_field, @intCast(data), start);
+        self.writeOpAndByte(
+            if (data.kind == .field) .get_field else .get_method,
+            @intCast(data.index),
+            start,
+        );
         try self.compileInstr();
     }
 
@@ -447,6 +452,11 @@ const Compiler = struct {
         // Compiles the identifier
         try self.compileInstr();
 
+        // If it's a method, adds 'self' at the beginning of the arguments
+        if (data.method) {
+            try self.compileInstr();
+        }
+
         for (0..data.arity) |_| {
             try self.compileInstr();
 
@@ -457,7 +467,7 @@ const Compiler = struct {
 
         self.writeOpAndByte(
             if (data.builtin) .NativeFnCall else .call,
-            data.arity,
+            if (data.method) data.arity + 1 else data.arity,
             start,
         );
     }
@@ -644,8 +654,8 @@ const Compiler = struct {
 
         for (0..data.arity) |_| {
             const save = self.manager.instr_idx;
-            const field_value_start = self.getData().field;
-            self.manager.instr_idx = field_value_start;
+            const field_value_start = self.getData().member;
+            self.manager.instr_idx = field_value_start.index;
             try self.compileInstr();
             // Jumps the `field` tag
             self.manager.instr_idx = save + 1;
