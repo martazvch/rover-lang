@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const ObjString = @import("Obj.zig").ObjString;
 const Value = @import("values.zig").Value;
+const oom = @import("../utils.zig").oom;
 
 count: usize,
 entries: []Entry,
@@ -27,10 +28,10 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Returns if the inserted key is new
-pub fn set(self: *Self, key: *ObjString, value: Value) Allocator.Error!bool {
+pub fn set(self: *Self, key: *ObjString, value: Value) bool {
     // Encodes a 75%
     if (4 * (self.count + 1) > 3 * self.entries.len) {
-        try self.adjustCapacity();
+        self.adjustCapacity();
     }
 
     const entry = Self.findEntry(self.entries, key);
@@ -107,9 +108,9 @@ pub fn findString(self: *const Self, str: []const u8, hash: u32) ?*ObjString {
     }
 }
 
-fn adjustCapacity(self: *Self) Allocator.Error!void {
+fn adjustCapacity(self: *Self) void {
     const new_capa = self.grow();
-    const entries_grown = try self.allocator.alloc(Entry, new_capa);
+    const entries_grown = self.allocator.alloc(Entry, new_capa) catch oom();
 
     // PERF: is it mandatory? At least maybe only the key? If Entry has default values?
     for (entries_grown) |*e| {
@@ -160,8 +161,8 @@ test "set" {
     const key = try ObjString.take(&vm, str);
     const val = Value.int(42);
 
-    try std.testing.expect(try table.set(key, val));
-    try std.testing.expect(!try table.set(key, val));
+    try std.testing.expect(table.set(key, val));
+    try std.testing.expect(!table.set(key, val));
 }
 
 test "grow" {
@@ -182,7 +183,7 @@ test "grow" {
         @memset(str, 'a');
         const key = try ObjString.take(&vm, str);
         // We check that each new entry is unique
-        try std.testing.expect(try table.set(key, val));
+        try std.testing.expect(table.set(key, val));
     }
 
     try std.testing.expect(table.count == 9);
@@ -205,7 +206,7 @@ test "get" {
 
     const key = try ObjString.take(&vm, str);
     const val = Value.int(42);
-    _ = try table.set(key, val);
+    _ = table.set(key, val);
 
     var entry = table.get(key);
     try std.testing.expectEqual(entry.?.Int, 42);
@@ -218,7 +219,7 @@ test "get" {
         @memset(str1, 'a');
         const key1 = try ObjString.take(&vm, str1);
         const val1 = Value.int(@intCast(i));
-        _ = try table.set(key1, val1);
+        _ = table.set(key1, val1);
         save_key = key1;
     }
 
@@ -246,7 +247,7 @@ test "delete" {
 
     const key = try ObjString.take(&vm, str);
     const val = Value.int(42);
-    _ = try table.set(key, val);
+    _ = table.set(key, val);
 
     const entry = table.get(key);
     try std.testing.expectEqual(entry.?.Int, 42);

@@ -17,6 +17,7 @@ const ObjString = Obj.ObjString;
 const ObjStruct = Obj.ObjStruct;
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
+const oom = @import("../utils.zig").oom;
 
 pipeline: Pipeline,
 gc: Gc,
@@ -346,9 +347,9 @@ fn execute(self: *Self) !void {
             .SetGlobal => self.globals[frame.readByte()] = self.stack.pop(),
             .SetHeap => self.heap_vars[frame.readByte()] = self.stack.pop(),
             .SetLocal => frame.slots[frame.readByte()] = self.stack.pop(),
-            .StrCat => try self.strConcat(),
-            .StrMulL => try self.strMul(self.stack.peekRef(0).Obj.as(ObjString), self.stack.peekRef(1).Int),
-            .StrMulR => try self.strMul(self.stack.peekRef(1).Obj.as(ObjString), self.stack.peekRef(0).Int),
+            .StrCat => self.strConcat(),
+            .StrMulL => self.strMul(self.stack.peekRef(0).Obj.as(ObjString), self.stack.peekRef(1).Int),
+            .StrMulR => self.strMul(self.stack.peekRef(1).Obj.as(ObjString), self.stack.peekRef(0).Int),
             .struct_literal => {
                 const arity = frame.readByte();
                 const scope: OpCode = @enumFromInt(frame.readByte());
@@ -360,7 +361,7 @@ fn execute(self: *Self) !void {
                     else => unreachable,
                 };
 
-                var instance = try ObjInstance.create(self, structure);
+                var instance = ObjInstance.create(self, structure);
 
                 for (0..arity) |i| {
                     instance.fields[i] = self.stack.peek(arity - i - 1);
@@ -408,11 +409,11 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
     return &instance.Obj.as(ObjInstance).fields[field_idx];
 }
 
-fn strConcat(self: *Self) !void {
+fn strConcat(self: *Self) void {
     const s2 = self.stack.peekRef(0).Obj.as(ObjString);
     const s1 = self.stack.peekRef(1).Obj.as(ObjString);
 
-    const res = try self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len);
+    const res = self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len) catch oom();
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
 
@@ -420,13 +421,13 @@ fn strConcat(self: *Self) !void {
     _ = self.stack.pop();
     _ = self.stack.pop();
 
-    self.stack.push(Value.obj((try ObjString.take(self, res)).asObj()));
+    self.stack.push(Value.obj(ObjString.take(self, res).asObj()));
 }
 
-fn strMul(self: *Self, str: *const ObjString, factor: i64) !void {
+fn strMul(self: *Self, str: *const ObjString, factor: i64) void {
     // BUG: Check if factor is positive
     const f = @as(usize, @intCast(factor));
-    const res = try self.gc_alloc.alloc(u8, str.chars.len * f);
+    const res = self.gc_alloc.alloc(u8, str.chars.len * f) catch oom();
     for (0..f) |i| {
         @memcpy(res[i * str.chars.len .. (i + 1) * str.chars.len], str.chars);
     }
@@ -435,7 +436,7 @@ fn strMul(self: *Self, str: *const ObjString, factor: i64) !void {
     _ = self.stack.pop();
     _ = self.stack.pop();
 
-    self.stack.push(Value.obj((try ObjString.take(self, res)).asObj()));
+    self.stack.push(Value.obj(ObjString.take(self, res).asObj()));
 }
 
 fn call(self: *Self, callee: *ObjFunction, args_count: usize) Error!void {

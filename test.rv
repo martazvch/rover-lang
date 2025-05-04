@@ -1,6 +1,10 @@
-fn Person() {}
+struct Person {
+    age: int
+
+    fn speak(self) {}
+}
 
 fn main() {
-    var p = Person.{}
+    var p = Person.{age=8}
 }
 

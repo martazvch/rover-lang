@@ -8,6 +8,7 @@ const Chunk = @import("../backend/Chunk.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
+const oom = @import("../utils.zig").oom;
 
 kind: ObjKind,
 next: ?*Obj,
@@ -25,11 +26,11 @@ const ObjKind = enum {
     @"struct",
 };
 
-pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) Allocator.Error!*T {
+pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) *T {
     comptime assert(@hasField(T, "obj"));
     comptime assert(@hasDecl(T, "asObj"));
 
-    const ptr = try vm.gc_alloc.create(T);
+    const ptr = vm.gc_alloc.create(T) catch oom();
     ptr.obj = .{
         .kind = kind,
         .next = vm.objects,
@@ -118,8 +119,8 @@ pub const ObjString = struct {
     const Self = @This();
 
     // PERF: flexible array member: https://craftinginterpreters.com/strings.html#challenges
-    fn create(vm: *Vm, str: []const u8, hash: u32) Allocator.Error!*ObjString {
-        var obj = try Obj.allocate(vm, Self, .string);
+    fn create(vm: *Vm, str: []const u8, hash: u32) *ObjString {
+        var obj = Obj.allocate(vm, Self, .string);
         obj.chars = str;
         obj.hash = hash;
 
@@ -127,7 +128,7 @@ pub const ObjString = struct {
         // inserting. We put the value on the stack so that it is marked
         // as a root
         vm.stack.push(Value.obj(obj.asObj()));
-        _ = try vm.strings.set(obj, Value.null_());
+        _ = vm.strings.set(obj, Value.null_());
         _ = vm.stack.pop();
 
         if (options.log_gc) {
@@ -137,13 +138,13 @@ pub const ObjString = struct {
         return obj;
     }
 
-    pub fn copy(vm: *Vm, str: []const u8) Allocator.Error!*ObjString {
+    pub fn copy(vm: *Vm, str: []const u8) *ObjString {
         const hash = ObjString.hashString(str);
         const interned = vm.strings.findString(str, hash);
 
         if (interned) |i| return i;
 
-        const chars = try vm.gc_alloc.alloc(u8, str.len);
+        const chars = vm.gc_alloc.alloc(u8, str.len) catch oom();
         @memcpy(chars, str);
 
         if (options.log_gc) {
@@ -158,7 +159,7 @@ pub const ObjString = struct {
 
     // Take a string allocated by calling Vm. If interned already, free
     // the memory and return the interned one
-    pub fn take(vm: *Vm, str: []const u8) Allocator.Error!*ObjString {
+    pub fn take(vm: *Vm, str: []const u8) *ObjString {
         const hash = ObjString.hashString(str);
         const interned = vm.strings.findString(str, hash);
 
@@ -198,8 +199,8 @@ pub const ObjFunction = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: ?*ObjString) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .func);
+    pub fn create(vm: *Vm, name: ?*ObjString) *Self {
+        const obj = Obj.allocate(vm, Self, .func);
 
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
@@ -243,8 +244,8 @@ pub const ObjNativeFn = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, function: NativeFn) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .native_fn);
+    pub fn create(vm: *Vm, function: NativeFn) *Self {
+        const obj = Obj.allocate(vm, Self, .native_fn);
         obj.function = function;
 
         if (options.log_gc) {
@@ -267,13 +268,15 @@ pub const ObjStruct = struct {
     obj: Obj,
     name: *ObjString,
     field_count: usize,
+    functions: []*ObjFunction,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *ObjString, field_count: usize) Allocator.Error!*Self {
-        const obj = try Obj.allocate(vm, Self, .@"struct");
+    pub fn create(vm: *Vm, name: *ObjString, field_count: usize, funcs: []*ObjFunction) *Self {
+        const obj = Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         obj.field_count = field_count;
+        obj.functions = funcs;
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
 
@@ -286,6 +289,10 @@ pub const ObjStruct = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.destroy(self);
+
+        for (self.functions) |f| {
+            allocator.destroy(f);
+        }
     }
 };
 
@@ -296,11 +303,11 @@ pub const ObjInstance = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, parent: *ObjStruct) Allocator.Error!*Self {
+    pub fn create(vm: *Vm, parent: *ObjStruct) *Self {
         // Fields first for GC because other wise allocating fields after creation
         // of the instance may trigger GC in between
-        const alloc_fields = try vm.gc_alloc.alloc(Value, parent.field_count);
-        const obj = try Obj.allocate(vm, Self, .instance);
+        const alloc_fields = vm.gc_alloc.alloc(Value, parent.field_count) catch oom();
+        const obj = Obj.allocate(vm, Self, .instance);
 
         obj.parent = parent;
         obj.fields = alloc_fields;

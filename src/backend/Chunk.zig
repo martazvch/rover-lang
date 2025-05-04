@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const Value = @import("../runtime/values.zig").Value;
+const oom = @import("../utils.zig").oom;
 
 code: ArrayList(u8),
 offsets: ArrayList(usize),
@@ -12,7 +13,7 @@ constant_count: u8,
 
 const Self = @This();
 const CONST_MAX = std.math.maxInt(u8) + 1;
-pub const Error = error{TooManyConst} || Allocator.Error;
+pub const Error = error{TooManyConst};
 
 pub fn init(allocator: Allocator) Self {
     return .{
@@ -29,14 +30,14 @@ pub fn deinit(self: *Self) void {
     self.offsets.deinit();
 }
 
-pub fn writeOp(self: *Self, op: OpCode, offset: usize) Error!void {
-    try self.code.append(@intFromEnum(op));
-    try self.offsets.append(offset);
+pub fn writeOp(self: *Self, op: OpCode, offset: usize) void {
+    self.code.append(@intFromEnum(op)) catch oom();
+    self.offsets.append(offset) catch oom();
 }
 
-pub fn writeByte(self: *Self, byte: u8, offset: usize) Error!void {
-    try self.code.append(byte);
-    try self.offsets.append(offset);
+pub fn writeByte(self: *Self, byte: u8, offset: usize) void {
+    self.code.append(byte) catch oom();
+    self.offsets.append(offset) catch oom();
 }
 
 pub fn writeConstant(self: *Self, value: Value) Error!u8 {
