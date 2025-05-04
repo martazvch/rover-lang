@@ -1,6 +1,6 @@
-fn Person() {}
+struct Person {}
 
 fn main() {
     var p = Person.{}
+    p.age
 }
-

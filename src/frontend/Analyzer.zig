@@ -308,18 +308,14 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
     var assigne_type = switch (node.assigne.*) {
         .literal => |*e| blk: {
-            if (e.tag != .identifier) {
-                return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
-            }
+            if (e.tag != .identifier) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
 
             const assigne = try self.identifier(e.idx, false);
 
             if (!assigne.initialized) assigne.initialized = true;
 
             // TODO: later, when function's parameters will maybe be a reference, allow it
-            if (assigne.kind != .normal) {
-                return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
-            }
+            if (assigne.kind != .normal) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
@@ -334,15 +330,13 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         // One case in wich we can coerce; int -> float
         if (assigne_type == .float and value_type == .int) {
             cast = true;
-        } else {
-            return self.err(
-                .{ .InvalidAssignType = .{
-                    .expect = self.getTypeName(assigne_type),
-                    .found = self.getTypeName(value_type),
-                } },
-                self.ast.getSpan(node.assigne),
-            );
-        }
+        } else return self.err(
+            .{ .InvalidAssignType = .{
+                .expect = self.getTypeName(assigne_type),
+                .found = self.getTypeName(value_type),
+            } },
+            self.ast.getSpan(node.assigne),
+        );
     }
 
     self.instructions.items(.data)[idx] = .{ .assignment = .{ .cast = cast } };
@@ -418,20 +412,13 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!void {
         };
 
         const param_type = if (param_idx == self.self_interned) param_type: {
-            if (!self.state.in_struct) {
-                return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
-            }
-
-            if (name_idx == self.init_interned) {
-                return self.err(.SelfInInit, self.ast.token_spans[p.name]);
-            }
+            if (!self.state.in_struct) return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
+            if (name_idx == self.init_interned) return self.err(.SelfInInit, self.ast.token_spans[p.name]);
 
             break :param_type .self;
         } else try self.checkAndGetType(p.typ);
 
-        if (param_type == .void) {
-            return self.err(.VoidParam, self.ast.token_spans[p.name]);
-        }
+        if (param_type == .void) return self.err(.VoidParam, self.ast.token_spans[p.name]);
 
         _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
         params_type.appendAssumeCapacity(param_type);
@@ -554,9 +541,8 @@ fn print(self: *Self, expr: *const Expr) !void {
 fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     const name = self.interner.intern(self.ast.toSource(node.name));
 
-    if (self.type_manager.isDeclared(name)) {
+    if (self.type_manager.isDeclared(name))
         return self.err(.{ .AlreadyDeclaredStruct = .{ .name = self.ast.toSource(node.name) } }, self.ast.getSpan(node));
-    }
 
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
@@ -692,12 +678,10 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 self.instructions.items(.data)[idx] = .{ .use = node.names.len };
 
                 return;
-            } else {
-                return self.err(
-                    .{ .UnknownModule = .{ .name = self.ast.toSource(n) } },
-                    self.ast.token_spans[n],
-                );
-            }
+            } else return self.err(
+                .{ .UnknownModule = .{ .name = self.ast.toSource(n) } },
+                self.ast.token_spans[n],
+            );
         }
     } else return self.err(
         .{ .UnknownModule = .{ .name = self.ast.toSource(node.names[0]) } },
@@ -721,9 +705,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         self.state.allow_partial = last;
 
         // Void assignment check
-        if (value_type == .void) {
-            return self.err(.VoidAssignment, self.ast.getSpan(value));
-        }
+        if (value_type == .void) return self.err(.VoidAssignment, self.ast.getSpan(value));
 
         // If no type declared, we infer the value type
         if (checked_type == .void) {
@@ -734,15 +716,13 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
             if (checked_type == .float and value_type == .int) {
                 cast = true;
                 _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
-            } else {
-                return self.err(
-                    .{ .InvalidAssignType = .{
-                        .expect = self.getTypeName(checked_type),
-                        .found = self.getTypeName(value_type),
-                    } },
-                    self.ast.getSpan(value),
-                );
-            }
+            } else return self.err(
+                .{ .InvalidAssignType = .{
+                    .expect = self.getTypeName(checked_type),
+                    .found = self.getTypeName(value_type),
+                } },
+                self.ast.getSpan(value),
+            );
         }
 
         initialized = true;
@@ -1010,9 +990,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     for (expr.nodes, 0..) |*node, i| {
         final = try self.analyzeNode(node);
 
-        if (final != .void and i != expr.nodes.len - 1) {
-            return self.err(.UnusedValue, expr.span);
-        }
+        if (final != .void and i != expr.nodes.len - 1) return self.err(.UnusedValue, expr.span);
     }
 
     const count = self.endScope();
@@ -1031,10 +1009,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
     const struct_type = try self.analyzeExpr(expr.structure);
     const field_idx = self.interner.intern(self.ast.toSource(expr.field));
 
-    if (!TypeSys.is(struct_type, .@"struct")) {
-        // TODO: error
-        std.debug.print("Error, field access on a non-struct", .{});
-    }
+    if (!TypeSys.is(struct_type, .@"struct")) return self.err(
+        .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
+        self.ast.getSpan(expr.structure),
+    );
 
     const infos_index = TypeSys.getValue(struct_type);
     const infos = self.type_manager.type_infos.items[infos_index].@"struct";
@@ -1043,10 +1021,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
         self.instructions.items(.data)[idx] = .{ .field = f.idx };
 
         return f.type;
-    } else {
-        // TODO: Error
-        @panic("Undeclared field during access");
-    }
+    } else return self.err(
+        .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
+        self.ast.token_spans[expr.field],
+    );
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1068,12 +1046,10 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         } else return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
     } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
 
-    if (infos.params.len != expr.args.len) {
-        return self.err(
-            AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
-            self.ast.getSpan(expr),
-        );
-    }
+    if (infos.params.len != expr.args.len) return self.err(
+        AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
+        self.ast.getSpan(expr),
+    );
 
     self.instructions.items(.data)[idx].call.builtin = infos.builtin;
     return self.fnCall(expr.args, infos);
@@ -1324,9 +1300,7 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     } else .void;
 
     // We check after to advance node idx
-    if (!self.state.in_fn) {
-        return self.err(.ReturnOutsideFn, self.ast.getSpan(expr));
-    }
+    if (!self.state.in_fn) return self.err(.ReturnOutsideFn, self.ast.getSpan(expr));
 
     if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
         if (self.state.fn_type == .float and return_type == .int) {
@@ -1380,23 +1354,19 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                     // Syntax: { x } instead of { x = x }
                     _ = try self.identifier(fv.name, true);
                 }
-            } else {
-                return self.err(
-                    .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
-                    self.ast.token_spans[fv.name],
-                );
-            }
+            } else return self.err(
+                .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
+                self.ast.token_spans[fv.name],
+            );
         }
 
         if (arity != proto.size) {
             var kv = proto.iterator();
             while (kv.next()) |entry| {
-                if (!entry.value_ptr.*) {
-                    self.err(
-                        .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
-                        self.ast.token_spans[expr.name],
-                    ) catch {};
-                }
+                if (!entry.value_ptr.*) self.err(
+                    .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
+                    self.ast.token_spans[expr.name],
+                ) catch {};
             }
 
             return error.Err;
@@ -1407,12 +1377,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
 
         return decl.typ;
-    } else {
-        // TODO: error
-        std.debug.print("Unknown structure type\n", .{});
-
-        return .void;
-    }
+    } else return self.err(.non_struct_struct_literal, self.ast.token_spans[expr.name]);
 }
 
 fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
