@@ -267,7 +267,6 @@ pub const ObjStruct = struct {
     obj: Obj,
     name: *ObjString,
     field_count: usize,
-    // methods: Table,
 
     const Self = @This();
 
@@ -275,7 +274,6 @@ pub const ObjStruct = struct {
         const obj = try Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         obj.field_count = field_count;
-        // obj.methods = Table.init(vm.allocator);
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
 
@@ -287,7 +285,6 @@ pub const ObjStruct = struct {
     }
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
-        // self.methods.deinit();
         allocator.destroy(self);
     }
 };
@@ -300,10 +297,13 @@ pub const ObjInstance = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, parent: *ObjStruct) Allocator.Error!*Self {
+        // Fields first for GC because other wise allocating fields after creation
+        // of the instance may trigger GC in between
+        const alloc_fields = try vm.gc_alloc.alloc(Value, parent.field_count);
         const obj = try Obj.allocate(vm, Self, .instance);
+
         obj.parent = parent;
-        obj.fields = try vm.gc_alloc.alloc(Value, parent.field_count);
-        // obj.methods = Table.init(vm.allocator);
+        obj.fields = alloc_fields;
 
         if (options.log_gc)
             std.debug.print("<instance of {s}>\n", .{parent.chars});
@@ -316,7 +316,6 @@ pub const ObjInstance = struct {
     }
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
-        // self.methods.deinit();
         allocator.free(self.fields);
         allocator.destroy(self);
     }

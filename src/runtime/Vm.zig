@@ -320,16 +320,6 @@ fn execute(self: *Self) !void {
                 // Here, there is no value to pop for now, no implicit null is
                 // put on top of the stack
                 self.frame_stack.count -= 1;
-
-                // Implicit print the last expression in REPL mode. For now, analyzer
-                // dosen't allow to write an expression returning a value without
-                // assignment or so
-
-                // if (self.stack.top == self.stack.values[0..].ptr) {
-                //     const res = self.stack.pop();
-                //     try res.print(self.stdout);
-                // }
-
                 break;
             },
             .@"return" => {
@@ -350,9 +340,7 @@ fn execute(self: *Self) !void {
             .ScopeReturn => {
                 const locals_count = frame.readByte();
                 const res = self.stack.pop();
-
-                // PERF: just adjust the stack top ptr? No need to pop them
-                for (0..locals_count) |_| _ = self.stack.pop();
+                self.stack.top -= locals_count;
                 self.stack.push(res);
             },
             .SetGlobal => self.globals[frame.readByte()] = self.stack.pop(),
@@ -367,7 +355,6 @@ fn execute(self: *Self) !void {
                 const idx = frame.readByte();
 
                 const structure = switch (scope) {
-                    // .GetLocal => self.stack.peekRef(idx + arity).Obj.as(ObjStruct),
                     .GetLocal => frame.slots[idx].Obj.as(ObjStruct),
                     .GetGlobal => self.globals[idx].Obj.as(ObjStruct),
                     else => unreachable,

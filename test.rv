@@ -1,8 +1,10 @@
 struct Person {
-    age: int,
+    name: str,
 }
 
 fn main() {
-    var tom = Person.{}
+    var tom = Person.{name = "Tom"}
+    tom.name = "Martin"
+    print tom.name
 }
 
