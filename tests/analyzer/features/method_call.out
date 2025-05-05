@@ -3,7 +3,7 @@
         [Print]
             [Field access 1]
                 [Variable index: 1, scope: local]
-    [Fn declaration getOld, index: 1, scope: local, return kind: implicit_void]
+    [Fn declaration getOld, index: 1, scope: local, return kind: implicit_value]
         [Binop type: add_int, cast: none]
             [Field access 0]
                 [Variable index: 1, scope: local]
@@ -11,6 +11,8 @@
         [Field assignment]
             [Field access 0]
                 [Variable index: 1, scope: local]
+        [Field access 0]
+            [Variable index: 1, scope: local]
 [Fn declaration main, index: 1, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
         [Structure literal, index: 0, scope: global]
@@ -19,9 +21,10 @@
     [Fn call arity: 0, builtin: false]
         [Method access 0]
             [Variable index: 1, scope: local]
-    [Fn call arity: 1, builtin: false]
-        [Method access 1]
-            [Variable index: 1, scope: local]
-        - args:
-        [Int 10]
+    [Discard]
+        [Fn call arity: 1, builtin: false]
+            [Method access 1]
+                [Variable index: 1, scope: local]
+            - args:
+            [Int 10]
 
