@@ -132,7 +132,7 @@ pub const ObjString = struct {
         _ = vm.stack.pop();
 
         if (options.log_gc) {
-            print("{s}\n", .{str});
+            std.debug.print("{s}\n", .{str});
         }
 
         return obj;
@@ -297,7 +297,7 @@ pub const ObjStruct = struct {
 
 pub const ObjInstance = struct {
     obj: Obj,
-    parent: *const ObjStruct,
+    parent: *ObjStruct,
     fields: []Value,
 
     const Self = @This();
@@ -312,7 +312,7 @@ pub const ObjInstance = struct {
         obj.fields = alloc_fields;
 
         if (options.log_gc)
-            std.debug.print("<instance of {s}>\n", .{parent.chars});
+            std.debug.print("<instance of {s}>\n", .{parent.name.chars});
 
         return obj;
     }

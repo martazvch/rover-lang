@@ -1,3 +1,6 @@
+// This test exists to verify a regression that occured when the GC triggered because of the high number of 
+// bound_method calls
+
 struct Human {
     age: int,
     name: str,

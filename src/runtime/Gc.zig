@@ -13,7 +13,6 @@ const ObjFunction = Obj.ObjFunction;
 const ObjStruct = Obj.ObjStruct;
 const ObjInstance = Obj.ObjInstance;
 const ObjBoundMethod = Obj.ObjBoundMethod;
-// const ObjBoundMethod = @import("obj.zig").ObjBoundMethod;
 
 vm: *Vm,
 parent_allocator: Allocator,
@@ -109,7 +108,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         },
         .instance => {
             const instance = obj.as(ObjInstance);
-            try self.markObject(instance.parent.name.asObj());
+            try self.markObject(instance.parent.asObj());
             try self.markArray(instance.fields);
         },
         .@"struct" => {
@@ -117,7 +116,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             try self.markObject(structure.name.asObj());
 
             for (structure.methods) |m| {
-                try self.blackenObject(m.asObj());
+                try self.markObject(m.asObj());
             }
         },
         // .Iter => {},
@@ -188,6 +187,7 @@ pub fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize)
 
     self.bytes_allocated += len;
     if (self.active and (self.bytes_allocated > self.next_gc or options.stress_gc)) {
+        // TODO: error?
         self.collect() catch return null;
     }
 
