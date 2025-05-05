@@ -15,6 +15,7 @@ const ObjInstance = Obj.ObjInstance;
 const ObjNativeFn = Obj.ObjNativeFn;
 const ObjString = Obj.ObjString;
 const ObjStruct = Obj.ObjStruct;
+const ObjBoundMethod = Obj.ObjBoundMethod;
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 const oom = @import("../utils.zig").oom;
@@ -188,7 +189,12 @@ fn execute(self: *Self) !void {
         if (comptime options.print_instr) {
             var dis = Disassembler.init(&frame.function.chunk, self.allocator, .Normal);
             defer dis.deinit();
-            _ = try dis.disInstruction(self.instructionNb(), self.stdout);
+            const instr_nb = self.instructionNb();
+            _ = try dis.disInstruction(instr_nb, self.stdout);
+
+            if (@as(OpCode, @enumFromInt(frame.ip[0])) == .field_assign) {
+                _ = try dis.disInstruction(instr_nb + 1, self.stdout);
+            }
         }
 
         const instruction = frame.readByte();
@@ -202,6 +208,36 @@ fn execute(self: *Self) !void {
             .AddInt => {
                 const rhs = self.stack.pop().Int;
                 self.stack.peekRef(0).Int += rhs;
+            },
+            .bound_method => {
+                const method_idx = frame.readByte();
+
+                const instance = blk: {
+                    const scope_op: OpCode = @enumFromInt(frame.readByte());
+                    const idx = frame.readByte();
+
+                    break :blk if (scope_op == .GetGlobal)
+                        &self.globals[idx]
+                    else if (scope_op == .GetHeap)
+                        &self.heap_vars[idx]
+                    else
+                        &frame.slots[idx];
+                };
+                const receiver = instance;
+                const method = instance.Obj.as(ObjInstance).parent.methods[method_idx];
+                const bound = ObjBoundMethod.create(self, receiver.*, method);
+
+                self.stack.push(Value.obj(bound.asObj()));
+            },
+            .bound_method_call => {
+                const args_count = frame.readByte();
+                const bound = self.stack.peekRef(args_count).Obj.as(ObjBoundMethod);
+                // -1 because 1 was added to make room for `self`
+                self.stack.peekRef(args_count - 1).* = bound.receiver;
+                try self.call(bound.method, args_count);
+
+                // If call success, we need to to set frame pointer back
+                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .call => {
                 const args_count = frame.readByte();
@@ -243,29 +279,14 @@ fn execute(self: *Self) !void {
                 field.* = self.stack.pop();
             },
             .get_field => {
-                const value = self.getField(frame);
-                self.stack.push(value.*);
+                const field = self.getField(frame);
+                self.stack.push(field.*);
             },
             // Compiler bug: https://github.com/ziglang/zig/issues/13938
             .GetGlobal => self.stack.push((&self.globals)[frame.readByte()]),
             .GetHeap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as GetGlobal
             .GetLocal => self.stack.push(frame.slots[frame.readByte()]),
-            .get_method => {
-                const method_idx = frame.readByte();
-                const scope_op: OpCode = @enumFromInt(frame.readByte());
-                const var_idx = frame.readByte();
-
-                const value = if (scope_op == .GetGlobal)
-                    &self.globals[var_idx]
-                else if (scope_op == .GetHeap)
-                    &self.heap_vars[var_idx]
-                else
-                    &frame.slots[var_idx];
-
-                var structure = value.Obj.as(ObjInstance).parent;
-                self.stack.push(Value.obj(structure.methods[method_idx].asObj()));
-            },
             .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
             .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
             .GeFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
@@ -393,15 +414,12 @@ fn execute(self: *Self) !void {
                 const rhs = self.stack.pop().Int;
                 self.stack.peekRef(0).Int -= rhs;
             },
-            // PERF: we could avoid a function call here
+            // PERF: we could avoid a function call here and cache a 'true' value?
             .true => self.stack.push(Value.bool_(true)),
         }
     }
 }
 
-// TODO: make this treatment in earlier stages to avoid runtime checks?
-// Rucursion here avoid to push and pop from stack like: a.b.c pushing a.b on stack
-// then pop it to access c to push it back
 fn getField(self: *Self, frame: *CallFrame) *Value {
     const field_idx = frame.readByte();
 

@@ -319,7 +319,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             break :blk assigne.typ;
         },
-        .field => |*e| (try self.field(e)).@"1",
+        .field => |*e| (try self.field(e)),
         else => return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne)),
     };
 
@@ -435,10 +435,13 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     self.state.fn_type = return_type;
 
-    self.type_manager.setInfo(type_idx, .{ .func = .{
-        .params = params_type.toOwnedSlice(self.allocator) catch oom(),
-        .return_type = return_type,
-    } });
+    self.type_manager.setInfo(type_idx, .{
+        .func = .{
+            .params = params_type.toOwnedSlice(self.allocator) catch oom(),
+            .return_type = return_type,
+            // .tag = if (self.state.struct_type == .void) .function else .method,
+        },
+    });
 
     // ------
     //  Body
@@ -664,7 +667,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                             // TODO: One side is fixed size, not the other one. Delete allocation?
                             .params = self.allocator.dupe(Type, func.params[0..func.arity]) catch oom(),
                             .return_type = func.return_type,
-                            .builtin = true,
+                            .tag = .builtin,
                         },
                     };
 
@@ -738,7 +741,8 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
     // var a: fn(int) -> bool
     if (TypeSys.getKind(checked_type) == .func) {
         const value = TypeSys.getValue(checked_type);
-        self.type_manager.type_infos.items[value].func.is_var = true;
+        _ = value; // autofix
+        // self.type_manager.type_infos.items[value].func.tag = .variable;
     }
 
     const variable = try self.declareVariable(name, checked_type, initialized, idx, .normal, node.name);
@@ -771,7 +775,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
-        .field => |*e| (try self.field(e)).@"1",
+        .field => |*e| (try self.field(e)),
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
@@ -1008,9 +1012,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-// FIX: (bound method) maybe add an extra argument to specify if we are in a call.
-// If we are, no need to emit a bound method and keep what's actually done (for optimization)
-fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
+fn field(self: *Self, expr: *const Ast.Field) Error!Type {
     const idx = self.addInstr(.{ .tag = .member });
     const struct_type = try self.analyzeExpr(expr.structure);
     const field_idx = self.interner.intern(self.ast.toSource(expr.field));
@@ -1023,22 +1025,22 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     const infos_index = TypeSys.getValue(struct_type);
     const infos = self.type_manager.type_infos.items[infos_index].@"struct";
 
-    const found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_idx)) |f|
+    var found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_idx)) |f|
         .{ f, .field }
     else if (infos.functions.get(field_idx)) |f|
-        .{ f, .method }
+        .{ f, .bound_method }
     else
         return self.err(
             .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
             self.ast.token_spans[expr.field],
         );
 
-    // FIX: (bound method) implement here bound method instead of giving the kind in data
     self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.idx, .kind = kind } };
 
-    // FIX: (bound method) Maybe return a single type as before but create a `bounded method` in Type System in case
-    // found_field is a function
-    return .{ struct_type, found_field.type };
+    if (kind == .bound_method)
+        found_field.type = TypeSys.setExtra(found_field.type, .bound_method);
+
+    return found_field.type;
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1046,14 +1048,9 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         .arity = @intCast(expr.args.len),
     } } });
 
-    // FIX: (bound method) Faire avant l'instruction et decider de l'instruction apres :
-    // - function
-    // - structure
-    // - bound method
-    // Pour bound method, faire comme ce qui est fait actuellement pour optimisation
-    const instance_type, const method_type = switch (expr.callee.*) {
+    const method_type = switch (expr.callee.*) {
         .field => |*e| try self.field(e),
-        else => .{ .void, try self.analyzeExpr(expr.callee) },
+        else => try self.analyzeExpr(expr.callee),
     };
 
     const infos = if (TypeSys.is(method_type, .func))
@@ -1068,46 +1065,48 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         } else return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
     } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
 
-    if (infos.params.len != expr.args.len) {
-        if (infos.params.len - 1 == expr.args.len and instance_type == infos.params[0]) {
-            // If this is a call like: instance.method(arg1, arg2, ...), we flag it as a method
-            // It allows the compiler to add 1 to the arity as `self` is implicitly passed
-            // We also add `self` as the first argument. It's always just before the field that has
-            // been put onto the stack
-            // TODO: test
-            self.instructions.items(.data)[idx].call.method = true;
+    var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
+        .builtin => .builtin,
+        .function => .function,
+    };
 
-            _ = self.addInstr(.{
-                .tag = .identifier,
-                .data = .{ .variable = .{
-                    .scope = .local,
-                    .index = @intCast(self.locals.items.len - self.local_offset - 1),
-                } },
-            });
-        } else return self.err(
+    b: {
+        if (infos.params.len == expr.args.len) {
+            break :b;
+        }
+
+        const args_diff = @max(infos.params.len, expr.args.len) - @min(infos.params.len, expr.args.len);
+
+        if (args_diff == 1 and TypeSys.getExtra(method_type) == .bound_method) {
+            call_tag = .bound;
+            break :b;
+        }
+
+        return self.err(
             AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
             self.ast.getSpan(expr),
         );
     }
 
-    self.instructions.items(.data)[idx].call.builtin = infos.builtin;
-
-    return self.fnCall(expr.args, infos);
+    self.instructions.items(.data)[idx].call.tag = call_tag;
+    return self.fnCall(expr.args, infos, call_tag == .bound);
 }
 
-fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo) Error!Type {
+fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Error!Type {
+    const params = if (is_bound) infos.params[1..] else infos.params;
+
     for (args, 0..) |arg, i| {
         const arg_type = try self.analyzeExpr(arg);
 
-        if (arg_type != infos.params[i] and !self.checkEqualFnType(arg_type, infos.params[i])) {
+        if (arg_type != params[i] and !self.checkEqualFnType(arg_type, params[i])) {
             // If it's an implicit cast between int and float, save the
             // argument indices for compiler. Otherwise, error
-            if (infos.params[i] == .float and arg_type == .int) {
+            if (params[i] == .float and arg_type == .int) {
                 _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
             } else {
                 return self.err(
                     .{ .TypeMismatch = .{
-                        .expect = self.getTypeName(infos.params[i]),
+                        .expect = self.getTypeName(params[i]),
                         .found = self.getTypeName(arg_type),
                     } },
                     self.ast.getSpan(arg),
@@ -1656,16 +1655,19 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
     return false;
 }
 
-// Helpers used for errors
+/// Helpers used for errors
 fn getTypeName(self: *const Self, typ: Type) []const u8 {
     if (TypeSys.is(typ, .func)) {
         return self.getFnTypeName(typ) catch oom();
+    } else if (TypeSys.is(typ, .@"struct")) {
+        //
     } else {
         const idx = self.type_manager.idx(typ);
         return self.interner.getKey(idx).?;
     }
 }
 
+/// Helpers used for errors
 fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     const value = TypeSys.getValue(typ);
     const decl = self.type_manager.type_infos.items[value].func;

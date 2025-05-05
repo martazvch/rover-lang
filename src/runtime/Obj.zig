@@ -17,7 +17,7 @@ is_marked: bool,
 const Obj = @This();
 
 const ObjKind = enum {
-    // BoundMethod,
+    bound_method,
     func,
     instance,
     // Iter,
@@ -48,7 +48,7 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) *T {
 
 pub fn destroy(self: *Obj, vm: *Vm) void {
     switch (self.kind) {
-        // .BoundMethod => self.as(ObjBoundMethod).deinit(vm.allocator),
+        .bound_method => self.as(ObjBoundMethod).deinit(vm.allocator),
         .func => {
             const function = self.as(ObjFunction);
             function.deinit(vm.gc_alloc);
@@ -81,7 +81,7 @@ pub fn as(self: *Obj, comptime T: type) *T {
 
 pub fn print(self: *Obj, writer: anytype) !void {
     try switch (self.kind) {
-        // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
+        .bound_method => self.as(ObjBoundMethod).method.log(),
         // .Closure => self.as(ObjClosure).function.print(writer),
         .func => self.as(ObjFunction).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
@@ -97,7 +97,7 @@ pub fn print(self: *Obj, writer: anytype) !void {
 
 pub fn log(self: *Obj) void {
     switch (self.kind) {
-        // .BoundMethod => self.as(ObjBoundMethod).method.function.print(writer),
+        .bound_method => self.as(ObjBoundMethod).method.log(),
         // .Closure => self.as(ObjClosure).function.print(writer),
         .func => self.as(ObjFunction).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
@@ -323,6 +323,34 @@ pub const ObjInstance = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.free(self.fields);
+        allocator.destroy(self);
+    }
+};
+
+pub const ObjBoundMethod = struct {
+    obj: Obj,
+    receiver: Value,
+    method: *ObjFunction,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, receiver: Value, method: *ObjFunction) *Self {
+        const obj = Obj.allocate(vm, Self, .bound_method);
+
+        obj.receiver = receiver;
+        obj.method = method;
+
+        if (options.log_gc)
+            method.log();
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.destroy(self);
     }
 };

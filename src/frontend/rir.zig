@@ -101,7 +101,12 @@ pub const Instruction = struct {
 
     pub const Assignment = struct { cast: bool };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, method: bool = false, builtin: bool = false };
+    pub const Call = struct {
+        arity: u8,
+        tag: CallTag = .function,
+
+        pub const CallTag = enum { bound, builtin, function, method };
+    };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
         cast: Cast,
@@ -114,7 +119,7 @@ pub const Instruction = struct {
         index: usize,
         kind: Kind,
 
-        pub const Kind = enum { field, method };
+        pub const Kind = enum { bound_method, field };
     };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };

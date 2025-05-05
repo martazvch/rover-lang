@@ -12,6 +12,7 @@ const Vm = @import("Vm.zig");
 const ObjFunction = Obj.ObjFunction;
 const ObjStruct = Obj.ObjStruct;
 const ObjInstance = Obj.ObjInstance;
+const ObjBoundMethod = Obj.ObjBoundMethod;
 // const ObjBoundMethod = @import("obj.zig").ObjBoundMethod;
 
 vm: *Vm,
@@ -94,11 +95,11 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
     }
 
     switch (obj.kind) {
-        // .BoundMethod => {
-        //     const bound = obj.as(ObjBoundMethod);
-        //     try self.markValue(&bound.receiver);
-        //     try self.markObject(bound.method.asObj());
-        // },
+        .bound_method => {
+            const bound = obj.as(ObjBoundMethod);
+            try self.markValue(&bound.receiver);
+            try self.markObject(bound.method.asObj());
+        },
         .func => {
             const function = obj.as(ObjFunction);
             if (function.name) |name| {

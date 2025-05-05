@@ -278,7 +278,7 @@ pub const RirRenderer = struct {
         try self.indent();
         var writer = self.tree.writer();
         try writer.print("[Fn call arity: {}, builtin: {}]\n", .{
-            data.arity, data.builtin,
+            data.arity, data.tag == .builtin,
         });
         self.indent_level += 1;
 

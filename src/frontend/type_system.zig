@@ -51,6 +51,7 @@ const ExtraSize = u4;
 pub const Extra = enum(u4) {
     none,
     builtin,
+    bound_method,
     _,
 
     pub fn toIdx(self: Extra) usize {
@@ -92,6 +93,13 @@ pub fn getExtra(typ: Type) Extra {
     return @enumFromInt(@as(u8, @intCast(typ.toIdx() >> 24)) & 0xf);
 }
 
+/// Get a type kind, discarding extra and value information bits
+pub fn setExtra(typ: Type, extra: Extra) Type {
+    // Looking for the 5-6-7-8 bits from left
+    const erased = typ.toIdx() & 0xf0ffffff;
+    return @enumFromInt(erased | extra.toIdx() << 24);
+}
+
 // Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
 // all to one and mask it
 /// Extract the value bits associated to a type
@@ -120,8 +128,9 @@ pub const TypeInfo = union(enum) {
 pub const FnInfo = struct {
     params: []const Type,
     return_type: Type,
-    builtin: bool = false,
-    is_var: bool = false,
+    tag: Tag = .function,
+
+    pub const Tag = enum { builtin, function };
 };
 
 pub const StructInfo = struct {

@@ -2,16 +2,34 @@ struct Person {
     age: int,
 
     fn speak(self) {
+        self.age = self.age * 10
         print self.age
-        self.age = 6
     }
+
+    fn getOld(self, amount: int) {
+        self.age = self.age + amount
+    }
+}
+
+fn oui() {
+    print "oui"
 }
 
 fn main() {
     var p = Person.{age=5}
     p.speak()
+    var a = 5
     p.speak()
-    // var method = p.speak
-    // method()
+    oui()
+    var method: fn(Person) -> void = p.speak
+    method()
+    p.speak()
+    method()
+
+    print ""
+    print ""
+    p.getOld(8)
+    
+    method()
 }
 

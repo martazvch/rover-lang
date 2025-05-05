@@ -57,6 +57,8 @@ pub fn writeConstant(self: *Self, value: Value) Error!u8 {
 pub const OpCode = enum(u8) {
     AddInt,
     AddFloat,
+    bound_method,
+    bound_method_call,
     CastToFloat,
     Constant,
     DefineHeapVar,
@@ -75,7 +77,7 @@ pub const OpCode = enum(u8) {
     GetGlobal,
     GetHeap,
     GetLocal,
-    get_method,
+    // get_method,
     GtFloat,
     GtInt,
     GeFloat,

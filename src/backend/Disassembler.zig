@@ -42,41 +42,12 @@ pub fn disSlice(self: *Self, name: []const u8, start: usize) !void {
 pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
     if (self.render_mode == .Normal) try writer.print("{:0>4} ", .{offset});
 
-    // if (offset > 0 and self.chunk.lines.items[offset] == self.chunk.lines.items[offset - 1]) {
-    //     print("   | ", .{});
-    // } else {
-    //     print("{:>4} ", .{self.chunk.lines.items[offset]});
-    // }
-
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
         .AddFloat => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .AddInt => self.simpleInstruction("OP_ADD_INT", offset, writer),
-        // .CloseUpValue => simpleInstruction("OP_CLOSE_UPVALUE", offset, writer),
-        // .Closure => {
-        //     var local_offset = offset + 1;
-        //     const constant = self.chunk.code.items[local_offset];
-        //     local_offset += 1;
-        //
-        //     print("{s:<16} index: {:<4}", .{ "OP_CLOSURE", constant });
-        //
-        //     const obj = self.chunk.constants.items[constant].as_obj().?;
-        //     obj.print(writer);
-        //     print("\n", .{});
-        //
-        //     const obj_fn = obj.as(ObjFunction);
-        //
-        //     for (0..obj_fn.upvalue_count) |_| {
-        //         const is_local = if (self.chunk.code.items[local_offset] == 1) "local" else "upvalue";
-        //         local_offset += 1;
-        //         const index = self.chunk.code.items[local_offset];
-        //         local_offset += 1;
-        //
-        //         print("{:>4}      |                     {s} {}\n", .{ local_offset - 2, is_local, index });
-        //     }
-        //
-        //     return local_offset;
-        // },
+        .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
+        .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
         .CastToFloat => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
         .Constant => self.constantInstruction("OP_CONSTANT", offset, writer),
         // .CreateIter => self.simpleInstruction("OP_CREATE_ITER", offset, writer),
@@ -92,14 +63,11 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
-        .field_assign => self.fieldAssign(offset, writer),
-        .get_field => self.getMember(offset, writer, "OP_GET_FIELD"),
+        .field_assign => self.simpleInstruction("OP_FIELD_ASSIGN", offset, writer),
+        .get_field => self.getMember("OP_GET_FIELD", offset, writer),
         .GetGlobal => self.indexInstruction("OP_GET_GLOBAL", offset, writer),
         .GetHeap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .GetLocal => self.indexInstruction("OP_GET_LOCAL", offset, writer),
-        .get_method => self.getMember(offset, writer, "OP_GET_METHOD"),
-        // .GetProperty => self.constantInstruction("OP_GET_PROPERTY", offset),
-        // .GetUpvalue => self.byte_instruction("OP_GET_UPVALUE", offset),
         .GtFloat => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .GtInt => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .GeFloat => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
@@ -113,7 +81,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .LeFloat => self.simpleInstruction("OP_LESS_EQUAL_FLOAT", offset, writer),
         .LeInt => self.simpleInstruction("OP_LESS_EQUAL_INT", offset, writer),
         .Loop => self.jumpInstruction("OP_LOOP", -1, offset, writer),
-        // .Method => self.constantInstruction("OP_METHOD", offset),
         .MulFloat => self.simpleInstruction("OP_MULTIPLY_FLOAT", offset, writer),
         .MulInt => self.simpleInstruction("OP_MULTIPLY_INT", offset, writer),
         .NakedReturn => self.simpleInstruction("OP_NAKED_RETURN", offset, writer),
@@ -133,13 +100,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .SetGlobal => self.indexInstruction("OP_SET_GLOBAL", offset, writer),
         .SetHeap => self.indexInstruction("OP_SET_HEAP", offset, writer),
         .SetLocal => self.indexInstruction("OP_SET_LOCAL", offset, writer),
-        // .SetProperty => self.constantInstruction("OP_SET_PROPERTY", offset),
-        // .SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),
-        // .@"struct" => self.constantInstruction("OP_STRUCT", offset),
         .StrCat => self.simpleInstruction("OP_STRING_CONCAT", offset, writer),
         .StrMulL => self.simpleInstruction("OP_STRING_MUL_L", offset, writer),
         .StrMulR => self.simpleInstruction("OP_STRING_MUL_R", offset, writer),
-        // .struct_literal => self.struct_literal(offset, writer),
         .struct_literal => self.indexInstruction("OP_STRUCT_LIT", offset, writer),
         .SubFloat => self.simpleInstruction("OP_SUBTRACT_FLOAT", offset, writer),
         .SubInt => self.simpleInstruction("OP_SUBTRACT_INT", offset, writer),
@@ -230,17 +193,7 @@ fn for_instruction(
     return offset + 4;
 }
 
-fn fieldAssign(self: *const Self, offset: usize, writer: anytype) !usize {
-    if (self.render_mode == .Test) {
-        try writer.print("{s}\n", .{"OP_FIELD_ASSIGN"});
-    } else {
-        try writer.print("{s:<24}\n", .{"OP_FIELD_ASSIGN"});
-    }
-
-    return offset + 1;
-}
-
-fn getMember(self: *const Self, offset: usize, writer: anytype, name: []const u8) !usize {
+fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     // Skips the struct_literal op
     var local_offset = offset;
     local_offset += 1;

@@ -74,7 +74,7 @@ pub const CompilationManager = struct {
     }
 
     pub fn compile(self: *Self) !*ObjFunction {
-        self.compiler = Compiler.init(self, null, .global, "global scope");
+        self.compiler = Compiler.init(self, "global scope");
 
         while (self.instr_idx < self.instr_tags.len) {
             try self.compiler.compileInstr();
@@ -102,11 +102,7 @@ pub const CompilationManager = struct {
 
 const Compiler = struct {
     manager: *CompilationManager,
-    // TODO: need an enclosing? Not used for now. If not, Need a Compilation manager?
-    enclosing: ?*Compiler,
     function: *ObjFunction,
-    // TODO: useless information
-    fn_kind: FnKind,
 
     const Self = @This();
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
@@ -120,12 +116,10 @@ const Compiler = struct {
     };
 
     // TODO: error handling?
-    pub fn init(manager: *CompilationManager, enclosing: ?*Compiler, fn_kind: FnKind, name: []const u8) Self {
+    pub fn init(manager: *CompilationManager, name: []const u8) Self {
         return .{
             .manager = manager,
-            .enclosing = enclosing,
             .function = ObjFunction.create(manager.vm, ObjString.copy(manager.vm, name)),
-            .fn_kind = fn_kind,
         };
     }
 
@@ -223,8 +217,8 @@ const Compiler = struct {
 
         // TODO: Error handling
         if (jump_offset > std.math.maxInt(u16)) {
-            std.debug.print("Loop body too large\n", .{});
-            return error.Err;
+            @panic("Loop body too large\n");
+            // return error.Err;
         }
 
         chunk.writeByte(@as(u8, @intCast(jump_offset >> 8)) & 0xff, offset);
@@ -239,7 +233,8 @@ const Compiler = struct {
             dis.disChunk(if (self.function.name) |n| n.chars else "Script") catch oom();
             const stdout = std.io.getStdOut().writer();
             stdout.print("{s}", .{dis.disassembled.items}) catch oom();
-            if (self.enclosing != null) try stdout.writeAll("\n");
+
+            if (self.function.name == null) try stdout.writeAll("\n");
         }
 
         return self.function;
@@ -432,7 +427,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         self.writeOpAndByte(
-            if (data.kind == .field) .get_field else .get_method,
+            if (data.kind == .field) .get_field else .bound_method,
             @intCast(data.index),
             start,
         );
@@ -452,10 +447,8 @@ const Compiler = struct {
         // Compiles the identifier
         try self.compileInstr();
 
-        // If it's a method, adds 'self' at the beginning of the arguments
-        if (data.method) {
-            try self.compileInstr();
-        }
+        // If it's a method, adds a tombstone for 'self' at the beginning of the arguments
+        if (data.tag == .bound) self.writeOp(.null, start);
 
         for (0..data.arity) |_| {
             try self.compileInstr();
@@ -466,8 +459,8 @@ const Compiler = struct {
         }
 
         self.writeOpAndByte(
-            if (data.builtin) .NativeFnCall else .call,
-            if (data.method) data.arity + 1 else data.arity,
+            if (data.tag == .function) .call else if (data.tag == .builtin) .NativeFnCall else .bound_method_call,
+            if (data.tag == .bound) data.arity + 1 else data.arity,
             start,
         );
     }
@@ -482,7 +475,7 @@ const Compiler = struct {
         const fn_var = self.getData().var_decl.variable;
         self.manager.instr_idx += 1;
 
-        const func = try self.compileFn(.@"fn", fn_name, data);
+        const func = try self.compileFn(fn_name, data);
         try self.emitConstant(Value.obj(func.asObj()), 0);
         self.defineVariable(fn_var, 0);
 
@@ -493,28 +486,17 @@ const Compiler = struct {
     }
 
     // TODO: Check if *kind* is really needed
-    fn compileFn(
-        self: *Self,
-        kind: FnKind,
-        name: []const u8,
-        data: Instruction.FnDecl,
-    ) Error!*ObjFunction {
-        var compiler = Compiler.init(self.manager, self, kind, name);
+    fn compileFn(self: *Self, name: []const u8, data: Instruction.FnDecl) Error!*ObjFunction {
+        var compiler = Compiler.init(self.manager, name);
 
         for (0..data.body_len) |_| {
             try compiler.compileInstr();
         }
 
         if (data.return_kind == .implicit_value) {
-            compiler.writeOp(
-                .@"return",
-                self.manager.instr_offsets[self.manager.instr_idx - 1],
-            );
+            compiler.writeOp(.@"return", self.manager.instr_offsets[self.manager.instr_idx - 1]);
         } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(
-                .NakedReturn,
-                self.manager.instr_offsets[self.manager.instr_idx - 1],
-            );
+            compiler.writeOp(.NakedReturn, self.manager.instr_offsets[self.manager.instr_idx - 1]);
         }
 
         return compiler.end();
@@ -631,7 +613,7 @@ const Compiler = struct {
             // Skip `variable` cause not needed here
             self.manager.instr_idx += 2;
 
-            const func = try self.compileFn(.method, fn_name, fn_data);
+            const func = try self.compileFn(fn_name, fn_data);
             funcs.appendAssumeCapacity(func);
         }
 
