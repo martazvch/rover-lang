@@ -1,10 +1,21 @@
+struct Pet {
+    name: str,
+    has_eaten: bool,
+}
+
 struct Person {
     name: str,
+    pet: Pet,
 }
 
 fn main() {
-    var tom = Person.{name = "Tom"}
+    var pet = Pet.{ name = "Vodka", has_eaten = true }
+    var tom = Person.{ name = "Tom", pet }
+    print tom.name
     tom.name = "Martin"
     print tom.name
+    print tom.pet.has_eaten
+    tom.pet.has_eaten = false
+    print tom.pet.has_eaten
 }
 

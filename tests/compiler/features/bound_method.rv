@@ -1,0 +1,16 @@
+struct Human {
+    age: int,
+
+    fn getOld(self, amount: int) {
+        self.age = self.age + amount
+    }
+}
+
+fn main() {
+    var human = Human.{age=5}
+    var getOld = human.getOld
+
+    var trash: int
+    getOld(5)
+}
+

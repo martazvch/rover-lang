@@ -1,0 +1,19 @@
+struct Human {
+    age: int,
+    name: str,
+
+    fn speak(self) {
+        print self.name
+    }
+
+    fn getOld(self, amount: int) {
+        self.age = self.age + amount
+    }
+}
+
+fn main() {
+    var human = Human.{ age=5, name="Tom" }
+    human.speak()
+    human.getOld(10)
+}
+

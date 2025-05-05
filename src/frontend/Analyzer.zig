@@ -152,9 +152,9 @@ const Variable = struct {
     decl: usize = 0,
     initialized: bool = false,
     captured: bool = false,
-    kind: Tag = .normal,
+    kind: Tag = .variable,
 
-    pub const Tag = enum { normal, func, param, import, @"struct" };
+    pub const Tag = enum { variable, func, param, import, @"struct" };
 
     pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
@@ -310,12 +310,17 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         .literal => |*e| blk: {
             if (e.tag != .identifier) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
 
-            const assigne = try self.identifier(e.idx, false);
+            var assigne = try self.identifier(e.idx, false);
 
             if (!assigne.initialized) assigne.initialized = true;
 
+            // If we assign a bound method that match the type (checked after), update type's infos
+            if (TypeSys.getExtra(value_type) == .bound_method) {
+                assigne.typ = TypeSys.setExtra(assigne.typ, .bound_method);
+            }
+
             // TODO: later, when function's parameters will maybe be a reference, allow it
-            if (assigne.kind != .normal) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
+            if (assigne.kind != .variable) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
@@ -439,7 +444,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         .func = .{
             .params = params_type.toOwnedSlice(self.allocator) catch oom(),
             .return_type = return_type,
-            // .tag = if (self.state.struct_type == .void) .function else .method,
         },
     });
 
@@ -718,7 +722,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         if (checked_type == .void) {
             checked_type = value_type;
             // Else, we check for coherence
-        } else if (checked_type != value_type) {
+        } else if (checked_type != value_type and !self.checkEqualFnType(checked_type, value_type)) {
             // One case in wich we can coerce, int -> float
             if (checked_type == .float and value_type == .int) {
                 cast = true;
@@ -733,19 +737,16 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         }
 
         initialized = true;
+
+        // If we assign a bound method that match the type (checked after), update type's infos
+        if (TypeSys.getExtra(value_type) == .bound_method) {
+            checked_type = TypeSys.setExtra(checked_type, .bound_method);
+        }
     } else {
         _ = self.addInstr(.{ .tag = .null });
     }
 
-    // If it was a function type, we mark it as assignable. Allow to assign to variable that of a function type like:
-    // var a: fn(int) -> bool
-    if (TypeSys.getKind(checked_type) == .func) {
-        const value = TypeSys.getValue(checked_type);
-        _ = value; // autofix
-        // self.type_manager.type_infos.items[value].func.tag = .variable;
-    }
-
-    const variable = try self.declareVariable(name, checked_type, initialized, idx, .normal, node.name);
+    const variable = try self.declareVariable(name, checked_type, initialized, idx, .variable, node.name);
     self.instructions.items(.data)[idx] = .{ .var_decl = .{ .variable = variable, .cast = cast } };
 }
 
@@ -1043,6 +1044,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
     return found_field.type;
 }
 
+// PERF: create a special call for calling bounded methods to stop splitting 'structure.method()' into 2 instructions
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const idx = self.addInstr(.{ .tag = .call, .data = .{ .call = .{
         .arity = @intCast(expr.args.len),
@@ -1172,7 +1174,7 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
 fn identifier(self: *Self, name: usize, initialized: bool) Error!*Variable {
     const variable = try self.resolveIdentifier(name, initialized);
 
-    if (variable.kind == .normal) {
+    if (variable.kind == .variable) {
         self.checkCapture(variable);
         _ = self.addInstr(.{ .tag = .identifier_id, .data = .{ .id = variable.decl } });
     } else {
@@ -1659,11 +1661,9 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
 fn getTypeName(self: *const Self, typ: Type) []const u8 {
     if (TypeSys.is(typ, .func)) {
         return self.getFnTypeName(typ) catch oom();
-    } else if (TypeSys.is(typ, .@"struct")) {
-        //
     } else {
-        const idx = self.type_manager.idx(typ);
-        return self.interner.getKey(idx).?;
+        const index = self.type_manager.idx(typ);
+        return self.interner.getKey(index).?;
     }
 }
 
@@ -1678,7 +1678,7 @@ fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
 
     for (decl.params, 0..) |p, i| {
         try writer.print("{s}{s}", .{
-            self.interner.getKey(p.toIdx()).?,
+            self.getTypeName(p),
             if (i < decl.params.len - 1) ", " else "",
         });
     }

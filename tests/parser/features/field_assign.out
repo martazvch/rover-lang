@@ -1,0 +1,20 @@
+{
+    "assignment": {
+        "assignee": {
+            "field": {
+                "structure": {
+                    "field": {
+                        "structure": {
+                            "literal": "tom"
+                        },
+                        "field_name": "pet"
+                    }
+                },
+                "field_name": "has_eaten"
+            }
+        },
+        "value": {
+            "literal": "true"
+        }
+    }
+}
