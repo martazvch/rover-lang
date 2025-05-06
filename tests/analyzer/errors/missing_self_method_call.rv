@@ -1,0 +1,10 @@
+struct Foo {
+    fn speak() {}
+    fn speak2(a: int) {}
+}
+
+fn main() {
+    var foo = Foo.{}
+    foo.speak()
+    foo.speak2()
+}

@@ -159,8 +159,7 @@ fn markValue(self: *Self, value: *const Value) Allocator.Error!void {
         try self.markObject(obj);
 }
 
-// pub because called once by the compiler
-pub fn markObject(self: *Self, obj: ?*Obj) Allocator.Error!void {
+fn markObject(self: *Self, obj: ?*Obj) Allocator.Error!void {
     if (obj) |o| {
         if (o.is_marked) return;
 

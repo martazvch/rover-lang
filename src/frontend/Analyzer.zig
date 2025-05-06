@@ -81,7 +81,6 @@ pub const TypeManager = struct {
     pub fn declare(self: *TypeManager, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) !TypeSys.Type {
         const count = self.type_infos.items.len;
 
-        // Error
         if (count == std.math.maxInt(TypeSys.Value)) return error.TooManyTypes;
 
         const typ = TypeSys.create(kind, extra, @intCast(count));
@@ -324,7 +323,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             break :blk assigne.typ;
         },
-        .field => |*e| (try self.field(e)),
+        .field => |*e| (try self.field(e)).@"1",
         else => return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne)),
     };
 
@@ -686,7 +685,8 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     } } });
                 }
 
-                self.instructions.items(.data)[idx] = .{ .use = node.names.len };
+                // self.instructions.items(.data)[idx] = .{ .use = node.names.len - 1 };
+                self.instructions.items(.data)[idx] = .{ .use = all_fn_names.len };
 
                 return;
             } else return self.err(
@@ -776,7 +776,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
-        .field => |*e| (try self.field(e)),
+        .field => |*e| (try self.field(e)).@"1",
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
@@ -1013,7 +1013,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-fn field(self: *Self, expr: *const Ast.Field) Error!Type {
+fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     const idx = self.addInstr(.{ .tag = .member });
     const struct_type = try self.analyzeExpr(expr.structure);
     const field_idx = self.interner.intern(self.ast.toSource(expr.field));
@@ -1041,7 +1041,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!Type {
     if (kind == .bound_method)
         found_field.type = TypeSys.setExtra(found_field.type, .bound_method);
 
-    return found_field.type;
+    return .{ struct_type, found_field.type };
 }
 
 // PERF: create a special call for calling bounded methods to stop splitting 'structure.method()' into 2 instructions
@@ -1050,9 +1050,9 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         .arity = @intCast(expr.args.len),
     } } });
 
-    const method_type = switch (expr.callee.*) {
+    const instance_type, const method_type = switch (expr.callee.*) {
         .field => |*e| try self.field(e),
-        else => try self.analyzeExpr(expr.callee),
+        else => .{ .void, try self.analyzeExpr(expr.callee) },
     };
 
     const infos = if (TypeSys.is(method_type, .func))
@@ -1067,6 +1067,16 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         } else return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
     } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
 
+    // Not just a call to an already bounded method. Two cases here:
+    // 1: var bounded = p.method(); bounded()  --> here instance_type is void
+    // 2: p.method()                           --> here instance_type isn't
+    if (instance_type != .void and TypeSys.getExtra(method_type) == .bound_method) {
+        if (infos.params.len == 0 or infos.params[0] != instance_type) return self.err(
+            .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
+            self.ast.token_spans[expr.callee.field.field],
+        );
+    }
+
     var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
         .builtin => .builtin,
         .function => .function,
@@ -1079,6 +1089,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
 
         const args_diff = @max(infos.params.len, expr.args.len) - @min(infos.params.len, expr.args.len);
 
+        // For bounded method, the difference of 1 is the invisible 'self' paramter
         if (args_diff == 1 and TypeSys.getExtra(method_type) == .bound_method) {
             call_tag = .bound;
             break :b;
