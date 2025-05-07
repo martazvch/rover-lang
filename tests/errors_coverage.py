@@ -65,7 +65,7 @@ success = test(
     "Analyzer",
     os.path.join(os.getcwd(), "src", "frontend", "analyzer_msg.zig"),
     os.path.join(os.getcwd(), "tests", "analyzer"),
-    ["TooManyTypes"]
+    ["too_many_types"]
 ) and success
 
 success = test(

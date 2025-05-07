@@ -201,56 +201,56 @@ fn execute(self: *Self) !void {
         const op: OpCode = @enumFromInt(instruction);
 
         switch (op) {
-            .AddFloat => {
-                const rhs = self.stack.pop().Float;
-                self.stack.peekRef(0).Float += rhs;
+            .add_float => {
+                const rhs = self.stack.pop().float;
+                self.stack.peekRef(0).float += rhs;
             },
-            .AddInt => {
-                const rhs = self.stack.pop().Int;
-                self.stack.peekRef(0).Int += rhs;
+            .add_int => {
+                const rhs = self.stack.pop().int;
+                self.stack.peekRef(0).int += rhs;
             },
             .bound_method => {
                 const receiver, const method = self.getBoundMethod(frame);
                 const bound = ObjBoundMethod.create(self, receiver, method);
-                self.stack.push(Value.obj(bound.asObj()));
+                self.stack.push(Value.makeObj(bound.asObj()));
             },
             .bound_method_call => {
                 const args_count = frame.readByte();
-                const bound = self.stack.peekRef(args_count).Obj.as(ObjBoundMethod);
+                const bound = self.stack.peekRef(args_count).obj.as(ObjBoundMethod);
                 try self.callBoundMethod(&frame, args_count, bound.receiver, bound.method);
             },
             .call => {
                 const args_count = frame.readByte();
-                const callee = self.stack.peekRef(args_count).Obj.as(ObjFunction);
+                const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
                 try self.call(callee, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
 
             // TODO: Cast could only 'transmute' or bitcast the value on stack to change the union tag
-            .CastToFloat => self.stack.push(Value.float(@floatFromInt(self.stack.pop().Int))),
-            .Constant => self.stack.push(frame.readConstant()),
-            .DefineHeapVar => {
+            .cast_to_float => self.stack.push(Value.makeFloat(@floatFromInt(self.stack.pop().int))),
+            .constant => self.stack.push(frame.readConstant()),
+            .define_heap_var => {
                 const idx = frame.readByte();
                 self.heap_vars[idx] = self.stack.pop();
             },
-            .DefineGlobal => {
+            .define_global => {
                 const idx = frame.readByte();
                 self.globals[idx] = self.stack.pop();
             },
-            .DivFloat => {
-                const rhs = self.stack.pop().Float;
-                self.stack.peekRef(0).Float /= rhs;
+            .div_float => {
+                const rhs = self.stack.pop().float;
+                self.stack.peekRef(0).float /= rhs;
             },
-            .DivInt => {
-                const rhs = self.stack.pop().Int;
-                const lhs = self.stack.pop().Int;
-                self.stack.push(Value.int(@divTrunc(lhs, rhs)));
+            .div_int => {
+                const rhs = self.stack.pop().int;
+                const lhs = self.stack.pop().int;
+                self.stack.push(Value.makeInt(@divTrunc(lhs, rhs)));
             },
-            .EqBool => self.stack.push(Value.bool_(self.stack.pop().Bool == self.stack.pop().Bool)),
-            .EqFloat => self.stack.push(Value.bool_(self.stack.pop().Float == self.stack.pop().Float)),
-            .EqInt => self.stack.push(Value.bool_(self.stack.pop().Int == self.stack.pop().Int)),
-            .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
-            .false => self.stack.push(Value.bool_(false)),
+            .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
+            .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
+            .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
+            .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(ObjString) == self.stack.pop().obj.as(ObjString))),
+            .false => self.stack.push(Value.false_),
             .field_assign => {
                 // Skips the 'get_field' or 'bound_method' code
                 frame.ip += 1;
@@ -262,50 +262,50 @@ fn execute(self: *Self) !void {
                 self.stack.push(field.*);
             },
             // Compiler bug: https://github.com/ziglang/zig/issues/13938
-            .GetGlobal => self.stack.push((&self.globals)[frame.readByte()]),
-            .GetHeap => self.stack.push(self.heap_vars[frame.readByte()]),
-            // TODO: see if same compiler bug as GetGlobal
-            .GetLocal => self.stack.push(frame.slots[frame.readByte()]),
-            .GtFloat => self.stack.push(Value.bool_(self.stack.pop().Float < self.stack.pop().Float)),
-            .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
-            .GeFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
-            .GeInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
+            .get_global => self.stack.push((&self.globals)[frame.readByte()]),
+            .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
+            // TODO: see if same compiler bug as get_global
+            .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
+            .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
+            .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
+            .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .invoke => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
                 const receiver = self.stack.peek(args_count);
-                const method = receiver.Obj.as(ObjInstance).parent.methods[method_idx];
+                const method = receiver.obj.as(ObjInstance).parent.methods[method_idx];
                 try self.callBoundMethod(&frame, args_count, receiver, method);
             },
-            .Jump => {
+            .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
             },
-            .JumpIfFalse => {
+            .jump_if_false => {
                 const jump = frame.readShort();
-                if (!self.stack.peek(0).Bool) frame.ip += jump;
+                if (!self.stack.peek(0).bool) frame.ip += jump;
             },
-            .JumpIfTrue => {
+            .jump_if_true => {
                 const jump = frame.readShort();
-                if (self.stack.peek(0).Bool) frame.ip += jump;
+                if (self.stack.peek(0).bool) frame.ip += jump;
             },
-            .LtFloat => self.stack.push(Value.bool_(self.stack.pop().Float > self.stack.pop().Float)),
-            .LtInt => self.stack.push(Value.bool_(self.stack.pop().Int > self.stack.pop().Int)),
-            .LeFloat => self.stack.push(Value.bool_(self.stack.pop().Float >= self.stack.pop().Float)),
-            .LeInt => self.stack.push(Value.bool_(self.stack.pop().Int >= self.stack.pop().Int)),
-            .Loop => {
+            .lt_float => self.stack.push(Value.makeBool(self.stack.pop().float > self.stack.pop().float)),
+            .lt_int => self.stack.push(Value.makeBool(self.stack.pop().int > self.stack.pop().int)),
+            .le_float => self.stack.push(Value.makeBool(self.stack.pop().float >= self.stack.pop().float)),
+            .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
+            .loop => {
                 const jump = frame.readShort();
                 frame.ip -= jump;
             },
-            .MulFloat => {
-                const rhs = self.stack.pop().Float;
-                self.stack.peekRef(0).Float *= rhs;
+            .mul_float => {
+                const rhs = self.stack.pop().float;
+                self.stack.peekRef(0).float *= rhs;
             },
-            .MulInt => {
-                const rhs = self.stack.pop().Int;
-                self.stack.peekRef(0).Int *= rhs;
+            .mul_int => {
+                const rhs = self.stack.pop().int;
+                self.stack.peekRef(0).int *= rhs;
             },
-            .NakedReturn => {
+            .naked_return => {
                 self.frame_stack.count -= 1;
 
                 // The last standing frame is the artificial one created when we run
@@ -318,28 +318,28 @@ fn execute(self: *Self) !void {
                 self.stack.top = frame.slots;
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
-            .NativeFnCall => {
+            .native_fn_call => {
                 const args_count = frame.readByte();
-                const native = self.stack.peekRef(args_count).Obj.as(ObjNativeFn).function;
+                const native = self.stack.peekRef(args_count).obj.as(ObjNativeFn).function;
                 const result = native((self.stack.top - args_count)[0..args_count]);
 
                 self.stack.top -= args_count + 1;
                 self.stack.push(result);
             },
-            .NeBool => self.stack.push(Value.bool_(self.stack.pop().Bool != self.stack.pop().Bool)),
-            .NeInt => self.stack.push(Value.bool_(self.stack.pop().Int != self.stack.pop().Int)),
-            .NeFloat => self.stack.push(Value.bool_(self.stack.pop().Float != self.stack.pop().Float)),
-            .NeStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) != self.stack.pop().Obj.as(ObjString))),
-            .NegateFloat => self.stack.peekRef(0).Float *= -1,
-            .NegateInt => self.stack.peekRef(0).Int *= -1,
+            .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
+            .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
+            .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
+            .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(ObjString) != self.stack.pop().obj.as(ObjString))),
+            .negate_float => self.stack.peekRef(0).float *= -1,
+            .negate_int => self.stack.peekRef(0).int *= -1,
             .not => self.stack.peekRef(0).not(),
-            .null => self.stack.push(Value.null_()),
-            .Pop => _ = self.stack.pop(),
+            .null => self.stack.push(Value.null_),
+            .pop => _ = self.stack.pop(),
             .print => {
                 try self.stack.pop().print(self.stdout);
                 _ = try self.stdout.write("\n");
             },
-            .ExitRepl => {
+            .exit_repl => {
                 // Here, there is no value to pop for now, no implicit null is
                 // put on top of the stack
                 self.frame_stack.count -= 1;
@@ -360,26 +360,26 @@ fn execute(self: *Self) !void {
                 self.stack.push(result);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
-            .ScopeReturn => {
+            .scope_return => {
                 const locals_count = frame.readByte();
                 const res = self.stack.pop();
                 self.stack.top -= locals_count;
                 self.stack.push(res);
             },
-            .SetGlobal => self.globals[frame.readByte()] = self.stack.pop(),
-            .SetHeap => self.heap_vars[frame.readByte()] = self.stack.pop(),
-            .SetLocal => frame.slots[frame.readByte()] = self.stack.pop(),
-            .StrCat => self.strConcat(),
-            .StrMulL => self.strMul(self.stack.peekRef(0).Obj.as(ObjString), self.stack.peekRef(1).Int),
-            .StrMulR => self.strMul(self.stack.peekRef(1).Obj.as(ObjString), self.stack.peekRef(0).Int),
+            .set_global => self.globals[frame.readByte()] = self.stack.pop(),
+            .set_heap => self.heap_vars[frame.readByte()] = self.stack.pop(),
+            .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
+            .str_cat => self.strConcat(),
+            .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(ObjString), self.stack.peekRef(1).int),
+            .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(ObjString), self.stack.peekRef(0).int),
             .struct_literal => {
                 const arity = frame.readByte();
                 const scope: OpCode = @enumFromInt(frame.readByte());
                 const idx = frame.readByte();
 
                 const structure = switch (scope) {
-                    .GetLocal => frame.slots[idx].Obj.as(ObjStruct),
-                    .GetGlobal => self.globals[idx].Obj.as(ObjStruct),
+                    .get_local => frame.slots[idx].obj.as(ObjStruct),
+                    .get_global => self.globals[idx].obj.as(ObjStruct),
                     else => unreachable,
                 };
 
@@ -390,18 +390,18 @@ fn execute(self: *Self) !void {
                 }
 
                 self.stack.top -= arity;
-                self.stack.push(Value.obj(instance.asObj()));
+                self.stack.push(Value.makeObj(instance.asObj()));
             },
-            .SubFloat => {
-                const rhs = self.stack.pop().Float;
-                self.stack.peekRef(0).Float -= rhs;
+            .sub_float => {
+                const rhs = self.stack.pop().float;
+                self.stack.peekRef(0).float -= rhs;
             },
-            .SubInt => {
-                const rhs = self.stack.pop().Int;
-                self.stack.peekRef(0).Int -= rhs;
+            .sub_int => {
+                const rhs = self.stack.pop().int;
+                self.stack.peekRef(0).int -= rhs;
             },
             // PERF: we could avoid a function call here and cache a 'true' value?
-            .true => self.stack.push(Value.bool_(true)),
+            .true => self.stack.push(Value.true_),
         }
     }
 }
@@ -417,15 +417,15 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
 
         const idx = frame.readByte();
 
-        break :blk if (op == .GetGlobal)
+        break :blk if (op == .get_global)
             &self.globals[idx]
-        else if (op == .GetHeap)
+        else if (op == .get_heap)
             &self.heap_vars[idx]
         else
             &frame.slots[idx];
     };
 
-    return &instance.Obj.as(ObjInstance).fields[field_idx];
+    return &instance.obj.as(ObjInstance).fields[field_idx];
 }
 
 fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction } {
@@ -435,15 +435,15 @@ fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction }
         const scope_op: OpCode = @enumFromInt(frame.readByte());
         const idx = frame.readByte();
 
-        break :blk if (scope_op == .GetGlobal)
+        break :blk if (scope_op == .get_global)
             &self.globals[idx]
-        else if (scope_op == .GetHeap)
+        else if (scope_op == .get_heap)
             &self.heap_vars[idx]
         else
             &frame.slots[idx];
     };
     const receiver = instance;
-    const method = instance.Obj.as(ObjInstance).parent.methods[method_idx];
+    const method = instance.obj.as(ObjInstance).parent.methods[method_idx];
 
     return .{ receiver.*, method };
 }
@@ -457,18 +457,18 @@ fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver:
 }
 
 fn strConcat(self: *Self) void {
-    const s2 = self.stack.peekRef(0).Obj.as(ObjString);
-    const s1 = self.stack.peekRef(1).Obj.as(ObjString);
+    const s2 = self.stack.peekRef(0).obj.as(ObjString);
+    const s1 = self.stack.peekRef(1).obj.as(ObjString);
 
     const res = self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len) catch oom();
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
 
-    // Pop after alloc in case of GC trigger
+    // pop after alloc in case of GC trigger
     _ = self.stack.pop();
     _ = self.stack.pop();
 
-    self.stack.push(Value.obj(ObjString.take(self, res).asObj()));
+    self.stack.push(Value.makeObj(ObjString.take(self, res).asObj()));
 }
 
 fn strMul(self: *Self, str: *const ObjString, factor: i64) void {
@@ -479,11 +479,11 @@ fn strMul(self: *Self, str: *const ObjString, factor: i64) void {
         @memcpy(res[i * str.chars.len .. (i + 1) * str.chars.len], str.chars);
     }
 
-    // Pop after alloc in case of GC trigger
+    // pop after alloc in case of GC trigger
     _ = self.stack.pop();
     _ = self.stack.pop();
 
-    self.stack.push(Value.obj(ObjString.take(self, res).asObj()));
+    self.stack.push(Value.makeObj(ObjString.take(self, res).asObj()));
 }
 
 fn call(self: *Self, callee: *ObjFunction, args_count: usize) Error!void {

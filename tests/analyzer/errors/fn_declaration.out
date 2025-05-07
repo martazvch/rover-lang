@@ -1,5 +1,5 @@
-VoidParam
-DuplicateParam, arg1
-IncompatibleFnType, int, bool
-IncompatibleFnType, void, int
-AlreadyDeclared, bis
+void_param
+duplicate_param, arg1
+incompatible_fn_type, int, bool
+incompatible_fn_type, void, int
+already_declared, bis

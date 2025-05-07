@@ -87,13 +87,13 @@ pub const CompilationManager = struct {
 
             // Insert a call to main with arity of 0 for now
             self.compiler.writeOpAndByte(
-                .GetGlobal,
+                .get_global,
                 self.main_index.?,
                 0,
             );
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
-            self.compiler.getChunk().writeOp(.ExitRepl, 0);
+            self.compiler.getChunk().writeOp(.exit_repl, 0);
         }
 
         return self.compiler.end();
@@ -154,7 +154,7 @@ const Compiler = struct {
     fn emitConstant(self: *Self, value: Value, offset: usize) Error!void {
         // TODO: error
         self.writeOpAndByte(
-            .Constant,
+            .constant,
             self.getChunk().writeConstant(value) catch |err| {
                 std.debug.print("Too many constants in chunk\n", .{});
                 return err;
@@ -163,11 +163,11 @@ const Compiler = struct {
         );
     }
 
-    /// Emits the corresponding `GetHeap`, `GetGlobal` or `GetLocal` with the correct index
+    /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         self.writeOpAndByte(
-            if (variable.scope == .heap) .GetHeap else if (variable.scope == .global) .GetGlobal else .GetLocal,
+            if (variable.scope == .heap) .get_heap else if (variable.scope == .global) .get_global else .get_local,
             @intCast(variable.index),
             offset,
         );
@@ -179,9 +179,9 @@ const Compiler = struct {
     fn defineVariable(self: *Self, infos: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         if (infos.scope == .global)
-            self.writeOpAndByte(.DefineGlobal, @intCast(infos.index), offset)
+            self.writeOpAndByte(.define_global, @intCast(infos.index), offset)
         else if (infos.scope == .heap)
-            self.writeOpAndByte(.DefineHeapVar, @intCast(infos.index), offset);
+            self.writeOpAndByte(.define_heap_var, @intCast(infos.index), offset);
     }
 
     fn emitJump(self: *Self, kind: OpCode, offset: usize) usize {
@@ -211,13 +211,13 @@ const Compiler = struct {
 
     fn emitLoop(self: *Self, loop_start: usize, offset: usize) Error!void {
         const chunk = self.getChunk();
-        chunk.writeOp(.Loop, offset);
+        chunk.writeOp(.loop, offset);
         // +2 for loop own operands (jump offset on 16bits)
         const jump_offset = chunk.code.items.len - loop_start + 2;
 
         // TODO: Error handling
         if (jump_offset > std.math.maxInt(u16)) {
-            @panic("Loop body too large\n");
+            @panic("loop body too large\n");
             // return error.Err;
         }
 
@@ -282,7 +282,7 @@ const Compiler = struct {
         try self.compileInstr();
 
         // We cast the value on top of stack if needed
-        if (assign_data.cast) self.writeOp(.CastToFloat, start);
+        if (assign_data.cast) self.writeOp(.cast_to_float, start);
 
         const data_idx = self.manager.instr_idx;
 
@@ -298,11 +298,11 @@ const Compiler = struct {
         // for now
         self.writeOpAndByte(
             if (data.scope == .global)
-                .SetGlobal
+                .set_global
             else if (data.scope == .heap)
-                .SetHeap
+                .set_heap
             else
-                .SetLocal,
+                .set_local,
             @intCast(data.index),
             start,
         );
@@ -322,39 +322,39 @@ const Compiler = struct {
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
 
         try self.compileInstr();
-        if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.CastToFloat, start);
+        if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
         try self.compileInstr();
-        if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.CastToFloat, start);
+        if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
         self.writeOp(
             switch (data.op) {
-                .add_float => .AddFloat,
-                .add_int => .AddInt,
-                .add_str => .StrCat,
-                .div_float => .DivFloat,
-                .div_int => .DivInt,
-                .eq_bool => .EqBool,
-                .eq_float => .EqFloat,
-                .eq_int => .EqInt,
-                .eq_str => .EqStr,
-                .ge_float => .GeFloat,
-                .ge_int => .GeInt,
-                .gt_float => .GtFloat,
-                .gt_int => .GtInt,
-                .le_float => .LeFloat,
-                .le_int => .LeInt,
-                .lt_float => .LtFloat,
-                .lt_int => .LtInt,
-                .mul_float => .MulFloat,
-                .mul_int => .MulInt,
-                .mul_str => if (data.cast == .rhs) .StrMulR else .StrMulL,
-                .ne_bool => .NeBool,
-                .ne_float => .NeFloat,
-                .ne_int => .NeInt,
-                .ne_str => .NeStr,
-                .sub_float => .SubFloat,
-                .sub_int => .SubInt,
+                .add_float => .add_float,
+                .add_int => .add_int,
+                .add_str => .str_cat,
+                .div_float => .div_float,
+                .div_int => .div_int,
+                .eq_bool => .eq_bool,
+                .eq_float => .eq_float,
+                .eq_int => .eq_int,
+                .eq_str => .eq_str,
+                .ge_float => .ge_float,
+                .ge_int => .ge_int,
+                .gt_float => .gt_float,
+                .gt_int => .gt_int,
+                .le_float => .le_float,
+                .le_int => .le_int,
+                .lt_float => .lt_float,
+                .lt_int => .lt_int,
+                .mul_float => .mul_float,
+                .mul_int => .mul_int,
+                .mul_str => if (data.cast == .rhs) .str_mul_r else .str_mul_l,
+                .ne_bool => .ne_bool,
+                .ne_float => .ne_float,
+                .ne_int => .ne_int,
+                .ne_str => .ne_str,
+                .sub_float => .sub_float,
+                .sub_int => .sub_int,
                 else => unreachable,
             },
             start,
@@ -367,7 +367,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         switch (data.cast_to) {
-            .float => self.writeOp(.CastToFloat, start),
+            .float => self.writeOp(.cast_to_float, start),
             .int => unreachable,
         }
     }
@@ -376,16 +376,16 @@ const Compiler = struct {
         switch (data.op) {
             .@"and" => {
                 try self.compileInstr();
-                const end_jump = self.emitJump(.JumpIfFalse, start);
+                const end_jump = self.emitJump(.jump_if_false, start);
                 // If true, pop the value, else the 'false' remains on top of stack
-                self.writeOp(.Pop, start);
+                self.writeOp(.pop, start);
                 try self.compileInstr();
                 try self.patchJump(end_jump);
             },
             .@"or" => {
                 try self.compileInstr();
-                const else_jump = self.emitJump(.JumpIfTrue, start);
-                self.writeOp(.Pop, start);
+                const else_jump = self.emitJump(.jump_if_true, start);
+                self.writeOp(.pop, start);
                 try self.compileInstr();
                 try self.patchJump(else_jump);
             },
@@ -401,10 +401,10 @@ const Compiler = struct {
         for (0..data.length) |_| try self.compileInstr();
 
         if (data.is_expr) {
-            self.writeOpAndByte(.ScopeReturn, data.pop_count, start);
+            self.writeOpAndByte(.scope_return, data.pop_count, start);
         } else {
             for (0..data.pop_count) |_| {
-                self.getChunk().writeOp(.Pop, start);
+                self.getChunk().writeOp(.pop, start);
             }
         }
     }
@@ -418,7 +418,7 @@ const Compiler = struct {
     fn discard(self: *Self) Error!void {
         self.manager.instr_idx += 1;
         try self.compileInstr();
-        self.writeOp(.Pop, 0);
+        self.writeOp(.pop, 0);
     }
 
     fn getMember(self: *Self) Error!void {
@@ -435,7 +435,7 @@ const Compiler = struct {
     }
 
     fn floatInstr(self: *Self) Error!void {
-        try self.emitConstant(Value.float(self.getData().float), self.getStart());
+        try self.emitConstant(Value.makeFloat(self.getData().float), self.getStart());
         self.manager.instr_idx += 1;
     }
 
@@ -459,7 +459,7 @@ const Compiler = struct {
         }
 
         self.writeOpAndByte(
-            if (data.tag == .function) .call else if (data.tag == .builtin) .NativeFnCall else .bound_method_call,
+            if (data.tag == .function) .call else if (data.tag == .builtin) .native_fn_call else .bound_method_call,
             data.arity,
             start,
         );
@@ -494,7 +494,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         const func = try self.compileFn(fn_name, data);
-        try self.emitConstant(Value.obj(func.asObj()), 0);
+        try self.emitConstant(Value.makeObj(func.asObj()), 0);
         self.defineVariable(fn_var, 0);
 
         // Check for main function
@@ -514,7 +514,7 @@ const Compiler = struct {
         if (data.return_kind == .implicit_value) {
             compiler.writeOp(.@"return", self.manager.instr_offsets[self.manager.instr_idx - 1]);
         } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(.NakedReturn, self.manager.instr_offsets[self.manager.instr_idx - 1]);
+            compiler.writeOp(.naked_return, self.manager.instr_offsets[self.manager.instr_idx - 1]);
         }
 
         return compiler.end();
@@ -531,7 +531,7 @@ const Compiler = struct {
     }
 
     fn intInstr(self: *Self) Error!void {
-        try self.emitConstant(Value.int(self.getData().int), self.getStart());
+        try self.emitConstant(Value.makeInt(self.getData().int), self.getStart());
         self.manager.instr_idx += 1;
     }
 
@@ -542,26 +542,26 @@ const Compiler = struct {
 
         // Condition
         try self.compileInstr();
-        const then_jump = self.emitJump(.JumpIfFalse, start);
+        const then_jump = self.emitJump(.jump_if_false, start);
         // Pops the condition, no longer needed
-        self.writeOp(.Pop, start);
+        self.writeOp(.pop, start);
 
         // Then body
         try self.compileInstr();
-        if (data.cast == .then) self.writeOp(.CastToFloat, start);
+        if (data.cast == .then) self.writeOp(.cast_to_float, start);
 
         // Exits the if expression
-        const else_jump = self.emitJump(.Jump, start);
+        const else_jump = self.emitJump(.jump, start);
         try self.patchJump(then_jump);
 
         // If we go in the else branch, we pop the condition too
-        self.writeOp(.Pop, start);
+        self.writeOp(.pop, start);
 
         // We insert a jump in the then body to be able to jump over the else branch
         // Otherwise, we just patch the then_jump
         if (data.has_else) {
             try self.compileInstr();
-            if (data.cast == .@"else") self.writeOp(.CastToFloat, start);
+            if (data.cast == .@"else") self.writeOp(.cast_to_float, start);
         }
 
         try self.patchJump(else_jump);
@@ -598,12 +598,12 @@ const Compiler = struct {
             if (data.cast) try self.compileInstr();
 
             self.writeOp(.@"return", start);
-        } else self.writeOp(.NakedReturn, start);
+        } else self.writeOp(.naked_return, start);
     }
 
     fn stringInstr(self: *Self) Error!void {
         try self.emitConstant(
-            Value.obj(ObjString.copy(
+            Value.makeObj(ObjString.copy(
                 self.manager.vm,
                 self.manager.interner.getKey(self.getData().id).?,
             ).asObj()),
@@ -636,7 +636,7 @@ const Compiler = struct {
         }
 
         try self.emitConstant(
-            Value.obj(ObjStruct.create(
+            Value.makeObj(ObjStruct.create(
                 self.manager.vm,
                 ObjString.copy(self.manager.vm, self.manager.interner.getKey(name).?),
                 data.fields_count,
@@ -676,7 +676,7 @@ const Compiler = struct {
 
         if (data.op == .minus) {
             self.writeOp(
-                if (data.typ == .int) .NegateInt else .NegateFloat,
+                if (data.typ == .int) .negate_int else .negate_float,
                 start,
             );
         } else self.writeOp(.not, start);
@@ -696,7 +696,7 @@ const Compiler = struct {
             self.manager.instr_idx += 1;
 
             try self.emitConstant(
-                Value.obj(ObjNativeFn.create(
+                Value.makeObj(ObjNativeFn.create(
                     self.manager.vm,
                     self.manager.natives[imported.index],
                 ).asObj()),
@@ -740,15 +740,15 @@ const Compiler = struct {
         const loop_start = chunk.code.items.len;
 
         try self.compileInstr();
-        const exit_jump = self.emitJump(.JumpIfFalse, start);
+        const exit_jump = self.emitJump(.jump_if_false, start);
 
         // If true
-        chunk.writeOp(.Pop, start);
+        chunk.writeOp(.pop, start);
         try self.compileInstr();
         try self.emitLoop(loop_start, start);
 
         try self.patchJump(exit_jump);
         // If false
-        chunk.writeOp(.Pop, start);
+        chunk.writeOp(.pop, start);
     }
 };

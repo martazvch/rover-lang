@@ -1,4 +1,4 @@
-VoidAssignment
-VoidAssignment
-UnusedValue
-InvalidAssignType, int, float
+void_assignment
+void_assignment
+unused_value
+invalid_assign_type, int, float

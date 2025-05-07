@@ -82,7 +82,6 @@ pub fn as(self: *Obj, comptime T: type) *T {
 pub fn print(self: *Obj, writer: anytype) !void {
     try switch (self.kind) {
         .bound_method => self.as(ObjBoundMethod).method.log(),
-        // .Closure => self.as(ObjClosure).function.print(writer),
         .func => self.as(ObjFunction).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
         // .Iter => {
@@ -98,7 +97,6 @@ pub fn print(self: *Obj, writer: anytype) !void {
 pub fn log(self: *Obj) void {
     switch (self.kind) {
         .bound_method => self.as(ObjBoundMethod).method.log(),
-        // .Closure => self.as(ObjClosure).function.print(writer),
         .func => self.as(ObjFunction).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
         // .Iter => {
@@ -127,8 +125,8 @@ pub const ObjString = struct {
         // The set method can trigger a GC to grow hashmap before
         // inserting. We put the value on the stack so that it is marked
         // as a root
-        vm.stack.push(Value.obj(obj.asObj()));
-        _ = vm.strings.set(obj, Value.null_());
+        vm.stack.push(Value.makeObj(obj.asObj()));
+        _ = vm.strings.set(obj, Value.null_);
         _ = vm.stack.pop();
 
         if (options.log_gc) {

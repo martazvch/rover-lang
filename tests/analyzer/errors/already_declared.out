@@ -1,3 +1,3 @@
-AlreadyDeclaredStruct, Name
+already_declared_struct, Name
 already_declared_field, score
-AlreadyDeclared, loc1
+already_declared, loc1

@@ -1,2 +1,2 @@
-InvalidAssignType, bool, int
-InvalidAssignType, int, bool
+invalid_assign_type, bool, int
+invalid_assign_type, int, bool

@@ -17,7 +17,7 @@ pub const _cast_i2f = NativeFnMeta{
 };
 
 pub fn __cast_i2f(values: []const Value) Value {
-    return Value.float(@as(f64, @floatFromInt(values[0].Int)));
+    return Value.makeFloat(@as(f64, @floatFromInt(values[0].int)));
 }
 
 // Casts int to float with useless extra arg
@@ -28,5 +28,5 @@ pub const _cast_f2i = NativeFnMeta{
 };
 
 pub fn __cast_f2i(values: []const Value) Value {
-    return Value.int(@as(i64, @intFromFloat(values[1].Float)));
+    return Value.makeInt(@as(i64, @intFromFloat(values[1].float)));
 }

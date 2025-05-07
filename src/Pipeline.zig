@@ -62,7 +62,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
 
     if (lexer.errs.items.len > 0) {
         var reporter = GenReporter(LexerMsg).init(source);
-        try reporter.report_all(filename, lexer.errs.items);
+        try reporter.reportAll(filename, lexer.errs.items);
         return error.ExitOnPrint;
     }
 
@@ -80,7 +80,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
 
     if (parser.errs.items.len > 0) {
         var reporter = GenReporter(ParserMsg).init(source);
-        try reporter.report_all(filename, parser.errs.items);
+        try reporter.reportAll(filename, parser.errs.items);
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
@@ -94,28 +94,28 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
-        try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
         return error.ExitOnPrint;
     }
 
     if (self.analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.report_all(filename, self.analyzer.errs.items);
+        try reporter.reportAll(filename, self.analyzer.errs.items);
 
         if (self.analyzer.warns.items.len > 0) {
             reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.report_all(filename, self.analyzer.warns.items);
+            try reporter.reportAll(filename, self.analyzer.warns.items);
         }
 
         self.instr_count = self.analyzer.instructions.len;
         return error.ExitOnPrint;
     } else if (self.config.print_ir)
-        try render_ir(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
     // Analyzer warnings
     if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.report_all(filename, self.analyzer.warns.items);
+        try reporter.reportAll(filename, self.analyzer.warns.items);
         return error.ExitOnPrint;
     }
 
@@ -145,7 +145,7 @@ fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void 
 
     if (parser.errs.items.len > 0) {
         for (parser.errs.items) |err| {
-            try err.to_str(stdout);
+            try err.toStr(stdout);
             try stdout.writeAll("\n");
         }
     } else {
@@ -155,7 +155,7 @@ fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void 
     }
 }
 
-fn render_ir(
+fn renderIr(
     allocator: Allocator,
     source: [:0]const u8,
     analyzer: *const Analyzer,

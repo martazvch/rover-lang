@@ -18,7 +18,7 @@ const BoxChar = enum {
     Vertical,
 };
 
-fn box_char(kind: BoxChar) []const u8 {
+fn boxChar(kind: BoxChar) []const u8 {
     return switch (kind) {
         .BottomLeft => "╰",
         .BottomRight => "╯",
@@ -51,21 +51,21 @@ fn color(clr: Color) []const u8 {
     };
 }
 
-fn generate_msg(comptime msg: []const u8, comptime clr: Color) []const u8 {
+fn generateMsg(comptime msg: []const u8, comptime clr: Color) []const u8 {
     return color(clr) ++ msg ++ color(.NoColor);
 }
 
-const err_msg = generate_msg("Error:", .Red);
-const help_msg = generate_msg("help:", .Green);
-const warning_msg = generate_msg("Warning:", .Yellow);
-const corner_to_hint = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 4;
-const corner_to_end = box_char(.BottomLeft) ++ box_char(.Horitzontal) ** 2;
+const err_msg = generateMsg("Error:", .Red);
+const help_msg = generateMsg("help:", .Green);
+const warning_msg = generateMsg("Warning:", .Yellow);
+const corner_to_hint = boxChar(.BottomLeft) ++ boxChar(.Horitzontal) ** 4;
+const corner_to_end = boxChar(.BottomLeft) ++ boxChar(.Horitzontal) ** 2;
 
 /// Generic reporter type. The *Item* is the type of object to refer to get extra data
 /// and *Reporter* is the enum that holds the messages. *Report* must have methods:
-/// - get_msg
-/// - get_hint
-/// - get_help
+/// - getMsg
+/// - getHint
+/// - getHelp
 pub fn GenReporter(comptime Report: type) type {
     return struct {
         source: [:0]const u8,
@@ -135,7 +135,7 @@ pub fn GenReporter(comptime Report: type) type {
         }
 
         /// Reports all the reports of type *Report*
-        pub fn report_all(self: *Self, file_name: []const u8, reports: []const GenReport(Report)) !void {
+        pub fn reportAll(self: *Self, file_name: []const u8, reports: []const GenReport(Report)) !void {
             const sep = if (builtin.os.tag == .windows) '\\' else '/';
             var iter = std.mem.splitBackwardsScalar(u8, file_name, sep);
             const name = iter.first();
@@ -149,7 +149,7 @@ pub fn GenReporter(comptime Report: type) type {
             // Prints the error part
             //  Error: <err-msg>
             try self.writer.print("{s} ", .{report.level.get_level_msg()});
-            try report.get_msg(self.writer);
+            try report.getMsg(self.writer);
             _ = try self.writer.write("\n");
 
             // If there is visual indication on text
@@ -198,8 +198,8 @@ pub fn GenReporter(comptime Report: type) type {
                     "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
                     .{
                         left_padding,
-                        box_char(.UpperLeft),
-                        box_char(.Horitzontal),
+                        boxChar(.UpperLeft),
+                        boxChar(.Horitzontal),
                         color(.Blue),
                         file_name,
                         color(.NoColor),
@@ -220,7 +220,7 @@ pub fn GenReporter(comptime Report: type) type {
                 // Underlines the problem
                 // Takes padding into account + separator + space
                 //  <space><space> |
-                try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+                try self.writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
 
                 // We get the length of the error code and the half to underline it
                 var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
@@ -237,9 +237,9 @@ pub fn GenReporter(comptime Report: type) type {
                 // Prints ─┬─
                 for (0..lexeme_len) |i| {
                     if (i == half) {
-                        _ = try self.writer.write(box_char(.UnderT));
+                        _ = try self.writer.write(boxChar(.UnderT));
                     } else {
-                        _ = try self.writer.write(box_char(.Horitzontal));
+                        _ = try self.writer.write(boxChar(.Horitzontal));
                     }
                 }
                 _ = try self.writer.write("\n");
@@ -250,13 +250,13 @@ pub fn GenReporter(comptime Report: type) type {
                 // Prints to indication (written state is the good one at this stage
                 // for the beginning of the sequence to print)
                 //  <space><space> | ╰─── <indication txt>
-                try self.writer.print("{s}{s} ", .{ left_padding, box_char(.Vertical) });
+                try self.writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
                 _ = try self.writer.write(space_buf[0 .. start_space + half]);
 
                 _ = try self.writer.write(color(.Yellow));
 
                 try self.writer.print("{s} ", .{corner_to_hint});
-                _ = try report.get_hint(self.writer);
+                _ = try report.getHint(self.writer);
                 _ = try self.writer.write("\n");
                 _ = try self.writer.write(color(.NoColor));
 
@@ -265,7 +265,7 @@ pub fn GenReporter(comptime Report: type) type {
             }
 
             var fba = try std.BoundedArray(u8, 1000).init(0);
-            try report.get_help(fba.writer());
+            try report.getHelp(fba.writer());
 
             if (fba.slice().len > 0) {
                 try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
@@ -278,11 +278,11 @@ pub fn GenReporter(comptime Report: type) type {
         // TODO: dynamic formatting
         fn print_line(self: *const Self, line_nb: usize, line: []const u8, digit_count: usize) !void {
             try switch (digit_count) {
-                1 => self.writer.print(" {:>1} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-                2 => self.writer.print(" {:>2} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-                3 => self.writer.print(" {:>3} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-                4 => self.writer.print(" {:>4} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
-                5 => self.writer.print(" {:>5} {s} {s}\n", .{ line_nb, box_char(.Vertical), line }),
+                1 => self.writer.print(" {:>1} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+                2 => self.writer.print(" {:>2} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+                3 => self.writer.print(" {:>3} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+                4 => self.writer.print(" {:>4} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+                5 => self.writer.print(" {:>5} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
                 else => unreachable,
             };
         }
@@ -298,9 +298,9 @@ pub fn GenReporter(comptime Report: type) type {
 ///  - end: ending byte offset from source of the error
 pub fn GenReport(comptime T: type) type {
     assert(@typeInfo(T) == .@"union");
-    assert(@hasDecl(T, "get_msg"));
-    assert(@hasDecl(T, "get_hint"));
-    assert(@hasDecl(T, "get_help"));
+    assert(@hasDecl(T, "getMsg"));
+    assert(@hasDecl(T, "getHint"));
+    assert(@hasDecl(T, "getHelp"));
 
     return struct {
         report: T,
@@ -343,19 +343,19 @@ pub fn GenReport(comptime T: type) type {
             return Self.init(report, .warning, span.start, span.end);
         }
 
-        pub fn get_msg(self: *const Self, writer: anytype) !void {
-            return self.report.get_msg(writer);
+        pub fn getMsg(self: *const Self, writer: anytype) !void {
+            return self.report.getMsg(writer);
         }
 
-        pub fn get_hint(self: *const Self, writer: anytype) !void {
-            return self.report.get_hint(writer);
+        pub fn getHint(self: *const Self, writer: anytype) !void {
+            return self.report.getHint(writer);
         }
 
-        pub fn get_help(self: *const Self, writer: anytype) !void {
-            return self.report.get_help(writer);
+        pub fn getHelp(self: *const Self, writer: anytype) !void {
+            return self.report.getHelp(writer);
         }
 
-        pub fn to_str(self: *const Self, writer: anytype) !void {
+        pub fn toStr(self: *const Self, writer: anytype) !void {
             const name = @tagName(self.report);
             try writer.writeAll(name);
 

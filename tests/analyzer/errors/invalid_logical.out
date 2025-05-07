@@ -1,3 +1,3 @@
-InvalidLogical, int
-InvalidLogical, float
-InvalidLogical, void
+invalid_logical, int
+invalid_logical, float
+invalid_logical, void

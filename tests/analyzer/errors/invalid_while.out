@@ -1,4 +1,4 @@
-NonBoolCond, while, int
-NonBoolCond, while, str
-NonVoidWhile, str
-NonVoidWhile, int
+non_bool_cond, while, int
+non_bool_cond, while, str
+non_void_while, str
+non_void_while, int

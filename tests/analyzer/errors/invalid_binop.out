@@ -1,12 +1,12 @@
-InvalidArithmetic, bool
-InvalidArithmetic, null
-InvalidArithmetic, str
+invalid_arithmetic, bool
+invalid_arithmetic, null
+invalid_arithmetic, str
 
-InvalidArithmetic, null
-InvalidArithmetic, bool
-InvalidArithmetic, str
+invalid_arithmetic, null
+invalid_arithmetic, bool
+invalid_arithmetic, str
 
-InvalidComparison, int, bool
-InvalidComparison, str, bool
-InvalidComparison, bool, float
-InvalidComparison, int, str
+invalid_comparison, int, bool
+invalid_comparison, str, bool
+invalid_comparison, bool, float
+invalid_comparison, int, str

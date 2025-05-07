@@ -10,7 +10,7 @@
 at the end of a scope being the returned value
 - Each control flow is an expression, all branches must return the same value:
    - If
-   - Loop
+   - loop
    - Match
 - Regarding returned value:
     - If:
@@ -18,7 +18,7 @@ at the end of a scope being the returned value
         - Each branch can exit the current scope with a ```return``` statement
     - While:
         - Can be exited with a ```break``` statement with a value after or not
-    - Loop:
+    - loop:
         - Same as while
     - Match:
         - Each branch must return the same type
@@ -300,7 +300,7 @@ if failable_fn() :: val { // custom alias for non-err value
 }
 ```
 
-- Loop aliases are done with `@` before loop keyword so we can mix aliases and loop
+- loop aliases are done with `@` before loop keyword so we can mix aliases and loop
 aliases without any confusion:
 
 ```rust
@@ -480,7 +480,7 @@ let Node {lhs :: l, rhs :: r} = node
 
 ### Still to figure out
 
-- Loop aliasing, maybe a bit cluttered for now, consider:
+- loop aliasing, maybe a bit cluttered for now, consider:
     - Optional "with" keyword:
     break outter with tk
     - Explicit dereferencing:

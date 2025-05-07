@@ -17,5 +17,5 @@ pub const clock = NativeFnMeta{
 };
 
 pub fn _clock(_: []const Value) Value {
-    return .{ .Float = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0 };
+    return .{ .float = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000.0 };
 }

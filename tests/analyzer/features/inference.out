@@ -20,7 +20,7 @@
             [Variable index: 2, scope: global]
 
     [Variable declaration index: 1, scope: local]
-        [Fn call arity: 0, builtin: false]
+        [Fn call arity: 0, call_tag: function]
             [Variable index: 3, scope: global]
     [Print]
         [Unary bang]

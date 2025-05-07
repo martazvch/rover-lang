@@ -1,4 +1,4 @@
-TypeMismatch, str, int
-WrongFnArgsCount, 1, 2
-WrongFnArgsCount, 2, 1
-VoidAssignment
+type_mismatch, str, int
+wrong_fn_args_count, 1, 2
+wrong_fn_args_count, 2, 1
+void_assignment

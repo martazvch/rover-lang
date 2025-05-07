@@ -1,2 +1,2 @@
-UseUninitVar, a
-UseUninitVar, _empty
+use_uninit_var, a
+use_uninit_var, _empty

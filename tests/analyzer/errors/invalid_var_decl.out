@@ -1,10 +1,10 @@
-InvalidAssignType, int, float
-InvalidAssignType, float, str
-InvalidAssignType, bool, int
-InvalidAssignType, str, int
+invalid_assign_type, int, float
+invalid_assign_type, float, str
+invalid_assign_type, bool, int
+invalid_assign_type, str, int
 
-UndeclaredType, floa
-UndeclaredType, Int
-UndeclaredType, House
+undeclared_type, floa
+undeclared_type, Int
+undeclared_type, House
 
-AlreadyDeclared, declared
+already_declared, declared

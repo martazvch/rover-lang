@@ -167,6 +167,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
     };
 
     return switch (NodeType) {
+        usize => self.token_spans[anynode],
         Node => switch (node) {
             inline else => |*n| self.getSpan(n.*),
         },

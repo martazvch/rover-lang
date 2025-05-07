@@ -1,13 +1,13 @@
 [Use count: 2]
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Print]
-        [Fn call arity: 1, builtin: true]
+        [Fn call arity: 1, call_tag: builtin]
             [Variable index: 0, scope: global]
             - args:
             [Int 12]
     [Block pop count: 0, is_expr: false]
         [Print]
-            [Fn call arity: 2, builtin: true]
+            [Fn call arity: 2, call_tag: builtin]
                 [Variable index: 1, scope: global]
                 - args:
                 [Bool true]
@@ -17,7 +17,7 @@
     [Block pop count: 2, is_expr: false]
         [Use count: 2]
         [Print]
-            [Fn call arity: 2, builtin: true]
+            [Fn call arity: 2, call_tag: builtin]
                 [Variable index: 2, scope: local]
                 - args:
                 [Bool false]
@@ -27,7 +27,7 @@
             [Int 1]
         [Use count: 2]
         [Print]
-            [Fn call arity: 1, builtin: true]
+            [Fn call arity: 1, call_tag: builtin]
                 [Variable index: 2, scope: local]
                 - args:
                 [Int 56]

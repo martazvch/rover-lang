@@ -16,7 +16,7 @@
                 [Variable index: 1, scope: local]
             [String yes]
         [Discard]
-            [Fn call arity: 1, builtin: false]
+            [Fn call arity: 1, call_tag: function]
                 [Variable index: 3, scope: local]
                 - args:
                 [Int 1]

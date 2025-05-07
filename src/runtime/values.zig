@@ -4,53 +4,52 @@ const print = std.debug.print;
 const Obj = @import("Obj.zig");
 
 pub const Value = union(enum) {
-    Bool: bool,
-    Float: f64,
-    Int: i64,
+    bool: bool,
+    float: f64,
+    int: i64,
     null,
-    Obj: *Obj,
+    obj: *Obj,
 
     const Self = @This();
+    pub const true_: Self = .{ .bool = true };
+    pub const false_: Self = .{ .bool = false };
+    pub const null_: Self = .{ .null = undefined };
 
-    pub fn bool_(value: bool) Self {
-        return .{ .Bool = value };
+    pub fn makeBool(value: bool) Self {
+        return .{ .bool = value };
     }
 
-    pub fn float(value: f64) Self {
-        return .{ .Float = value };
+    pub fn makeFloat(value: f64) Self {
+        return .{ .float = value };
     }
 
-    pub fn int(value: i64) Self {
-        return .{ .Int = value };
+    pub fn makeInt(value: i64) Self {
+        return .{ .int = value };
     }
 
-    pub fn null_() Self {
-        return .{ .null = undefined };
-    }
-
-    pub fn obj(object: *Obj) Value {
-        return .{ .Obj = object };
+    pub fn makeObj(object: *Obj) Value {
+        return .{ .obj = object };
     }
 
     // Safety garenteed by the analyzer
     pub fn not(self: *Self) void {
-        self.Bool = !self.Bool;
+        self.bool = !self.bool;
     }
 
-    pub fn as_obj(self: *const Value) ?*Obj {
+    pub fn asObj(self: *const Value) ?*Obj {
         return switch (self.*) {
-            .Obj => |v| v,
+            .obj => |v| v,
             else => null,
         };
     }
 
     pub fn print(self: *const Value, writer: anytype) !void {
         try switch (self.*) {
-            .Bool => |v| writer.print("{}", .{v}),
-            .Float => |v| writer.print("{d}", .{v}),
-            .Int => |v| writer.print("{}", .{v}),
+            .bool => |v| writer.print("{}", .{v}),
+            .float => |v| writer.print("{d}", .{v}),
+            .int => |v| writer.print("{}", .{v}),
             .null => writer.print("null", .{}),
-            .Obj => |v| v.print(writer),
+            .obj => |v| v.print(writer),
         };
     }
 };

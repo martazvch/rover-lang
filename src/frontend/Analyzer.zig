@@ -30,7 +30,7 @@ pub const TypeManager = struct {
     type_infos: ArrayList(TypeInfo),
     natives: BuiltinAnalyzer = builtin_init(),
 
-    const Error = error{TooManyTypes};
+    const Error = error{too_many_types};
 
     pub fn init(allocator: Allocator) TypeManager {
         return .{
@@ -62,7 +62,7 @@ pub const TypeManager = struct {
         self.type_infos.append(undefined) catch oom();
 
         return if (count == std.math.maxInt(TypeSys.Value))
-            error.TooManyTypes
+            error.too_many_types
         else
             @intCast(count);
     }
@@ -81,11 +81,11 @@ pub const TypeManager = struct {
     pub fn declare(self: *TypeManager, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) !TypeSys.Type {
         const count = self.type_infos.items.len;
 
-        if (count == std.math.maxInt(TypeSys.Value)) return error.TooManyTypes;
+        if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
 
         const typ = TypeSys.create(kind, extra, @intCast(count));
         self.type_infos.append(info) catch oom();
-        self.declared.put(name, typ) catch oom();
+        self.addType(name, typ);
 
         return typ;
     }
@@ -142,7 +142,7 @@ allocator: Allocator,
 repl: bool,
 
 const Self = @This();
-const Error = error{ Err, UndeclaredVar, UninitVar } || TypeManager.Error;
+const Error = error{ Err, undeclared_var, UninitVar } || TypeManager.Error;
 
 const Variable = struct {
     index: usize = 0,
@@ -231,7 +231,7 @@ fn addInstr(self: *Self, instr: Instruction) usize {
 
 fn isNumeric(self: *Self, expr: *const Expr, t: Type) Error!void {
     if (t != .int and t != .float) return self.err(
-        AnalyzerMsg.invalid_arithmetic(self.getTypeName(t)),
+        AnalyzerMsg.invalidArithmetic(self.getTypeName(t)),
         self.ast.getSpan(expr),
     );
 }
@@ -251,30 +251,30 @@ pub fn analyze(self: *Self, ast: *const Ast) !void {
     for (ast.nodes) |*node| {
         const node_type = self.analyzeNode(node) catch |e| {
             switch (e) {
-                error.TooManyTypes => return self.err(.TooManyTypes, self.ast.getSpan(node)),
+                error.too_many_types => return self.err(.too_many_types, self.ast.getSpan(node)),
                 error.Err => continue,
                 else => return e,
             }
         };
 
         if (node_type != .void) {
-            self.err(.UnusedValue, self.ast.getSpan(node)) catch {};
+            self.err(.unused_value, self.ast.getSpan(node)) catch {};
         }
     }
 
     // In REPL mode, no need for main function
     if (self.repl)
         return
-    else if (self.main == null) self.err(.NoMain, .{ .start = 0, .end = 0 }) catch {};
+    else if (self.main == null) self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
 }
 
 fn analyzeNode(self: *Self, node: *const Node) Error!Type {
     if (self.scope_depth == 0 and !self.repl and !self.isPure(node.*)) {
         // TODO: add block, not allowed to have local scopes in global scope
         return if (std.meta.activeTag(node.*) == .expr and std.meta.activeTag(node.expr.*) == .@"return")
-            self.err(.ReturnOutsideFn, self.ast.getSpan(node))
+            self.err(.return_outside_fn, self.ast.getSpan(node))
         else
-            self.err(.UnpureInGlobal, self.ast.getSpan(node));
+            self.err(.unpure_in_global, self.ast.getSpan(node));
     }
 
     switch (node.*) {
@@ -304,12 +304,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     const value_type = try self.analyzeExpr(node.value);
 
     if (value_type == .void) {
-        return self.err(.VoidAssignment, self.ast.getSpan(node.value));
+        return self.err(.void_assignment, self.ast.getSpan(node.value));
     }
 
     var assigne_type = switch (node.assigne.*) {
         .literal => |*e| blk: {
-            if (e.tag != .identifier) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
+            if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             var assigne = try self.identifier(e.idx, false);
 
@@ -321,12 +321,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
             }
 
             // TODO: later, when function's parameters will maybe be a reference, allow it
-            if (assigne.kind != .variable) return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne));
+            if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
         .field => |*e| (try self.field(e)).@"1",
-        else => return self.err(.InvalidAssignTarget, self.ast.getSpan(node.assigne)),
+        else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
     // If type is unknown, we update it
@@ -337,7 +337,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         if (assigne_type == .float and value_type == .int) {
             cast = true;
         } else return self.err(
-            .{ .InvalidAssignType = .{
+            .{ .invalid_assign_type = .{
                 .expect = self.getTypeName(assigne_type),
                 .found = self.getTypeName(value_type),
             } },
@@ -353,7 +353,7 @@ fn discard(self: *Self, expr: *const Expr) !void {
     _ = self.addInstr(.{ .tag = .discard });
     const discarded = try self.analyzeExpr(expr);
 
-    if (discarded == .void) return self.err(.VoidDiscard, self.ast.getSpan(expr));
+    if (discarded == .void) return self.err(.void_discard, self.ast.getSpan(expr));
 }
 
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
@@ -406,26 +406,22 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
 
-    for (node.params, 0..) |p, i| {
+    for (node.params) |p| {
         const decl = self.instructions.len;
         const param_idx = self.checkName(p.name) catch |e| {
-            self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
-                .{ .DuplicateParam = .{ .name = self.ast.toSource(p.name) } },
-                self.ast.token_spans[p.name],
-            );
+            self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(.{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } }, self.ast.getSpan(p.name));
             return e;
         };
 
         const param_type = if (param_idx == self.self_interned) blk: {
-            if (self.state.struct_type == .void) return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
-            if (i > 0) @panic("self as non first parameter"); // TODO: test
-            if (name_idx == self.init_interned) return self.err(.SelfInInit, self.ast.token_spans[p.name]);
+            if (self.state.struct_type == .void) return self.err(.self_outside_struct, self.ast.getSpan(p.name));
+            if (name_idx == self.init_interned) return self.err(.self_in_init, self.ast.getSpan(p.name));
 
             self.locals.items[self.locals.items.len - 1].name = self.self_interned;
             break :blk self.state.struct_type;
         } else blk: {
             const param_type = try self.checkAndGetType(p.typ);
-            if (param_type == .void) return self.err(.VoidParam, self.ast.token_spans[p.name]);
+            if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
 
             _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
             break :blk param_type;
@@ -436,10 +432,10 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     const return_type = try self.checkAndGetType(node.return_type);
 
     if (name_idx == self.init_interned and return_type != .self) {
-        return self.err(.NonSelfInitReturn, if (node.return_type) |t|
+        return self.err(.non_self_init_return, if (node.return_type) |t|
             self.ast.getSpan(t)
         else
-            self.ast.token_spans[node.name]);
+            self.ast.getSpan(node.name));
     }
 
     self.state.fn_type = return_type;
@@ -465,7 +461,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     for (node.body.nodes, 0..) |*n, i| {
         // If previous statement returned, it's only dead code now
         if (deadcode_start == 0 and self.state.returns) {
-            self.warn(.DeadCode, self.ast.getSpan(n));
+            self.warn(.dead_code, self.ast.getSpan(n));
             deadcode_start = self.instructions.len;
             deadcode_count = len - i;
         }
@@ -490,20 +486,20 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         // If last expression produced a value and that it wasn't the last one and it
         // wasn't a return, error
         if (body_type != .void and i != len - 1 and !self.state.returns) {
-            self.err(.UnusedValue, self.ast.getSpan(n)) catch {};
+            self.err(.unused_value, self.ast.getSpan(n)) catch {};
         }
     }
 
     if (!body_err and body_type != return_type and !self.checkEqualFnType(body_type, return_type)) {
         return self.err(
-            .{ .IncompatibleFnType = .{
+            .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(return_type),
                 .found = self.getTypeName(body_type),
             } },
             if (node.body.nodes.len > 0)
                 self.ast.getSpan(node.body.nodes[node.body.nodes.len - 1])
             else
-                self.ast.token_spans[node.name],
+                self.ast.getSpan(node.name),
         );
     }
 
@@ -548,14 +544,14 @@ fn print(self: *Self, expr: *const Expr) !void {
     const typ = try self.analyzeExpr(expr);
 
     if (typ == .void)
-        return self.err(.VoidPrint, self.ast.getSpan(expr));
+        return self.err(.void_print, self.ast.getSpan(expr));
 }
 
 fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     const name = self.interner.intern(self.ast.toSource(node.name));
 
     if (self.type_manager.isDeclared(name))
-        return self.err(.{ .AlreadyDeclaredStruct = .{ .name = self.ast.toSource(node.name) } }, self.ast.getSpan(node));
+        return self.err(.{ .already_declared_struct = .{ .name = self.ast.toSource(node.name) } }, self.ast.getSpan(node));
 
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
@@ -584,7 +580,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         if (infos.fields.get(field_name) != null) {
             return self.err(
                 .{ .already_declared_field = .{ .name = self.ast.toSource(f.name) } },
-                self.ast.token_spans[f.name],
+                self.ast.getSpan(f.name),
             );
         }
 
@@ -608,7 +604,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
                     .expect = self.getTypeName(field_type),
                     .found = self.getTypeName(field_value_type),
                 } },
-                self.ast.token_spans[f.name],
+                self.ast.getSpan(f.name),
             );
         }
 
@@ -690,18 +686,17 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     } } });
                 }
 
-                // self.instructions.items(.data)[idx] = .{ .use = node.names.len - 1 };
                 self.instructions.items(.data)[idx] = .{ .use = all_fn_names.len };
 
                 return;
             } else return self.err(
-                .{ .UnknownModule = .{ .name = self.ast.toSource(n) } },
-                self.ast.token_spans[n],
+                .{ .unknown_module = .{ .name = self.ast.toSource(n) } },
+                self.ast.getSpan(n),
             );
         }
     } else return self.err(
-        .{ .UnknownModule = .{ .name = self.ast.toSource(node.names[0]) } },
-        self.ast.token_spans[node.names[0]],
+        .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
+        self.ast.getSpan(node.names[0]),
     );
 }
 
@@ -721,7 +716,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         self.state.allow_partial = last;
 
         // Void assignment check
-        if (value_type == .void) return self.err(.VoidAssignment, self.ast.getSpan(value));
+        if (value_type == .void) return self.err(.void_assignment, self.ast.getSpan(value));
 
         // If no type declared, we infer the value type
         if (checked_type == .void) {
@@ -733,7 +728,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
                 cast = true;
                 _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
             } else return self.err(
-                .{ .InvalidAssignType = .{
+                .{ .invalid_assign_type = .{
                     .expect = self.getTypeName(checked_type),
                     .found = self.getTypeName(value_type),
                 } },
@@ -760,7 +755,7 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
     const cond_type = try self.analyzeExpr(node.condition);
 
     if (cond_type != .bool) return self.err(
-        .{ .NonBoolCond = .{
+        .{ .non_bool_cond = .{
             .what = "while",
             .found = self.getTypeName(cond_type),
         } },
@@ -770,7 +765,7 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
     const body_type = try self.block(&node.body);
 
     if (body_type != .void) return self.err(
-        .{ .NonVoidWhile = .{
+        .{ .non_void_while = .{
             .found = self.getTypeName(body_type),
         } },
         self.ast.getSpan(node.body),
@@ -844,7 +839,7 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                         .float => {},
                         .int => {
                             self.warn(
-                                AnalyzerMsg.implicit_cast("right hand side", self.getTypeName(lhs)),
+                                AnalyzerMsg.implicitCast("right hand side", self.getTypeName(lhs)),
                                 self.ast.getSpan(expr.rhs),
                             );
 
@@ -857,7 +852,7 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                     switch (rhs) {
                         .float => {
                             self.warn(
-                                AnalyzerMsg.implicit_cast("left hand side", self.getTypeName(rhs)),
+                                AnalyzerMsg.implicitCast("left hand side", self.getTypeName(rhs)),
                                 self.ast.getSpan(expr.lhs),
                             );
 
@@ -900,10 +895,10 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                 if ((lhs == .int and rhs == .float) or (lhs == .float and rhs == .int)) {
                     if (lhs == .int) {
                         data.cast = .lhs;
-                        self.warn(.FloatEqualCast, self.ast.getSpan(expr.rhs));
+                        self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
                     } else {
                         data.cast = .rhs;
-                        self.warn(.FloatEqualCast, self.ast.getSpan(expr.rhs));
+                        self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
                     }
 
                     switch (op) {
@@ -913,14 +908,14 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                     }
                 } else {
                     return self.err(
-                        AnalyzerMsg.invalid_cmp(self.getTypeName(lhs), self.getTypeName(rhs)),
+                        AnalyzerMsg.invalidCmp(self.getTypeName(lhs), self.getTypeName(rhs)),
                         self.ast.getSpan(expr),
                     );
                 }
             } else {
                 // Check for unsafe float comparisons or int comparison
                 if (lhs == .float) {
-                    self.warn(.FloatEqual, self.ast.getSpan(expr));
+                    self.warn(.float_equal, self.ast.getSpan(expr));
                 }
             }
 
@@ -938,10 +933,10 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
             switch (lhs) {
                 .float => {
                     switch (rhs) {
-                        .float => self.warn(.FloatEqual, self.ast.getSpan(expr)),
+                        .float => self.warn(.float_equal, self.ast.getSpan(expr)),
                         .int => {
                             data.cast = .rhs;
-                            self.warn(.FloatEqualCast, self.ast.getSpan(expr.rhs));
+                            self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
                         },
                         else => unreachable,
                     }
@@ -950,7 +945,7 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
                     switch (rhs) {
                         .float => {
                             data.cast = .lhs;
-                            self.warn(.FloatEqualCast, self.ast.getSpan(expr.lhs));
+                            self.warn(.float_equal_cast, self.ast.getSpan(expr.lhs));
                         },
                         .int => switch (op) {
                             .greater_equal => data.op = .ge_int,
@@ -970,12 +965,12 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
         // Logical binop
         .@"and", .@"or" => {
             if (lhs != .bool) return self.err(
-                .{ .InvalidLogical = .{ .found = self.getTypeName(lhs) } },
+                .{ .invalid_logical = .{ .found = self.getTypeName(lhs) } },
                 self.ast.getSpan(expr.lhs),
             );
 
             if (rhs != .bool) return self.err(
-                .{ .InvalidLogical = .{ .found = self.getTypeName(rhs) } },
+                .{ .invalid_logical = .{ .found = self.getTypeName(rhs) } },
                 self.ast.getSpan(expr.rhs),
             );
 
@@ -1004,7 +999,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     for (expr.nodes, 0..) |*node, i| {
         final = try self.analyzeNode(node);
 
-        if (final != .void and i != expr.nodes.len - 1) return self.err(.UnusedValue, expr.span);
+        if (final != .void and i != expr.nodes.len - 1) return self.err(.unused_value, expr.span);
     }
 
     const count = self.endScope();
@@ -1038,7 +1033,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     else
         return self.err(
             .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
-            self.ast.token_spans[expr.field],
+            self.ast.getSpan(expr.field),
         );
 
     self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.idx, .kind = kind } };
@@ -1069,9 +1064,9 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
             const type_idx = TypeSys.getValue(init_fn.type);
             break :blk self.type_manager.type_infos.items[type_idx].func;
         } else {
-            return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
+            return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
         }
-    } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
+    } else return self.err(.invalid_call_target, self.ast.getSpan(expr));
 
     var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
         .builtin => .builtin,
@@ -1087,7 +1082,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
 
             if (infos.params.len == 0 or infos.params[0] != instance_type) return self.err(
                 .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
-                self.ast.token_spans[expr.callee.field.field],
+                self.ast.getSpan(expr.callee.field.field),
             );
         } else call_tag = .bound;
     }
@@ -1099,9 +1094,8 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
 
         const args_diff = @max(infos.params.len, expr.args.len) - @min(infos.params.len, expr.args.len);
 
-        // For bounded method, the difference of 1 is the invisible 'self' paramter
+        // For bounded method, the difference of 1 is the invisible 'self' parameter
         if (args_diff == 1 and TypeSys.getExtra(method_type) == .bound_method) {
-            // call_tag = .bound;
             break :b;
         }
 
@@ -1111,7 +1105,6 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         );
     }
 
-    // TODO: upgrade test to make call_tag figure in IR render
     self.instructions.items(.data)[idx].call.tag = call_tag;
 
     return self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
@@ -1124,13 +1117,11 @@ fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Err
         const arg_type = try self.analyzeExpr(arg);
 
         if (arg_type != params[i] and !self.checkEqualFnType(arg_type, params[i])) {
-            // If it's an implicit cast between int and float, save the
-            // argument indices for compiler. Otherwise, error
             if (params[i] == .float and arg_type == .int) {
                 _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
             } else {
                 return self.err(
-                    .{ .TypeMismatch = .{
+                    .{ .type_mismatch = .{
                         .expect = self.getTypeName(params[i]),
                         .found = self.getTypeName(arg_type),
                     } },
@@ -1220,7 +1211,6 @@ fn resolveIdentifier(self: *Self, name: usize, initialized: bool) Error!*Variabl
     const text = self.ast.toSource(name);
     const name_idx = self.interner.intern(text);
 
-    // We first check in locals
     if (self.locals.items.len > 0) {
         var idx = self.locals.items.len;
 
@@ -1228,9 +1218,8 @@ fn resolveIdentifier(self: *Self, name: usize, initialized: bool) Error!*Variabl
             const local = &self.locals.items[idx - 1];
 
             if (name_idx == local.name) {
-                // Checks the initialization if asked
                 if (initialized and !local.initialized) {
-                    return self.err(.{ .UseUninitVar = .{ .name = text } }, self.ast.token_spans[name]);
+                    return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(name));
                 }
 
                 return local;
@@ -1242,15 +1231,14 @@ fn resolveIdentifier(self: *Self, name: usize, initialized: bool) Error!*Variabl
     for (self.globals.items) |*glob| {
         if (name_idx == glob.name) {
             if (initialized and !glob.initialized) {
-                return self.err(.{ .UseUninitVar = .{ .name = text } }, self.ast.token_spans[name]);
+                return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(name));
             }
 
             return glob;
         }
     }
 
-    // Else, it's undeclared
-    return self.err(.{ .UndeclaredVar = .{ .name = text } }, self.ast.token_spans[name]);
+    return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(name));
 }
 
 /// Check if the variable needs to be captured and captures it if so
@@ -1275,7 +1263,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
 
     // We can continue to analyze if the condition isn't a bool
     if (cond_type != .bool) self.err(
-        .{ .NonBoolCond = .{
+        .{ .non_bool_cond = .{
             .what = "if",
             .found = self.getTypeName(cond_type),
         } },
@@ -1320,7 +1308,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
                 data.cast = .then;
 
                 self.warn(
-                    AnalyzerMsg.implicit_cast("then branch", "float"),
+                    AnalyzerMsg.implicitCast("then branch", "float"),
                     self.ast.getSpan(expr.then),
                 );
             } else if (then_type == .float and else_type == .int) {
@@ -1329,11 +1317,11 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
                 // Safe unsafe access, if there is a non void type
                 // there is an else body
                 self.warn(
-                    AnalyzerMsg.implicit_cast("else branch", "float"),
+                    AnalyzerMsg.implicitCast("else branch", "float"),
                     self.ast.getSpan(expr.@"else".?),
                 );
             } else return self.err(
-                .{ .IncompatibleIfType = .{
+                .{ .incompatible_if_type = .{
                     .found1 = self.getTypeName(then_type),
                     .found2 = self.getTypeName(else_type),
                 } },
@@ -1342,7 +1330,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
         }
     } else if (then_type != .void and !self.state.allow_partial) {
         return self.err(
-            .{ .MissingElseClause = .{ .if_type = self.getTypeName(then_type) } },
+            .{ .missing_else_clause = .{ .if_type = self.getTypeName(then_type) } },
             self.ast.getSpan(expr),
         );
     }
@@ -1364,14 +1352,14 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     } else .void;
 
     // We check after to advance node idx
-    if (!self.state.in_fn) return self.err(.ReturnOutsideFn, self.ast.getSpan(expr));
+    if (!self.state.in_fn) return self.err(.return_outside_fn, self.ast.getSpan(expr));
 
     if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
         if (self.state.fn_type == .float and return_type == .int) {
             self.instructions.items(.data)[idx].@"return".cast = true;
             _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
         } else return self.err(
-            .{ .IncompatibleFnType = .{
+            .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(self.state.fn_type),
                 .found = self.getTypeName(return_type),
             } },
@@ -1423,7 +1411,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                 }
             } else return self.err(
                 .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
-                self.ast.token_spans[fv.name],
+                self.ast.getSpan(fv.name),
             );
         }
 
@@ -1432,7 +1420,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
             while (kv.next()) |entry| {
                 if (!entry.value_ptr.*) self.err(
                     .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
-                    self.ast.token_spans[expr.name],
+                    self.ast.getSpan(expr.name),
                 ) catch {};
             }
 
@@ -1444,7 +1432,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
 
         return decl.typ;
-    } else return self.err(.non_struct_struct_literal, self.ast.token_spans[expr.name]);
+    } else return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.name));
 }
 
 fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
@@ -1461,12 +1449,12 @@ fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
 
     if (op == .not and rhs != .bool) {
         return self.err(
-            .{ .InvalidUnary = .{ .found = self.getTypeName(rhs) } },
+            .{ .invalid_unary = .{ .found = self.getTypeName(rhs) } },
             self.ast.getSpan(expr),
         );
     } else if (op == .minus and rhs != .int and rhs != .float) {
         return self.err(
-            AnalyzerMsg.invalid_arithmetic(self.getTypeName(rhs)),
+            AnalyzerMsg.invalidArithmetic(self.getTypeName(rhs)),
             self.ast.getSpan(expr),
         );
     }
@@ -1529,8 +1517,8 @@ fn checkName(self: *Self, token: usize) !usize {
     const name = self.interner.intern(self.ast.toSource(token));
 
     if (self.identInScope(name)) return self.err(
-        .{ .AlreadyDeclared = .{ .name = self.interner.getKey(name).? } },
-        self.ast.token_spans[token],
+        .{ .already_declared = .{ .name = self.interner.getKey(name).? } },
+        self.ast.getSpan(token),
     );
 
     return name;
@@ -1543,7 +1531,7 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
         .scalar => self.type_manager.declared.get(
             self.interner.intern(self.ast.toSource(t)),
         ) orelse return self.err(
-            .{ .UndeclaredType = .{ .found = self.ast.toSource(t) } },
+            .{ .undeclared_type = .{ .found = self.ast.toSource(t) } },
             self.ast.getSpan(t),
         ),
         .function => |*fn_type| self.createAnonymousFnType(fn_type),
@@ -1562,7 +1550,7 @@ fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
         const param_type = try self.checkAndGetType(p);
 
         if (param_type == .void) {
-            return self.err(.VoidParam, fn_type.span);
+            return self.err(.void_param, fn_type.span);
         }
 
         params_type.appendAssumeCapacity(param_type);
@@ -1612,7 +1600,7 @@ fn declareVariable(
         variable.index = index;
 
         if (index > 255) {
-            return self.err(.TooManyLocals, self.ast.token_spans[token]);
+            return self.err(.too_many_locals, self.ast.getSpan(token));
         }
 
         self.locals.append(variable) catch oom();
@@ -1647,9 +1635,9 @@ fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.
         TypeSys.getValue(expr_type)
     else
         self.err(
-            .{ .TypeMismatch = .{
-                .expect = TypeSys.str_kind(kind),
-                .found = TypeSys.str_kind(TypeSys.getKind(expr_type)),
+            .{ .type_mismatch = .{
+                .expect = TypeSys.strKind(kind),
+                .found = TypeSys.strKind(TypeSys.getKind(expr_type)),
             } },
             self.to_span(node),
         );

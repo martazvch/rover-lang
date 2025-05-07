@@ -35,7 +35,7 @@ pub const ParserMsg = union(enum) {
 
     const Self = @This();
 
-    pub fn get_msg(self: Self, writer: anytype) !void {
+    pub fn getMsg(self: Self, writer: anytype) !void {
         try switch (self) {
             .chaining_cmp_op => writer.print("chaining comparison operators", .{}),
             .expect_arrow_before_fn_type => writer.print("expect arrow '->' before function type", .{}),
@@ -76,7 +76,7 @@ pub const ParserMsg = union(enum) {
         };
     }
 
-    pub fn get_hint(self: Self, writer: anytype) !void {
+    pub fn getHint(self: Self, writer: anytype) !void {
         try switch (self) {
             .chaining_cmp_op => writer.print("this one is not allowed", .{}),
             .expect_brace_after_struct_body,
@@ -112,7 +112,7 @@ pub const ParserMsg = union(enum) {
         };
     }
 
-    pub fn get_help(self: Self, writer: anytype) !void {
+    pub fn getHelp(self: Self, writer: anytype) !void {
         try switch (self) {
             .chaining_cmp_op => writer.print("split your comparison with 'and' and 'or' operators", .{}),
             .expect_arrow_before_fn_type => writer.print("add an arrow '->' between function's arguments list and type", .{}),

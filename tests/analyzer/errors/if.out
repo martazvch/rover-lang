@@ -1,12 +1,12 @@
-NonBoolCond, if, int
-MissingElseClause, int
-MissingElseClause, float
-IncompatibleIfType, int, str
-IncompatibleIfType, void, float
-IncompatibleIfType, float, str
-IncompatibleIfType, int, str
-UnusedValue
-UnusedValue
-ImplicitCast, else branch, float
-ImplicitCast, then branch, float
-ImplicitCast, else branch, float
+non_bool_cond, if, int
+missing_else_clause, int
+missing_else_clause, float
+incompatible_if_type, int, str
+incompatible_if_type, void, float
+incompatible_if_type, float, str
+incompatible_if_type, int, str
+unused_value
+unused_value
+implicit_cast, else branch, float
+implicit_cast, then branch, float
+implicit_cast, else branch, float

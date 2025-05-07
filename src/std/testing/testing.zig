@@ -28,5 +28,5 @@ pub const eql_int = NativeFnMeta{
 };
 
 pub fn _eql_int(values: []const Value) Value {
-    return Value.bool_(values[0].Int == values[0].Int);
+    return Value.makeBool(values[0].int == values[0].int);
 }

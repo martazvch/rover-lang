@@ -1,17 +1,17 @@
-IncompatibleFnType, void, int
-IncompatibleFnType, void, str
+incompatible_fn_type, void, int
+incompatible_fn_type, void, str
 
 // Partial if
-MissingElseClause, int
+missing_else_clause, int
 
 // func return
-IncompatibleFnType, int, float
+incompatible_fn_type, int, float
 
 // Partial if for tmp
-MissingElseClause, str
+missing_else_clause, str
 
 // Nested if
-IncompatibleFnType, int, float
+incompatible_fn_type, int, float
 
 // Func 2, very nested type error
-IncompatibleFnType, int, float
+incompatible_fn_type, int, float

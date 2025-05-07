@@ -162,7 +162,8 @@ pub const MemberInfo = struct {
     default: bool = false,
 };
 
-pub fn str_kind(kind: Kind) []const u8 {
+/// Renders Kind as a string
+pub fn strKind(kind: Kind) []const u8 {
     return switch (kind) {
         .func => "function",
         else => |k| @tagName(k),

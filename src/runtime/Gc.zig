@@ -155,7 +155,7 @@ fn sweep(self: *Self) void {
 }
 
 fn markValue(self: *Self, value: *const Value) Allocator.Error!void {
-    if (value.as_obj()) |obj|
+    if (value.asObj()) |obj|
         try self.markObject(obj);
 }
 

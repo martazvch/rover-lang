@@ -17,7 +17,7 @@ pub const _gt_f2i = NativeFnMeta{
 };
 
 pub fn __gt_f2i(values: []const Value) Value {
-    return Value.bool_(values[2].Float > @as(f64, @floatFromInt(values[0].Int)));
+    return Value.makeBool(values[2].float > @as(f64, @floatFromInt(values[0].int)));
 }
 
 // Compares if int is greater than float
@@ -28,5 +28,5 @@ pub const _gt_i2f = NativeFnMeta{
 };
 
 pub fn __gt_i2f(values: []const Value) Value {
-    return Value.bool_(values[0].Int > @as(i64, @intFromFloat(values[1].Float)));
+    return Value.makeBool(values[0].int > @as(i64, @intFromFloat(values[1].float)));
 }

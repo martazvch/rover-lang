@@ -65,15 +65,15 @@ pub fn delete(self: *Self, key: *const ObjString) bool {
 
     // Place a tombstone
     entry.key = null;
-    entry.value = Value.bool_(true);
+    entry.value = Value.true_;
     return true;
 }
 
 fn findEntry(entries: []Entry, key: *const ObjString) *Entry {
-    var index = key.hash % entries.len;
+    var index = key.hash & (entries.len - 1);
     var tombstone: ?*Entry = null;
 
-    while (true) : (index = (index + 1) % entries.len) {
+    while (true) : (index = (index + 1) & (entries.len - 1)) {
         const entry = &entries[index];
 
         if (entry.key == null) {
@@ -92,9 +92,9 @@ fn findEntry(entries: []Entry, key: *const ObjString) *Entry {
 pub fn findString(self: *const Self, str: []const u8, hash: u32) ?*ObjString {
     if (self.count == 0) return null;
 
-    var index = hash % self.entries.len;
+    var index = hash & (self.entries.len - 1);
 
-    while (true) : (index = (index + 1) % self.entries.len) {
+    while (true) : (index = (index + 1) & (self.entries.len - 1)) {
         const entry = self.entries[index];
 
         if (entry.key) |k| {
@@ -115,7 +115,7 @@ fn adjustCapacity(self: *Self) void {
     // PERF: is it mandatory? At least maybe only the key? If Entry has default values?
     for (entries_grown) |*e| {
         e.key = null;
-        e.value = Value.null_();
+        e.value = Value.null_;
     }
 
     // Reset count because we are going to take into account only non-tombstone
@@ -159,7 +159,7 @@ test "set" {
     @memcpy(str, "mars");
 
     const key = try ObjString.take(&vm, str);
-    const val = Value.int(42);
+    const val = Value.makeInt(42);
 
     try std.testing.expect(table.set(key, val));
     try std.testing.expect(!table.set(key, val));
@@ -176,7 +176,7 @@ test "grow" {
     var table = Self.init(allocator);
     defer table.deinit();
 
-    const val = Value.int(42);
+    const val = Value.makeInt(42);
 
     for (0..9) |i| {
         const str = try vm.allocator.alloc(u8, i);
@@ -205,7 +205,7 @@ test "get" {
     @memcpy(str, "mars");
 
     const key = try ObjString.take(&vm, str);
-    const val = Value.int(42);
+    const val = Value.makeInt(42);
     _ = table.set(key, val);
 
     var entry = table.get(key);
@@ -218,7 +218,7 @@ test "get" {
         const str1 = try vm.allocator.alloc(u8, i);
         @memset(str1, 'a');
         const key1 = try ObjString.take(&vm, str1);
-        const val1 = Value.int(@intCast(i));
+        const val1 = Value.makeInt(@intCast(i));
         _ = table.set(key1, val1);
         save_key = key1;
     }
@@ -246,7 +246,7 @@ test "delete" {
     @memcpy(str, "mars");
 
     const key = try ObjString.take(&vm, str);
-    const val = Value.int(42);
+    const val = Value.makeInt(42);
     _ = table.set(key, val);
 
     const entry = table.get(key);
