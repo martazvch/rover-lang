@@ -15,11 +15,6 @@ struct Human {
 fn main() {
     var human = Human.{ age=5, name="Tom" }
     var trash: int
-    var speak = human.speak
-    var trash2: int
-    var getOld = human.getOld
-
-    speak()
-    _ = getOld(10)
+    human.speak()
+    _ = human.getOld(10)
 }
-

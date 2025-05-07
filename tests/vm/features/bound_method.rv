@@ -18,12 +18,9 @@ fn oui() {
 
 fn main() {
     var p = Person.{age=5}
-    p.speak()
 
     // Mess up with stack
     var a = 5
-    p.speak()
-    oui()
 
     var method1: fn(Person) -> void 
     method1 = p.speak
@@ -31,12 +28,11 @@ fn main() {
     var method3 = p.speak
 
     method1()
+    oui()
 
     p.speak()
     method2()
-
-    print p.getOld(8)
-    
+    _ = p.getOld(8)
     method3()
 }
 

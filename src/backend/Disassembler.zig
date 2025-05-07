@@ -50,7 +50,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
         .CastToFloat => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
         .Constant => self.constantInstruction("OP_CONSTANT", offset, writer),
-        // .CreateIter => self.simpleInstruction("OP_CREATE_ITER", offset, writer),
         .DefineHeapVar => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
         .DefineGlobal => self.indexInstruction("OP_DEFINE_GLOBAL", offset, writer),
         .DivFloat => self.simpleInstruction("OP_DIVIDE_FLOAT", offset, writer),
@@ -72,7 +71,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .GtInt => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .GeFloat => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .GeInt => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
-        // .Invoke => self.invokeInstruction("OP_INVOKE", offset),
+        .invoke => self.invokeInstruction(offset, writer),
         .Jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
         .JumpIfFalse => self.jumpInstruction("OP_JUMP_IF_FALSE", 1, offset, writer),
         .JumpIfTrue => self.jumpInstruction("OP_JUMP_IF_TRUE", 1, offset, writer),
@@ -132,12 +131,7 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     return offset + 2;
 }
 
-fn constantInstruction(
-    self: *const Self,
-    name: []const u8,
-    offset: usize,
-    writer: anytype,
-) !usize {
+fn constantInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     const constant = self.chunk.code.items[offset + 1];
     const value = self.chunk.constants[constant];
 
@@ -211,19 +205,15 @@ fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype
     return local_offset;
 }
 
-fn invokeInstruction(
-    self: *const Self,
-    name: []const u8,
-    offset: usize,
-    writer: anytype,
-) !usize {
-    const name_id = self.chunk.code.items[offset + 1];
-    const method_name = self.chunk.constants.items[name_id];
-    const arg_count = self.chunk.code.items[offset + 2];
+fn invokeInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
+    const arity = self.chunk.code.items[offset + 1];
+    const method_idx = self.chunk.code.items[offset + 2];
 
-    try writer.print("{s:<24} index {}, value ", .{ name, name_id });
-    try method_name.print(writer);
-    try writer.print(", {} args\n", .{arg_count});
+    if (self.render_mode == .Test) {
+        try writer.print("{s:} arity {}, method index {}\n", .{ "OP_INVOKE", arity, method_idx });
+    } else {
+        try writer.print("{s:<24} arity {}, method index {}\n", .{ "OP_INVOKE", arity, method_idx });
+    }
 
-    return offset - 3;
+    return offset + 3;
 }

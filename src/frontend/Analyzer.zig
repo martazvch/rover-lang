@@ -131,6 +131,7 @@ type_manager: TypeManager,
 interner: Interner,
 
 // TODO: mettre en struct
+empty_interned: usize,
 main_interned: usize,
 std_interned: usize,
 self_interned: usize,
@@ -198,6 +199,7 @@ pub fn init(self: *Self, allocator: Allocator, repl: bool) void {
     self.type_manager = TypeManager.init(self.allocator);
     self.interner = Interner.init(self.allocator);
 
+    self.empty_interned = self.interner.intern("");
     self.main_interned = self.interner.intern("main");
     self.std_interned = self.interner.intern("std");
     self.self_interned = self.interner.intern("self");
@@ -383,7 +385,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We add function's name for runtime access
     _ = self.addInstr(.{ .tag = .name, .data = .{ .id = name_idx } });
 
-    // We declare before body for recursion and before parameters to put it as the first local
+    // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type = TypeSys.create(.func, .none, type_idx);
     const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .func, node.name);
@@ -398,14 +400,13 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.in_fn = true;
     self.state.allow_partial = true;
 
-    // We add a empty variable to anticipate the function it self on the stack
-    // it's the returned address for the function
-    self.locals.append(.{ .depth = self.scope_depth, .name = name_idx, .typ = fn_type, .initialized = true, .kind = .func }) catch oom();
+    // We reserve slot 0 for potential 'self'
+    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, .param, 0);
 
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
 
-    for (node.params) |p| {
+    for (node.params, 0..) |p, i| {
         const decl = self.instructions.len;
         const param_idx = self.checkName(p.name) catch |e| {
             self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
@@ -415,16 +416,20 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             return e;
         };
 
-        const param_type = if (param_idx == self.self_interned) param_type: {
+        const param_type = if (param_idx == self.self_interned) blk: {
             if (self.state.struct_type == .void) return self.err(.SelfOutsideStruct, self.ast.token_spans[p.name]);
+            if (i > 0) @panic("self as non first parameter"); // TODO: test
             if (name_idx == self.init_interned) return self.err(.SelfInInit, self.ast.token_spans[p.name]);
 
-            break :param_type self.state.struct_type;
-        } else try self.checkAndGetType(p.typ);
+            self.locals.items[self.locals.items.len - 1].name = self.self_interned;
+            break :blk self.state.struct_type;
+        } else blk: {
+            const param_type = try self.checkAndGetType(p.typ);
+            if (param_type == .void) return self.err(.VoidParam, self.ast.token_spans[p.name]);
 
-        if (param_type == .void) return self.err(.VoidParam, self.ast.token_spans[p.name]);
-
-        _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
+            _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
+            break :blk param_type;
+        };
         params_type.appendAssumeCapacity(param_type);
     }
 
@@ -1044,7 +1049,6 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     return .{ struct_type, found_field.type };
 }
 
-// PERF: create a special call for calling bounded methods to stop splitting 'structure.method()' into 2 instructions
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const idx = self.addInstr(.{ .tag = .call, .data = .{ .call = .{
         .arity = @intCast(expr.args.len),
@@ -1064,23 +1068,29 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         if (struct_infos.functions.get(self.init_interned)) |init_fn| {
             const type_idx = TypeSys.getValue(init_fn.type);
             break :blk self.type_manager.type_infos.items[type_idx].func;
-        } else return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
+        } else {
+            return self.err(.StructCallButNoInit, self.ast.getSpan(expr));
+        }
     } else return self.err(.InvalidCallTarget, self.ast.getSpan(expr));
-
-    // Not just a call to an already bounded method. Two cases here:
-    // 1: var bounded = p.method(); bounded()  --> here instance_type is void
-    // 2: p.method()                           --> here instance_type isn't
-    if (instance_type != .void and TypeSys.getExtra(method_type) == .bound_method) {
-        if (infos.params.len == 0 or infos.params[0] != instance_type) return self.err(
-            .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
-            self.ast.token_spans[expr.callee.field.field],
-        );
-    }
 
     var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
         .builtin => .builtin,
         .function => .function,
     };
+
+    // Not just a call to an already bounded method. Two cases here:
+    // 1: var bounded = p.method(); bounded()  --> here instance_type is void
+    // 2: p.method()                           --> here instance_type isn't
+    if (TypeSys.getExtra(method_type) == .bound_method) {
+        if (instance_type != .void) {
+            call_tag = .invoke;
+
+            if (infos.params.len == 0 or infos.params[0] != instance_type) return self.err(
+                .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
+                self.ast.token_spans[expr.callee.field.field],
+            );
+        } else call_tag = .bound;
+    }
 
     b: {
         if (infos.params.len == expr.args.len) {
@@ -1091,7 +1101,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
 
         // For bounded method, the difference of 1 is the invisible 'self' paramter
         if (args_diff == 1 and TypeSys.getExtra(method_type) == .bound_method) {
-            call_tag = .bound;
+            // call_tag = .bound;
             break :b;
         }
 
@@ -1101,8 +1111,10 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         );
     }
 
+    // TODO: upgrade test to make call_tag figure in IR render
     self.instructions.items(.data)[idx].call.tag = call_tag;
-    return self.fnCall(expr.args, infos, call_tag == .bound);
+
+    return self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
 }
 
 fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Error!Type {

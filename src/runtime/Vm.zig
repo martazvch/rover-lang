@@ -210,41 +210,19 @@ fn execute(self: *Self) !void {
                 self.stack.peekRef(0).Int += rhs;
             },
             .bound_method => {
-                const method_idx = frame.readByte();
-
-                const instance = blk: {
-                    const scope_op: OpCode = @enumFromInt(frame.readByte());
-                    const idx = frame.readByte();
-
-                    break :blk if (scope_op == .GetGlobal)
-                        &self.globals[idx]
-                    else if (scope_op == .GetHeap)
-                        &self.heap_vars[idx]
-                    else
-                        &frame.slots[idx];
-                };
-                const receiver = instance;
-                const method = instance.Obj.as(ObjInstance).parent.methods[method_idx];
-                const bound = ObjBoundMethod.create(self, receiver.*, method);
-
+                const receiver, const method = self.getBoundMethod(frame);
+                const bound = ObjBoundMethod.create(self, receiver, method);
                 self.stack.push(Value.obj(bound.asObj()));
             },
             .bound_method_call => {
                 const args_count = frame.readByte();
                 const bound = self.stack.peekRef(args_count).Obj.as(ObjBoundMethod);
-                // -1 because 1 was added to make room for `self`
-                self.stack.peekRef(args_count - 1).* = bound.receiver;
-                try self.call(bound.method, args_count);
-
-                // If call success, we need to to set frame pointer back
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                try self.callBoundMethod(&frame, args_count, bound.receiver, bound.method);
             },
             .call => {
                 const args_count = frame.readByte();
                 const callee = self.stack.peekRef(args_count).Obj.as(ObjFunction);
                 try self.call(callee, args_count);
-
-                // If call success, we need to to set frame pointer back
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
 
@@ -274,6 +252,7 @@ fn execute(self: *Self) !void {
             .EqStr => self.stack.push(Value.bool_(self.stack.pop().Obj.as(ObjString) == self.stack.pop().Obj.as(ObjString))),
             .false => self.stack.push(Value.bool_(false)),
             .field_assign => {
+                // Skips the 'get_field' or 'bound_method' code
                 frame.ip += 1;
                 const field = self.getField(frame);
                 field.* = self.stack.pop();
@@ -291,6 +270,13 @@ fn execute(self: *Self) !void {
             .GtInt => self.stack.push(Value.bool_(self.stack.pop().Int < self.stack.pop().Int)),
             .GeFloat => self.stack.push(Value.bool_(self.stack.pop().Float <= self.stack.pop().Float)),
             .GeInt => self.stack.push(Value.bool_(self.stack.pop().Int <= self.stack.pop().Int)),
+            .invoke => {
+                const args_count = frame.readByte();
+                const method_idx = frame.readByte();
+                const receiver = self.stack.peek(args_count);
+                const method = receiver.Obj.as(ObjInstance).parent.methods[method_idx];
+                try self.callBoundMethod(&frame, args_count, receiver, method);
+            },
             .Jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
@@ -440,6 +426,34 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
     };
 
     return &instance.Obj.as(ObjInstance).fields[field_idx];
+}
+
+fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction } {
+    const method_idx = frame.readByte();
+
+    const instance = blk: {
+        const scope_op: OpCode = @enumFromInt(frame.readByte());
+        const idx = frame.readByte();
+
+        break :blk if (scope_op == .GetGlobal)
+            &self.globals[idx]
+        else if (scope_op == .GetHeap)
+            &self.heap_vars[idx]
+        else
+            &frame.slots[idx];
+    };
+    const receiver = instance;
+    const method = instance.Obj.as(ObjInstance).parent.methods[method_idx];
+
+    return .{ receiver.*, method };
+}
+
+fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver: Value, method: *ObjFunction) !void {
+    self.stack.peekRef(args_count).* = receiver;
+    try self.call(method, args_count);
+
+    // If call success, we need to to set frame pointer back
+    frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 }
 
 fn strConcat(self: *Self) void {

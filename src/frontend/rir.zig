@@ -105,7 +105,7 @@ pub const Instruction = struct {
         arity: u8,
         tag: CallTag = .function,
 
-        pub const CallTag = enum { bound, builtin, function, method };
+        pub const CallTag = enum { bound, builtin, function, invoke };
     };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {

@@ -444,11 +444,11 @@ const Compiler = struct {
         const start = self.getStart();
         self.manager.instr_idx += 1;
 
+        if (data.tag == .invoke)
+            return self.invoke(data, start);
+
         // Compiles the identifier
         try self.compileInstr();
-
-        // If it's a method, adds a tombstone for 'self' at the beginning of the arguments
-        if (data.tag == .bound) self.writeOp(.null, start);
 
         for (0..data.arity) |_| {
             try self.compileInstr();
@@ -460,9 +460,27 @@ const Compiler = struct {
 
         self.writeOpAndByte(
             if (data.tag == .function) .call else if (data.tag == .builtin) .NativeFnCall else .bound_method_call,
-            if (data.tag == .bound) data.arity + 1 else data.arity,
+            data.arity,
             start,
         );
+    }
+
+    fn invoke(self: *Self, data: Instruction.Call, start: usize) Error!void {
+        // We do not compile the 'bound_method' op code
+        const member_data = self.getData().member;
+        self.manager.instr_idx += 1;
+        try self.compileInstr();
+
+        for (0..data.arity) |_| {
+            try self.compileInstr();
+
+            if (self.manager.instr_idx < self.manager.instr_tags.len and
+                self.manager.instr_tags[self.manager.instr_idx] == .cast)
+                try self.compileInstr();
+        }
+
+        self.writeOpAndByte(.invoke, data.arity, start);
+        self.writeByte(@intCast(member_data.index), start);
     }
 
     fn fnDecl(self: *Self) Error!void {

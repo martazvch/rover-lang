@@ -1,19 +1,19 @@
 -- speak --
 OP_GET_FIELD index 1 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL index 0
 OP_PRINT
 OP_NAKED_RETURN
 
 -- getOld --
 OP_GET_FIELD index 0 of next variable
+OP_GET_LOCAL index 0
 OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
 OP_ADD_INT
 OP_FIELD_ASSIGN
 OP_GET_FIELD index 0 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL index 0
 OP_GET_FIELD index 0 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL index 0
 OP_RETURN
 
 -- main --
@@ -21,15 +21,12 @@ OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value "Tom"
 OP_STRUCT_LIT index 2
 OP_GET_GLOBAL index 0
-OP_BOUND_METHOD index 0 of next variable
-OP_GET_LOCAL index 1
 OP_NULL
-OP_BOUND_METHOD_CALL index 1
-OP_BOUND_METHOD index 1 of next variable
 OP_GET_LOCAL index 1
-OP_NULL
+OP_INVOKE arity 0, method index 0
+OP_GET_LOCAL index 1
 OP_CONSTANT index 2, value 10
-OP_BOUND_METHOD_CALL index 2
+OP_INVOKE arity 1, method index 1
 OP_POP
 OP_NAKED_RETURN
 
