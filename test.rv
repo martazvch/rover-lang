@@ -14,6 +14,7 @@ struct Human {
 
     fn getOld(self, amount: int) -> int {
         self.age = self.age + amount
+        self.age
     }
 
     fn speak(self) {
@@ -31,6 +32,12 @@ fn main() {
     print tom.getOld(60)
     var trash2: int
     tom.pet.speakTo(tom.name)
+
+    fn capture() {
+        tom.pet.speakTo(tom.name)
+    }
+
+    capture()
 }
 
 

@@ -13,6 +13,7 @@ const TokenIndex = Ast.TokenIndex;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
+const oom = @import("../utils.zig").oom;
 
 source: []const u8,
 errs: ArrayList(ParserReport),
@@ -20,13 +21,15 @@ arena: ArenaAllocator,
 allocator: Allocator,
 token_tags: []const Token.Tag,
 token_spans: []const Span,
-token_idx: usize,
-nodes: ArrayListUnmanaged(Node),
-panic_mode: bool,
+token_idx: usize = 0,
+nodes: ArrayListUnmanaged(Node) = .{},
+panic_mode: bool = false,
+in_cond: bool = false,
+in_group: bool = false,
 
 const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
-const Error = error{err} || Allocator.Error || std.fmt.ParseIntError;
+const Error = error{err} || std.fmt.ParseIntError;
 
 pub const empty: Self = .{
     .source = undefined,
@@ -35,9 +38,6 @@ pub const empty: Self = .{
     .allocator = undefined,
     .token_tags = undefined,
     .token_spans = undefined,
-    .token_idx = 0,
-    .nodes = .{},
-    .panic_mode = false,
 };
 
 pub fn init(self: *Self, allocator: Allocator) void {
@@ -196,7 +196,7 @@ fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
     self.panic_mode = true;
 
     const report = ParserReport.err(error_kind, self.token_spans[token]);
-    try self.errs.append(report);
+    self.errs.append(report) catch oom();
 
     return error.err;
 }
@@ -211,7 +211,7 @@ fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
     self.panic_mode = true;
 
     const report = ParserReport.err(error_kind, span);
-    try self.errs.append(report);
+    self.errs.append(report) catch oom();
 
     return error.err;
 }
@@ -271,7 +271,7 @@ fn fnDecl(self: *Self) Error!Node {
             }
 
             // TODO: Allocate only one `Self` type for all
-            const typ = try self.allocator.create(Ast.Type);
+            const typ = self.allocator.create(Ast.Type) catch oom();
             typ.* = .{ .self = self.token_idx - 1 };
             param.typ = typ;
         } else {
@@ -280,7 +280,7 @@ fn fnDecl(self: *Self) Error!Node {
             param.typ = try self.parseType();
         }
 
-        try params.append(self.allocator, param);
+        params.append(self.allocator, param) catch oom();
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -301,7 +301,7 @@ fn fnDecl(self: *Self) Error!Node {
 
     return .{ .fn_decl = .{
         .name = name,
-        .params = try params.toOwnedSlice(self.allocator),
+        .params = params.toOwnedSlice(self.allocator) catch oom(),
         .body = (try self.block()).block,
         .return_type = return_type,
     } };
@@ -327,7 +327,7 @@ fn structDecl(self: *Self) !Node {
             return self.errAtCurrent(.expect_field_type_or_default);
         }
 
-        try fields.append(self.allocator, .{ .name = field_name, .typ = typ, .value = value });
+        fields.append(self.allocator, .{ .name = field_name, .typ = typ, .value = value }) catch oom();
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -344,7 +344,7 @@ fn structDecl(self: *Self) !Node {
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
         try self.expect(.@"fn", .expect_fn_in_struct_body);
-        try functions.append(self.allocator, (try self.fnDecl()).fn_decl);
+        functions.append(self.allocator, (try self.fnDecl()).fn_decl) catch oom();
         self.skipNewLines();
     }
 
@@ -352,12 +352,12 @@ fn structDecl(self: *Self) !Node {
 
     return .{ .struct_decl = .{
         .name = name,
-        .fields = try fields.toOwnedSlice(self.allocator),
-        .functions = try functions.toOwnedSlice(self.allocator),
+        .fields = fields.toOwnedSlice(self.allocator) catch oom(),
+        .functions = functions.toOwnedSlice(self.allocator) catch oom(),
     } };
 }
 
-fn varDecl(self: *Self) !Node {
+fn varDecl(self: *Self) Error!Node {
     const name = self.token_idx;
     try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
 
@@ -378,7 +378,7 @@ fn varDecl(self: *Self) !Node {
     return .{ .var_decl = .{ .name = name, .typ = typ, .value = value } };
 }
 
-fn multiVarDecl(self: *Self, first_name: usize) !Node {
+fn multiVarDecl(self: *Self, first_name: usize) Error!Node {
     var count: usize = 1;
     var decls: ArrayListUnmanaged(Ast.VarDecl) = .{};
     var variables = ArrayListUnmanaged(usize){};
@@ -386,10 +386,10 @@ fn multiVarDecl(self: *Self, first_name: usize) !Node {
 
     while (self.match(.comma)) {
         try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
-        try variables.append(self.allocator, self.token_idx - 1);
+        variables.append(self.allocator, self.token_idx - 1) catch oom();
     }
 
-    try decls.ensureTotalCapacity(self.allocator, variables.items.len);
+    decls.ensureTotalCapacity(self.allocator, variables.items.len) catch oom();
     const typ = try self.expectTypeOrEmpty();
     const first_value = if (self.match(.equal))
         try self.parsePrecedenceExpr(0)
@@ -422,7 +422,7 @@ fn multiVarDecl(self: *Self, first_name: usize) !Node {
             .expect = variables.items.len + 1,
         } });
 
-    return .{ .multi_var_decl = .{ .decls = try decls.toOwnedSlice(self.allocator) } };
+    return .{ .multi_var_decl = .{ .decls = decls.toOwnedSlice(self.allocator) catch oom() } };
 }
 
 /// Expects a type after ':'. If no colon, declares an empty type
@@ -437,7 +437,7 @@ fn expectTypeOrEmpty(self: *Self) Error!?*Ast.Type {
 
 /// Parses a type. It assumes you know that a type is expected at this place
 fn parseType(self: *Self) Error!*Ast.Type {
-    const typ = try self.allocator.create(Ast.Type);
+    const typ = self.allocator.create(Ast.Type) catch oom();
 
     if (self.isIdentOrType()) {
         typ.* = .{ .scalar = self.token_idx - 1 };
@@ -448,7 +448,7 @@ fn parseType(self: *Self) Error!*Ast.Type {
         try self.expect(.left_paren, .expect_paren_after_fn_name);
 
         while (!self.check(.right_paren) and !self.check(.eof)) {
-            try params.append(self.allocator, try self.parseType());
+            params.append(self.allocator, try self.parseType()) catch oom();
             if (!self.match(.comma)) break;
         }
 
@@ -464,7 +464,7 @@ fn parseType(self: *Self) Error!*Ast.Type {
         span.end = self.token_idx - 1;
 
         typ.* = .{ .function = .{
-            .params = try params.toOwnedSlice(self.allocator),
+            .params = params.toOwnedSlice(self.allocator) catch oom(),
             .return_type = return_type,
             .span = span,
         } };
@@ -483,7 +483,7 @@ fn isIdentOrType(self: *Self) bool {
         self.match(.bool);
 }
 
-fn discard(self: *Self) !Node {
+fn discard(self: *Self) Error!Node {
     try self.expect(.equal, .invalid_discard);
 
     return .{ .discard = try self.parsePrecedenceExpr(0) };
@@ -497,12 +497,12 @@ fn use(self: *Self) Error!Node {
     }
 
     while (self.match(.identifier) and !self.check(.eof)) {
-        try names.append(self.allocator, self.token_idx - 1);
+        names.append(self.allocator, self.token_idx - 1) catch oom();
         if (self.match(.dot)) continue;
         break;
     }
 
-    return .{ .use = .{ .names = try names.toOwnedSlice(self.allocator) } };
+    return .{ .use = .{ .names = names.toOwnedSlice(self.allocator) catch oom() } };
 }
 
 fn statement(self: *Self) Error!Node {
@@ -520,7 +520,7 @@ fn statement(self: *Self) Error!Node {
     }
 }
 
-fn assignment(self: *Self, assigne: *Expr) !Node {
+fn assignment(self: *Self, assigne: *Expr) Error!Node {
     return .{ .assignment = .{
         .assigne = assigne,
         .value = try self.parsePrecedenceExpr(0),
@@ -531,7 +531,7 @@ fn print(self: *Self) Error!Node {
     return .{ .print = try self.parsePrecedenceExpr(0) };
 }
 
-fn whileStmt(self: *Self) !Node {
+fn whileStmt(self: *Self) Error!Node {
     const cond = try self.parsePrecedenceExpr(0);
     const body = if (self.matchAndSkip(.left_brace))
         (try self.block()).block
@@ -585,7 +585,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
         const op = self.token_idx - 1;
         const rhs = try self.parsePrecedenceExpr(next_rule.prec + 1);
 
-        const expr = try self.allocator.create(Expr);
+        const expr = self.allocator.create(Expr) catch oom();
         expr.* = .{ .binop = .{
             .lhs = node,
             .rhs = rhs,
@@ -602,7 +602,6 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 
 /// Parses expressions (prefix + sufix)
 fn parseExpr(self: *Self) Error!*Expr {
-    // Prefix part
     const expr = try switch (self.prev(.tag)) {
         .left_brace => self.block(),
         .@"if" => self.ifExpr(),
@@ -623,25 +622,24 @@ fn parseExpr(self: *Self) Error!*Expr {
         },
     };
 
-    // Apply postfix
     return self.postfix(expr);
 }
 
 fn block(self: *Self) Error!*Expr {
     const openning_brace = self.token_idx - 1;
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     var exprs: ArrayListUnmanaged(Node) = .{};
 
     self.skipNewLines();
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
-        try exprs.append(self.allocator, try self.declaration());
+        exprs.append(self.allocator, try self.declaration()) catch oom();
         self.skipNewLines();
     }
 
     try self.expectOrErrAtToken(.right_brace, .unclosed_brace, openning_brace);
     expr.* = .{ .block = .{
-        .nodes = try exprs.toOwnedSlice(self.allocator),
+        .nodes = exprs.toOwnedSlice(self.allocator) catch oom(),
         .span = .{ .start = openning_brace, .end = self.prev(.span).start },
     } };
 
@@ -675,7 +673,7 @@ fn ifExpr(self: *Self) Error!*Expr {
         break :blk null;
     };
 
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .@"if" = .{
         .condition = condition,
         .then = then,
@@ -690,7 +688,7 @@ fn grouping(self: *Self) Error!*Expr {
     const opening = self.prev(.span).start;
     self.skipNewLines();
 
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     const value = try self.parsePrecedenceExpr(0);
 
     try self.expectOrErrAtToken(.right_paren, .unclosed_paren, start);
@@ -707,7 +705,7 @@ fn grouping(self: *Self) Error!*Expr {
 }
 
 fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .literal = .{ .tag = tag, .idx = self.token_idx - 1 } };
 
     return expr;
@@ -715,7 +713,7 @@ fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
 
 fn returnExpr(self: *Self) Error!*Expr {
     const kw = self.token_idx - 1;
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .@"return" = .{
         .expr = if (self.check(.new_line) or self.check(.right_brace))
             null
@@ -728,7 +726,7 @@ fn returnExpr(self: *Self) Error!*Expr {
 }
 
 fn unary(self: *Self) Error!*Expr {
-    const expr = try self.allocator.create(Expr);
+    const expr = self.allocator.create(Expr) catch oom();
     self.advance();
     expr.* = .{ .unary = .{ .op = self.token_idx - 2, .expr = try self.parseExpr() } };
 
@@ -756,7 +754,7 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 
 // Takes the callee expression as input and output the full function call expression
 fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
-    const call_expr = try self.allocator.create(Expr);
+    const call_expr = self.allocator.create(Expr) catch oom();
 
     // TODO: init with capacity of 255?
     var args: std.ArrayListUnmanaged(*Expr) = .{};
@@ -769,7 +767,7 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
         if (args.items.len == 255)
             return self.errAtCurrent(.{ .too_many_fn_args = .{ .what = "argument" } });
 
-        try args.append(self.allocator, try self.parsePrecedenceExpr(0));
+        args.append(self.allocator, try self.parsePrecedenceExpr(0)) catch oom();
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -780,7 +778,7 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
 
     call_expr.* = .{ .fn_call = .{
         .callee = expr,
-        .args = try args.toOwnedSlice(self.allocator),
+        .args = args.toOwnedSlice(self.allocator) catch oom(),
     } };
 
     return call_expr;
@@ -789,7 +787,7 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
 fn field(self: *Self, expr: *Expr) Error!*Expr {
     try self.expect(.identifier, .expect_name_after_dot);
 
-    const field_access = try self.allocator.create(Expr);
+    const field_access = self.allocator.create(Expr) catch oom();
     field_access.* = .{ .field = .{
         .structure = expr,
         .field = self.token_idx - 1,
@@ -800,7 +798,7 @@ fn field(self: *Self, expr: *Expr) Error!*Expr {
 
 // TODO: check if need to destroy the expr
 fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
-    const struct_lit = try self.allocator.create(Expr);
+    const struct_lit = self.allocator.create(Expr) catch oom();
     var fields_values: ArrayListUnmanaged(Ast.FieldAndValue) = .{};
 
     if (expr.* != .literal and expr.literal.tag != .identifier) {
@@ -818,10 +816,10 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
         }
 
         // Either: { x = 3 }  or { x }
-        try fields_values.append(self.allocator, .{
+        fields_values.append(self.allocator, .{
             .name = self.token_idx - 1,
             .value = if (self.match(.equal)) try self.parsePrecedenceExpr(0) else null,
-        });
+        }) catch oom();
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -831,7 +829,7 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
     try self.expect(.right_brace, .expect_brace_after_struct_lit);
     struct_lit.* = .{ .struct_literal = .{
         .name = expr.literal.idx,
-        .fields = try fields_values.toOwnedSlice(self.allocator),
+        .fields = fields_values.toOwnedSlice(self.allocator) catch oom(),
     } };
 
     return struct_lit;
