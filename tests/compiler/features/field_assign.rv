@@ -3,7 +3,7 @@ struct Person {
 }
 
 fn main() {
-    var tom = Person.{name = "Tom"}
+    var tom = Person{name = "Tom"}
     tom.name = "Martin"
 }
 

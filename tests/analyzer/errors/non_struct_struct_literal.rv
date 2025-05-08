@@ -1,7 +1,7 @@
 fn Person() {}
 
 fn main() {
-    var p = Person.{}
+    var p = Person{}
 }
 
 

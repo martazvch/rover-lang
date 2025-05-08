@@ -51,7 +51,7 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Parses the token stream
-pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(Token)) !Ast {
+pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(Token)) Error!Ast {
     self.source = source;
     self.token_tags = tokens.items(.tag);
     self.token_spans = tokens.items(.span);
@@ -67,7 +67,7 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
             },
             else => return e,
         };
-        try self.nodes.append(self.allocator, stmt);
+        self.nodes.append(self.allocator, stmt) catch oom();
 
         // If EOF, exit
         if (self.match(.eof)) break;
@@ -93,7 +93,7 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
         .source = source,
         .token_tags = self.token_tags,
         .token_spans = self.token_spans,
-        .nodes = try self.nodes.toOwnedSlice(self.allocator),
+        .nodes = self.nodes.toOwnedSlice(self.allocator) catch oom(),
     };
 }
 
@@ -532,7 +532,12 @@ fn print(self: *Self) Error!Node {
 }
 
 fn whileStmt(self: *Self) Error!Node {
+    const save = self.in_cond;
+    self.in_cond = true;
+    errdefer self.in_cond = save;
     const cond = try self.parsePrecedenceExpr(0);
+    self.in_cond = save;
+
     const body = if (self.matchAndSkip(.left_brace))
         (try self.block()).block
     else
@@ -647,8 +652,12 @@ fn block(self: *Self) Error!*Expr {
 }
 
 fn ifExpr(self: *Self) Error!*Expr {
+    const save = self.in_cond;
+    self.in_cond = true;
+    errdefer self.in_cond = save;
     const condition = try self.parsePrecedenceExpr(0);
     self.skipNewLines();
+    self.in_cond = save;
 
     // TODO: Warning for unnecessary 'do' if there is a block after
     const then: Node = if (self.matchAndSkip(.left_brace))
@@ -687,6 +696,11 @@ fn grouping(self: *Self) Error!*Expr {
     const start = self.token_idx - 1;
     const opening = self.prev(.span).start;
     self.skipNewLines();
+
+    const save = self.in_group;
+    self.in_group = true;
+    errdefer self.in_group = save;
+    defer self.in_group = save;
 
     const expr = self.allocator.create(Expr) catch oom();
     const value = try self.parsePrecedenceExpr(0);
@@ -741,11 +755,13 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
         if (self.match(.left_paren)) {
             expr = try self.finishCall(expr);
         } else if (self.match(.dot)) {
-            if (self.match(.left_brace)) {
-                expr = try self.structLiteral(expr);
-            } else {
-                expr = try self.field(expr);
+            expr = try self.field(expr);
+        } else if (self.match(.left_brace)) {
+            if (self.in_cond and !self.in_group) {
+                self.token_idx -= 1;
+                return expr;
             }
+            expr = try self.structLiteral(expr);
         } else break;
     }
 
@@ -796,7 +812,6 @@ fn field(self: *Self, expr: *Expr) Error!*Expr {
     return field_access;
 }
 
-// TODO: check if need to destroy the expr
 fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
     const struct_lit = self.allocator.create(Expr) catch oom();
     var fields_values: ArrayListUnmanaged(Ast.FieldAndValue) = .{};

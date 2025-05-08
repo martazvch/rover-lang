@@ -24,8 +24,8 @@ struct Human {
 }
 
 fn main() {
-    var pet = Pet.{name="Vodka", life=9}
-    var tom = Human.{age=5, name="Tom", pet}
+    var pet = Pet{name="Vodka", life=9}
+    var tom = Human{age=5, name="Tom", pet}
     var trash: int
 
     tom.speak() 

@@ -17,7 +17,7 @@ fn oui() {
 }
 
 fn main() {
-    var p = Person.{age=5}
+    var p = Person{age=5}
 
     // Mess up with stack
     var a = 5

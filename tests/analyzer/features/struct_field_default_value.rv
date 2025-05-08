@@ -4,6 +4,6 @@ struct Person {
 }
 
 fn main() {
-    var tom = Person.{ name = "Tom", age = 8 }
+    var tom = Person{ name = "Tom", age = 8 }
 }
 

@@ -9,8 +9,8 @@ struct Person {
 }
 
 fn main() {
-    var pet = Pet.{ name = "Vodka", has_eaten = true }
-    var tom = Person.{ name = "Tom", pet }
+    var pet = Pet{ name = "Vodka", has_eaten = true }
+    var tom = Person{ name = "Tom", pet }
     print tom.name
     tom.name = "Martin"
     print tom.name

@@ -6,21 +6,21 @@ struct Human {
 var answer = 42
 
 fn main() {
-    var human = Human.{ age = 5, name = "Tom" }
-    human = Human.{ name = "Tom", age = 5 }
+    var human = Human{ age = 5, name = "Tom" }
+    human = Human{ name = "Tom", age = 5 }
 
     var age = 95
-    human = Human.{ age, name = "Tom" }
+    human = Human{ age, name = "Tom" }
 
     var name = "Tom"
-    human = Human.{ age = 6, name }
+    human = Human{ age = 6, name }
 
-    human = Human.{ age, name }
-    human = Human.{ name, age }
+    human = Human{ age, name }
+    human = Human{ name, age }
 
     struct Local {
         answer: int
     }
 
-    var adr = Local.{answer}
+    var adr = Local{answer}
 }

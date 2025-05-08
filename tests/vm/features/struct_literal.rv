@@ -6,34 +6,34 @@ struct Human {
 var answer = 42
 
 fn main() {
-    var human = Human.{ age = 5, name = "Tom" }
+    var human = Human{ age = 5, name = "Tom" }
     print human
     print human.age
     print human.name
 
-    human = Human.{ name = "Tom", age = 5 }
+    human = Human{ name = "Tom", age = 5 }
     print human
     print human.age
     print human.name
 
     var age = 95
-    human = Human.{ age, name = "Tom" }
+    human = Human{ age, name = "Tom" }
     print human
     print human.age
     print human.name
 
     var name = "Martin"
-    human = Human.{ age = 6, name }
+    human = Human{ age = 6, name }
     print human
     print human.age
     print human.name
 
-    human = Human.{ age, name }
+    human = Human{ age, name }
     print human
     print human.age
     print human.name
     
-    human = Human.{ name, age }
+    human = Human{ name, age }
     print human
     print human.age
     print human.name
@@ -42,7 +42,7 @@ fn main() {
         answer: int
     }
 
-    var adr = Local.{answer}
+    var adr = Local{answer}
     print adr
     print adr.answer
 }

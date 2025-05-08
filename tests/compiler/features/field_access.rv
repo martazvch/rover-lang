@@ -10,8 +10,8 @@ struct Human {
 }
 
 fn main() {
-    var pet = Pet.{name = "Vodka", has_eaten = false}
-    var human = Human.{age = 5, name = "Tom", pet }
+    var pet = Pet{ name = "Vodka", has_eaten = false }
+    var human = Human{ age = 5, name = "Tom", pet }
     print human.pet.has_eaten
 }
 

@@ -1,9 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayList;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
-const AutoHashMap = std.AutoHashMap;
+const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const Interner = @import("../Interner.zig");
 const GenReport = @import("../reporter.zig").GenReport;
@@ -26,32 +25,30 @@ const TypeInfo = TypeSys.TypeInfo;
 
 // Re-export constants
 pub const TypeManager = struct {
-    declared: std.AutoHashMap(usize, Type),
-    type_infos: ArrayList(TypeInfo),
+    allocator: Allocator,
+    declared: AutoHashMapUnmanaged(usize, Type) = .{},
+    type_infos: ArrayListUnmanaged(TypeInfo) = .{},
     natives: BuiltinAnalyzer = builtin_init(),
 
     const Error = error{too_many_types};
 
     pub fn init(allocator: Allocator) TypeManager {
-        return .{
-            .declared = .init(allocator),
-            .type_infos = .init(allocator),
-        };
+        return .{ .allocator = allocator };
     }
 
     pub fn init_builtins(self: *TypeManager, interner: *Interner) void {
-        self.declared.put(interner.intern("void"), .void) catch oom();
-        self.declared.put(interner.intern("null"), .null) catch oom();
-        self.declared.put(interner.intern("bool"), .bool) catch oom();
-        self.declared.put(interner.intern("float"), .float) catch oom();
-        self.declared.put(interner.intern("int"), .int) catch oom();
-        self.declared.put(interner.intern("str"), .str) catch oom();
-        self.declared.put(interner.intern("Self"), .self) catch oom();
+        self.declared.put(self.allocator, interner.intern("void"), .void) catch oom();
+        self.declared.put(self.allocator, interner.intern("null"), .null) catch oom();
+        self.declared.put(self.allocator, interner.intern("bool"), .bool) catch oom();
+        self.declared.put(self.allocator, interner.intern("float"), .float) catch oom();
+        self.declared.put(self.allocator, interner.intern("int"), .int) catch oom();
+        self.declared.put(self.allocator, interner.intern("str"), .str) catch oom();
+        self.declared.put(self.allocator, interner.intern("Self"), .self) catch oom();
     }
 
     pub fn deinit(self: *TypeManager) void {
-        self.declared.deinit();
-        self.type_infos.deinit();
+        self.declared.deinit(self.allocator);
+        self.type_infos.deinit(self.allocator);
     }
 
     /// Adds information about a type. Requires the kind and extra info, the value (aka
@@ -59,7 +56,7 @@ pub const TypeManager = struct {
     /// Returns the complete type
     pub fn reserveInfo(self: *TypeManager) !TypeSys.Value {
         const count = self.type_infos.items.len;
-        self.type_infos.append(undefined) catch oom();
+        self.type_infos.append(self.allocator, undefined) catch oom();
 
         return if (count == std.math.maxInt(TypeSys.Value))
             error.too_many_types
@@ -74,7 +71,7 @@ pub const TypeManager = struct {
 
     /// Adds a type linked associated with the name
     pub fn addType(self: *TypeManager, name: usize, typ: Type) void {
-        self.declared.put(name, typ) catch oom();
+        self.declared.put(self.allocator, name, typ) catch oom();
     }
 
     /// Declares a new type built with `kind` and `extra` parameters and add the informations
@@ -84,7 +81,7 @@ pub const TypeManager = struct {
         if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
 
         const typ = TypeSys.create(kind, extra, @intCast(count));
-        self.type_infos.append(info) catch oom();
+        self.type_infos.append(self.allocator, info) catch oom();
         self.addType(name, typ);
 
         return typ;
@@ -116,11 +113,12 @@ pub const TypeManager = struct {
 ast: *const Ast,
 
 instructions: MultiArrayList(Instruction),
-warns: ArrayList(AnalyzerReport),
-errs: ArrayList(AnalyzerReport),
+warns: ArrayListUnmanaged(AnalyzerReport),
+errs: ArrayListUnmanaged(AnalyzerReport),
+declarations: AutoHashMapUnmanaged(usize, Type),
 
-globals: ArrayList(Variable),
-locals: ArrayList(Variable),
+globals: ArrayListUnmanaged(Variable),
+locals: ArrayListUnmanaged(Variable),
 scope_depth: usize,
 /// Offset updated at each fn call, emulate the frame pointer at runtime
 local_offset: usize,
@@ -185,19 +183,19 @@ pub fn init(self: *Self, allocator: Allocator, repl: bool) void {
     self.arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = self.arena.allocator();
 
+    self.errs = .{};
+    self.warns = .{};
     self.instructions = .{};
-    self.warns = .init(self.allocator);
-    self.errs = .init(self.allocator);
-    self.globals = .init(self.allocator);
-    self.locals = .init(self.allocator);
+    self.declarations = .{};
+    self.globals = .{};
+    self.locals = .{};
     self.scope_depth = 0;
-    self.heap_count = 0;
-
-    self.state = .{};
-    self.main = null;
     self.local_offset = 0;
-    self.type_manager = TypeManager.init(self.allocator);
-    self.interner = Interner.init(self.allocator);
+    self.heap_count = 0;
+    self.main = null;
+    self.state = .{};
+    self.type_manager = .init(self.allocator);
+    self.interner = .init(self.allocator);
 
     self.empty_interned = self.interner.intern("");
     self.main_interned = self.interner.intern("main");
@@ -237,12 +235,12 @@ fn isNumeric(self: *Self, expr: *const Expr, t: Type) Error!void {
 }
 
 fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
-    self.errs.append(AnalyzerReport.err(kind, span)) catch oom();
+    self.errs.append(self.allocator, AnalyzerReport.err(kind, span)) catch oom();
     return error.Err;
 }
 
 fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
-    self.warns.append(AnalyzerReport.warn(kind, span)) catch oom();
+    self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
 }
 
 pub fn analyze(self: *Self, ast: *const Ast) !void {
@@ -1479,7 +1477,7 @@ fn endScope(self: *Self) usize {
         }
 
         pop_count = self.locals.items.len - i;
-        self.locals.resize(i) catch oom();
+        self.locals.resize(self.allocator, i) catch oom();
     }
 
     return pop_count;
@@ -1592,7 +1590,7 @@ fn declareVariable(
         const index = self.globals.items.len;
         variable.index = index;
 
-        self.globals.append(variable) catch oom();
+        self.globals.append(self.allocator, variable) catch oom();
         return .{ .index = @intCast(index), .scope = .global };
     } else {
         // Take function's frame into account
@@ -1603,7 +1601,7 @@ fn declareVariable(
             return self.err(.too_many_locals, self.ast.getSpan(token));
         }
 
-        self.locals.append(variable) catch oom();
+        self.locals.append(self.allocator, variable) catch oom();
         return .{ .index = @intCast(index), .scope = .local };
     }
 }

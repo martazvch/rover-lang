@@ -1,6 +1,6 @@
-A.{x, y, z, }
+A{x, y, z, }
 
-B.{}
+B{}
 
-C.{x = x, y, z = 12 + add()}
+C{x = x, y, z = 12 + add()}
 
