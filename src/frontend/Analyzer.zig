@@ -118,7 +118,7 @@ errs: ArrayListUnmanaged(AnalyzerReport),
 declarations: AutoHashMapUnmanaged(usize, Type),
 
 globals: ArrayListUnmanaged(Variable),
-locals: ArrayListUnmanaged(Variable),
+locals: ArrayListUnmanaged(Variable) = .{},
 scope_depth: usize,
 /// Offset updated at each fn call, emulate the frame pointer at runtime
 local_offset: usize,
@@ -140,7 +140,7 @@ allocator: Allocator,
 repl: bool,
 
 const Self = @This();
-const Error = error{ Err, undeclared_var, UninitVar } || TypeManager.Error;
+const Error = error{Err} || TypeManager.Error;
 
 const Variable = struct {
     index: usize = 0,

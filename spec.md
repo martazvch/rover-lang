@@ -15,9 +15,9 @@ at the end of a scope being the returned value
 - Regarding returned value:
     - If:
         - Each branch must return the same type unless exit scope
-        - Each branch can exit the current scope with a ```return``` statement
+        - Each branch can exit the current scope with a `return` statement
     - While:
-        - Can be exited with a ```break``` statement with a value after or not
+        - Can be exited with a `break` statement with a value after or not
     - loop:
         - Same as while
     - Match:
@@ -41,7 +41,7 @@ Struct can be constructed as:
 
 ```rust
 struct Point {x, y: int}
-let p = Point.{ x = 1, y = 2 }
+let p = Point{ x = 1, y = 2 }
 ```
 
 They can have an `init` method thats called automatically on creation and allow
@@ -89,7 +89,7 @@ all non-default value must have a match in args
 
 ```rust
 struct Point {
-    x, y: i64
+    x, y: int
 
     fn init(x, y) Self {}
 }
@@ -156,23 +156,45 @@ Language should support list comprehension because it's too powerfull
 
 ### Union type
 
-Union type allow to use any type of the language together
-
-```rust
-type Animal = Dog | Cat
-```
-
-> [!WARNING]
-> Not sure, if we can, it means that we could define traits on unions with
-> errors in it... strange
-
-It can be mixed with errors
+Union can be defined in two ways and can be aliased. Error union follows the same rule but
+separate the types from the error with `!` like:
 
 ```rust
 type ShelterRes = Dog | Cat ! NoPet | Burnt
 
-fn fetch_pet(name: str) -> ShelterRes {}
+fn add() int!Error {}
 ```
+
+- Inlined union
+
+If you wanna use type union in a function's declaration of a structure's field for example,
+you can define it as:
+
+```rust
+struct Point {
+    coord: (int, int)|Vec2,
+}
+fn addOne(value: int|Vec2) {}
+
+// Alias
+type ScalarOrVec = int|Vec2
+
+```
+
+- Heavy union
+
+You can define an union like you would define an enum but you can attach methods on it
+
+```rust
+union {
+    int,
+    Vec2,
+    
+    fn addOne(self) {}
+}
+```
+
+It allows to define methods on it, apply traits, derive macro, ...
 
 ### Error
 
@@ -211,73 +233,36 @@ fn compile(source: str) -> ! CompilerErr|ParserErr { // error union inplace fusi
 }
 ```
 
-In case of use of *if* to check if a value is an error, it provides a special *else*
-with the error:
+### Null and error fallbacks
 
-```rust
-let maybe_err: int!ParserErr = parse()
-
-if maybe_err :: ok_val {
-    print("Ok: {}", ok_val)
-} else :: err {
-    print("Got err {}", err)
-}
-```
-
-### ifnull and iferr
-
-Those keywords are meant to provide a fallback value in case of null/error value.
-For erros, we can pattern match on it with *when*
-Combination of *iferr* and *match* allow to write only once *err* (reduce boilerplate)
+To provide fallback values in case of null variable or error union variable, there are the two
+operators `??` and `!!`.
 
 ```rust
 fn add() -> int!Err {}
+fn mul() -> ?int {}
 
-let res = add() iferr 5 // fallback value
-
-let res = add() iferr :: err { // fallback value + error usage
-    print(err)
-    5
-}
-
-let res = add() iferr :: err { // custom handling + error propagation
-    print("you really messed up")
-    return err
-}
-
-let res = add() iferr :: err when err { // with when, we match the error type
-    ParserErr.InvalidToken :: tk => {
-        print("got {}", tk.lexeme)
-        5
-    }
-    ParserErr.InvalidType => {
-        print("expected {}, found {}", err.found, err.expect)
-        10
-    }
-    _ => return err
-}
-
-fn add() -> ?int {}
-let res = add() ifnull 10
+let res = add() !! 5
+let res = mul() ?? 5
 ```
 
-### Aliases
+### Extract operator
 
-A key feature is that you can alias in various place with "::"
-Invoking alias don't require using the "::" symbol, only for declaration
-(previoulsy it was `@` for the symbol)
+You can use the extract operator `::` to extract in several place, or sometimes alias.
 
 - Control flow:
+
+You can alias for the entier construct by extracting at the end of the condition or extract on each branch
 
 ```rust
 match get_pet().name :: n {
     "Rodrigo de la suerte" => print(fmt("I'm gonna kill you {}!", n))
-    else => print("Who are you {}?", n)
+    _ => print("Who are you {}?", n)
 }
 
 when pet :: p {
     Cat => print(fmt("I'm gonna kill you {}!", p.cat_method()))
-    else => print("What type are you {}?", p)
+    _ => print("What type are you {}?", p)
 }
 
 // Alias branches (mostly useful for errors' payload)
@@ -289,16 +274,57 @@ when err { // with when, we match the error type
     _ => return err
 }
 
-if a :: res { // custom alias for non-null value
+```
+
+For `if`, you can use it to extract a non-null value or a non-error value. In the latter case, the `else`
+branch can extract the error
+
+```rust
+let maybeNull: ?int = 0
+
+if maybeNull :: res {
+    // Here `res` is an int
     print(res)
 }
 
-if failable_fn() :: val { // custom alias for non-err value
+let maybeErr: int!Error = 0
+
+if maybeErr :: val {
+    // Here val is an int
     print(val)
 } else :: err {
+    // Here err is an error
     print("Error: {}", err) 
 }
 ```
+
+For `while`, it's the same, a non-null value can be extracted in the condition like:
+
+```rust
+while maybeNull() :: value {}
+```
+
+### Trap keyword
+
+To work with errors, there is the `trap` keyword. It can extract the error and is considered as an *expression*.
+It means that it can provide a fallback value as `!!` with the possibility to interact with the error
+
+```rust
+let value = maybeErr() trap 5
+let value = maybeErr() trap { 5 }
+let value = maybeErr() trap :: err {
+    print err
+    5
+}
+let value = maybeErr() trap :: err {
+    match err {
+        MathErr => 5,
+        _ => return err
+    }
+}
+```
+
+### Named loops
 
 - loop aliases are done with `@` before loop keyword so we can mix aliases and loop
 aliases without any confusion:
@@ -321,14 +347,12 @@ Can alias types while working with generics implementation (espacially with unio
 
 ### Nullable
 
-While loops should work with nullable to providing the value in an alias
-if a non-null result is returned
-Can unsafe collapse the nullable with: variable.?
+Nullable is part of a type. In can be unsafe collapsed with `.?` operator and can be extracted
+in different control flow constructs.
 
 ```rust
-fn next() -> ?Token {}
-
-while next() :: val { }
+let value: ?int = 0
+let value_int = value.?
 ```
 
 ### Closure
@@ -407,10 +431,11 @@ trait Add<T, R> {
 
 struct Vec2 { x, y: float }
 
-impl Add<int|float|Vec2 :: T, Vec2> for Vec2 {
+impl Add<T, Vec2> for Vec2 {
     fn add(self, other: T) -> Vec2 when T {
         int|float => Vec2 { x = self.x + other.x, y = self.y + other.y }
         Vec2 => Vec2 { x = self.x + other.x, y = self.y + other.y }
+        _ => panic()
     }
 }
 ```
@@ -489,51 +514,6 @@ let Node {lhs :: l, rhs :: r} = node
 - String interpolation with a `fmt` function in the `std` or the `%` syntaxe
     -> `fmt` function
 
-## Ideas
-
-From Gleam:
-
-- Pipe operator to avoid nested calls
-
-```python
-res = lstrip(rstrip(split("str")))
-```
-
-```gleam
-let res = "str"
-    |> string.strip()
-    |> string.rstrip()
-    |> string.lstrip()
-```
-
-## Debugger
-
-> [!Note]
-> the whole discussion is in my chatgpt, but he approuved the idea
-
-Allow the user the debug the program with a CLI debugger. The user whould be able to inspect
-any variable of any scope currently available including:
-
-- Stack
-- Constants
-- Upvalues
-
-Objectives:
-
-- Don't slow down the Vm when don't used in debug mode
-- Allow CLI usage with a REPL mode like GDB
-
-Solution:
-
-- Create a Debugger structure that owns a Vm instance
-- In the Vm, add a compile flag to enable check of compile hook at each instruction
-- The debugger checks those hooks and checks if current line is in its breakpoints list
-- If yes, in enters REPL mode
-
-That means that we generate two binaries, one is the interpreter without those debug hooks
-and the other contains those, meaning that it will check them unconditionaly
-
-
 ## Thoughts
 The idea is to bring back old operators working with errors (!) and nullable (?) and 
 rework how we work with errors
@@ -609,19 +589,8 @@ fn calculate(a: int) int ! Error {
 }
 ```
 
-### Specialized else
+## Archives
 
-To work with nullable and error, we introduce `else?` and `else!`. It allow to define a fallback value
-
-```rust
-fn get() -> ?int {}
-fn get2() -> int ! Err {}
-
-fn main() {
-    let val = get() else? 5
-    let val2 = get2() else! 5
-}
-```
 ### Specialized if
 
 To work with nullable and error, we introduce `if?` and `if!`. It allow to use control flow
@@ -662,6 +631,20 @@ fn main() {
 }
 ```
 
+### Specialized else
+
+To work with nullable and error, we introduce `else?` and `else!`. It allow to define a fallback value
+
+```rust
+fn get() -> ?int {}
+fn get2() -> int ! Err {}
+
+fn main() {
+    let val = get() else? 5
+    let val2 = get2() else! 5
+}
+```
+
 ### Different aliasing
 
 I was also wondering about `@` for aliasing. It reads quite naturally as `@` is often "at"
@@ -686,3 +669,69 @@ fn main() {
     }
 }
 ```
+
+### (v0) ifnull and iferr
+
+Those keywords are meant to provide a fallback value in case of null/error value.
+For erros, we can pattern match on it with *when*
+Combination of *iferr* and *match* allow to write only once *err* (reduce boilerplate)
+
+```rust
+fn add() -> int!Err {}
+
+let res = add() iferr 5 // fallback value
+
+let res = add() iferr :: err { // fallback value + error usage
+    print(err)
+    5
+}
+
+let res = add() iferr :: err { // custom handling + error propagation
+    print("you really messed up")
+    return err
+}
+
+let res = add() iferr :: err when err { // with when, we match the error type
+    ParserErr.InvalidToken :: tk => {
+        print("got {}", tk.lexeme)
+        5
+    }
+    ParserErr.InvalidType => {
+        print("expected {}, found {}", err.found, err.expect)
+        10
+    }
+    _ => return err
+}
+
+fn add() -> ?int {}
+let res = add() ifnull 10
+```
+
+## Debugger
+
+> [!Note]
+> the whole discussion is in my chatgpt, but he approuved the idea
+
+Allow the user the debug the program with a CLI debugger. The user whould be able to inspect
+any variable of any scope currently available including:
+
+- Stack
+- Constants
+- Upvalues
+
+Objectives:
+
+- Don't slow down the Vm when don't used in debug mode
+- Allow CLI usage with a REPL mode like GDB
+
+Solution:
+
+- Create a Debugger structure that owns a Vm instance
+- In the Vm, add a compile flag to enable check of compile hook at each instruction
+- The debugger checks those hooks and checks if current line is in its breakpoints list
+- If yes, in enters REPL mode
+
+That means that we generate two binaries, one is the interpreter without those debug hooks
+and the other contains those, meaning that it will check them unconditionaly
+
+

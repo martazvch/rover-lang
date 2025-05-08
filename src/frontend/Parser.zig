@@ -757,6 +757,7 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
         } else if (self.match(.dot)) {
             expr = try self.field(expr);
         } else if (self.match(.left_brace)) {
+            // TODO: structure literals are not limited to Identifier with this parsing
             if (self.in_cond and !self.in_group) {
                 self.token_idx -= 1;
                 return expr;
