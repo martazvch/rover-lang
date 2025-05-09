@@ -9,7 +9,7 @@ OP_CONSTANT index 4, value 3
 OP_NATIVE_CALL index 3
 OP_PRINT
 
-OP_GET_GLOBAL index 1
+OP_GET_GLOBAL index 1, <native fn>
 OP_FALSE
 OP_CONSTANT index 5, value 3
 OP_NATIVE_CALL index 2
@@ -58,12 +58,5 @@ OP_POP
 OP_NAKED_RETURN
 
 -- global scope --
-OP_CONSTANT index 0, value <native fn>
-OP_DEFINE_GLOBAL index 0
-OP_CONSTANT index 1, value <native fn>
-OP_DEFINE_GLOBAL index 1
-
-OP_CONSTANT index 2, value <fn main>
-OP_DEFINE_GLOBAL index 2
-OP_GET_GLOBAL index 2
+OP_GET_GLOBAL index 2, <fn main>
 OP_CALL index 0

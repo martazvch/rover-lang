@@ -160,10 +160,6 @@ fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
     self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
 }
 
-fn addSymbol(self: *Self, name: usize, typ: Type) void {
-    self.symbols.put(self.allocator, name, .{ .index = self.symbols.count(), .type = typ }) catch oom();
-}
-
 pub fn analyze(self: *Self, ast: *const Ast) void {
     self.ast = ast;
 
@@ -310,7 +306,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = fn_var, .cast = false } } });
 
     if (self.scope_depth == 0) {
-        self.addSymbol(name_idx, fn_type);
+        self.symbols.put(self.allocator, name_idx, fn_type) catch oom();
     }
 
     self.scope_depth += 1;
@@ -495,7 +491,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     infos.fields.ensureTotalCapacity(self.allocator, @intCast(node.fields.len)) catch oom();
 
     for (node.fields, 0..) |*f, i| {
-        var field_infos: TypeSys.MemberInfo = .{ .type = undefined, .index = i };
+        var field_infos: TypeSys.MemberInfo = .{ .type = undefined, .idx = i };
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (infos.fields.get(field_name) != null) {
@@ -545,7 +541,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     for (node.functions, 0..) |*f, i| {
         const fn_name = self.interner.intern(self.ast.toSource(f.name));
         const fn_type = try self.fnDeclaration(f);
-        infos.functions.putAssumeCapacity(fn_name, .{ .index = i, .type = fn_type });
+        infos.functions.putAssumeCapacity(fn_name, .{ .idx = i, .type = fn_type });
 
         // Update type with each new method
         type_info = .{ .@"struct" = infos };
@@ -567,7 +563,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
     // For now, "std" is interned at initialization in slot 1
     if (first_name == self.std_interned) {
-        const idx = self.addInstr(.{ .tag = .use });
+        const idx = self.addInstr(.{ .tag = .use, .data = undefined });
         // TODO: For now, il keeps synchronized the different arrays of
         // nodes/instructions
         _ = self.addInstr(.{ .tag = .null, .data = undefined });
@@ -624,7 +620,6 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         const module = try self.importModule(node);
         const module_type = TypeSys.create(.module, .none, @intCast(self.imports.items.len));
         self.imports.append(self.allocator, module) catch oom();
-
         const last = node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(last));
         _ = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, last);
@@ -656,6 +651,8 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
 
             _ = file.readAll(buf) catch @panic("error while reading imported file");
             buf[size] = 0;
+
+            std.debug.print("Got content from import:\n{s}\n", .{buf});
 
             var pipeline = self.pipeline.createSubPipeline();
             // TODO: Handle error
@@ -727,10 +724,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
 
     const variable = try self.declareVariable(name, checked_type, initialized, idx, .variable, node.name);
     self.instructions.items(.data)[idx] = .{ .var_decl = .{ .variable = variable, .cast = cast } };
-
-    if (variable.scope == .global) {
-        self.addSymbol(name, checked_type);
-    }
 }
 
 fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
@@ -997,49 +990,63 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 }
 
 fn moduleField(self: *Self, module_idx: usize, field_idx: usize) Type {
+    self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
+        .module = module_idx,
+        .symbol = field_idx,
+    } } });
+    // _ = self.addInstr(.{ .tag = .module_symbol, .data = .{ .module_symbol = .{
+    //     .module = module_idx,
+    //     .symbol = field_idx,
+    // } } });
+
     const module = &self.imports.items[module_idx];
-    const symbol = module.symbols.get(field_idx) orelse {
+    const symbol_type = module.symbols.get(field_idx) orelse {
         // TODO: error
         @panic("Module doesn't have declaration");
     };
 
-    self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
-        .module = module_idx,
-        .symbol = symbol.index,
-    } } });
-
-    return symbol.type;
+    return symbol_type;
 }
 
 fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     const idx = self.addInstr(.{ .tag = .member });
+
+    // const struct_type = switch (expr.structure.*) {
+    //     .literal => |*lit| blk: {
+    //         std.debug.print("Yes, a literla\n", .{});
+    //         const literal_name = self.interner.intern(self.ast.toSource(lit.idx));
+    //         const variable = try self.resolveIdentifier(literal_name, true);
+    //
+    //         // We don't compile instructions if the variable is a module. Modules are kind
+    //         // of placeholder just to track informations. If not a module, generate instructions
+    //         // to get the variable
+    //         if (TypeSys.is(variable.typ, .module)) {
+    //             const infos_index = TypeSys.getValue(variable.typ);
+    //             // return .{ .void, self.moduleField(infos_index, field_idx) };
+    //             return .{ .void, self.moduleField(infos_index, 0) };
+    //         } else {
+    //             self.makeVariableInstr(variable);
+    //             break :blk variable.typ;
+    //         }
+    //     },
+    //     else => try self.analyzeExpr(expr.structure),
+    // };
+    // const field_idx = self.interner.intern(self.ast.toSource(expr.field));
+
+    const struct_type = try self.analyzeExpr(expr.structure);
     const field_idx = self.interner.intern(self.ast.toSource(expr.field));
 
-    const struct_type = switch (expr.structure.*) {
-        .literal => |*lit| blk: {
-            const variable = try self.resolveIdentifier(lit.idx, true);
+    const infos_index = TypeSys.getValue(struct_type);
 
-            // We don't compile instructions if the variable is a module. Modules are kind
-            // of placeholder just to track informations. If not a module, generate instructions
-            // to get the variable
-            if (TypeSys.is(variable.typ, .module)) {
-                const infos_index = TypeSys.getValue(variable.typ);
-                return .{ .void, self.moduleField(infos_index, field_idx) };
-            } else {
-                self.makeVariableInstr(variable);
-                break :blk variable.typ;
-            }
-        },
-        else => try self.analyzeExpr(expr.structure),
-    };
-
-    const infos = if (TypeSys.is(struct_type, .@"struct")) blk: {
-        const infos_index = TypeSys.getValue(struct_type);
-        break :blk self.type_manager.type_infos.items[infos_index].@"struct";
-    } else return self.err(
-        .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
-        self.ast.getSpan(expr.structure),
-    );
+    const infos = if (TypeSys.is(struct_type, .@"struct"))
+        self.type_manager.type_infos.items[infos_index].@"struct"
+    else if (TypeSys.is(struct_type, .module))
+        return .{ .void, self.moduleField(infos_index, field_idx) }
+    else
+        return self.err(
+            .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
+            self.ast.getSpan(expr.structure),
+        );
 
     var found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_idx)) |f|
         .{ f, .field }
@@ -1051,7 +1058,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
             self.ast.getSpan(expr.field),
         );
 
-    self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.index, .kind = kind } };
+    self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.idx, .kind = kind } };
 
     if (kind == .bound_method)
         found_field.type = TypeSys.setExtra(found_field.type, .bound_method);
@@ -1417,7 +1424,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
             if (infos.fields.get(field_name)) |f| {
                 proto.putAssumeCapacity(field_name, true);
-                self.instructions.items(.data)[start + f.index] = .{ .member = .{
+                self.instructions.items(.data)[start + f.idx] = .{ .member = .{
                     .index = self.instructions.len,
                     .kind = .field,
                 } };

@@ -5,17 +5,20 @@ const print = std.debug.print;
 
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
+const Value = @import("../runtime/values.zig").Value;
 
 chunk: *const Chunk,
+globals: []const Value,
 disassembled: ArrayList(u8),
 render_mode: RenderMode,
 
 const Self = @This();
 pub const RenderMode = enum { none, Normal, Test };
 
-pub fn init(chunk: *const Chunk, allocator: Allocator, render_mode: RenderMode) Self {
+pub fn init(allocator: Allocator, chunk: *const Chunk, globals: []const Value, render_mode: RenderMode) Self {
     return .{
         .chunk = chunk,
+        .globals = globals,
         .disassembled = ArrayList(u8).init(allocator),
         .render_mode = render_mode,
     };
@@ -48,6 +51,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
         .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
+        .call => self.indexInstruction("OP_CALL", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
         .constant => self.constantInstruction("OP_CONSTANT", offset, writer),
         .define_heap_var => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
@@ -60,11 +64,10 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .eq_str => self.simpleInstruction("OP_EQUAL_STRING", offset, writer),
         .exit_repl => self.simpleInstruction("OP_EXIT_REPL", offset, writer),
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
-        .call => self.indexInstruction("OP_CALL", offset, writer),
         // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
         .field_assign => self.simpleInstruction("OP_FIELD_ASSIGN", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", offset, writer),
-        .get_global => self.indexInstruction("OP_GET_GLOBAL", offset, writer),
+        .get_global => self.getGlobal(offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
@@ -80,6 +83,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .le_float => self.simpleInstruction("OP_LESS_EQUAL_FLOAT", offset, writer),
         .le_int => self.simpleInstruction("OP_LESS_EQUAL_INT", offset, writer),
         .loop => self.jumpInstruction("OP_LOOP", -1, offset, writer),
+        .module_symbol => self.moduleSymbol(offset, writer),
         .mul_float => self.simpleInstruction("OP_MULTIPLY_FLOAT", offset, writer),
         .mul_int => self.simpleInstruction("OP_MULTIPLY_INT", offset, writer),
         .naked_return => self.simpleInstruction("OP_NAKED_RETURN", offset, writer),
@@ -127,6 +131,24 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     } else {
         try writer.print("{s:<24} index {:>4}\n", .{ name, index });
     }
+
+    return offset + 2;
+}
+
+fn getGlobal(self: *const Self, offset: usize, writer: anytype) !usize {
+    const index = self.chunk.code.items[offset + 1];
+
+    if (self.render_mode == .Test) {
+        try writer.print("{s} index {}", .{ "OP_GET_GLOBAL", index });
+    } else {
+        try writer.print("{s:<24} index {:>4}", .{ "OP_GET_GLOBAL", index });
+    }
+
+    if (self.globals[index].asObj()) |obj| {
+        try writer.writeAll(", ");
+        try obj.print(writer);
+    }
+    try writer.writeAll("\n");
 
     return offset + 2;
 }
@@ -213,6 +235,19 @@ fn invokeInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
         try writer.print("{s:} arity {}, method index {}\n", .{ "OP_INVOKE", arity, method_idx });
     } else {
         try writer.print("{s:<24} arity {}, method index {}\n", .{ "OP_INVOKE", arity, method_idx });
+    }
+
+    return offset + 3;
+}
+
+fn moduleSymbol(self: *const Self, offset: usize, writer: anytype) !usize {
+    const module = self.chunk.code.items[offset + 1];
+    const symbol = self.chunk.code.items[offset + 2];
+
+    if (self.render_mode == .Test) {
+        try writer.print("{s:} module {}, symbol {}\n", .{ "OP_MODULE_SYMBOL", module, symbol });
+    } else {
+        try writer.print("{s:<24} module {:>4}, symbol {:>4}\n", .{ "OP_MODULE_SYMBOL", module, symbol });
     }
 
     return offset + 3;

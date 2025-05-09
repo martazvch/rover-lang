@@ -7,7 +7,9 @@ const options = @import("options");
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
+const Interner = @import("../Interner.zig");
 const Pipeline = @import("../Pipeline.zig");
+const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const ObjFunction = Obj.ObjFunction;
@@ -18,53 +20,46 @@ const ObjStruct = Obj.ObjStruct;
 const ObjBoundMethod = Obj.ObjBoundMethod;
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
-const oom = @import("../utils.zig").oom;
 
 pipeline: Pipeline,
 gc: Gc,
+module: Pipeline.Module,
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
 allocator: Allocator,
 gc_alloc: Allocator,
 stdout: std.fs.File.Writer,
+interner: Interner,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
-globals: [256]Value, // TODO: ArrayList or constant, not hard written
 heap_vars: []Value,
 
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
 
 pub const Config = struct {
-    embedded: bool,
-    print_ast: bool,
-    print_bytecode: bool,
-    static_analyzis: bool,
-    print_ir: bool,
-
-    pub const default: Config = .{
-        .embedded = false,
-        .print_ast = false,
-        .print_bytecode = false,
-        .static_analyzis = false,
-        .print_ir = false,
-    };
+    embedded: bool = false,
+    print_ast: bool = false,
+    print_bytecode: bool = false,
+    static_analyzis: bool = false,
+    print_ir: bool = false,
 };
 
 pub const empty: Self = .{
-    .pipeline = undefined,
+    .pipeline = .empty,
     .gc = undefined,
     .gc_alloc = undefined,
+    .module = undefined,
     .stack = .empty,
     .frame_stack = .empty,
     .ip = undefined,
     .allocator = undefined,
     .stdout = undefined,
+    .interner = undefined,
     .strings = undefined,
     .objects = null,
-    .globals = undefined,
     .heap_vars = undefined,
 };
 
@@ -75,6 +70,7 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.gc = .init(allocator);
     self.gc_alloc = self.gc.allocator();
     self.stdout = std.io.getStdOut().writer();
+    self.interner = .init(allocator);
     self.gc.link(self);
     self.pipeline.init(self, config);
     self.stack.init();
@@ -89,7 +85,9 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
 }
 
 pub fn deinit(self: *Self) void {
+    self.allocator.free(self.module.globals);
     self.allocator.free(self.heap_vars);
+    self.interner.deinit();
     self.gc.deinit();
     self.strings.deinit();
     self.freeObjects();
@@ -131,11 +129,12 @@ fn instructionNb(self: *const Self) usize {
 }
 
 pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
-    const module = self.pipeline.run(filename, source) catch |e| switch (e) {
+    self.module = self.pipeline.run(filename, source) catch |e| switch (e) {
         error.ExitOnPrint => return,
         else => return e,
     };
-    try self.call(module.function, 0);
+
+    try self.call(self.module.function, 0);
     self.gc.active = true;
     try self.execute();
 }
@@ -187,7 +186,7 @@ fn execute(self: *Self) !void {
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.init(&frame.function.chunk, self.allocator, .Normal);
+            var dis = Disassembler.init(self.allocator, &frame.function.chunk, self.module.globals, .Normal);
             defer dis.deinit();
             const instr_nb = self.instructionNb();
             _ = try dis.disInstruction(instr_nb, self.stdout);
@@ -235,7 +234,7 @@ fn execute(self: *Self) !void {
             },
             .define_global => {
                 const idx = frame.readByte();
-                self.globals[idx] = self.stack.pop();
+                self.module.globals[idx] = self.stack.pop();
             },
             .div_float => {
                 const rhs = self.stack.pop().float;
@@ -262,7 +261,10 @@ fn execute(self: *Self) !void {
                 self.stack.push(field.*);
             },
             // Compiler bug: https://github.com/ziglang/zig/issues/13938
-            .get_global => self.stack.push((&self.globals)[frame.readByte()]),
+            .get_global => {
+                const idx = frame.readByte();
+                self.stack.push(self.module.globals[idx]);
+            },
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
@@ -296,6 +298,12 @@ fn execute(self: *Self) !void {
             .loop => {
                 const jump = frame.readShort();
                 frame.ip -= jump;
+            },
+            .module_symbol => {
+                const module = frame.readByte();
+                const symbol = frame.readByte();
+                const imported = self.module.imports[module].function.chunk.constants[symbol];
+                self.stack.push(imported);
             },
             .mul_float => {
                 const rhs = self.stack.pop().float;
@@ -366,7 +374,10 @@ fn execute(self: *Self) !void {
                 self.stack.top -= locals_count;
                 self.stack.push(res);
             },
-            .set_global => self.globals[frame.readByte()] = self.stack.pop(),
+            .set_global => {
+                const idx = frame.readByte();
+                self.module.globals[idx] = self.stack.pop();
+            },
             .set_heap => self.heap_vars[frame.readByte()] = self.stack.pop(),
             .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
             .str_cat => self.strConcat(),
@@ -379,7 +390,7 @@ fn execute(self: *Self) !void {
 
                 const structure = switch (scope) {
                     .get_local => frame.slots[idx].obj.as(ObjStruct),
-                    .get_global => self.globals[idx].obj.as(ObjStruct),
+                    .get_global => self.module.globals[idx].obj.as(ObjStruct),
                     else => unreachable,
                 };
 
@@ -418,7 +429,7 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
         const idx = frame.readByte();
 
         break :blk if (op == .get_global)
-            &self.globals[idx]
+            &self.module.globals[idx]
         else if (op == .get_heap)
             &self.heap_vars[idx]
         else
@@ -436,7 +447,7 @@ fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction }
         const idx = frame.readByte();
 
         break :blk if (scope_op == .get_global)
-            &self.globals[idx]
+            &self.module.globals[idx]
         else if (scope_op == .get_heap)
             &self.heap_vars[idx]
         else

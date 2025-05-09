@@ -6,41 +6,37 @@
 OP_CONSTANT index 0, value 5
 OP_CONSTANT index 1, value "Tom"
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_CONSTANT index 2, value 5
 OP_CONSTANT index 3, value "Tom"
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_SET_LOCAL index 1
 OP_CONSTANT index 4, value 95
 OP_GET_LOCAL index 2
 OP_CONSTANT index 5, value "Tom"
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_SET_LOCAL index 1
 OP_CONSTANT index 6, value "Tom"
 OP_CONSTANT index 7, value 6
 OP_GET_LOCAL index 3
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_SET_LOCAL index 1
 OP_GET_LOCAL index 2
 OP_GET_LOCAL index 3
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_SET_LOCAL index 1
 OP_GET_LOCAL index 2
 OP_GET_LOCAL index 3
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <structure Human>
 OP_SET_LOCAL index 1
 OP_NAKED_RETURN
 
 -- global scope --
-OP_CONSTANT index 0, value <structure Human>
-OP_DEFINE_GLOBAL index 0
-OP_CONSTANT index 1, value <fn main>
-OP_DEFINE_GLOBAL index 1
-OP_GET_GLOBAL index 1
+OP_GET_GLOBAL index 1, <fn main>
 OP_CALL index 0
 

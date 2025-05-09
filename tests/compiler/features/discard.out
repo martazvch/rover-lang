@@ -6,7 +6,5 @@ OP_POP
 OP_NAKED_RETURN
 
 -- global scope --
-OP_CONSTANT index 0, value <fn main>
-OP_DEFINE_GLOBAL index 0
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <fn main>
 OP_CALL index 0

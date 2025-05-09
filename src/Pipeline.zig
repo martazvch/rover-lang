@@ -2,30 +2,33 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const options = @import("options");
+const oom = @import("utils.zig").oom;
 
+const Lexer = @import("frontend/Lexer.zig");
+const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
+const Ast = @import("frontend/Ast.zig");
+const AstRender = @import("frontend/AstRender.zig");
+const Parser = @import("frontend/Parser.zig");
+const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
+const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("frontend/Ast.zig");
-const AstRender = @import("frontend/AstRender.zig");
-const Lexer = @import("frontend/Lexer.zig");
-const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const Parser = @import("frontend/Parser.zig");
-const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
+const Symbols = @import("frontend/type_system.zig").Symbols;
+const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const ObjFunction = @import("runtime/Obj.zig").ObjFunction;
+const Value = @import("runtime/values.zig").Value;
 const Vm = @import("runtime/Vm.zig");
-const Interner = @import("Interner.zig");
 
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
-interner: Interner,
 config: Vm.Config,
 analyzer: Analyzer,
+type_manager: TypeManager,
 instr_count: usize,
 code_count: usize,
 
@@ -38,6 +41,7 @@ pub const empty: Self = .{
     .allocator = undefined,
     .config = undefined,
     .analyzer = undefined,
+    .type_manager = undefined,
     .instr_count = 0,
     .code_count = 0,
 };
@@ -46,31 +50,36 @@ pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
     self.vm = vm;
     self.arena = .init(vm.allocator);
     self.allocator = self.arena.allocator();
-    self.interner = .init(self.allocator);
     self.config = config;
     self.analyzer = undefined;
-    self.analyzer.init(self.allocator, &self.interner, config.embedded);
+    self.analyzer.init(self.allocator, self, &self.vm.interner, config.embedded);
+    self.type_manager = .init(self.allocator);
+    self.type_manager.init_builtins(&self.vm.interner);
 }
 
 pub fn deinit(self: *Self) void {
     self.arena.deinit();
 }
 
+// TODO: clean unused
 pub const Module = struct {
-    symbols: Analyzer.Symbols,
+    name: []const u8,
+    imports: []Module,
+    symbols: Symbols,
     function: *ObjFunction,
+    globals: []Value,
 };
 
 /// Runs the pipeline
-pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
+pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Lexer
     var lexer = Lexer.init(self.allocator);
-    try lexer.lex(source);
+    lexer.lex(source);
     defer lexer.deinit();
 
     if (lexer.errs.items.len > 0) {
         var reporter = GenReporter(LexerMsg).init(source);
-        try reporter.reportAll(filename, lexer.errs.items);
+        try reporter.reportAll(file_name, lexer.errs.items);
         return error.ExitOnPrint;
     }
 
@@ -80,7 +89,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
     defer parser.deinit();
 
     const token_slice = lexer.tokens.toOwnedSlice();
-    var ast = try parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
+    var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
     if (options.test_mode and self.config.print_ast) {
         try printAst(self.allocator, &ast, &parser);
@@ -89,12 +98,12 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
 
     if (parser.errs.items.len > 0) {
         var reporter = GenReporter(ParserMsg).init(source);
-        try reporter.reportAll(filename, parser.errs.items);
+        try reporter.reportAll(file_name, parser.errs.items);
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
     // Analyzer
-    try self.analyzer.analyze(&ast);
+    self.analyzer.analyze(&ast);
     defer self.analyzer.reinit();
 
     // We don't keep errors/warnings from a prompt to another
@@ -103,28 +112,28 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
-        try self.renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
         return error.ExitOnPrint;
     }
 
     if (self.analyzer.errs.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.reportAll(filename, self.analyzer.errs.items);
+        try reporter.reportAll(file_name, self.analyzer.errs.items);
 
         if (self.analyzer.warns.items.len > 0) {
             reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.reportAll(filename, self.analyzer.warns.items);
+            try reporter.reportAll(file_name, self.analyzer.warns.items);
         }
 
         self.instr_count = self.analyzer.instructions.len;
         return error.ExitOnPrint;
     } else if (self.config.print_ir)
-        try self.renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
     // Analyzer warnings
     if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.reportAll(filename, self.analyzer.warns.items);
+        try reporter.reportAll(file_name, self.analyzer.warns.items);
         return error.ExitOnPrint;
     }
 
@@ -132,9 +141,9 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
     var compiler = CompilationManager.init(
         self.vm,
         self.analyzer.type_manager.natives.functions,
-        &self.interner,
         self.instr_count,
         &self.analyzer.instructions,
+        &self.analyzer.symbols,
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
@@ -142,11 +151,18 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
     defer compiler.deinit();
     self.instr_count = self.analyzer.instructions.len;
     const function = try compiler.compile();
+    errdefer compiler.globals.deinit(self.vm.allocator);
 
-    return if (options.test_mode and self.config.print_bytecode)
-        error.ExitOnPrint
-    else
-        .{ .symbols = self.analyzer.symbols, .function = function };
+    return if (options.test_mode and self.config.print_bytecode) {
+        return error.ExitOnPrint;
+    } else .{
+        .name = file_name[0 .. file_name.len - 3],
+        .imports = self.analyzer.imports.toOwnedSlice(self.allocator) catch oom(),
+        .symbols = self.analyzer.symbols,
+        .function = function,
+        // TODO: use only one allocator?
+        .globals = compiler.globals.toOwnedSlice(self.vm.allocator) catch oom(),
+    };
 }
 
 fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
@@ -167,6 +183,7 @@ fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void 
 fn renderIr(
     self: *Self,
     allocator: Allocator,
+    file_name: []const u8,
     source: [:0]const u8,
     analyzer: *const Analyzer,
     start: usize,
@@ -175,15 +192,30 @@ fn renderIr(
     var rir_renderer = RirRenderer.init(
         allocator,
         source,
-        start,
-        analyzer.instructions,
+        analyzer.instructions.items(.tag)[start..],
+        analyzer.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
-        &self.interner,
+        &self.vm.interner,
         static,
     );
     defer rir_renderer.deinit();
 
-    try rir_renderer.parse_ir();
+    try rir_renderer.parse_ir(file_name);
     try rir_renderer.display();
+}
+
+pub fn createSubPipeline(self: *Self) Self {
+    var pipeline: Self = .empty;
+    var sub_config = self.config;
+    // FIX: To make 'main' function not mandatory
+    sub_config.embedded = true;
+
+    pipeline.vm = self.vm;
+    pipeline.arena = self.arena;
+    pipeline.allocator = self.allocator;
+    pipeline.config = sub_config;
+    pipeline.analyzer.init(self.allocator, self, &self.vm.interner, true);
+
+    return pipeline;
 }

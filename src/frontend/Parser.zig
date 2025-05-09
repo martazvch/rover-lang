@@ -29,7 +29,7 @@ in_group: bool = false,
 
 const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
-const Error = error{err} || std.fmt.ParseIntError;
+const Error = error{Err};
 
 pub const empty: Self = .{
     .source = undefined,
@@ -51,7 +51,7 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Parses the token stream
-pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, token_spans: []const Span) Error!Ast {
+pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, token_spans: []const Span) Ast {
     self.source = source;
     self.token_tags = token_tags;
     self.token_spans = token_spans;
@@ -61,11 +61,11 @@ pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, t
     while (!self.match(.eof)) {
         const stmt = self.declaration() catch |e| switch (e) {
             // If it's our own error, we continue on parsing
-            Error.err => {
+            Error.Err => {
                 self.synchronize();
                 continue;
             },
-            else => return e,
+            // else => return e,
         };
         self.nodes.append(self.allocator, stmt) catch oom();
 
@@ -184,14 +184,14 @@ fn errAtPrev(self: *Self, error_kind: ParserMsg) Error {
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
 fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
-    if (self.panic_mode) return error.err;
+    if (self.panic_mode) return error.Err;
 
     self.panic_mode = true;
 
     const report = ParserReport.err(error_kind, self.token_spans[token]);
     self.errs.append(report) catch oom();
 
-    return error.err;
+    return error.Err;
 }
 
 /// If error already encountered and in the same statement parsing,
@@ -199,14 +199,14 @@ fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
 fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
-    if (self.panic_mode) return error.err;
+    if (self.panic_mode) return error.Err;
 
     self.panic_mode = true;
 
     const report = ParserReport.err(error_kind, span);
     self.errs.append(report) catch oom();
 
-    return error.err;
+    return error.Err;
 }
 
 fn synchronize(self: *Self) void {

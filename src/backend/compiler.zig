@@ -9,7 +9,7 @@ const Rir = @import("../frontend/rir.zig");
 const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
-const Interner = @import("../Interner.zig");
+const Symbols = @import("../frontend/type_system.zig").Symbols;
 const GenReport = @import("../reporter.zig").GenReport;
 const ObjString = @import("../runtime/Obj.zig").ObjString;
 const ObjFunction = @import("../runtime/Obj.zig").ObjFunction;
@@ -18,26 +18,27 @@ const ObjStruct = @import("../runtime/Obj.zig").ObjStruct;
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
+const oom = @import("../utils.zig").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
-const oom = @import("../utils.zig").oom;
 
 pub const CompilationManager = struct {
     vm: *Vm,
     natives: []const NativeFn,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
-    interner: *const Interner,
     instr_tags: []const Instruction.Tag,
     instr_data: []const Instruction.Data,
     instr_offsets: []const usize,
     instr_idx: usize,
+    symbols: *Symbols,
     render_mode: Disassembler.RenderMode,
     main: usize,
     main_index: ?u8 = null,
     repl: bool,
     heap_count: usize = 0,
+    globals: ArrayListUnmanaged(Value) = .{},
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -46,9 +47,9 @@ pub const CompilationManager = struct {
     pub fn init(
         vm: *Vm,
         natives: []const NativeFn,
-        interner: *const Interner,
         instr_start: usize,
         instructions: *const MultiArrayList(Instruction),
+        symbols: *Symbols,
         render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
@@ -58,10 +59,10 @@ pub const CompilationManager = struct {
             .natives = natives,
             .compiler = undefined,
             .errs = .init(vm.allocator),
-            .interner = interner,
             .instr_tags = instructions.items(.tag),
             .instr_data = instructions.items(.data),
             .instr_offsets = instructions.items(.offset),
+            .symbols = symbols,
             .instr_idx = instr_start,
             .render_mode = render_mode,
             .main = main,
@@ -75,6 +76,11 @@ pub const CompilationManager = struct {
 
     pub fn compile(self: *Self) !*ObjFunction {
         self.compiler = Compiler.init(self, "global scope");
+
+        // TODO: maybe separate globals and put it in the manager as every other spawned compilers
+        // will be for local functions
+        // self.compiler.function.chunk.globals.ensureTotalCapacity(self.vm.gc_alloc, self.symbols.count()) catch oom();
+        self.globals.ensureTotalCapacity(self.vm.allocator, self.symbols.count()) catch oom();
 
         while (self.instr_idx < self.instr_tags.len) {
             try self.compiler.compileInstr();
@@ -163,6 +169,10 @@ const Compiler = struct {
         );
     }
 
+    fn addGlobal(self: *Self, global: Value) void {
+        self.manager.globals.appendAssumeCapacity(global);
+    }
+
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
@@ -226,9 +236,13 @@ const Compiler = struct {
     }
 
     pub fn end(self: *Self) Error!*ObjFunction {
-        // Disassembler
         if (self.manager.render_mode != .none) {
-            var dis = Disassembler.init(&self.function.chunk, self.manager.vm.allocator, self.manager.render_mode);
+            var dis = Disassembler.init(
+                self.manager.vm.allocator,
+                &self.function.chunk,
+                self.manager.globals.items,
+                self.manager.render_mode,
+            );
             defer dis.deinit();
             dis.disChunk(if (self.function.name) |n| n.chars else "Script") catch oom();
             const stdout = std.io.getStdOut().writer();
@@ -248,17 +262,19 @@ const Compiler = struct {
             .bool => self.boolInstr(),
             .cast => self.cast(),
             .discard => self.discard(),
-            .member => self.getMember(),
             .float => self.floatInstr(),
             .call => self.fnCall(),
             .fn_decl => self.fnDecl(),
-            .name => unreachable,
             .identifier => self.identifier(false),
             .identifier_id => self.identifier(true),
+            // TODO: remove
             .imported => unreachable,
             .int => self.intInstr(),
             .@"if" => self.ifInstr(),
+            .member => self.getMember(),
+            .module_symbol => self.moduleSymbol(),
             .multiple_var_decl => self.multipleVarDecl(),
+            .name => unreachable,
             .null => self.nullInstr(),
             .print => self.print(),
             .@"return" => self.returnInstr(),
@@ -434,6 +450,15 @@ const Compiler = struct {
         try self.compileInstr();
     }
 
+    fn moduleSymbol(self: *Self) Error!void {
+        const data = self.getData().module_symbol;
+        const start = self.getStart();
+        self.manager.instr_idx += 1;
+
+        self.writeOpAndByte(.module_symbol, @intCast(data.module), start);
+        self.writeByte(@intCast(data.symbol), start);
+    }
+
     fn floatInstr(self: *Self) Error!void {
         try self.emitConstant(Value.makeFloat(self.getData().float), self.getStart());
         self.manager.instr_idx += 1;
@@ -488,14 +513,27 @@ const Compiler = struct {
 
         const data = self.getData().fn_decl;
         self.manager.instr_idx += 1;
-        const fn_name = self.manager.interner.getKey(self.getData().id).?;
+        const name_idx = self.getData().id;
+        const fn_name = self.manager.vm.interner.getKey(name_idx).?;
         self.manager.instr_idx += 1;
         const fn_var = self.getData().var_decl.variable;
         self.manager.instr_idx += 1;
 
         const func = try self.compileFn(fn_name, data);
-        try self.emitConstant(Value.makeObj(func.asObj()), 0);
-        self.defineVariable(fn_var, 0);
+
+        // TEST:
+        if (fn_var.scope == .global) {
+            self.addGlobal(Value.makeObj(func.asObj()));
+        } else {
+            // TODO: check if put on the stack, should be no need
+            try self.emitConstant(Value.makeObj(func.asObj()), 0);
+            self.defineVariable(fn_var, 0);
+        }
+
+        // Linking if amoung exported symbols
+        // if (self.manager.symbols.getPtr(name_idx)) |symbol| {
+        //     symbol.index = self.function.chunk.constant_count - 1;
+        // }
 
         // Check for main function
         if (idx == self.manager.main) {
@@ -605,7 +643,7 @@ const Compiler = struct {
         try self.emitConstant(
             Value.makeObj(ObjString.copy(
                 self.manager.vm,
-                self.manager.interner.getKey(self.getData().id).?,
+                self.manager.vm.interner.getKey(self.getData().id).?,
             ).asObj()),
             self.getStart(),
         );
@@ -627,7 +665,7 @@ const Compiler = struct {
         for (0..data.func_count) |_| {
             const fn_data = self.getData().fn_decl;
             self.manager.instr_idx += 1;
-            const fn_name = self.manager.interner.getKey(self.getData().id).?;
+            const fn_name = self.manager.vm.interner.getKey(self.getData().id).?;
             // Skip `variable` cause not needed here
             self.manager.instr_idx += 2;
 
@@ -635,16 +673,33 @@ const Compiler = struct {
             funcs.appendAssumeCapacity(func);
         }
 
-        try self.emitConstant(
-            Value.makeObj(ObjStruct.create(
-                self.manager.vm,
-                ObjString.copy(self.manager.vm, self.manager.interner.getKey(name).?),
-                data.fields_count,
-                funcs.toOwnedSlice(self.manager.vm.allocator) catch oom(),
-            ).asObj()),
-            self.getStart(),
-        );
-        self.defineVariable(struct_var.variable, start);
+        const structure = Value.makeObj(ObjStruct.create(
+            self.manager.vm,
+            ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+            data.fields_count,
+            funcs.toOwnedSlice(self.manager.vm.allocator) catch oom(),
+        ).asObj());
+
+        if (struct_var.variable.scope == .global) {
+            self.addGlobal(structure);
+        } else {
+            try self.emitConstant(
+                structure,
+                self.getStart(),
+            );
+            self.defineVariable(struct_var.variable, start);
+        }
+
+        // try self.emitConstant(
+        //     Value.makeObj(ObjStruct.create(
+        //         self.manager.vm,
+        //         ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+        //         data.fields_count,
+        //         funcs.toOwnedSlice(self.manager.vm.allocator) catch oom(),
+        //     ).asObj()),
+        //     self.getStart(),
+        // );
+        // self.defineVariable(struct_var.variable, start);
     }
 
     fn structLiteral(self: *Self) Error!void {
@@ -716,10 +771,12 @@ const Compiler = struct {
             self.manager.instr_idx += 1;
         } else {
             try self.compileInstr();
-
             if (data.cast) try self.compileInstr();
         }
 
+        // TODO: Fix this, just to avoid accessing an empty slot at runtime
+        // If we are top level, value should be pure and compile time known
+        if (data.variable.scope == .global) self.addGlobal(.null_);
         self.defineVariable(data.variable, start);
 
         if (data.variable.scope == .heap) {

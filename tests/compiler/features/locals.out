@@ -18,7 +18,5 @@ OP_NAKED_RETURN
 -- global scope --
 OP_CONSTANT index 0, value "sneaky"
 OP_DEFINE_GLOBAL index 0
-OP_CONSTANT index 1, value <fn main>
-OP_DEFINE_GLOBAL index 1
-OP_GET_GLOBAL index 1
+OP_GET_GLOBAL index 1, <fn main>
 OP_CALL index 0

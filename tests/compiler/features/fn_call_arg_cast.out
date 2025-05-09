@@ -13,7 +13,7 @@ OP_CAST_TO_FLOAT
 OP_CALL index 2
 
 // Call to sub
-OP_GET_GLOBAL index 0
+OP_GET_GLOBAL index 0, <fn sub>
 OP_CONSTANT index 3, value 1
 OP_CAST_TO_FLOAT
 OP_CONSTANT index 4, value 2
@@ -25,10 +25,5 @@ OP_CALL index 3
 OP_NAKED_RETURN
 
 -- global scope --
-OP_CONSTANT index 0, value <fn sub>
-OP_DEFINE_GLOBAL index 0
-
-OP_CONSTANT index 1, value <fn main>
-OP_DEFINE_GLOBAL index 1
-OP_GET_GLOBAL index 1
+OP_GET_GLOBAL index 1, <fn main>
 OP_CALL index 0

@@ -1,5 +1,6 @@
 use math
 
 fn main() {
-
+    math.introduce()
+    //var vec = math.getVecFromPos(1, 2)
 }

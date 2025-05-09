@@ -23,7 +23,7 @@ pub const RirRenderer = struct {
     static_analyzis: bool,
     indent_level: u8 = 0,
     tree: ArrayList(u8),
-    instr_idx: usize,
+    instr_idx: usize = 0,
 
     const indent_size: u8 = 4;
     const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -34,8 +34,8 @@ pub const RirRenderer = struct {
     pub fn init(
         allocator: Allocator,
         source: []const u8,
-        from: usize,
-        instructions: std.MultiArrayList(Instruction),
+        instr_tags: []const Instruction.Tag,
+        instr_data: []const Instruction.Data,
         errs: []const AnalyzerReport,
         warns: []const AnalyzerReport,
         interner: *const Interner,
@@ -43,15 +43,13 @@ pub const RirRenderer = struct {
     ) Self {
         return .{
             .source = source,
-            .instr_tags = instructions.items(.tag)[from..],
-            .instr_data = instructions.items(.data)[from..],
+            .instr_tags = instr_tags,
+            .instr_data = instr_data,
             .errs = errs,
             .warns = warns,
             .interner = interner,
             .static_analyzis = static_analyzis,
-            .indent_level = 0,
             .tree = ArrayList(u8).init(allocator),
-            .instr_idx = 0,
         };
     }
 
@@ -68,7 +66,11 @@ pub const RirRenderer = struct {
         try self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]);
     }
 
-    pub fn parse_ir(self: *Self) !void {
+    pub fn parse_ir(self: *Self, file_name: []const u8) !void {
+        var writer = self.tree.writer();
+        // TODO: remove the comment
+        try writer.print("//-- {s} --\n", .{file_name});
+
         if (self.errs.len > 0)
             try self.parseErrs()
         else if (self.static_analyzis and self.warns.len > 0)
@@ -118,19 +120,21 @@ pub const RirRenderer = struct {
             .binop => self.binop(index),
             .block => self.block(index),
             .bool => self.boolInstr(index),
+            .call => self.fnCall(index),
             .cast => self.cast(index),
             .discard => self.discard(),
             .float => self.floatInstr(index),
-            .call => self.fnCall(index),
-            .member => self.getField(index),
             .fn_decl => self.fnDeclaration(index),
-            .name => unreachable,
             .identifier => self.identifier(index, false),
             .identifier_id => self.identifier(index, true),
             .@"if" => self.ifInstr(index),
+            // TODO: delete later
             .imported => unreachable,
             .int => self.intInstr(),
+            .member => self.getMember(index),
+            .module_symbol => self.moduleSymbol(index),
             .multiple_var_decl => self.multipleVarDecl(),
+            .name => unreachable,
             .null => {
                 try self.indent();
                 try self.tree.appendSlice("[Null]\n");
@@ -194,7 +198,7 @@ pub const RirRenderer = struct {
         try writer.writeAll("[Field assignment]\n");
 
         self.indent_level += 1;
-        try self.getField(self.instr_idx);
+        try self.getMember(self.instr_idx);
         self.indent_level -= 1;
     }
 
@@ -300,7 +304,7 @@ pub const RirRenderer = struct {
         self.indent_level -= 1;
     }
 
-    fn getField(self: *Self, instr: usize) Error!void {
+    fn getMember(self: *Self, instr: usize) Error!void {
         const data = self.instr_data[instr].member;
         self.instr_idx += 1;
 
@@ -318,6 +322,15 @@ pub const RirRenderer = struct {
         // Variable
         try self.parseInstr(self.instr_idx);
         self.indent_level -= 1;
+    }
+
+    fn moduleSymbol(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].module_symbol;
+        self.instr_idx += 1;
+
+        try self.indent();
+        var writer = self.tree.writer();
+        try writer.print("[Module {}, symbol {}]\n", .{ data.module, data.symbol });
     }
 
     fn fnDeclaration(self: *Self, instr: usize) Error!void {

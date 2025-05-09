@@ -1,14 +1,16 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Value = @import("../runtime/values.zig").Value;
 const oom = @import("../utils.zig").oom;
 
+allocator: Allocator,
 code: ArrayList(u8),
 offsets: ArrayList(usize),
+// globals: ArrayListUnmanaged(Value),
 constants: [CONST_MAX]Value,
-// constants: ArrayList(Value),
 constant_count: u8,
 
 const Self = @This();
@@ -17,9 +19,10 @@ pub const Error = error{TooManyConst};
 
 pub fn init(allocator: Allocator) Self {
     return .{
+        .allocator = allocator,
         .code = ArrayList(u8).init(allocator),
         .offsets = ArrayList(usize).init(allocator),
-        // .constants = ArrayList(Value).init(allocator),
+        // .globals = .{},
         .constants = undefined,
         .constant_count = 0,
     };
@@ -28,6 +31,7 @@ pub fn init(allocator: Allocator) Self {
 pub fn deinit(self: *Self) void {
     self.code.deinit();
     self.offsets.deinit();
+    // self.globals.deinit(self.allocator);
 }
 
 pub fn writeOp(self: *Self, op: OpCode, offset: usize) void {
@@ -42,17 +46,17 @@ pub fn writeByte(self: *Self, byte: u8, offset: usize) void {
 
 pub fn writeConstant(self: *Self, value: Value) Error!u8 {
     if (self.constant_count == CONST_MAX) {
-        // if (self.constants.items.len == CONST_MAX) {
         return error.TooManyConst;
     }
-
-    // try self.constants.append(value);
-    // return @intCast(self.constants.items.len - 1);
 
     self.constants[self.constant_count] = value;
     self.constant_count += 1;
     return self.constant_count - 1;
 }
+
+// pub fn addGlobal(self: *Self, global: Value) void {
+//     self.globals.append(self.allocator, global) catch oom();
+// }
 
 pub const OpCode = enum(u8) {
     add_int,
@@ -90,6 +94,7 @@ pub const OpCode = enum(u8) {
     le_int,
     le_float,
     loop,
+    module_symbol,
     mul_float,
     mul_int,
     naked_return,

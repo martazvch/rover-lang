@@ -1,10 +1,29 @@
-// Locals
+use std._test1
+
 fn main() {
     {
-        var noval = 1
-        print noval
+        use std._test2
+        print _gt_f2i(1, "empty", 3.)
+
+        // From _test1
+        print _cast_f2i(false, 3.)
+    }
+    {
+        var tmp = 1
+        use std._test1
+        print _cast_i2f(56)
     }
 
-    var a: int
+    // Reimport locally
+    use std._test2
+    {
+        use std._test2
+        use std._test1
+
+        // From _test1
+        print _cast_i2f(56)
+        // From _test2
+        print _gt_i2f(24, 3.)
+    }
 }
 

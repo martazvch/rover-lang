@@ -6,6 +6,7 @@ const expect = std.testing.expect;
 
 const GenReport = @import("../reporter.zig").GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
+const oom = @import("../utils.zig").oom;
 
 source: [:0]const u8,
 index: usize,
@@ -162,7 +163,7 @@ pub fn deinit(self: *Self) void {
     self.errs.deinit();
 }
 
-pub fn lex(self: *Self, source: [:0]const u8) !void {
+pub fn lex(self: *Self, source: [:0]const u8) void {
     self.source = source;
 
     while (true) {
@@ -170,20 +171,20 @@ pub fn lex(self: *Self, source: [:0]const u8) !void {
 
         // TODO: redo this part. As we lex every thing at once, use arraylist for
         // errors like parser, analyzer, ...? Or use compitme to associate both sides
-        try switch (tk.tag) {
+        switch (tk.tag) {
             .leading_zeroes => self.errorAt(.leading_zeroes, &tk),
             .unterminated_str => self.errorAt(.unterminated_str, &tk),
             .unexpected_char => self.errorAt(.unexpected_char, &tk),
-            else => self.tokens.append(self.allocator, tk),
-        };
+            else => self.tokens.append(self.allocator, tk) catch oom(),
+        }
 
         if (tk.tag == .eof) break;
     }
 }
 
-fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) !void {
+fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) void {
     const report = LexerReport.err(tag, token.span);
-    try self.errs.append(report);
+    self.errs.append(report) catch oom();
 }
 
 pub fn next(self: *Self) Token {
@@ -477,7 +478,7 @@ pub fn next(self: *Self) Token {
 test "ident and strings" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("foo bar variable  truth");
+    lexer.lex("foo bar variable  truth");
 
     const res = [_]Token{
         .{ .tag = .identifier, .span = .{ .start = 0, .end = 3 } },
@@ -499,7 +500,7 @@ test "ident and strings" {
 test "numbers" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("123 45.6 7. .86");
+    lexer.lex("123 45.6 7. .86");
 
     const res = [_]Token{
         .{ .tag = .int, .span = .{ .start = 0, .end = 3 } },
@@ -521,7 +522,7 @@ test "numbers" {
 test "tokens" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("(){}.:,=!< ><= >= !=+-*/");
+    lexer.lex("(){}.:,=!< ><= >= !=+-*/");
 
     const res = [_]Token.Tag{
         .left_paren,    .right_paren, .left_brace, .right_brace, .dot,     .colon,
@@ -538,7 +539,7 @@ test "tokens" {
 test "keywords" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex(
+    lexer.lex(
         \\\and else false for fn if in null or print return 
         \\\self struct true var while not int float str do use
     );
@@ -558,7 +559,7 @@ test "keywords" {
 test "unterminated string" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("\"blabla bli blop");
+    lexer.lex("\"blabla bli blop");
 
     const err = lexer.errs.items[0];
     try expect(err.report == .unterminated_str);
@@ -567,7 +568,7 @@ test "unterminated string" {
 test "leading zeros" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("var e = 01\n var b = 00002");
+    lexer.lex("var e = 01\n var b = 00002");
 
     try expect(lexer.errs.items[0].report == .leading_zeroes);
     try expect(lexer.errs.items[1].report == .leading_zeroes);
@@ -576,7 +577,7 @@ test "leading zeros" {
 test "underscore" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("var _under   _=1   var _1art   var ___yo");
+    lexer.lex("var _under   _=1   var _1art   var ___yo");
 
     const res = [_]Token.Tag{
         .@"var", .identifier, .underscore, .equal,      .int,
@@ -592,7 +593,7 @@ test "underscore" {
 test "arrow" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex("- > -5> >- -< ->");
+    lexer.lex("- > -5> >- -< ->");
 
     const res = [_]Token.Tag{
         .minus, .greater, .minus,       .int, .greater, .greater, .minus,
@@ -608,7 +609,7 @@ test "arrow" {
 test "dot" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    try lexer.lex(". .. ... .! .? .* ....!");
+    lexer.lex(". .. ... .! .? .* ....!");
 
     const res = [_]Token.Tag{
         .dot,      .dot_dot,     .dot_dot_dot, .dot_bang, .dot_question_mark,

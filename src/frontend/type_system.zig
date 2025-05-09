@@ -1,5 +1,6 @@
 const std = @import("std");
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 // Types are 32 bits long
 const TypeSize = u32;
@@ -123,7 +124,7 @@ pub fn isBuiltin(typ: Type) bool {
 // Custom types
 pub const TypeInfo = union(enum) {
     func: FnInfo,
-    module: ModuleInfo,
+    module: Symbols,
     @"struct": StructInfo,
 };
 
@@ -134,10 +135,6 @@ pub const FnInfo = struct {
     tag: Tag = .function,
 
     pub const Tag = enum { builtin, function };
-};
-
-pub const ModuleInfo = struct {
-    functions: AutoHashMapUnmanaged(usize, Type),
 };
 
 pub const StructInfo = struct {
@@ -162,11 +159,20 @@ pub const StructInfo = struct {
 
 pub const MemberInfo = struct {
     /// Order of declaration
-    idx: usize,
+    index: usize,
     /// Field's type
     type: Type,
     /// Has a default value
     default: bool = false,
+};
+
+pub const Symbols = AutoArrayHashMapUnmanaged(usize, SymbolInfo);
+
+pub const SymbolInfo = struct {
+    /// Order of declaration
+    index: usize,
+    /// Field's type
+    type: Type,
 };
 
 /// Renders Kind as a string

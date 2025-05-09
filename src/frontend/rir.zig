@@ -22,9 +22,11 @@ pub const Instruction = struct {
         identifier,
         identifier_id,
         @"if",
+        // TODO: delete
         imported,
         int,
         multiple_var_decl,
+        module_symbol,
         null,
         print,
         @"return",
@@ -47,10 +49,12 @@ pub const Instruction = struct {
         capture: usize,
         cast_to: Type,
         member: Member,
+        module_symbol: ModuleSymbol,
         float: f64,
         fn_decl: FnDecl,
         id: usize,
         @"if": If,
+        // TODO: delete later
         imported: Imported,
         int: i64,
         @"return": Return,
@@ -121,6 +125,7 @@ pub const Instruction = struct {
 
         pub const Kind = enum { bound_method, field };
     };
+    pub const ModuleSymbol = struct { module: usize, symbol: usize };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };

@@ -21,7 +21,7 @@ OP_SET_GLOBAL index 1
 OP_NAKED_RETURN
 
 -- main --
-OP_GET_GLOBAL index 2
+OP_GET_GLOBAL index 2, <fn set_vars>
 OP_CALL index 0
 OP_GET_GLOBAL index 0
 OP_CALL index 0
@@ -34,9 +34,5 @@ OP_NULL
 OP_DEFINE_GLOBAL index 0
 OP_NULL
 OP_DEFINE_GLOBAL index 1
-OP_CONSTANT index 0, value <fn set_vars>
-OP_DEFINE_GLOBAL index 2
-OP_CONSTANT index 1, value <fn main>
-OP_DEFINE_GLOBAL index 3
-OP_GET_GLOBAL index 3
+OP_GET_GLOBAL index 3, <fn main>
 OP_CALL index 0
