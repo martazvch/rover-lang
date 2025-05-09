@@ -18,10 +18,12 @@ const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const GenReporter = @import("reporter.zig").GenReporter;
 const ObjFunction = @import("runtime/Obj.zig").ObjFunction;
 const Vm = @import("runtime/Vm.zig");
+const Interner = @import("Interner.zig");
 
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
+interner: Interner,
 config: Vm.Config,
 analyzer: Analyzer,
 instr_count: usize,
@@ -44,17 +46,23 @@ pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
     self.vm = vm;
     self.arena = .init(vm.allocator);
     self.allocator = self.arena.allocator();
+    self.interner = .init(self.allocator);
     self.config = config;
     self.analyzer = undefined;
-    self.analyzer.init(self.allocator, config.embedded);
+    self.analyzer.init(self.allocator, &self.interner, config.embedded);
 }
 
 pub fn deinit(self: *Self) void {
     self.arena.deinit();
 }
 
+pub const Module = struct {
+    symbols: Analyzer.Symbols,
+    function: *ObjFunction,
+};
+
 /// Runs the pipeline
-pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunction {
+pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !Module {
     // Lexer
     var lexer = Lexer.init(self.allocator);
     try lexer.lex(source);
@@ -71,7 +79,8 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
     parser.init(self.allocator);
     defer parser.deinit();
 
-    var ast = try parser.parse(source, &lexer.tokens);
+    const token_slice = lexer.tokens.toOwnedSlice();
+    var ast = try parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
     if (options.test_mode and self.config.print_ast) {
         try printAst(self.allocator, &ast, &parser);
@@ -94,7 +103,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
-        try renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try self.renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
         return error.ExitOnPrint;
     }
 
@@ -110,7 +119,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
         self.instr_count = self.analyzer.instructions.len;
         return error.ExitOnPrint;
     } else if (self.config.print_ir)
-        try renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        try self.renderIr(self.allocator, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
     // Analyzer warnings
     if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
@@ -123,7 +132,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
     var compiler = CompilationManager.init(
         self.vm,
         self.analyzer.type_manager.natives.functions,
-        &self.analyzer.interner,
+        &self.interner,
         self.instr_count,
         &self.analyzer.instructions,
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
@@ -137,7 +146,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !*ObjFunctio
     return if (options.test_mode and self.config.print_bytecode)
         error.ExitOnPrint
     else
-        function;
+        .{ .symbols = self.analyzer.symbols, .function = function };
 }
 
 fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
@@ -156,6 +165,7 @@ fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void 
 }
 
 fn renderIr(
+    self: *Self,
     allocator: Allocator,
     source: [:0]const u8,
     analyzer: *const Analyzer,
@@ -169,7 +179,7 @@ fn renderIr(
         analyzer.instructions,
         analyzer.errs.items,
         analyzer.warns.items,
-        &analyzer.interner,
+        &self.interner,
         static,
     );
     defer rir_renderer.deinit();

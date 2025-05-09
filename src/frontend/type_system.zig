@@ -1,4 +1,5 @@
 const std = @import("std");
+const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 // Types are 32 bits long
 const TypeSize = u32;
@@ -35,6 +36,7 @@ pub const Kind = enum(KindSize) {
     @"error",
     param,
     @"struct",
+    module,
     _,
 
     pub fn toIdx(self: Kind) usize {
@@ -121,6 +123,7 @@ pub fn isBuiltin(typ: Type) bool {
 // Custom types
 pub const TypeInfo = union(enum) {
     func: FnInfo,
+    module: ModuleInfo,
     @"struct": StructInfo,
 };
 
@@ -133,9 +136,13 @@ pub const FnInfo = struct {
     pub const Tag = enum { builtin, function };
 };
 
+pub const ModuleInfo = struct {
+    functions: AutoHashMapUnmanaged(usize, Type),
+};
+
 pub const StructInfo = struct {
-    functions: std.AutoHashMapUnmanaged(usize, MemberInfo),
-    fields: std.AutoHashMapUnmanaged(usize, MemberInfo),
+    functions: AutoHashMapUnmanaged(usize, MemberInfo),
+    fields: AutoHashMapUnmanaged(usize, MemberInfo),
     default_value_fields: usize,
 
     pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {

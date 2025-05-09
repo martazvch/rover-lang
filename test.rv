@@ -1,20 +1,10 @@
+// Locals
 fn main() {
-    while 1 {}
-    while "true" {}
-    while true { "value" }
-    while true or false {
-        var a = 56
-        a
+    {
+        var noval = 1
+        print noval
     }
 
-    // No error
-    while true or false { var a = 1 }
-    while {
-        var tmp = 45
-        if tmp == 45 do true else false
-    } {
-        var tmp = 32
-        print tmp + 5
-    }
+    var a: int
 }
 

@@ -22,6 +22,7 @@ const Span = @import("Lexer.zig").Span;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
+const Pipeline = @import("../Pipeline.zig");
 
 // Re-export constants
 pub const TypeManager = struct {
@@ -118,15 +119,16 @@ errs: ArrayListUnmanaged(AnalyzerReport),
 declarations: AutoHashMapUnmanaged(usize, Type),
 
 globals: ArrayListUnmanaged(Variable),
-locals: ArrayListUnmanaged(Variable) = .{},
+locals: ArrayListUnmanaged(Variable),
 scope_depth: usize,
 /// Offset updated at each fn call, emulate the frame pointer at runtime
 local_offset: usize,
 heap_count: usize,
 main: ?usize,
 state: State,
+symbols: Symbols,
 type_manager: TypeManager,
-interner: Interner,
+interner: *Interner,
 
 // TODO: mettre en struct
 empty_interned: usize,
@@ -141,6 +143,9 @@ repl: bool,
 
 const Self = @This();
 const Error = error{Err} || TypeManager.Error;
+pub const Symbols = struct {
+    functions: AutoHashMapUnmanaged(usize, Type) = .{},
+};
 
 const Variable = struct {
     index: usize = 0,
@@ -179,7 +184,7 @@ const State = struct {
 
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
-pub fn init(self: *Self, allocator: Allocator, repl: bool) void {
+pub fn init(self: *Self, allocator: Allocator, interner: *Interner, repl: bool) void {
     self.arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = self.arena.allocator();
 
@@ -194,16 +199,18 @@ pub fn init(self: *Self, allocator: Allocator, repl: bool) void {
     self.heap_count = 0;
     self.main = null;
     self.state = .{};
+    self.symbols = .{};
     self.type_manager = .init(self.allocator);
-    self.interner = .init(self.allocator);
+    self.interner = interner;
 
+    // TODO: cache this?
     self.empty_interned = self.interner.intern("");
     self.main_interned = self.interner.intern("main");
     self.std_interned = self.interner.intern("std");
     self.self_interned = self.interner.intern("self");
     self.init_interned = self.interner.intern("init");
+    self.type_manager.init_builtins(self.interner);
 
-    self.type_manager.init_builtins(&self.interner);
     self.repl = repl;
 }
 
@@ -387,8 +394,11 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type = TypeSys.create(.func, .none, type_idx);
     const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .func, node.name);
-
     _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = fn_var, .cast = false } } });
+
+    if (self.scope_depth == 0) {
+        self.symbols.functions.put(self.allocator, name_idx, fn_type) catch oom();
+    }
 
     self.scope_depth += 1;
     self.local_offset = self.locals.items.len;
@@ -641,7 +651,6 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
 fn use(self: *Self, node: *const Ast.Use) !void {
     const idx = self.addInstr(.{ .tag = .use, .data = undefined });
-
     const name = self.interner.intern(self.ast.toSource(node.names[0]));
 
     // For now, "std" is interned at initialization in slot 1
@@ -692,10 +701,56 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 self.ast.getSpan(n),
             );
         }
-    } else return self.err(
-        .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
-        self.ast.getSpan(node.names[0]),
-    );
+    } else {
+        // Here, we try to resolve imports like: use math or use math.matrix
+        // We import the file as a structure
+        //
+        // Later, support special items imported like: use math.math{ vec2, vec3 } or use math.*
+        const content = try self.checkImport(node);
+        std.debug.print("Got content from import:\n{s}\n", .{content});
+
+        return self.err(
+            .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
+            self.ast.getSpan(node.names[0]),
+        );
+    }
+}
+
+fn checkImport(self: *Self, node: *const Ast.Use) Error![:0]const u8 {
+    var cwd = std.fs.cwd();
+
+    for (node.names, 0..) |n, i| {
+        const name = self.ast.toSource(n);
+
+        if (i == node.names.len - 1) {
+            const filename = self.allocator.alloc(u8, name.len + 3) catch oom();
+            defer self.allocator.free(filename);
+
+            @memcpy(filename[0..name.len], name);
+            @memcpy(filename[name.len..], ".rv");
+
+            const file = cwd.openFile(filename, .{}) catch |e| switch (e) {
+                error.FileNotFound => @panic("file doesn't exist"),
+                else => unreachable,
+            };
+            defer file.close();
+
+            // The file has a new line inserted by default
+            const size = file.getEndPos() catch @panic("wrong import file end position");
+            const buf = self.allocator.alloc(u8, size + 1) catch oom();
+
+            _ = file.readAll(buf) catch @panic("error while reading imported file");
+            buf[size] = 0;
+            return buf[0..size :0];
+        } else {
+            cwd = cwd.openDir(name, .{}) catch |e| switch (e) {
+                error.FileNotFound, error.NotDir => @panic("module not found"),
+                else => unreachable,
+            };
+        }
+    }
+
+    unreachable;
 }
 
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {

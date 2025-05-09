@@ -51,10 +51,10 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Parses the token stream
-pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(Token)) Error!Ast {
+pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, token_spans: []const Span) Error!Ast {
     self.source = source;
-    self.token_tags = tokens.items(.tag);
-    self.token_spans = tokens.items(.span);
+    self.token_tags = token_tags;
+    self.token_spans = token_spans;
 
     self.skipNewLines();
 
@@ -74,13 +74,6 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
 
         // After each nodes we expect a new line
         if (!self.check(.new_line)) {
-            // Could be that user wrote: Foo{} instead of Foo.{}, it's identifier + block
-            // without a new line instead of structure literal
-            if (self.prev(.tag) == .identifier and self.current(.tag) == .left_brace) {
-                std.debug.print("Could be trying to do structure literal? Missing '.'\n", .{});
-                // TODO: Error
-            }
-
             const start = self.prev(.span).end;
             self.errAtSpan(.{ .start = start, .end = start + 1 }, .expect_new_line) catch {};
             self.synchronize();
@@ -91,8 +84,8 @@ pub fn parse(self: *Self, source: [:0]const u8, tokens: *const MultiArrayList(To
 
     return .{
         .source = source,
-        .token_tags = self.token_tags,
-        .token_spans = self.token_spans,
+        .token_tags = token_tags,
+        .token_spans = token_spans,
         .nodes = self.nodes.toOwnedSlice(self.allocator) catch oom(),
     };
 }

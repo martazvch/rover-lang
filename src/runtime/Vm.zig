@@ -131,11 +131,11 @@ fn instructionNb(self: *const Self) usize {
 }
 
 pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
-    const func = self.pipeline.run(filename, source) catch |e| switch (e) {
+    const module = self.pipeline.run(filename, source) catch |e| switch (e) {
         error.ExitOnPrint => return,
         else => return e,
     };
-    try self.call(func, 0);
+    try self.call(module.function, 0);
     self.gc.active = true;
     try self.execute();
 }
