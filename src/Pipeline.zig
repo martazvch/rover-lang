@@ -2,23 +2,23 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const options = @import("options");
-const oom = @import("utils.zig").oom;
 
-const Lexer = @import("frontend/Lexer.zig");
-const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const Ast = @import("frontend/Ast.zig");
-const AstRender = @import("frontend/AstRender.zig");
-const Parser = @import("frontend/Parser.zig");
-const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const Compiler = @import("backend/compiler.zig").Compiler;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
+const Ast = @import("frontend/Ast.zig");
+const AstRender = @import("frontend/AstRender.zig");
+const Lexer = @import("frontend/Lexer.zig");
+const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
+const Parser = @import("frontend/Parser.zig");
+const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
+const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
 const Symbols = @import("frontend/type_system.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
+const oom = @import("utils.zig").oom;
 const ObjFunction = @import("runtime/Obj.zig").ObjFunction;
 const Value = @import("runtime/values.zig").Value;
 const Vm = @import("runtime/Vm.zig");
@@ -157,7 +157,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else .{
         .name = file_name[0 .. file_name.len - 3],
-        .imports = self.analyzer.imports.toOwnedSlice(self.allocator) catch oom(),
+        .imports = self.analyzer.modules.toOwnedSlice(self.allocator) catch oom(),
         .symbols = self.analyzer.symbols,
         .function = function,
         // TODO: use only one allocator?

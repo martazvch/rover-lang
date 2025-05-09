@@ -302,7 +302,7 @@ fn execute(self: *Self) !void {
             .module_symbol => {
                 const module = frame.readByte();
                 const symbol = frame.readByte();
-                const imported = self.module.imports[module].function.chunk.constants[symbol];
+                const imported = self.module.imports[module].globals[symbol];
                 self.stack.push(imported);
             },
             .mul_float => {

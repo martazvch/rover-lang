@@ -33,14 +33,14 @@ declarations: AutoHashMapUnmanaged(usize, Type),
 
 globals: ArrayListUnmanaged(Variable),
 locals: ArrayListUnmanaged(Variable),
+imports: ArrayListUnmanaged(Variable),
 scope_depth: usize,
-/// Offset updated at each fn call, emulate the frame pointer at runtime
 local_offset: usize,
 heap_count: usize,
 main: ?usize,
 state: State,
 symbols: TypeSys.Symbols,
-imports: ArrayListUnmanaged(Pipeline.Module),
+modules: ArrayListUnmanaged(Pipeline.Module),
 
 // TODO: mettre en struct
 empty_interned: usize,
@@ -105,13 +105,14 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.declarations = .{};
     self.globals = .{};
     self.locals = .{};
+    self.imports = .{};
     self.scope_depth = 0;
     self.local_offset = 0;
     self.heap_count = 0;
     self.main = null;
     self.state = .{};
     self.symbols = .{};
-    self.imports = .{};
+    self.modules = .{};
     self.interner = interner;
 
     // TODO: cache this?
@@ -554,6 +555,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     }
 
     _ = self.endScope();
+    self.addSymbol(name, struct_type);
 
     self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
         .fields_count = node.fields.len,
@@ -622,13 +624,25 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         // TODO: what to do for local imports? We leave them all without discarding any of the imports
         // even the nested ones so we keep the index good
         const module = try self.importModule(node);
-        const module_type = TypeSys.create(.module, .none, @intCast(self.imports.items.len));
-        self.imports.append(self.allocator, module) catch oom();
+        const module_type = TypeSys.create(.module, .none, @intCast(self.modules.items.len));
+        self.modules.append(self.allocator, module) catch oom();
 
         const last = node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(last));
-        _ = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, last);
+        self.addModule(module_name, module_type);
     }
+}
+
+fn addModule(self: *Self, name: usize, typ: Type) void {
+    const variable: Variable = .{
+        .name = name,
+        .typ = typ,
+        .depth = 0,
+        .kind = .module,
+        .decl = self.instructions.len,
+    };
+
+    self.imports.append(self.allocator, variable) catch oom();
 }
 
 fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
@@ -997,7 +1011,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 }
 
 fn moduleField(self: *Self, module_idx: usize, field_idx: usize) Type {
-    const module = &self.imports.items[module_idx];
+    const module = &self.modules.items[module_idx];
     const symbol = module.symbols.get(field_idx) orelse {
         // TODO: error
         @panic("Module doesn't have declaration");
@@ -1238,6 +1252,12 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
             return glob;
         }
+    }
+
+    // TODO: Switch to hashmap? But order is important for after, so ArrayHashMap?
+    for (self.imports.items) |*import| {
+        if (import.name == name_idx)
+            return import;
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(name));
