@@ -77,6 +77,8 @@ fn markRoots(self: *Self) Allocator.Error!void {
     for (self.vm.frame_stack.frames[0..self.vm.frame_stack.count]) |*frame| {
         try self.markObject(frame.function.asObj());
     }
+
+    try self.markArray(self.vm.start_module.globals);
 }
 
 fn traceRef(self: *Self) Allocator.Error!void {

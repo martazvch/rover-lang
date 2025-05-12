@@ -1128,7 +1128,6 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
             call_tag = .invoke_import;
         } else {
             call_tag = .import;
-
             self.instructions.items(.data)[idx].call.module = @intCast(self.imported.get(method_type).?);
         }
     } else if (extra == .bound_method) {
