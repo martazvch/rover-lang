@@ -1,29 +1,25 @@
-use std._test1
+struct Human {
+    age: int,
+    name: str,
+
+    fn speak(self) {
+        print self.name
+    }
+
+    fn getOld(self, amount: int) -> int {
+        self.age = self.age + amount
+        self.age
+    }
+}
 
 fn main() {
-    {
-        use std._test2
-        print _gt_f2i(1, "empty", 3.)
+    var human = Human{ age=5, name="Tom" }
+    // var trash: int
+    // var speak = human.speak
+    // var trash2: int
+    var getOld = human.getOld
 
-        // From _test1
-        print _cast_f2i(false, 3.)
-    }
-    {
-        var tmp = 1
-        use std._test1
-        print _cast_i2f(56)
-    }
-
-    // Reimport locally
-    use std._test2
-    {
-        use std._test2
-        use std._test1
-
-        // From _test1
-        print _cast_i2f(56)
-        // From _test2
-        print _gt_i2f(24, 3.)
-    }
+    // speak()
+    _ = getOld(10)
 }
 

@@ -41,6 +41,10 @@ main: ?usize,
 state: State,
 symbols: TypeSys.Symbols,
 modules: ArrayListUnmanaged(Pipeline.Module),
+/// Keeps track of which module do imports come from
+/// Relies on the fact that every modules share the same type_manager
+/// as it makes types unique
+imported: AutoHashMapUnmanaged(Type, usize),
 
 // TODO: mettre en struct
 empty_interned: usize,
@@ -113,6 +117,7 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.state = .{};
     self.symbols = .{};
     self.modules = .{};
+    self.imported = .{};
     self.interner = interner;
 
     // TODO: cache this?
@@ -235,8 +240,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
             if (!assigne.initialized) assigne.initialized = true;
 
             // If we assign a bound method that match the type (checked after), update type's infos
-            if (TypeSys.getExtra(value_type) == .bound_method) {
+            const extra = TypeSys.getExtra(value_type);
+
+            if (extra == .bound_method) {
                 assigne.typ = TypeSys.setExtra(assigne.typ, .bound_method);
+            } else if (extra == .imported) {
+                assigne.typ = TypeSys.setExtra(assigne.typ, .imported);
             }
 
             // TODO: later, when function's parameters will maybe be a reference, allow it
@@ -732,8 +741,12 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         initialized = true;
 
         // If we assign a bound method that match the type (checked after), update type's infos
-        if (TypeSys.getExtra(value_type) == .bound_method) {
+        const extra = TypeSys.getExtra(value_type);
+
+        if (extra == .bound_method) {
             checked_type = TypeSys.setExtra(checked_type, .bound_method);
+        } else if (extra == .imported) {
+            checked_type = TypeSys.setExtra(checked_type, .imported);
         }
     } else {
         _ = self.addInstr(.{ .tag = .null });
@@ -1010,24 +1023,28 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-fn moduleField(self: *Self, module_idx: usize, field_idx: usize) Type {
+fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
     const module = &self.modules.items[module_idx];
-    const symbol = module.symbols.get(field_idx) orelse {
+    const symbol = module.symbols.get(field_name) orelse {
         // TODO: error
         @panic("Module doesn't have declaration");
     };
 
+    // Overwrite the 'member' instruction
     self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
         .module = module_idx,
         .symbol = symbol.index,
     } } });
 
-    return symbol.type;
+    const typ = TypeSys.setExtra(symbol.type, .imported);
+    self.imported.put(self.allocator, typ, module_idx) catch oom();
+
+    return typ;
 }
 
 fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     const idx = self.addInstr(.{ .tag = .member });
-    const field_idx = self.interner.intern(self.ast.toSource(expr.field));
+    const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
     const struct_type = switch (expr.structure.*) {
         .literal => |*lit| blk: {
@@ -1038,7 +1055,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
             // to get the variable
             if (TypeSys.is(variable.typ, .module)) {
                 const infos_index = TypeSys.getValue(variable.typ);
-                return .{ .void, self.moduleField(infos_index, field_idx) };
+                return .{ .module, self.moduleField(infos_index, field_name) };
             } else {
                 self.makeVariableInstr(variable);
                 break :blk variable.typ;
@@ -1055,9 +1072,9 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
         self.ast.getSpan(expr.structure),
     );
 
-    var found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_idx)) |f|
+    var found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_name)) |f|
         .{ f, .field }
-    else if (infos.functions.get(field_idx)) |f|
+    else if (infos.functions.get(field_name)) |f|
         .{ f, .bound_method }
     else
         return self.err(
@@ -1082,6 +1099,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         .field => |*e| try self.field(e),
         else => .{ .void, try self.analyzeExpr(expr.callee) },
     };
+    const extra = TypeSys.getExtra(method_type);
 
     const infos = if (TypeSys.is(method_type, .func))
         self.type_manager.type_infos.items[TypeSys.getValue(method_type)].func
@@ -1105,7 +1123,15 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // Not just a call to an already bounded method. Two cases here:
     // 1: var bounded = p.method(); bounded()  --> here instance_type is void
     // 2: p.method()                           --> here instance_type isn't
-    if (TypeSys.getExtra(method_type) == .bound_method) {
+    if (extra == .imported) {
+        if (instance_type == .module) {
+            call_tag = .invoke_import;
+        } else {
+            call_tag = .import;
+
+            self.instructions.items(.data)[idx].call.module = @intCast(self.imported.get(method_type).?);
+        }
+    } else if (extra == .bound_method) {
         if (instance_type != .void) {
             call_tag = .invoke;
 
@@ -1124,7 +1150,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         const args_diff = @max(infos.params.len, expr.args.len) - @min(infos.params.len, expr.args.len);
 
         // For bounded method, the difference of 1 is the invisible 'self' parameter
-        if (args_diff == 1 and TypeSys.getExtra(method_type) == .bound_method) {
+        if (args_diff == 1 and extra == .bound_method) {
             break :b;
         }
 

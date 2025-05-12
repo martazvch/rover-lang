@@ -68,6 +68,14 @@ pub const Module = struct {
     symbols: Symbols,
     function: *ObjFunction,
     globals: []Value,
+
+    pub fn deinit(self: *Module, allocator: Allocator) void {
+        for (self.imports) |*mod| {
+            mod.deinit(allocator);
+        }
+
+        allocator.free(self.globals);
+    }
 };
 
 /// Runs the pipeline
@@ -105,6 +113,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Analyzer
     self.analyzer.analyze(&ast);
     defer self.analyzer.reinit();
+    errdefer {
+        for (self.analyzer.modules.items) |*mod| {
+            mod.deinit(self.vm.allocator);
+        }
+    }
 
     // We don't keep errors/warnings from a prompt to another
     defer self.analyzer.errs.clearRetainingCapacity();

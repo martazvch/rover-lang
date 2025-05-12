@@ -12,6 +12,7 @@ pub const Type = enum(TypeSize) {
     bool,
     str,
     self,
+    module,
     _,
 
     pub fn toIdx(self: Type) usize {
@@ -55,6 +56,7 @@ pub const Extra = enum(u4) {
     none,
     builtin,
     bound_method,
+    imported,
     _,
 
     pub fn toIdx(self: Extra) usize {

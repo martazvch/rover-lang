@@ -23,7 +23,9 @@ const Value = @import("values.zig").Value;
 
 pipeline: Pipeline,
 gc: Gc,
-module: Pipeline.Module,
+start_module: Pipeline.Module,
+module: *Pipeline.Module,
+module_chain: std.ArrayListUnmanaged(*Pipeline.Module),
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
@@ -52,6 +54,8 @@ pub const empty: Self = .{
     .gc = undefined,
     .gc_alloc = undefined,
     .module = undefined,
+    .start_module = undefined,
+    .module_chain = .{},
     .stack = .empty,
     .frame_stack = .empty,
     .ip = undefined,
@@ -85,8 +89,9 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
 }
 
 pub fn deinit(self: *Self) void {
-    self.allocator.free(self.module.globals);
     self.allocator.free(self.heap_vars);
+    self.start_module.deinit(self.allocator);
+    self.module_chain.deinit(self.allocator);
     self.interner.deinit();
     self.gc.deinit();
     self.strings.deinit();
@@ -129,11 +134,12 @@ fn instructionNb(self: *const Self) usize {
 }
 
 pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
-    self.module = self.pipeline.run(filename, source) catch |e| switch (e) {
+    self.start_module = self.pipeline.run(filename, source) catch |e| switch (e) {
         error.ExitOnPrint => return,
         else => return e,
     };
 
+    self.module = &self.start_module;
     try self.call(self.module.function, 0);
     self.gc.active = true;
     try self.execute();
@@ -260,7 +266,6 @@ fn execute(self: *Self) !void {
                 const field = self.getField(frame);
                 self.stack.push(field.*);
             },
-            // Compiler bug: https://github.com/ziglang/zig/issues/13938
             .get_global => {
                 const idx = frame.readByte();
                 self.stack.push(self.module.globals[idx]);
@@ -272,12 +277,32 @@ fn execute(self: *Self) !void {
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
+            .import_call => {
+                const args_count = frame.readByte();
+                const module = frame.readByte();
+                self.updateModule(module);
+
+                const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
+                try self.call(callee, args_count);
+                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+            },
             .invoke => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
                 const receiver = self.stack.peek(args_count);
                 const method = receiver.obj.as(ObjInstance).parent.methods[method_idx];
                 try self.callBoundMethod(&frame, args_count, receiver, method);
+            },
+            .invoke_import => {
+                const args_count = frame.readByte();
+                const module = frame.readByte();
+                const symbol = frame.readByte();
+
+                self.updateModule(module);
+                const imported = self.module.globals[symbol];
+
+                try self.call(imported.asObj().?.as(ObjFunction), args_count);
+                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .jump => {
                 const jump = frame.readShort();
@@ -413,6 +438,7 @@ fn execute(self: *Self) !void {
             },
             // PERF: we could avoid a function call here and cache a 'true' value?
             .true => self.stack.push(Value.true_),
+            .unload_module => self.module = self.module_chain.pop().?,
         }
     }
 }
@@ -465,6 +491,11 @@ fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver:
 
     // If call success, we need to to set frame pointer back
     frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
+}
+
+fn updateModule(self: *Self, module_idx: usize) void {
+    self.module_chain.append(self.allocator, self.module) catch oom();
+    self.module = &self.module.imports[module_idx];
 }
 
 fn strConcat(self: *Self) void {

@@ -9,7 +9,6 @@ const oom = @import("../utils.zig").oom;
 allocator: Allocator,
 code: ArrayList(u8),
 offsets: ArrayList(usize),
-// globals: ArrayListUnmanaged(Value),
 constants: [CONST_MAX]Value,
 constant_count: u8,
 
@@ -22,7 +21,6 @@ pub fn init(allocator: Allocator) Self {
         .allocator = allocator,
         .code = ArrayList(u8).init(allocator),
         .offsets = ArrayList(usize).init(allocator),
-        // .globals = .{},
         .constants = undefined,
         .constant_count = 0,
     };
@@ -31,7 +29,6 @@ pub fn init(allocator: Allocator) Self {
 pub fn deinit(self: *Self) void {
     self.code.deinit();
     self.offsets.deinit();
-    // self.globals.deinit(self.allocator);
 }
 
 pub fn writeOp(self: *Self, op: OpCode, offset: usize) void {
@@ -53,10 +50,6 @@ pub fn writeConstant(self: *Self, value: Value) Error!u8 {
     self.constant_count += 1;
     return self.constant_count - 1;
 }
-
-// pub fn addGlobal(self: *Self, global: Value) void {
-//     self.globals.append(self.allocator, global) catch oom();
-// }
 
 pub const OpCode = enum(u8) {
     add_int,
@@ -85,7 +78,9 @@ pub const OpCode = enum(u8) {
     gt_int,
     ge_float,
     ge_int,
+    import_call,
     invoke,
+    invoke_import,
     jump,
     jump_if_false,
     jump_if_true,
@@ -121,4 +116,5 @@ pub const OpCode = enum(u8) {
     sub_float,
     sub_int,
     true,
+    unload_module,
 };

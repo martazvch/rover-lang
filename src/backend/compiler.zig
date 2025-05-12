@@ -470,42 +470,65 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         if (data.tag == .invoke)
-            return self.invoke(data, start);
+            return self.invoke(data, start)
+        else if (data.tag == .invoke_import)
+            return self.invokeImport(data, start);
 
         // Compiles the identifier
         try self.compileInstr();
-
-        for (0..data.arity) |_| {
-            try self.compileInstr();
-
-            if (self.manager.instr_idx < self.manager.instr_tags.len and
-                self.manager.instr_tags[self.manager.instr_idx] == .cast)
-                try self.compileInstr();
-        }
+        try self.compileArgs(data.arity);
 
         self.writeOpAndByte(
-            if (data.tag == .function) .call else if (data.tag == .builtin) .native_fn_call else .bound_method_call,
+            switch (data.tag) {
+                .function => .call,
+                .builtin => .native_fn_call,
+                .import => .import_call,
+                else => .bound_method_call,
+            },
             data.arity,
             start,
         );
+
+        // For imports, we generate op code to load/unload the module
+        if (data.tag == .import) {
+            self.writeByte(data.module, start);
+            self.writeOp(.unload_module, start);
+        }
     }
 
     fn invoke(self: *Self, data: Instruction.Call, start: usize) Error!void {
         // We do not compile the 'bound_method' op code
         const member_data = self.getData().member;
         self.manager.instr_idx += 1;
+        // Compiles the receiver
         try self.compileInstr();
+        try self.compileArgs(data.arity);
 
-        for (0..data.arity) |_| {
+        self.writeOpAndByte(.invoke, data.arity, start);
+        self.writeByte(@intCast(member_data.index), start);
+    }
+
+    fn invokeImport(self: *Self, data: Instruction.Call, start: usize) Error!void {
+        // We skip the 'module_symbol' op code
+        const symbol_data = self.getData().module_symbol;
+        self.manager.instr_idx += 1;
+        self.writeOp(.null, start);
+        try self.compileArgs(data.arity);
+
+        self.writeOpAndByte(.invoke_import, data.arity, start);
+        self.writeByte(@intCast(symbol_data.module), start);
+        self.writeByte(@intCast(symbol_data.symbol), start);
+        self.writeOp(.unload_module, start);
+    }
+
+    fn compileArgs(self: *Self, arity: usize) Error!void {
+        for (0..arity) |_| {
             try self.compileInstr();
 
             if (self.manager.instr_idx < self.manager.instr_tags.len and
                 self.manager.instr_tags[self.manager.instr_idx] == .cast)
                 try self.compileInstr();
         }
-
-        self.writeOpAndByte(.invoke, data.arity, start);
-        self.writeByte(@intCast(member_data.index), start);
     }
 
     fn fnDecl(self: *Self) Error!void {
@@ -521,7 +544,6 @@ const Compiler = struct {
 
         const func = try self.compileFn(fn_name, data);
 
-        // TEST:
         if (fn_var.scope == .global) {
             self.addGlobal(Value.makeObj(func.asObj()));
         } else {
@@ -529,11 +551,6 @@ const Compiler = struct {
             try self.emitConstant(Value.makeObj(func.asObj()), 0);
             self.defineVariable(fn_var, 0);
         }
-
-        // Linking if amoung exported symbols
-        // if (self.manager.symbols.getPtr(name_idx)) |symbol| {
-        //     symbol.index = self.function.chunk.constant_count - 1;
-        // }
 
         // Check for main function
         if (idx == self.manager.main) {

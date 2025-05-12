@@ -108,8 +108,10 @@ pub const Instruction = struct {
     pub const Call = struct {
         arity: u8,
         tag: CallTag = .function,
+        /// If we call an imported function, we will load it's module
+        module: u8 = 0,
 
-        pub const CallTag = enum { bound, builtin, function, invoke };
+        pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import };
     };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
