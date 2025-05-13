@@ -1,0 +1,12 @@
+struct Vehicle {
+    tires: int,
+    gas: float,
+
+    fn killTires(self, count: int) {
+        self.tires = self.tires - count
+    }
+}
+
+fn presentVehicle(name: str) {
+    print "I'm a vehicle " + name
+}

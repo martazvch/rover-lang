@@ -656,41 +656,45 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
         const name = self.ast.toSource(n);
 
         if (i == node.names.len - 1) {
-            const filename = self.allocator.alloc(u8, name.len + 3) catch oom();
-            defer self.allocator.free(filename);
+            const file_name = self.allocator.alloc(u8, name.len + 3) catch oom();
+            defer self.allocator.free(file_name);
 
-            @memcpy(filename[0..name.len], name);
-            @memcpy(filename[name.len..], ".rv");
+            @memcpy(file_name[0..name.len], name);
+            @memcpy(file_name[name.len..], ".rv");
 
-            const file = cwd.openFile(filename, .{}) catch |e| switch (e) {
-                error.FileNotFound => @panic("file doesn't exist"),
-                else => unreachable,
+            const file = cwd.openFile(file_name, .{}) catch {
+                const owned_name = self.allocator.dupe(u8, file_name) catch oom();
+                const e: AnalyzerMsg = if (node.names.len > 1)
+                    .{ .missing_file_in_module = .{
+                        .file = owned_name,
+                        .module = self.ast.toSource(node.names[node.names.len - 2]),
+                    } }
+                else
+                    .{ .missing_file_in_cwd = .{ .file = owned_name } };
+
+                return self.err(e, self.ast.getSpan(n));
             };
             defer file.close();
 
             // The file has a new line inserted by default
-            const size = file.getEndPos() catch @panic("wrong import file end position");
+            const size = file.getEndPos() catch @panic("Rover internal error: wrong import file end position");
             const buf = self.allocator.alloc(u8, size + 1) catch oom();
 
-            _ = file.readAll(buf) catch @panic("error while reading imported file");
+            _ = file.readAll(buf) catch @panic("Rover internal error: error while reading imported file");
             buf[size] = 0;
 
             var pipeline = self.pipeline.createSubPipeline();
-            // TODO: Handle error
-            const module = pipeline.run(filename, buf[0..size :0]) catch |e| {
-                std.debug.print("Error while compiling imported file {s}: {s}\n", .{ filename, @errorName(e) });
-                std.process.exit(1);
+            // Exit for now, just showing the error of the sub-pipeline
+            const module = pipeline.run(file_name, buf[0..size :0]) catch {
+                std.process.exit(0);
             };
 
             return module;
         } else {
-            cwd = cwd.openDir(name, .{}) catch |e| switch (e) {
-                error.FileNotFound, error.NotDir => return self.err(
-                    .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
-                    self.ast.getSpan(node.names[0]),
-                ),
-                else => unreachable,
-            };
+            cwd = cwd.openDir(name, .{}) catch return self.err(
+                .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
+                self.ast.getSpan(node.names[0]),
+            );
         }
     }
 
