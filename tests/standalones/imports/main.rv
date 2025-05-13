@@ -1,39 +1,15 @@
-use math
-
-// fn printVec(vec: math.Vec) {
-// fn printVec(vec: Vec) {
-//     print vec.x
-//     print vec.y
-// }
+use data.math 
 
 fn main() {
     math.introduce()
     var vec = math.getVecFromPos(1, 2)
-    print vec.x
-    print vec.y
-    vec = math.getVecFromPos(8, 9)
-    print vec.x
-    print vec.y
 
-    fn trash(a: int) -> bool {
-            a < 10
-    }
-    print trash(vec.y)
-
-    vec = math.getVecFromPos(3, 7)
-    print vec.x
-    print vec.y
-
-    // var vec2 = Vec{x=12, y=34}
-    // print vec.x
-    // print vec.y
-
+    // Bounded
     var please = math.introduce
-        please()
+    please()
 
     var please2 = math.getVecFromPos
     var vec2 = please2(6, 89)
 
-    print vec2.x
     print vec2.y
 }

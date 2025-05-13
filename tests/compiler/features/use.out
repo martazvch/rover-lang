@@ -1,62 +1,53 @@
--- main --
-// First block
-OP_CONSTANT index 0, value <native fn>
-OP_CONSTANT index 1, value <native fn>
+//---- math.rv ----
+
+-- introduce --
+OP_CONSTANT index 0, value "This is a mathematical module"
+OP_PRINT
+OP_NAKED_RETURN
+
+-- getVecFromPos --
 OP_GET_LOCAL index 1
-OP_CONSTANT index 2, value 1
-OP_CONSTANT index 3, value "empty"
-OP_CONSTANT index 4, value 3
-OP_NATIVE_CALL index 3
-OP_PRINT
-
-OP_GET_GLOBAL index 1, <native fn>
-OP_FALSE
-OP_CONSTANT index 5, value 3
-OP_NATIVE_CALL index 2
-OP_PRINT
-
-OP_POP
-OP_POP
-
-// Second one
-OP_CONSTANT index 6, value 1
-OP_CONSTANT index 7, value <native fn>
-OP_CONSTANT index 8, value <native fn>
 OP_GET_LOCAL index 2
-OP_CONSTANT index 9, value 56
-OP_NATIVE_CALL index 1
-OP_PRINT
-OP_POP
-OP_POP
-OP_POP
+OP_STRUCT_LIT index 2
+OP_GET_GLOBAL index 0, <structure Vec2>
+OP_RETURN
 
-OP_CONSTANT index 10, value <native fn>
-OP_CONSTANT index 11, value <native fn>
+-- global scope --
+OP_EXIT_REPL
 
-// Third one
-OP_CONSTANT index 12, value <native fn>
-OP_CONSTANT index 13, value <native fn>
-OP_CONSTANT index 14, value <native fn>
-OP_CONSTANT index 15, value <native fn>
+//---- main.rv ----
 
-OP_GET_LOCAL index 5
-OP_CONSTANT index 16, value 56
-OP_NATIVE_CALL index 1
-OP_PRINT
+-- main --
+OP_NULL
+OP_INVOKE_IMPORT arity 0, module index 0, symbol index: 1
+OP_UNLOAD_MODULE
 
+OP_NULL
+OP_CONSTANT index 0, value 1
+OP_CONSTANT index 1, value 2
+OP_INVOKE_IMPORT arity 2, module index 0, symbol index: 2
+OP_UNLOAD_MODULE
+
+OP_MODULE_SYMBOL module 0, symbol 1
+
+OP_GET_LOCAL index 2
+OP_IMPORT_CALL arity 0, module 0
+OP_UNLOAD_MODULE
+
+OP_MODULE_SYMBOL module 0, symbol 2
+
+OP_GET_LOCAL index 3
+OP_CONSTANT index 2, value 6
+OP_CONSTANT index 3, value 89
+OP_IMPORT_CALL arity 2, module 0
+OP_UNLOAD_MODULE
+
+OP_GET_FIELD index 1 of next variable
 OP_GET_LOCAL index 4
-OP_CONSTANT index 17, value 24
-OP_CONSTANT index 18, value 3
-OP_NATIVE_CALL index 2
 OP_PRINT
-
-OP_POP
-OP_POP
-OP_POP
-OP_POP
 
 OP_NAKED_RETURN
 
 -- global scope --
-OP_GET_GLOBAL index 2, <fn main>
+OP_GET_GLOBAL index 0, <fn main>
 OP_CALL index 0

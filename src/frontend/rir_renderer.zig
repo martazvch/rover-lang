@@ -281,9 +281,13 @@ pub const RirRenderer = struct {
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Fn call arity: {}, call_tag: {s}]\n", .{
+        try writer.print("[Fn call arity: {}, call_tag: {s}", .{
             data.arity, @tagName(data.tag),
         });
+        if (data.tag == .import or data.tag == .invoke_import) {
+            try writer.print(", module: {}", .{data.module});
+        }
+        try writer.writeAll("]\n");
         self.indent_level += 1;
 
         // Variable

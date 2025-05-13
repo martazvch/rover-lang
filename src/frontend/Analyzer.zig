@@ -41,10 +41,6 @@ main: ?usize,
 state: State,
 symbols: TypeSys.Symbols,
 modules: ArrayListUnmanaged(Pipeline.Module),
-/// Keeps track of which module do imports come from
-/// Relies on the fact that every modules share the same type_manager
-/// as it makes types unique
-imported: AutoHashMapUnmanaged(Type, usize),
 
 // TODO: mettre en struct
 empty_interned: usize,
@@ -117,7 +113,6 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.state = .{};
     self.symbols = .{};
     self.modules = .{};
-    self.imported = .{};
     self.interner = interner;
 
     // TODO: cache this?
@@ -253,7 +248,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             break :blk assigne.typ;
         },
-        .field => |*e| (try self.field(e)).@"1",
+        .field => |*e| (try self.field(e)).field,
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
@@ -786,7 +781,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
-        .field => |*e| (try self.field(e)).@"1",
+        .field => |*e| (try self.field(e)).field,
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
@@ -1023,26 +1018,23 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
-    const module = &self.modules.items[module_idx];
-    const symbol = module.symbols.get(field_name) orelse {
-        // TODO: error
-        @panic("Module doesn't have declaration");
+const StructAndFieldTypes = struct {
+    structure: Type,
+    field: Type,
+
+    pub fn init(structure_type: Type, field_type: Type) StructAndFieldTypes {
+        return .{ .structure = structure_type, .field = field_type };
+    }
+};
+
+fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
+    return switch (expr.*) {
+        .field => |*e| try self.field(e),
+        else => .init(.void, try self.analyzeExpr(expr)),
     };
-
-    // Overwrite the 'member' instruction
-    self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
-        .module = module_idx,
-        .symbol = symbol.index,
-    } } });
-
-    const typ = TypeSys.setExtra(symbol.type, .imported);
-    self.imported.put(self.allocator, typ, module_idx) catch oom();
-
-    return typ;
 }
 
-fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
+fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const idx = self.addInstr(.{ .tag = .member });
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
@@ -1055,7 +1047,8 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
             // to get the variable
             if (TypeSys.is(variable.typ, .module)) {
                 const infos_index = TypeSys.getValue(variable.typ);
-                return .{ .module, self.moduleField(infos_index, field_name) };
+
+                return .init(TypeSys.create(.module, .none, infos_index), self.moduleField(infos_index, field_name));
             } else {
                 self.makeVariableInstr(variable);
                 break :blk variable.typ;
@@ -1087,7 +1080,25 @@ fn field(self: *Self, expr: *const Ast.Field) Error!struct { Type, Type } {
     if (kind == .bound_method)
         found_field.type = TypeSys.setExtra(found_field.type, .bound_method);
 
-    return .{ struct_type, found_field.type };
+    return .init(struct_type, found_field.type);
+}
+
+fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
+    const module = &self.modules.items[module_idx];
+    const symbol = module.symbols.get(field_name) orelse {
+        // TODO: error
+        @panic("Module doesn't have declaration");
+    };
+
+    // Overwrite the 'member' instruction
+    self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
+        .module = module_idx,
+        .symbol = symbol.index,
+    } } });
+
+    const typ = TypeSys.setExtra(symbol.type, .imported);
+
+    return typ;
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1095,16 +1106,13 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         .arity = @intCast(expr.args.len),
     } } });
 
-    const instance_type, const method_type = switch (expr.callee.*) {
-        .field => |*e| try self.field(e),
-        else => .{ .void, try self.analyzeExpr(expr.callee) },
-    };
-    const extra = TypeSys.getExtra(method_type);
+    const sft = try self.getStructAndFieldTypes(expr.callee);
+    const extra = TypeSys.getExtra(sft.field);
 
-    const infos = if (TypeSys.is(method_type, .func))
-        self.type_manager.type_infos.items[TypeSys.getValue(method_type)].func
-    else if (TypeSys.is(method_type, .@"struct")) blk: {
-        const val = TypeSys.getValue(method_type);
+    const infos = if (TypeSys.is(sft.field, .func))
+        self.type_manager.type_infos.items[TypeSys.getValue(sft.field)].func
+    else if (TypeSys.is(sft.field, .@"struct")) blk: {
+        const val = TypeSys.getValue(sft.field);
         const struct_infos = self.type_manager.type_infos.items[val].@"struct";
 
         if (struct_infos.functions.get(self.init_interned)) |init_fn| {
@@ -1124,17 +1132,18 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // 1: var bounded = p.method(); bounded()  --> here instance_type is void
     // 2: p.method()                           --> here instance_type isn't
     if (extra == .imported) {
-        if (instance_type == .module) {
+        if (TypeSys.getKind(sft.structure) == .module) {
             call_tag = .invoke_import;
         } else {
             call_tag = .import;
-            self.instructions.items(.data)[idx].call.module = @intCast(self.imported.get(method_type).?);
+            // TODO: protect the cast
+            self.instructions.items(.data)[idx].call.module = @intCast(TypeSys.getValue(sft.structure));
         }
     } else if (extra == .bound_method) {
-        if (instance_type != .void) {
+        if (sft.structure != .void) {
             call_tag = .invoke;
 
-            if (infos.params.len == 0 or infos.params[0] != instance_type) return self.err(
+            if (infos.params.len == 0 or infos.params[0] != sft.structure) return self.err(
                 .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
                 self.ast.getSpan(expr.callee.field.field),
             );

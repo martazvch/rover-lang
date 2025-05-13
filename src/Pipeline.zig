@@ -31,6 +31,7 @@ analyzer: Analyzer,
 type_manager: TypeManager,
 instr_count: usize,
 code_count: usize,
+is_sub: bool = false,
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -126,22 +127,24 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
         try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
-        return error.ExitOnPrint;
+
+        // If we are a sub-pipeline, we print and contnue compile
+        if (!self.is_sub) return error.ExitOnPrint;
+    } else {
+        if (self.analyzer.errs.items.len > 0) {
+            var reporter = GenReporter(AnalyzerMsg).init(source);
+            try reporter.reportAll(file_name, self.analyzer.errs.items);
+
+            if (self.analyzer.warns.items.len > 0) {
+                reporter = GenReporter(AnalyzerMsg).init(source);
+                try reporter.reportAll(file_name, self.analyzer.warns.items);
+            }
+
+            self.instr_count = self.analyzer.instructions.len;
+            return error.ExitOnPrint;
+        } else if (self.config.print_ir)
+            try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
     }
-
-    if (self.analyzer.errs.items.len > 0) {
-        var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.reportAll(file_name, self.analyzer.errs.items);
-
-        if (self.analyzer.warns.items.len > 0) {
-            reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.reportAll(file_name, self.analyzer.warns.items);
-        }
-
-        self.instr_count = self.analyzer.instructions.len;
-        return error.ExitOnPrint;
-    } else if (self.config.print_ir)
-        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
     // Analyzer warnings
     if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
@@ -152,6 +155,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
 
     // Compiler
     var compiler = CompilationManager.init(
+        file_name,
         self.vm,
         self.analyzer.type_manager.natives.functions,
         self.instr_count,
@@ -166,7 +170,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     const function = try compiler.compile();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
-    return if (options.test_mode and self.config.print_bytecode) {
+    return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
         return error.ExitOnPrint;
     } else .{
         .name = file_name[0 .. file_name.len - 3],
@@ -229,6 +233,7 @@ pub fn createSubPipeline(self: *Self) Self {
     pipeline.allocator = self.allocator;
     pipeline.config = sub_config;
     pipeline.analyzer.init(self.allocator, self, &self.vm.interner, true);
+    pipeline.is_sub = true;
 
     return pipeline;
 }

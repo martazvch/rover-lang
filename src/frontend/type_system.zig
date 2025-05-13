@@ -12,7 +12,6 @@ pub const Type = enum(TypeSize) {
     bool,
     str,
     self,
-    module,
     _,
 
     pub fn toIdx(self: Type) usize {

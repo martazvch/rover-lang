@@ -97,11 +97,11 @@ const Tester = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.clear_diags();
+        self.clearDiags();
         self.diags.deinit();
     }
 
-    fn clear_diags(self: *Self) void {
+    fn clearDiags(self: *Self) void {
         for (self.diags.items) |*diag|
             diag.deinit(self.allocator);
 
@@ -114,22 +114,22 @@ const Tester = struct {
         switch (stage) {
             .all => {
                 // TODO: for loop
-                try self.run_stage(.parser);
+                try self.runStage(.parser);
                 success = self.report(.parser);
-                self.clear_diags();
+                self.clearDiags();
 
-                try self.run_stage(.analyzer);
+                try self.runStage(.analyzer);
                 success = self.report(.analyzer) or success;
-                self.clear_diags();
+                self.clearDiags();
 
-                try self.run_stage(.compiler);
+                try self.runStage(.compiler);
                 success = self.report(.compiler) or success;
 
-                try self.run_stage(.vm);
+                try self.runStage(.vm);
                 success = self.report(.vm);
             },
             else => {
-                try self.run_stage(stage);
+                try self.runStage(stage);
                 success = self.report(stage);
             },
         }
@@ -152,7 +152,7 @@ const Tester = struct {
         return true;
     }
 
-    fn run_stage(self: *Self, stage: Stage) !void {
+    fn runStage(self: *Self, stage: Stage) !void {
         const categories = switch (stage) {
             .analyzer => &[_][]const u8{ "errors", "features", "warnings" },
             .parser => &[_][]const u8{ "errors", "features" },
@@ -170,24 +170,21 @@ const Tester = struct {
             defer walker.deinit();
 
             while (try walker.next()) |entry| {
-                if (std.mem.endsWith(u8, entry.basename, ".rv")) {
-                    self.test_file(&cwd, stage, entry, category) catch continue;
+                // File ending with .rv and not a child of current directory
+                if (std.mem.endsWith(u8, entry.basename, ".rv") and entry.dir.fd == cwd.fd) {
+                    self.testFile(&cwd, stage, entry, category) catch continue;
                 }
             }
         }
     }
 
-    fn test_file(self: *Self, dir: *std.fs.Dir, stage: Stage, entry: std.fs.Dir.Walker.Entry, category: []const u8) !void {
+    fn testFile(self: *Self, dir: *std.fs.Dir, stage: Stage, entry: std.fs.Dir.Walker.Entry, category: []const u8) !void {
         var no_ext = std.mem.splitScalar(u8, entry.basename, '.');
         const name = no_ext.next().?;
         var output_file = try self.allocator.alloc(u8, name.len + 4);
         defer self.allocator.free(output_file);
         @memcpy(output_file[0..name.len], name);
         @memcpy(output_file[name.len..], ".out");
-
-        // std.debug.print("Entry path: {s}\n", .{entry.path});
-        // std.debug.print("Output file: {s}\n", .{output_file});
-        // const output = std.fs.path.join(allocator, entry.path, entry.basename);
 
         const argv = if (stage == .vm)
             &[_][]const u8{ self.exe_path, entry.basename }
@@ -198,9 +195,9 @@ const Tester = struct {
 
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const path = try std.os.getFdPath(dir.fd, &buf);
-        // std.debug.print("Exe path: {s}\n", .{self.exe_path});
-        // std.debug.print("Cwd: {s}\n", .{path});
-        // std.debug.print("Argv: {s}\n", .{argv});
+
+        // std.debug.print("CWD: {s}\n", .{path});
+        // std.debug.print("Args: {any}\n", .{argv});
 
         const res = std.process.Child.run(.{
             .allocator = self.allocator,
@@ -213,7 +210,7 @@ const Tester = struct {
         defer self.allocator.free(res.stdout);
         defer self.allocator.free(res.stderr);
 
-        const got = try self.clean_text(res.stdout);
+        const got = try self.cleanText(res.stdout);
         defer self.allocator.free(got);
 
         const file = dir.openFile(output_file, .{ .mode = .read_only }) catch |err| {
@@ -228,22 +225,20 @@ const Tester = struct {
         defer self.allocator.free(expect);
 
         _ = try file.readAll(expect);
-        const clean_expect = try self.clean_text(expect);
+        const clean_expect = try self.cleanText(expect);
         defer self.allocator.free(clean_expect);
 
         std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), std.mem.trimRight(u8, clean_expect, "\n"))) catch |e| {
-            // std.debug.print("Expect: --{s}--\n", .{clean_expect});
-            // std.debug.print("Got: --{s}--\n", .{got});
             try self.diags.append(.{
                 .category = category,
-                .diff = try self.colorized_dif(clean_expect, got),
+                .diff = try self.colorizedDiff(clean_expect, got),
                 .file_name = try self.allocator.dupe(u8, entry.basename),
             });
             return e;
         };
     }
 
-    fn clean_text(self: *const Self, text: []const u8) ![]const u8 {
+    fn cleanText(self: *const Self, text: []const u8) ![]const u8 {
         var res = std.ArrayList(u8).init(self.allocator);
         var lines = std.mem.splitScalar(u8, text, '\n');
 
@@ -262,7 +257,7 @@ const Tester = struct {
         return res.toOwnedSlice();
     }
 
-    fn colorized_dif(self: *Self, expect: []const u8, got: []const u8) ![]const u8 {
+    fn colorizedDiff(self: *Self, expect: []const u8, got: []const u8) ![]const u8 {
         const RED = "\x1b[31m";
         const NORMAL = "\x1b[0m";
 

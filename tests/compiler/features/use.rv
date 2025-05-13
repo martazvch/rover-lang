@@ -1,28 +1,16 @@
-use std._test1
+use data.math
 
 fn main() {
-    {
-        use std._test2
-        print _gt_f2i(1, "empty", 3.)
+    math.introduce()
+    var vec = math.getVecFromPos(1, 2)
 
-        // From _test1
-        print _cast_f2i(false, 3.)
-    }
-    {
-        var tmp = 1
-        use std._test1
-        print _cast_i2f(56)
-    }
+    // Bounded
+    var please = math.introduce
+    please()
 
-    // Reimport locally
-    use std._test2
-    {
-        use std._test2
-        use std._test1
+    var please2 = math.getVecFromPos
+    var vec2 = please2(6, 89)
 
-        // From _test1
-        print _cast_i2f(56)
-        // From _test2
-        print _gt_i2f(24, 3.)
-    }
+    print vec2.y
 }
+

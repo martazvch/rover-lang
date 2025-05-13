@@ -24,6 +24,7 @@ const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
 pub const CompilationManager = struct {
+    file_name: []const u8,
     vm: *Vm,
     natives: []const NativeFn,
     compiler: Compiler,
@@ -45,6 +46,7 @@ pub const CompilationManager = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     pub fn init(
+        file_name: []const u8,
         vm: *Vm,
         natives: []const NativeFn,
         instr_start: usize,
@@ -55,6 +57,7 @@ pub const CompilationManager = struct {
         repl: bool,
     ) Self {
         return .{
+            .file_name = file_name,
             .vm = vm,
             .natives = natives,
             .compiler = undefined,
@@ -75,6 +78,11 @@ pub const CompilationManager = struct {
     }
 
     pub fn compile(self: *Self) !*ObjFunction {
+        if (self.render_mode != .none) {
+            const stdout = std.io.getStdOut().writer();
+            try stdout.print("//---- {s} ----\n\n", .{self.file_name});
+        }
+
         self.compiler = Compiler.init(self, "global scope");
 
         // TODO: maybe separate globals and put it in the manager as every other spawned compilers
@@ -246,9 +254,7 @@ const Compiler = struct {
             defer dis.deinit();
             dis.disChunk(if (self.function.name) |n| n.chars else "Script") catch oom();
             const stdout = std.io.getStdOut().writer();
-            stdout.print("{s}", .{dis.disassembled.items}) catch oom();
-
-            if (self.function.name == null) try stdout.writeAll("\n");
+            stdout.print("{s}\n", .{dis.disassembled.items}) catch oom();
         }
 
         return self.function;
