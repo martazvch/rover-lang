@@ -13,6 +13,7 @@ const ObjFunction = Obj.ObjFunction;
 const ObjStruct = Obj.ObjStruct;
 const ObjInstance = Obj.ObjInstance;
 const ObjBoundMethod = Obj.ObjBoundMethod;
+const Module = @import("../Pipeline.zig").Module;
 
 vm: *Vm,
 parent_allocator: Allocator,
@@ -74,11 +75,21 @@ fn markRoots(self: *Self) Allocator.Error!void {
         try self.markValue(&value[0]);
     }
 
-    for (self.vm.frame_stack.frames[0..self.vm.frame_stack.count]) |*frame| {
-        try self.markObject(frame.function.asObj());
-    }
+    // No need because part of Vm's linked list
+    // for (self.vm.frame_stack.frames[0..self.vm.frame_stack.count]) |*frame| {
+    //     try self.markObject(frame.function.asObj());
+    // }
 
-    try self.markArray(self.vm.start_module.globals);
+    try self.markModule(self.vm.module);
+}
+
+fn markModule(self: *Self, module: *Module) Allocator.Error!void {
+    // No need to mark the fubctions it's in the Vm's linked list
+    try self.markArray(module.globals);
+
+    for (module.imports) |*mod| {
+        try self.markModule(mod);
+    }
 }
 
 fn traceRef(self: *Self) Allocator.Error!void {

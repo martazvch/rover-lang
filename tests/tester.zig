@@ -196,9 +196,6 @@ const Tester = struct {
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const path = try std.os.getFdPath(dir.fd, &buf);
 
-        // std.debug.print("CWD: {s}\n", .{path});
-        // std.debug.print("Args: {any}\n", .{argv});
-
         const res = std.process.Child.run(.{
             .allocator = self.allocator,
             .cwd = path,
