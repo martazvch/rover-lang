@@ -93,24 +93,17 @@ pub const RirRenderer = struct {
         }
     }
 
-    const Tag = enum {
-        data,
-        tag,
-
-        pub fn Type(tag: Tag) type {
-            return switch (tag) {
-                .data => Instruction.Data,
-                .tag => Instruction.Tag,
-            };
-        }
-    };
-
-    fn next(self: *Self, comptime tag: Tag) tag.Type() {
+    fn next(self: *Self, tag: anytype) switch (tag) {
+        .data => Instruction.Data,
+        .tag => Instruction.Tag,
+        else => @compileError("rir_renderer: trying to get unsupported next data"),
+    } {
         defer self.instr_idx += 1;
 
         return switch (tag) {
             .data => self.instr_data[self.instr_idx],
             .tag => self.instr_tag[self.instr_idx],
+            else => unreachable,
         };
     }
 
@@ -132,7 +125,7 @@ pub const RirRenderer = struct {
             .imported => unreachable,
             .int => self.intInstr(),
             .member => self.getMember(index),
-            .module_symbol => self.moduleSymbol(index),
+            .module_import => self.moduleImport(index),
             .multiple_var_decl => self.multipleVarDecl(),
             .name => unreachable,
             .null => {
@@ -281,17 +274,20 @@ pub const RirRenderer = struct {
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Fn call arity: {}, call_tag: {s}", .{
+        try writer.print("[Fn call arity: {}, call_tag: {s}]\n", .{
             data.arity, @tagName(data.tag),
         });
-        if (data.tag == .import or data.tag == .invoke_import) {
-            try writer.print(", module: {}", .{data.module});
-        }
-        try writer.writeAll("]\n");
+
         self.indent_level += 1;
 
         // Variable
         try self.parseInstr(self.instr_idx);
+
+        if (data.tag == .import) {
+            try self.indent();
+            try self.tree.appendSlice("- load module:\n");
+            try self.parseInstr(self.instr_idx);
+        }
 
         if (data.arity > 0) {
             try self.indent();
@@ -328,13 +324,13 @@ pub const RirRenderer = struct {
         self.indent_level -= 1;
     }
 
-    fn moduleSymbol(self: *Self, instr: usize) Error!void {
-        const data = self.instr_data[instr].module_symbol;
+    fn moduleImport(self: *Self, instr: usize) Error!void {
+        const data = self.instr_data[instr].module_import;
         self.instr_idx += 1;
 
         try self.indent();
         var writer = self.tree.writer();
-        try writer.print("[Module {}, symbol {}]\n", .{ data.module, data.symbol });
+        try writer.print("[Import module {}, scope {s}]\n", .{ data.index, @tagName(data.scope) });
     }
 
     fn fnDeclaration(self: *Self, instr: usize) Error!void {

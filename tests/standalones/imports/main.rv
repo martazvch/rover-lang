@@ -1,7 +1,6 @@
-use data.piou
 use math
-use data.vehicle
-use data.sub.speak
+// use data.vehicle
+// use data.sub.speak
 
 fn main() {
     // Math
@@ -39,17 +38,17 @@ fn main() {
     print vec2.x
     print vec2.y
     print vec2.len()
-    
+
     print "test bounded"
     var bounded = vec2.len
     print bounded()
-
-    // Vehicle
-    vehicle.presentVehicle("AMG")
-    var tires = 4
-    var gas = 900
-    //var amg = vehicle.Vehicle{ tires, gas }
-
-    // Speak
-    speak.speak("I'm a beautiful content to be displayed")
+    //
+    // // Vehicle
+    // vehicle.presentVehicle("AMG")
+    // var tires = 4
+    // var gas = 900
+    // //var amg = vehicle.Vehicle{ tires, gas }
+    //
+    // // Speak
+    // speak.speak("I'm a beautiful content to be displayed")
 }

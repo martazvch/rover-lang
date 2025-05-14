@@ -2,6 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 
 const Obj = @import("Obj.zig");
+const Module = @import("../Pipeline.zig").Module;
 
 pub const Value = union(enum) {
     bool: bool,
@@ -9,6 +10,7 @@ pub const Value = union(enum) {
     int: i64,
     null,
     obj: *Obj,
+    module: *Module,
 
     const Self = @This();
     pub const true_: Self = .{ .bool = true };
@@ -27,7 +29,11 @@ pub const Value = union(enum) {
         return .{ .int = value };
     }
 
-    pub fn makeObj(object: *Obj) Value {
+    pub fn makeModule(module: *Module) Self {
+        return .{ .module = module };
+    }
+
+    pub fn makeObj(object: *Obj) Self {
         return .{ .obj = object };
     }
 
@@ -36,20 +42,21 @@ pub const Value = union(enum) {
         self.bool = !self.bool;
     }
 
-    pub fn asObj(self: *const Value) ?*Obj {
+    pub fn asObj(self: *const Self) ?*Obj {
         return switch (self.*) {
             .obj => |v| v,
             else => null,
         };
     }
 
-    pub fn print(self: *const Value, writer: anytype) !void {
+    pub fn print(self: *const Self, writer: anytype) !void {
         try switch (self.*) {
             .bool => |v| writer.print("{}", .{v}),
             .float => |v| writer.print("{d}", .{v}),
             .int => |v| writer.print("{}", .{v}),
             .null => writer.print("null", .{}),
             .obj => |v| v.print(writer),
+            .module => |v| writer.print("<module {s}>", .{v.name}),
         };
     }
 };

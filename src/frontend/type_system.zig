@@ -135,6 +135,20 @@ pub const TypeInfo = union(enum) {
     func: FnInfo,
     module: Symbols,
     @"struct": StructInfo,
+
+    pub fn setModule(self: *TypeInfo, module: usize) void {
+        switch (self.*) {
+            .module => unreachable,
+            inline else => |*t| t.module = module,
+        }
+    }
+
+    pub fn getModule(self: *TypeInfo) usize {
+        return switch (self.*) {
+            .module => unreachable,
+            inline else => |*t| t.module,
+        };
+    }
 };
 
 // TODO: slice instead of fixes size array
@@ -142,6 +156,8 @@ pub const FnInfo = struct {
     params: []const Type,
     return_type: Type,
     tag: Tag = .function,
+    /// Modules from which it has been imported
+    module: usize = 0,
 
     pub const Tag = enum { builtin, function };
 };
@@ -150,6 +166,8 @@ pub const StructInfo = struct {
     functions: AutoHashMapUnmanaged(usize, MemberInfo),
     fields: AutoHashMapUnmanaged(usize, MemberInfo),
     default_value_fields: usize,
+    /// Module from which it has been imported
+    module: usize = 0,
 
     pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {
         var res = std.AutoHashMapUnmanaged(usize, bool){};
@@ -175,14 +193,7 @@ pub const MemberInfo = struct {
     default: bool = false,
 };
 
-pub const Symbols = AutoArrayHashMapUnmanaged(usize, SymbolInfo);
-
-pub const SymbolInfo = struct {
-    /// Order of declaration
-    index: usize,
-    /// Field's type
-    type: Type,
-};
+pub const Symbols = AutoArrayHashMapUnmanaged(usize, MemberInfo);
 
 test "types" {
     const expect = @import("std").testing.expect;

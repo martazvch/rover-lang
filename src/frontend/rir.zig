@@ -26,7 +26,7 @@ pub const Instruction = struct {
         imported,
         int,
         multiple_var_decl,
-        module_symbol,
+        module_import,
         null,
         print,
         @"return",
@@ -48,8 +48,6 @@ pub const Instruction = struct {
         call: Call,
         capture: usize,
         cast_to: Type,
-        member: Member,
-        module_symbol: ModuleSymbol,
         float: f64,
         fn_decl: FnDecl,
         id: usize,
@@ -57,6 +55,8 @@ pub const Instruction = struct {
         // TODO: delete later
         imported: Imported,
         int: i64,
+        member: Member,
+        module_import: ModuleImport,
         @"return": Return,
         struct_decl: StructDecl,
         struct_literal: StructLiteral,
@@ -108,8 +108,6 @@ pub const Instruction = struct {
     pub const Call = struct {
         arity: u8,
         tag: CallTag = .function,
-        /// If we call an imported function, we will load its module
-        module: u8 = 0,
 
         pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import };
     };
@@ -125,9 +123,9 @@ pub const Instruction = struct {
         index: usize,
         kind: Kind,
 
-        pub const Kind = enum { bound_method, field };
+        pub const Kind = enum { bound_method, field, symbol };
     };
-    pub const ModuleSymbol = struct { module: usize, symbol: usize };
+    pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };

@@ -628,20 +628,22 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         // TODO: what to do for local imports? We leave them all without discarding any of the imports
         // even the nested ones so we keep the index good
         const module = try self.importModule(node);
-        const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
-        self.modules.append(self.allocator, module) catch oom();
-
         const last = node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(last));
-        self.addModule(module_name, module_type);
+        const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
+
+        const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, last);
+        _ = self.addInstr(.{ .tag = .module_import, .data = .{ .module_import = .{ .index = self.modules.items.len, .scope = variable.scope } } });
+        self.modules.append(self.allocator, module) catch oom();
+        self.addImport(module_name, module_type);
     }
 }
 
-fn addModule(self: *Self, name: usize, typ: Type) void {
+fn addImport(self: *Self, name: usize, typ: Type) void {
     const variable: Variable = .{
         .name = name,
         .typ = typ,
-        .depth = 0,
+        .depth = self.scope_depth,
         .kind = .module,
         .decl = self.instructions.len,
     };
@@ -1042,42 +1044,57 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const idx = self.addInstr(.{ .tag = .member });
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
-    const struct_type = switch (expr.structure.*) {
-        .literal => |*lit| blk: {
-            const variable = try self.resolveIdentifier(lit.idx, true);
+    const struct_type = try self.analyzeExpr(expr.structure);
+    const struct_value = struct_type.getValue();
 
-            // We don't compile instructions if the variable is a module. Modules are kind
-            // of placeholder just to track informations. If not a module, generate instructions
-            // to get the variable
-            if (variable.typ.is(.module)) {
-                const infos_index = variable.typ.getValue();
+    var found_field, const kind: Instruction.Member.Kind = switch (struct_type.getKind()) {
+        .@"struct" => blk: {
+            const infos = self.type_manager.type_infos.items[struct_value].@"struct";
 
-                return .init(Type.create(.module, .none, infos_index), self.moduleField(infos_index, field_name));
-            } else {
-                self.makeVariableInstr(variable);
-                break :blk variable.typ;
-            }
+            break :blk if (infos.fields.get(field_name)) |f|
+                .{ f, .field }
+            else if (infos.functions.get(field_name)) |f|
+                .{ f, .bound_method }
+            else
+                return self.err(
+                    .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
+                    self.ast.getSpan(expr.field),
+                );
         },
-        else => try self.analyzeExpr(expr.structure),
+        .module => blk: {
+            const module = &self.modules.items[struct_value];
+            var symbol = module.symbols.get(field_name) orelse {
+                // TODO: error
+                @panic("Module doesn't have declaration");
+            };
+
+            // TODO:
+            if (!symbol.type.is(.func)) {
+                @panic("support only function member access on imports for now");
+            }
+
+            // TODO: for now we copy it as the type manager is shared accross all sub-pipelines. We want to
+            // set the `module` field only for this analyzer pass
+
+            // Here, we get the symbol we are referencing, then we create a copy. We give it the correct
+            // import index (setModule) so that we can retreive its declaration later in the self.imports
+            // list. As we updated the 'module' index field, we add a new type in the type manager and
+            // create a type based on its index. We update the symbol's type to refer to the new one
+            var new_infos = self.type_manager.type_infos.items[symbol.type.getValue()];
+            new_infos.setModule(struct_value);
+
+            const new_idx = try self.type_manager.reserveInfo();
+            self.type_manager.setInfo(new_idx, new_infos);
+            const new_type = Type.create(.func, .imported, new_idx);
+            symbol.type = new_type;
+
+            break :blk .{ symbol, .symbol };
+        },
+        else => return self.err(
+            .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
+            self.ast.getSpan(expr.structure),
+        ),
     };
-
-    const infos = if (struct_type.is(.@"struct")) blk: {
-        const infos_index = struct_type.getValue();
-        break :blk self.type_manager.type_infos.items[infos_index].@"struct";
-    } else return self.err(
-        .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
-        self.ast.getSpan(expr.structure),
-    );
-
-    var found_field, const kind: Instruction.Member.Kind = if (infos.fields.get(field_name)) |f|
-        .{ f, .field }
-    else if (infos.functions.get(field_name)) |f|
-        .{ f, .bound_method }
-    else
-        return self.err(
-            .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
-            self.ast.getSpan(expr.field),
-        );
 
     self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.index, .kind = kind } };
 
@@ -1085,24 +1102,6 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         found_field.type.setExtra(.bound_method);
 
     return .init(struct_type, found_field.type);
-}
-
-fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
-    const module = &self.modules.items[module_idx];
-    var symbol = module.symbols.get(field_name) orelse {
-        // TODO: error
-        @panic("Module doesn't have declaration");
-    };
-
-    // Overwrite the 'member' instruction
-    self.instructions.set(self.instructions.len - 1, .{ .tag = .module_symbol, .data = .{ .module_symbol = .{
-        .module = module_idx,
-        .symbol = symbol.index,
-    } } });
-
-    symbol.type.setExtra(.imported);
-
-    return symbol.type;
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1136,13 +1135,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // 1: var bounded = p.method(); bounded()  --> here instance_type is void
     // 2: p.method()                           --> here instance_type isn't
     if (extra == .imported) {
-        if (sft.structure.getKind() == .module) {
-            call_tag = .invoke_import;
-        } else {
-            call_tag = .import;
-            // TODO: protect the cast
-            self.instructions.items(.data)[idx].call.module = @intCast(sft.structure.getValue());
-        }
+        call_tag = if (sft.structure.getKind() == .module) .invoke_import else .import;
     } else if (extra == .bound_method) {
         if (sft.structure != .void) {
             call_tag = .invoke;
@@ -1172,12 +1165,19 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         );
     }
 
+    try self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
+
+    // To load the module's global before call. If it's an invoke_import, we know that the
+    // module is already just behind
+    if (call_tag == .import) {
+        self.makeVariableInstr(&self.imports.items[infos.module]);
+    }
     self.instructions.items(.data)[idx].call.tag = call_tag;
 
-    return self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
+    return infos.return_type;
 }
 
-fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Error!Type {
+fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Error!void {
     const params = if (is_bound) infos.params[1..] else infos.params;
 
     for (args, 0..) |arg, i| {
@@ -1197,8 +1197,6 @@ fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Err
             }
         }
     }
-
-    return infos.return_type;
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
@@ -1290,12 +1288,6 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
             return glob;
         }
-    }
-
-    // TODO: Switch to hashmap? But order is important for after, so ArrayHashMap?
-    for (self.imports.items) |*import| {
-        if (import.name == name_idx)
-            return import;
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(name));

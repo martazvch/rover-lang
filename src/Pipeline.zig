@@ -160,14 +160,14 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         self.analyzer.type_manager.natives.functions,
         self.instr_count,
         &self.analyzer.instructions,
-        &self.analyzer.symbols,
+        self.analyzer.modules.items,
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
     );
     defer compiler.deinit();
     self.instr_count = self.analyzer.instructions.len;
-    const function = try compiler.compile();
+    const function = try compiler.compile(self.analyzer.symbols.count());
     errdefer compiler.globals.deinit(self.vm.allocator);
 
     return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {

@@ -10,6 +10,7 @@ const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
 const Symbols = @import("../frontend/type_system.zig").Symbols;
+const Module = @import("../Pipeline.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
 const ObjString = @import("../runtime/Obj.zig").ObjString;
 const ObjFunction = @import("../runtime/Obj.zig").ObjFunction;
@@ -33,7 +34,7 @@ pub const CompilationManager = struct {
     instr_data: []const Instruction.Data,
     instr_offsets: []const usize,
     instr_idx: usize,
-    symbols: *Symbols,
+    modules: []Module,
     render_mode: Disassembler.RenderMode,
     main: usize,
     main_index: ?u8 = null,
@@ -51,7 +52,7 @@ pub const CompilationManager = struct {
         natives: []const NativeFn,
         instr_start: usize,
         instructions: *const MultiArrayList(Instruction),
-        symbols: *Symbols,
+        modules: []Module,
         render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
@@ -65,7 +66,7 @@ pub const CompilationManager = struct {
             .instr_tags = instructions.items(.tag),
             .instr_data = instructions.items(.data),
             .instr_offsets = instructions.items(.offset),
-            .symbols = symbols,
+            .modules = modules,
             .instr_idx = instr_start,
             .render_mode = render_mode,
             .main = main,
@@ -77,7 +78,7 @@ pub const CompilationManager = struct {
         self.errs.deinit();
     }
 
-    pub fn compile(self: *Self) !*ObjFunction {
+    pub fn compile(self: *Self, symbols_count: usize) !*ObjFunction {
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
             try stdout.print("//---- {s} ----\n\n", .{self.file_name});
@@ -87,8 +88,7 @@ pub const CompilationManager = struct {
 
         // TODO: maybe separate globals and put it in the manager as every other spawned compilers
         // will be for local functions
-        // self.compiler.function.chunk.globals.ensureTotalCapacity(self.vm.gc_alloc, self.symbols.count()) catch oom();
-        self.globals.ensureTotalCapacity(self.vm.allocator, self.symbols.count()) catch oom();
+        self.globals.ensureTotalCapacity(self.vm.allocator, symbols_count) catch oom();
 
         while (self.instr_idx < self.instr_tags.len) {
             try self.compiler.compileInstr();
@@ -278,7 +278,7 @@ const Compiler = struct {
             .int => self.intInstr(),
             .@"if" => self.ifInstr(),
             .member => self.getMember(),
-            .module_symbol => self.moduleSymbol(),
+            .module_import => self.moduleImport(),
             .multiple_var_decl => self.multipleVarDecl(),
             .name => unreachable,
             .null => self.nullInstr(),
@@ -449,20 +449,16 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         self.writeOpAndByte(
-            if (data.kind == .field) .get_field else .bound_method,
+            if (data.kind == .field)
+                .get_field
+            else if (data.kind == .symbol)
+                .get_symbol
+            else
+                .bound_method,
             @intCast(data.index),
             start,
         );
         try self.compileInstr();
-    }
-
-    fn moduleSymbol(self: *Self) Error!void {
-        const data = self.getData().module_symbol;
-        const start = self.getStart();
-        self.manager.instr_idx += 1;
-
-        self.writeOpAndByte(.module_symbol, @intCast(data.module), start);
-        self.writeByte(@intCast(data.symbol), start);
     }
 
     fn floatInstr(self: *Self) Error!void {
@@ -497,7 +493,8 @@ const Compiler = struct {
 
         // For imports, we generate op code to load/unload the module
         if (data.tag == .import) {
-            self.writeByte(data.module, start);
+            // Compiles the index + scope of the module to load it
+            try self.compileInstr();
             self.writeOp(.unload_module, start);
         }
     }
@@ -515,15 +512,14 @@ const Compiler = struct {
     }
 
     fn invokeImport(self: *Self, data: Instruction.Call, start: usize) Error!void {
-        // We skip the 'module_symbol' op code
-        const symbol_data = self.getData().module_symbol;
+        const symbol_data = self.getData().member;
         self.manager.instr_idx += 1;
-        self.writeOp(.null, start);
+        // Compiles the receiver
+        try self.compileInstr();
         try self.compileArgs(data.arity);
 
         self.writeOpAndByte(.invoke_import, data.arity, start);
-        self.writeByte(@intCast(symbol_data.module), start);
-        self.writeByte(@intCast(symbol_data.symbol), start);
+        self.writeByte(@intCast(symbol_data.index), start);
         self.writeOp(.unload_module, start);
     }
 
@@ -628,6 +624,18 @@ const Compiler = struct {
         try self.patchJump(else_jump);
     }
 
+    fn moduleImport(self: *Self) Error!void {
+        const data = self.getData().module_import;
+
+        if (data.scope == .global) {
+            self.addGlobal(.makeModule(&self.manager.modules[data.index]));
+        } else {
+            const start = self.getStart();
+            self.writeOpAndByte(.push_module, @intCast(data.index), start);
+        }
+        self.manager.instr_idx += 1;
+    }
+
     fn multipleVarDecl(self: *Self) Error!void {
         const data = self.getData().id;
         self.manager.instr_idx += 1;
@@ -712,17 +720,6 @@ const Compiler = struct {
             );
             self.defineVariable(struct_var.variable, start);
         }
-
-        // try self.emitConstant(
-        //     Value.makeObj(ObjStruct.create(
-        //         self.manager.vm,
-        //         ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
-        //         data.fields_count,
-        //         funcs.toOwnedSlice(self.manager.vm.allocator) catch oom(),
-        //     ).asObj()),
-        //     self.getStart(),
-        // );
-        // self.defineVariable(struct_var.variable, start);
     }
 
     fn structLiteral(self: *Self) Error!void {

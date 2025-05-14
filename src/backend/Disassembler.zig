@@ -66,14 +66,15 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
         .field_assign => self.simpleInstruction("OP_FIELD_ASSIGN", offset, writer),
+        .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
+        .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", offset, writer),
         .get_global => self.getGlobal(offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
+        .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
-        .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
-        .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
         .import_call => self.importCall(offset, writer),
         .invoke => self.invokeInstruction(offset, writer),
         .invoke_import => self.invokeImportInstruction(offset, writer),
@@ -85,7 +86,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .le_float => self.simpleInstruction("OP_LESS_EQUAL_FLOAT", offset, writer),
         .le_int => self.simpleInstruction("OP_LESS_EQUAL_INT", offset, writer),
         .loop => self.jumpInstruction("OP_LOOP", -1, offset, writer),
-        .module_symbol => self.moduleSymbol(offset, writer),
         .mul_float => self.simpleInstruction("OP_MULTIPLY_FLOAT", offset, writer),
         .mul_int => self.simpleInstruction("OP_MULTIPLY_INT", offset, writer),
         .naked_return => self.simpleInstruction("OP_NAKED_RETURN", offset, writer),
@@ -100,6 +100,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .null => self.simpleInstruction("OP_NULL", offset, writer),
         .pop => self.simpleInstruction("OP_POP", offset, writer),
         .print => self.simpleInstruction("OP_PRINT", offset, writer),
+        .push_module => self.indexInstruction("OP_PUSH_MODULE", offset, writer),
         .@"return" => self.simpleInstruction("OP_RETURN", offset, writer),
         .scope_return => self.indexInstruction("OP_SCOPE_RETURN", offset, writer),
         .set_global => self.indexInstruction("OP_SET_GLOBAL", offset, writer),
@@ -244,32 +245,18 @@ fn invokeInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
 
 fn invokeImportInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
-    const module = self.chunk.code.items[offset + 2];
-    const symbol = self.chunk.code.items[offset + 3];
-
-    if (self.render_mode == .Test) {
-        try writer.print(
-            "{s} arity {}, module index {}, symbol index: {}\n",
-            .{ "OP_INVOKE_IMPORT", arity, module, symbol },
-        );
-    } else {
-        try writer.print(
-            "{s:<24} arity {:>4}, module index {:>4}, symbol index: {:>4}\n",
-            .{ "OP_INVOKE_IMPORT", arity, module, symbol },
-        );
-    }
-
-    return offset + 4;
-}
-
-fn moduleSymbol(self: *const Self, offset: usize, writer: anytype) !usize {
-    const module = self.chunk.code.items[offset + 1];
     const symbol = self.chunk.code.items[offset + 2];
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} module {}, symbol {}\n", .{ "OP_MODULE_SYMBOL", module, symbol });
+        try writer.print(
+            "{s} arity {}, symbol index: {}\n",
+            .{ "OP_INVOKE_IMPORT", arity, symbol },
+        );
     } else {
-        try writer.print("{s:<24} module {:>4}, symbol {:>4}\n", .{ "OP_MODULE_SYMBOL", module, symbol });
+        try writer.print(
+            "{s:<24} arity {:>4}, symbol index: {:>4}\n",
+            .{ "OP_INVOKE_IMPORT", arity, symbol },
+        );
     }
 
     return offset + 3;
@@ -277,13 +264,12 @@ fn moduleSymbol(self: *const Self, offset: usize, writer: anytype) !usize {
 
 fn importCall(self: *const Self, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
-    const module = self.chunk.code.items[offset + 2];
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, module {}\n", .{ "OP_IMPORT_CALL", arity, module });
+        try writer.print("{s} arity {}, load following module:\n", .{ "OP_IMPORT_CALL", arity });
     } else {
-        try writer.print("{s:<24} arity {:>4}, module {:>4}\n", .{ "OP_IMPORT_CALL", arity, module });
+        try writer.print("{s:<24} arity {:>4}, load following module:\n", .{ "OP_IMPORT_CALL", arity });
     }
 
-    return offset + 3;
+    return offset + 2;
 }

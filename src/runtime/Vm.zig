@@ -9,6 +9,7 @@ const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
 const Interner = @import("../Interner.zig");
 const Pipeline = @import("../Pipeline.zig");
+const Module = Pipeline.Module;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
@@ -23,9 +24,9 @@ const Value = @import("values.zig").Value;
 
 pipeline: Pipeline,
 gc: Gc,
-start_module: Pipeline.Module,
-module: *Pipeline.Module,
-module_chain: std.ArrayListUnmanaged(*Pipeline.Module),
+start_module: Module,
+module: *Module,
+module_chain: std.ArrayListUnmanaged(*Module),
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
@@ -197,8 +198,10 @@ fn execute(self: *Self) !void {
             const instr_nb = self.instructionNb();
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
-            if (@as(OpCode, @enumFromInt(frame.ip[0])) == .field_assign) {
-                _ = try dis.disInstruction(instr_nb + 1, self.stdout);
+            switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
+                .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
+                .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
+                else => {},
             }
         }
 
@@ -273,16 +276,39 @@ fn execute(self: *Self) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_symbol => {
+                const symbol_idx = frame.readByte();
+                const scope: OpCode = @enumFromInt(frame.readByte());
+                const module_idx = frame.readByte();
+
+                // TODO: make a method for that
+                const value = if (scope == .get_global)
+                    &self.module.globals[module_idx]
+                    // else if (scope == .get_heap)
+                    //     &self.heap_vars[idx]
+                else
+                    &frame.slots[module_idx];
+
+                self.stack.push(value.module.globals[symbol_idx]);
+            },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .import_call => {
                 const args_count = frame.readByte();
-                const module = frame.readByte();
+                const scope: OpCode = @enumFromInt(frame.readByte());
+                const module_idx = frame.readByte();
+
+                const module = if (scope == .get_global)
+                    self.module.globals[module_idx].module
+                        // else if (scope == .get_heap)
+                        //     &self.heap_vars[idx]
+                else
+                    frame.slots[module_idx].module;
                 self.updateModule(module);
 
-                const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
+                const callee = self.stack.peekRef(args_count).asObj().?.as(ObjFunction);
                 try self.call(callee, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
@@ -295,11 +321,11 @@ fn execute(self: *Self) !void {
             },
             .invoke_import => {
                 const args_count = frame.readByte();
-                const module = frame.readByte();
                 const symbol = frame.readByte();
 
+                const module = self.stack.peek(args_count).module;
                 self.updateModule(module);
-                const imported = self.module.globals[symbol];
+                const imported = self.stack.peek(args_count).module.globals[symbol];
 
                 try self.call(imported.asObj().?.as(ObjFunction), args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
@@ -323,12 +349,6 @@ fn execute(self: *Self) !void {
             .loop => {
                 const jump = frame.readShort();
                 frame.ip -= jump;
-            },
-            .module_symbol => {
-                const module = frame.readByte();
-                const symbol = frame.readByte();
-                const imported = self.module.imports[module].globals[symbol];
-                self.stack.push(imported);
             },
             .mul_float => {
                 const rhs = self.stack.pop().float;
@@ -371,6 +391,11 @@ fn execute(self: *Self) !void {
             .print => {
                 try self.stack.pop().print(self.stdout);
                 _ = try self.stdout.write("\n");
+            },
+            .push_module => {
+                const index = frame.readByte();
+                const module = &self.module.imports[index];
+                self.stack.push(.makeModule(module));
             },
             .exit_repl => {
                 // Here, there is no value to pop for now, no implicit null is
@@ -493,10 +518,15 @@ fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver:
     frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 }
 
-fn updateModule(self: *Self, module_idx: usize) void {
+fn updateModule(self: *Self, module: *Module) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
-    self.module = &self.module.imports[module_idx];
+    self.module = module;
 }
+
+// fn updateModule(self: *Self, module_idx: usize) void {
+//     self.module_chain.append(self.allocator, self.module) catch oom();
+//     self.module = &self.module.imports[module_idx];
+// }
 
 fn strConcat(self: *Self) void {
     const s2 = self.stack.peekRef(0).obj.as(ObjString);
