@@ -69,7 +69,7 @@ pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extr
 
     if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
 
-    const typ = TypeSys.create(kind, extra, @intCast(count));
+    const typ: Type = .create(kind, extra, @intCast(count));
     self.type_infos.append(self.allocator, info) catch oom();
     self.addType(name, typ);
 

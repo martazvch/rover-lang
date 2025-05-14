@@ -235,12 +235,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
             if (!assigne.initialized) assigne.initialized = true;
 
             // If we assign a bound method that match the type (checked after), update type's infos
-            const extra = TypeSys.getExtra(value_type);
+            const extra = value_type.getExtra();
 
             if (extra == .bound_method) {
-                assigne.typ = TypeSys.setExtra(assigne.typ, .bound_method);
+                assigne.typ.setExtra(.bound_method);
             } else if (extra == .imported) {
-                assigne.typ = TypeSys.setExtra(assigne.typ, .imported);
+                assigne.typ.setExtra(.imported);
             }
 
             // TODO: later, when function's parameters will maybe be a reference, allow it
@@ -310,7 +310,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
-    const fn_type = TypeSys.create(.func, .none, type_idx);
+    const fn_type: Type = .create(.func, .none, type_idx);
     const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .func, node.name);
     _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = fn_var, .cast = false } } });
 
@@ -481,7 +481,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
-    const struct_type = TypeSys.create(.@"struct", .none, type_idx);
+    const struct_type: Type = .create(.@"struct", .none, type_idx);
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
     errdefer self.state.struct_type = .void;
@@ -628,7 +628,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         // TODO: what to do for local imports? We leave them all without discarding any of the imports
         // even the nested ones so we keep the index good
         const module = try self.importModule(node);
-        const module_type = TypeSys.create(.module, .none, @intCast(self.modules.items.len));
+        const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
         self.modules.append(self.allocator, module) catch oom();
 
         const last = node.names[node.names.len - 1];
@@ -740,12 +740,12 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         initialized = true;
 
         // If we assign a bound method that match the type (checked after), update type's infos
-        const extra = TypeSys.getExtra(value_type);
+        const extra = value_type.getExtra();
 
         if (extra == .bound_method) {
-            checked_type = TypeSys.setExtra(checked_type, .bound_method);
+            checked_type.setExtra(.bound_method);
         } else if (extra == .imported) {
-            checked_type = TypeSys.setExtra(checked_type, .imported);
+            checked_type.setExtra(.imported);
         }
     } else {
         _ = self.addInstr(.{ .tag = .null });
@@ -1049,10 +1049,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
             // We don't compile instructions if the variable is a module. Modules are kind
             // of placeholder just to track informations. If not a module, generate instructions
             // to get the variable
-            if (TypeSys.is(variable.typ, .module)) {
-                const infos_index = TypeSys.getValue(variable.typ);
+            if (variable.typ.is(.module)) {
+                const infos_index = variable.typ.getValue();
 
-                return .init(TypeSys.create(.module, .none, infos_index), self.moduleField(infos_index, field_name));
+                return .init(Type.create(.module, .none, infos_index), self.moduleField(infos_index, field_name));
             } else {
                 self.makeVariableInstr(variable);
                 break :blk variable.typ;
@@ -1061,8 +1061,8 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         else => try self.analyzeExpr(expr.structure),
     };
 
-    const infos = if (TypeSys.is(struct_type, .@"struct")) blk: {
-        const infos_index = TypeSys.getValue(struct_type);
+    const infos = if (struct_type.is(.@"struct")) blk: {
+        const infos_index = struct_type.getValue();
         break :blk self.type_manager.type_infos.items[infos_index].@"struct";
     } else return self.err(
         .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_type) } },
@@ -1082,14 +1082,14 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.index, .kind = kind } };
 
     if (kind == .bound_method)
-        found_field.type = TypeSys.setExtra(found_field.type, .bound_method);
+        found_field.type.setExtra(.bound_method);
 
     return .init(struct_type, found_field.type);
 }
 
 fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
     const module = &self.modules.items[module_idx];
-    const symbol = module.symbols.get(field_name) orelse {
+    var symbol = module.symbols.get(field_name) orelse {
         // TODO: error
         @panic("Module doesn't have declaration");
     };
@@ -1100,9 +1100,9 @@ fn moduleField(self: *Self, module_idx: usize, field_name: usize) Type {
         .symbol = symbol.index,
     } } });
 
-    const typ = TypeSys.setExtra(symbol.type, .imported);
+    symbol.type.setExtra(.imported);
 
-    return typ;
+    return symbol.type;
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
@@ -1111,16 +1111,16 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     } } });
 
     const sft = try self.getStructAndFieldTypes(expr.callee);
-    const extra = TypeSys.getExtra(sft.field);
+    const extra = sft.field.getExtra();
 
-    const infos = if (TypeSys.is(sft.field, .func))
-        self.type_manager.type_infos.items[TypeSys.getValue(sft.field)].func
-    else if (TypeSys.is(sft.field, .@"struct")) blk: {
-        const val = TypeSys.getValue(sft.field);
+    const infos = if (sft.field.is(.func))
+        self.type_manager.type_infos.items[sft.field.getValue()].func
+    else if (sft.field.is(.@"struct")) blk: {
+        const val = sft.field.getValue();
         const struct_infos = self.type_manager.type_infos.items[val].@"struct";
 
         if (struct_infos.functions.get(self.init_interned)) |init_fn| {
-            const type_idx = TypeSys.getValue(init_fn.type);
+            const type_idx = init_fn.type.getValue();
             break :blk self.type_manager.type_infos.items[type_idx].func;
         } else {
             return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
@@ -1136,12 +1136,12 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // 1: var bounded = p.method(); bounded()  --> here instance_type is void
     // 2: p.method()                           --> here instance_type isn't
     if (extra == .imported) {
-        if (TypeSys.getKind(sft.structure) == .module) {
+        if (sft.structure.getKind() == .module) {
             call_tag = .invoke_import;
         } else {
             call_tag = .import;
             // TODO: protect the cast
-            self.instructions.items(.data)[idx].call.module = @intCast(TypeSys.getValue(sft.structure));
+            self.instructions.items(.data)[idx].call.module = @intCast(sft.structure.getValue());
         }
     } else if (extra == .bound_method) {
         if (sft.structure != .void) {
@@ -1458,7 +1458,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
     if (self.type_manager.declared.get(decl.name)) |struct_type| {
         const arity = expr.fields.len;
-        const value = TypeSys.getValue(struct_type);
+        const value = struct_type.getValue();
         const infos = self.type_manager.type_infos.items[value].@"struct";
         var proto = infos.proto(self.allocator);
         defer proto.deinit(self.allocator);
@@ -1641,7 +1641,7 @@ fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
         },
     });
 
-    return TypeSys.create(.func, .none, type_idx);
+    return .create(.func, .none, type_idx);
 }
 
 /// Declares a variable either in globals or in locals based on current scope depth
@@ -1708,13 +1708,13 @@ fn isPure(self: *const Self, node: anytype) bool {
 fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.Value {
     const expr_type = try self.analyze_node(node);
 
-    return if (TypeSys.is(expr_type, kind))
-        TypeSys.getValue(expr_type)
+    return if (expr_type.is(kind))
+        expr_type.getValue()
     else
         self.err(
             .{ .type_mismatch = .{
-                .expect = TypeSys.strKind(kind),
-                .found = TypeSys.strKind(TypeSys.getKind(expr_type)),
+                .expect = kind.toStr(),
+                .found = expr_type.getKind().toStr(),
             } },
             self.to_span(node),
         );
@@ -1726,12 +1726,12 @@ fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.
 /// types in function definitions)
 fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
     if (t1 == t2) return true;
-    if (!TypeSys.is(t1, .func) or !TypeSys.is(t2, .func)) return false;
+    if (!t1.is(.func) or !t2.is(.func)) return false;
 
-    const v1 = TypeSys.getValue(t1);
+    const v1 = t1.getValue();
     const infos1 = self.type_manager.type_infos.items[v1].func;
 
-    const v2 = TypeSys.getValue(t2);
+    const v2 = t2.getValue();
     const infos2 = self.type_manager.type_infos.items[v2].func;
 
     if (infos1.params.len == infos2.params.len and infos1.return_type == infos2.return_type) {
@@ -1747,7 +1747,7 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
 
 /// Helpers used for errors
 fn getTypeName(self: *const Self, typ: Type) []const u8 {
-    if (TypeSys.is(typ, .func)) {
+    if (typ.is(.func)) {
         return self.getFnTypeName(typ) catch oom();
     } else {
         const index = self.type_manager.idx(typ);
@@ -1757,7 +1757,7 @@ fn getTypeName(self: *const Self, typ: Type) []const u8 {
 
 /// Helpers used for errors
 fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
-    const value = TypeSys.getValue(typ);
+    const value = typ.getValue();
     const decl = self.type_manager.type_infos.items[value].func;
 
     var res: std.ArrayListUnmanaged(u8) = .{};
