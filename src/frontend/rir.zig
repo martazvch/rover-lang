@@ -3,67 +3,39 @@ pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 
 pub const Instruction = struct {
-    tag: Tag,
-    data: Data = undefined,
+    data: Data,
     offset: usize = 0,
 
-    pub const Tag = enum(u8) {
-        assignment,
-        binop,
-        block,
-        bool,
-        call,
-        cast,
-        discard,
-        member,
-        float,
-        fn_decl,
-        name,
-        identifier,
-        identifier_id,
-        @"if",
-        // TODO: delete
-        imported,
-        int,
-        multiple_var_decl,
-        module_import,
-        null,
-        print,
-        @"return",
-        self,
-        string,
-        struct_decl,
-        struct_literal,
-        unary,
-        use,
-        var_decl,
-        @"while",
-    };
-
-    pub const Data = union {
+    pub const Data = union(enum) {
         assignment: Assignment,
         binop: Binop,
         block: Block,
         bool: bool,
         call: Call,
-        capture: usize,
-        cast_to: Type,
+        cast: Type,
+        discard: void,
         float: f64,
         fn_decl: FnDecl,
-        id: usize,
+        identifier: Variable,
+        identifier_id: usize,
         @"if": If,
         // TODO: delete later
         imported: Imported,
         int: i64,
         member: Member,
         module_import: ModuleImport,
+        multiple_var_decl: usize,
+        name: usize,
+        null: void,
+        print: void,
         @"return": Return,
+        string: usize,
         struct_decl: StructDecl,
         struct_literal: StructLiteral,
         unary: Unary,
         use: u64,
         var_decl: VarDecl,
-        variable: Variable,
+        @"while": void,
     };
 
     pub const Binop = struct {
@@ -135,7 +107,7 @@ pub const Instruction = struct {
 
         pub const Op = enum { minus, bang };
     };
-    pub const VarDecl = struct { variable: Variable, cast: bool };
+    pub const VarDecl = struct { variable: Variable, has_value: bool = false, cast: bool = false };
     // TODO: no need to pack here I think
     pub const Variable = packed struct { index: u62, scope: Scope };
 };

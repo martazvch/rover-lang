@@ -33,7 +33,7 @@ declarations: AutoHashMapUnmanaged(usize, Type),
 
 globals: ArrayListUnmanaged(Variable),
 locals: ArrayListUnmanaged(Variable),
-imports: ArrayListUnmanaged(Variable),
+imports: ArrayListUnmanaged(Instruction.Variable),
 scope_depth: usize,
 local_offset: usize,
 heap_count: usize,
@@ -136,13 +136,18 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstr(self: *Self, instr: Instruction) usize {
-    self.instructions.append(self.allocator, .{
-        .tag = instr.tag,
-        .data = instr.data,
-    }) catch oom();
+inline fn addInstr(self: *Self, data: Instruction.Data) void {
+    self.instructions.append(self.allocator, .{ .data = data }) catch oom();
+}
 
-    return self.instructions.len - 1;
+/// Reserves an empty slot and returns its index
+inline fn reserveInstr(self: *Self) usize {
+    return self.instructions.addOne(self.allocator) catch oom();
+}
+
+/// Sets the instruction at the given idnex
+inline fn setInstr(self: *Self, index: usize, data: Instruction.Data) void {
+    self.instructions.set(index, .{ .data = data });
 }
 
 fn isNumeric(self: *Self, expr: *const Expr, t: Type) Error!void {
@@ -218,7 +223,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     errdefer self.state.allow_partial = last;
 
     var cast = false;
-    const idx = self.addInstr(.{ .tag = .assignment });
+    const index = self.reserveInstr();
 
     const value_type = try self.analyzeExpr(node.value);
 
@@ -268,12 +273,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         );
     }
 
-    self.instructions.items(.data)[idx] = .{ .assignment = .{ .cast = cast } };
     self.state.allow_partial = last;
+    self.setInstr(index, .{ .assignment = .{ .cast = cast } });
 }
 
 fn discard(self: *Self, expr: *const Expr) !void {
-    _ = self.addInstr(.{ .tag = .discard });
+    self.addInstr(.{ .discard = undefined });
     const discarded = try self.analyzeExpr(expr);
 
     if (discarded == .void) return self.err(.void_discard, self.ast.getSpan(expr));
@@ -304,15 +309,15 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     }
 
     // Check in current scope
-    const fn_idx = self.addInstr(.{ .tag = .fn_decl, .data = undefined });
+    const fn_idx = self.reserveInstr();
     // We add function's name for runtime access
-    _ = self.addInstr(.{ .tag = .name, .data = .{ .id = name_idx } });
+    self.addInstr(.{ .name = name_idx });
 
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type: Type = .create(.func, .none, type_idx);
     const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .func, node.name);
-    _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = fn_var, .cast = false } } });
+    self.addInstr(.{ .var_decl = .{ .variable = fn_var, .cast = false } });
 
     if (self.scope_depth == 0) {
         self.addSymbol(name_idx, fn_type);
@@ -448,17 +453,13 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         .implicit_value;
 
     self.state = save_state;
-
-    self.instructions.items(.data)[fn_idx] = .{ .fn_decl = .{
-        .body_len = len - deadcode_count,
-        .return_kind = return_kind,
-    } };
+    self.setInstr(fn_idx, .{ .fn_decl = .{ .body_len = len - deadcode_count, .return_kind = return_kind } });
 
     return fn_type;
 }
 
 fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
-    _ = self.addInstr(.{ .tag = .multiple_var_decl, .data = .{ .id = node.decls.len } });
+    self.addInstr(.{ .multiple_var_decl = node.decls.len });
 
     for (node.decls) |*n| {
         try self.varDeclaration(n);
@@ -466,7 +467,7 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
 }
 
 fn print(self: *Self, expr: *const Expr) !void {
-    _ = self.addInstr(.{ .tag = .print });
+    self.addInstr(.{ .print = undefined });
     const typ = try self.analyzeExpr(expr);
 
     if (typ == .void)
@@ -487,10 +488,10 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     errdefer self.state.struct_type = .void;
     const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .@"struct", node.name);
 
-    const struct_idx = self.addInstr(.{ .tag = .struct_decl });
+    const index = self.reserveInstr();
     // We add function's name for runtime access
-    _ = self.addInstr(.{ .tag = .name, .data = .{ .id = name } });
-    _ = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = .{ .variable = struct_var, .cast = false } } });
+    self.addInstr(.{ .name = name });
+    self.addInstr(.{ .var_decl = .{ .variable = struct_var, .cast = false } });
 
     self.scope_depth += 1;
     errdefer _ = self.endScope();
@@ -520,7 +521,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
             field_infos.default = true;
             infos.default_value_fields += 1;
 
-            _ = self.addInstr(.{ .tag = .member, .data = .{ .member = .{ .index = i, .kind = .field } } });
+            self.addInstr(.{ .member = .{ .index = i, .kind = .field } });
             break :blk try self.analyzeExpr(value);
         } else .void;
 
@@ -560,12 +561,11 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
     _ = self.endScope();
     self.addSymbol(name, struct_type);
-
-    self.instructions.items(.data)[struct_idx] = .{ .struct_decl = .{
+    self.setInstr(index, .{ .struct_decl = .{
         .fields_count = node.fields.len,
         .default_fields = infos.default_value_fields,
         .func_count = node.functions.len,
-    } };
+    } });
 }
 
 fn use(self: *Self, node: *const Ast.Use) !void {
@@ -573,10 +573,10 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
     // For now, "std" is interned at initialization in slot 1
     if (first_name == self.std_interned) {
-        const idx = self.addInstr(.{ .tag = .use });
+        const index = self.reserveInstr();
         // TODO: For now, il keeps synchronized the different arrays of
         // nodes/instructions
-        _ = self.addInstr(.{ .tag = .null, .data = undefined });
+        self.addInstr(.{ .null = undefined });
 
         // TODO: support real imports
         if (node.names.len > 2) @panic("Use statements can't import more than std + one module");
@@ -605,14 +605,10 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                     // Declare the variable
                     const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, .func, n);
-
-                    _ = self.addInstr(.{ .tag = .imported, .data = .{ .imported = .{
-                        .index = func.index,
-                        .variable = variable,
-                    } } });
+                    self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
                 }
 
-                self.instructions.items(.data)[idx] = .{ .use = all_fn_names.len };
+                self.setInstr(index, .{ .use = all_fn_names.len });
 
                 return;
             } else return self.err(
@@ -633,22 +629,10 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
 
         const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, last);
-        _ = self.addInstr(.{ .tag = .module_import, .data = .{ .module_import = .{ .index = self.modules.items.len, .scope = variable.scope } } });
+        self.addInstr(.{ .module_import = .{ .index = self.modules.items.len, .scope = variable.scope } });
         self.modules.append(self.allocator, module) catch oom();
-        self.addImport(module_name, module_type);
+        self.imports.append(self.allocator, variable) catch oom();
     }
-}
-
-fn addImport(self: *Self, name: usize, typ: Type) void {
-    const variable: Variable = .{
-        .name = name,
-        .typ = typ,
-        .depth = self.scope_depth,
-        .kind = .module,
-        .decl = self.instructions.len,
-    };
-
-    self.imports.append(self.allocator, variable) catch oom();
 }
 
 fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
@@ -706,12 +690,14 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
     const name = try self.checkName(node.name);
     var checked_type = try self.checkAndGetType(node.typ);
-    const idx = self.addInstr(.{ .tag = .var_decl, .data = .{ .var_decl = undefined } });
+    const index = self.reserveInstr();
 
     var initialized = false;
-    var cast = false;
+    var data = Instruction.VarDecl{ .variable = undefined };
 
     if (node.value) |value| {
+        data.has_value = true;
+
         const last = self.state.allow_partial;
         self.state.allow_partial = false;
 
@@ -728,8 +714,8 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         } else if (checked_type != value_type and !self.checkEqualFnType(checked_type, value_type)) {
             // One case in wich we can coerce, int -> float
             if (checked_type == .float and value_type == .int) {
-                cast = true;
-                _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
+                data.cast = true;
+                self.addInstr(.{ .cast = .float });
             } else return self.err(
                 .{ .invalid_assign_type = .{
                     .expect = self.getTypeName(checked_type),
@@ -749,20 +735,18 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         } else if (extra == .imported) {
             checked_type.setExtra(.imported);
         }
-    } else {
-        _ = self.addInstr(.{ .tag = .null });
     }
 
-    const variable = try self.declareVariable(name, checked_type, initialized, idx, .variable, node.name);
-    self.instructions.items(.data)[idx] = .{ .var_decl = .{ .variable = variable, .cast = cast } };
+    data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
+    self.setInstr(index, .{ .var_decl = data });
 
-    if (variable.scope == .global) {
+    if (data.variable.scope == .global) {
         self.addSymbol(name, checked_type);
     }
 }
 
 fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
-    _ = self.addInstr(.{ .tag = .@"while" });
+    self.addInstr(.{ .@"while" = undefined });
     const cond_type = try self.analyzeExpr(node.condition);
 
     if (cond_type != .bool) return self.err(
@@ -776,9 +760,7 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
     const body_type = try self.block(&node.body);
 
     if (body_type != .void) return self.err(
-        .{ .non_void_while = .{
-            .found = self.getTypeName(body_type),
-        } },
+        .{ .non_void_while = .{ .found = self.getTypeName(body_type) } },
         self.ast.getSpan(node.body),
     );
 }
@@ -800,7 +782,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
 
 fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
     const op = self.ast.token_tags[expr.op];
-    const idx = self.addInstr(.{ .tag = .binop });
+    const index = self.reserveInstr();
 
     const lhs = try self.analyzeExpr(expr.lhs);
     const rhs = try self.analyzeExpr(expr.rhs);
@@ -809,15 +791,11 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
 
     // String operations
     if (op == .plus and lhs == .str and rhs == .str) {
-        self.instructions.items(.data)[idx] = .{ .binop = .{ .op = .add_str } };
+        self.setInstr(index, .{ .binop = .{ .op = .add_str } });
         return .str;
     } else if (op == .star) {
         if ((lhs == .str and rhs == .int) or (lhs == .int and rhs == .str)) {
-            self.instructions.items(.data)[idx] = .{ .binop = .{
-                .cast = if (rhs == .int) .rhs else .lhs,
-                .op = .mul_str,
-            } };
-
+            self.setInstr(index, .{ .binop = .{ .op = .mul_str, .cast = if (rhs == .int) .rhs else .lhs } });
             return .str;
         }
     }
@@ -994,7 +972,7 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
         else => unreachable,
     }
 
-    self.instructions.items(.data)[idx] = .{ .binop = data };
+    self.setInstr(index, .{ .binop = data });
 
     return res;
 }
@@ -1003,8 +981,7 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     self.scope_depth += 1;
     errdefer self.scope_depth -= 1;
 
-    const idx = self.addInstr(.{ .tag = .block, .data = undefined });
-
+    const index = self.reserveInstr();
     var final: Type = .void;
 
     for (expr.nodes, 0..) |*node, i| {
@@ -1015,11 +992,11 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 
     const count = self.endScope();
 
-    self.instructions.items(.data)[idx] = .{ .block = .{
+    self.setInstr(index, .{ .block = .{
         .length = expr.nodes.len,
         .pop_count = @intCast(count),
         .is_expr = if (final != .void) true else false,
-    } };
+    } });
 
     return final;
 }
@@ -1041,7 +1018,7 @@ fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTy
 }
 
 fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
-    const idx = self.addInstr(.{ .tag = .member });
+    const index = self.reserveInstr();
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
     const struct_type = try self.analyzeExpr(expr.structure);
@@ -1096,7 +1073,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         ),
     };
 
-    self.instructions.items(.data)[idx] = .{ .member = .{ .index = found_field.index, .kind = kind } };
+    self.setInstr(index, .{ .member = .{ .index = found_field.index, .kind = kind } });
 
     if (kind == .bound_method)
         found_field.type.setExtra(.bound_method);
@@ -1105,9 +1082,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
-    const idx = self.addInstr(.{ .tag = .call, .data = .{ .call = .{
-        .arity = @intCast(expr.args.len),
-    } } });
+    const index = self.reserveInstr();
 
     const sft = try self.getStructAndFieldTypes(expr.callee);
     const extra = sft.field.getExtra();
@@ -1170,9 +1145,11 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // To load the module's global before call. If it's an invoke_import, we know that the
     // module is already just behind
     if (call_tag == .import) {
-        self.makeVariableInstr(&self.imports.items[infos.module]);
+        // TODO: make declaration_id instead of full variable instruction?
+        self.addInstr(.{ .identifier = self.imports.items[infos.module] });
     }
-    self.instructions.items(.data)[idx].call.tag = call_tag;
+
+    self.setInstr(index, .{ .call = .{ .arity = @intCast(expr.args.len), .tag = call_tag } });
 
     return infos.return_type;
 }
@@ -1185,7 +1162,7 @@ fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Err
 
         if (arg_type != params[i] and !self.checkEqualFnType(arg_type, params[i])) {
             if (params[i] == .float and arg_type == .int) {
-                _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
+                self.addInstr(.{ .cast = .float });
             } else {
                 return self.err(
                     .{ .type_mismatch = .{
@@ -1204,15 +1181,11 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
 
     switch (expr.tag) {
         .bool => {
-            _ = self.addInstr(.{ .tag = .bool, .data = .{
-                .bool = if (self.ast.token_tags[expr.idx] == .true) true else false,
-            } });
-
+            self.addInstr(.{ .bool = if (self.ast.token_tags[expr.idx] == .true) true else false });
             return .bool;
         },
         .identifier, .self => {
             const variable = try self.identifier(expr.idx, true);
-
             return variable.typ;
         },
         .int => {
@@ -1221,8 +1194,7 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
                 std.debug.print("Error parsing integer\n", .{});
                 break :blk 0;
             };
-            _ = self.addInstr(.{ .tag = .int, .data = .{ .int = value } });
-
+            self.addInstr(.{ .int = value });
             return .int;
         },
         .float => {
@@ -1231,20 +1203,17 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
                 std.debug.print("Error parsing float\n", .{});
                 break :blk 0.0;
             };
-            _ = self.addInstr(.{ .tag = .float, .data = .{ .float = value } });
-
+            self.addInstr(.{ .float = value });
             return .float;
         },
         .null => {
-            _ = self.addInstr(.{ .tag = .null });
-
+            self.addInstr(.{ .null = undefined });
             return .null;
         },
         .string => {
             // Removes the quotes
             const value = self.interner.intern(text[1 .. text.len - 1]);
-            _ = self.addInstr(.{ .tag = .string, .data = .{ .id = value } });
-
+            self.addInstr(.{ .string = value });
             return .str;
         },
     }
@@ -1297,16 +1266,14 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
     if (variable.kind == .variable) {
         self.checkCapture(variable);
-        _ = self.addInstr(.{ .tag = .identifier_id, .data = .{ .id = variable.decl } });
+        self.addInstr(.{ .identifier_id = variable.decl });
     } else {
         // Params and imports aren't declared so we can't reference them, they just live on stack
         // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
-        _ = self.addInstr(
-            .{ .tag = .identifier, .data = .{ .variable = .{
-                .index = @intCast(variable.index),
-                .scope = if (variable.depth > 0) .local else .global,
-            } } },
-        );
+        self.addInstr(.{ .identifier = .{
+            .index = @intCast(variable.index),
+            .scope = if (variable.depth > 0) .local else .global,
+        } });
     }
 }
 
@@ -1325,7 +1292,7 @@ fn checkCapture(self: *Self, variable: *Variable) void {
 }
 
 fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
-    const idx = self.addInstr(.{ .tag = .@"if", .data = undefined });
+    const index = self.reserveInstr();
     var data: Instruction.If = .{ .cast = .none, .has_else = false };
 
     const cond_type = try self.analyzeExpr(expr.condition);
@@ -1404,19 +1371,18 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
         );
     }
 
-    self.instructions.items(.data)[idx] = .{ .@"if" = data };
+    self.setInstr(index, .{ .@"if" = data });
 
     return final_type;
 }
 
 fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
-    const idx = self.addInstr(.{ .tag = .@"return", .data = .{ .@"return" = .{
-        .value = false,
-        .cast = false,
-    } } });
+    const index = self.reserveInstr();
+    var data: Instruction.Return = .{ .value = false, .cast = false };
 
     const return_type = if (expr.expr) |e| blk: {
-        self.instructions.items(.data)[idx].@"return".value = true;
+        data.value = true;
+
         break :blk try self.analyzeExpr(e);
     } else .void;
 
@@ -1425,8 +1391,8 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
 
     if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
         if (self.state.fn_type == .float and return_type == .int) {
-            self.instructions.items(.data)[idx].@"return".cast = true;
-            _ = self.addInstr(.{ .tag = .cast, .data = .{ .cast_to = .float } });
+            data.cast = true;
+            self.addInstr(.{ .cast = .float });
         } else return self.err(
             .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(self.state.fn_type),
@@ -1437,16 +1403,13 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     }
 
     self.state.returns = true;
+    self.setInstr(index, .{ .@"return" = data });
     return self.state.fn_type;
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     const decl = try self.resolveIdentifier(expr.name, true);
-
-    const struct_lit_idx = self.addInstr(.{
-        .tag = .struct_literal,
-        .data = .{ .struct_literal = .{ .variable = decl.toVar(), .arity = expr.fields.len, .end = 0 } },
-    });
+    const index = self.reserveInstr();
 
     if (self.type_manager.declared.get(decl.name)) |struct_type| {
         const arity = expr.fields.len;
@@ -1458,8 +1421,9 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         const start = self.instructions.len;
         self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity) catch oom();
 
+        // TODO: needed?
         for (0..arity) |_| {
-            self.instructions.appendAssumeCapacity(.{ .tag = .member });
+            self.instructions.appendAssumeCapacity(.{ .data = .{ .null = undefined } });
         }
 
         for (expr.fields) |*fv| {
@@ -1498,7 +1462,12 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
         // As the compiler is gonna jump around to compile in the correct order, we need a way
         // to know where to go in the list at the end to continue compiling as normal
-        self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
+        // self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
+        self.setInstr(index, .{ .struct_literal = .{
+            .variable = decl.toVar(),
+            .arity = expr.fields.len,
+            .end = self.instructions.len,
+        } });
 
         return decl.typ;
     } else return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.name));
@@ -1506,13 +1475,8 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
 fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
     const op = self.ast.token_tags[expr.op];
-    const idx = self.addInstr(.{
-        .tag = .unary,
-        .data = .{ .unary = .{
-            .op = if (op == .not) .bang else .minus,
-            .typ = .float,
-        } },
-    });
+    const index = self.reserveInstr();
+    var data: Instruction.Unary = .{ .op = if (op == .not) .bang else .minus, .typ = .float };
 
     const rhs = try self.analyzeExpr(expr.expr);
 
@@ -1528,7 +1492,9 @@ fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {
         );
     }
 
-    if (rhs == .int) self.instructions.items(.data)[idx].unary.typ = .int;
+    if (rhs == .int) data.typ = .int;
+
+    self.setInstr(index, .{ .unary = data });
 
     return rhs;
 }

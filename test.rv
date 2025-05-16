@@ -1,0 +1,17 @@
+struct Pet {
+    name: str,
+    has_eaten: bool,
+}
+
+struct Person {
+    name: str,
+    pet: Pet,
+}
+
+fn main() {
+    var pet = Pet{ name = "Vodka", has_eaten = true }
+    var tom = Person{ name = "Tom", pet }
+    tom.name = "Martin"
+    tom.pet.has_eaten = false
+}
+

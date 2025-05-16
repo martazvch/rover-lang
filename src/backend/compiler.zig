@@ -30,7 +30,6 @@ pub const CompilationManager = struct {
     natives: []const NativeFn,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
-    instr_tags: []const Instruction.Tag,
     instr_data: []const Instruction.Data,
     instr_offsets: []const usize,
     instr_idx: usize,
@@ -63,7 +62,6 @@ pub const CompilationManager = struct {
             .natives = natives,
             .compiler = undefined,
             .errs = .init(vm.allocator),
-            .instr_tags = instructions.items(.tag),
             .instr_data = instructions.items(.data),
             .instr_offsets = instructions.items(.offset),
             .modules = modules,
@@ -90,7 +88,7 @@ pub const CompilationManager = struct {
         // will be for local functions
         self.globals.ensureTotalCapacity(self.vm.allocator, symbols_count) catch oom();
 
-        while (self.instr_idx < self.instr_tags.len) {
+        while (self.instr_idx < self.instr_data.len) {
             try self.compiler.compileInstr();
         }
 
@@ -137,6 +135,12 @@ const Compiler = struct {
         };
     }
 
+    fn next(self: *Self) Instruction.Data {
+        defer self.manager.instr_idx += 1;
+
+        return self.manager.instr_data[self.manager.instr_idx];
+    }
+
     inline fn getChunk(self: *Self) *Chunk {
         return &self.function.chunk;
     }
@@ -146,7 +150,11 @@ const Compiler = struct {
     }
 
     inline fn getStart(self: *const Self) usize {
-        return self.manager.instr_offsets[self.manager.instr_idx];
+        const idx = if (self.manager.instr_idx >= self.manager.instr_data.len)
+            self.manager.instr_idx - 1
+        else
+            self.manager.instr_idx;
+        return self.manager.instr_offsets[idx];
     }
 
     /// Writes an OpCode to the current chunk
@@ -182,7 +190,7 @@ const Compiler = struct {
     }
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
-    fn emitGetVar(self: *Self, variable: Instruction.Variable, offset: usize) void {
+    fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         self.writeOpAndByte(
             if (variable.scope == .heap) .get_heap else if (variable.scope == .global) .get_global else .get_local,
@@ -261,84 +269,75 @@ const Compiler = struct {
     }
 
     fn compileInstr(self: *Self) Error!void {
-        try switch (self.manager.instr_tags[self.manager.instr_idx]) {
-            .assignment => self.assignment(),
-            .binop => self.binop(),
-            .block => self.block(),
-            .bool => self.boolInstr(),
-            .cast => self.cast(),
+        try switch (self.next()) {
+            .assignment => |*data| self.assignment(data),
+            .binop => |*data| self.binop(data),
+            .block => |*data| self.block(data),
+            .bool => |data| self.boolInstr(data),
+            .call => |*data| self.fnCall(data),
+            .cast => |data| self.cast(data),
             .discard => self.discard(),
-            .float => self.floatInstr(),
-            .call => self.fnCall(),
-            .fn_decl => self.fnDecl(),
-            .identifier => self.identifier(false),
-            .identifier_id => self.identifier(true),
-            // TODO: remove
+            .float => |data| self.floatInstr(data),
+            .fn_decl => |*data| self.fnDecl(data),
+            .identifier => |*data| self.identifier(data),
+            .identifier_id => |data| self.identifier(&self.manager.instr_data[data].var_decl.variable),
+            .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
-            .int => self.intInstr(),
-            .@"if" => self.ifInstr(),
-            .member => self.getMember(),
-            .module_import => self.moduleImport(),
-            .multiple_var_decl => self.multipleVarDecl(),
+            .int => |data| self.intInstr(data),
+            .member => |*data| self.getMember(data),
+            .module_import => |*data| self.moduleImport(data),
+            .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
             .null => self.nullInstr(),
             .print => self.print(),
-            .@"return" => self.returnInstr(),
-            .self => unreachable,
-            .string => self.stringInstr(),
-            .struct_decl => self.structDecl(),
-            .struct_literal => self.structLiteral(),
-            .unary => self.unary(),
-            .use => self.use(),
-            .var_decl => self.varDecl(),
+            .@"return" => |*data| self.returnInstr(data),
+            .string => |data| self.stringInstr(data),
+            .struct_decl => |*data| self.structDecl(data),
+            .struct_literal => |*data| self.structLiteral(data),
+            .unary => |*data| self.unary(data),
+            .use => |data| self.use(data),
+            .var_decl => |*data| self.varDecl(data),
             .@"while" => self.whileInstr(),
         };
     }
 
-    fn assignment(self: *Self) Error!void {
-        const assign_data = self.getData().assignment;
+    fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         // Value
         try self.compileInstr();
 
         // We cast the value on top of stack if needed
-        if (assign_data.cast) self.writeOp(.cast_to_float, start);
+        if (data.cast) self.writeOp(.cast_to_float, start);
 
-        const data_idx = self.manager.instr_idx;
-
-        const data = if (self.manager.instr_tags[data_idx] == .identifier_id)
-            self.manager.instr_data[self.manager.instr_data[data_idx].id].var_decl.variable
-        else if (self.manager.instr_tags[data_idx] == .member) {
-            return self.fieldAssignment(start);
-        } else self.manager.instr_data[data_idx].variable;
-
-        self.manager.instr_idx += 1;
+        const variable_data = switch (self.next()) {
+            .identifier => |*variable| variable,
+            .identifier_id => |idx| &self.manager.instr_data[idx].var_decl.variable,
+            .member => |*member| return self.fieldAssignment(member, start),
+            else => unreachable,
+        };
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
         self.writeOpAndByte(
-            if (data.scope == .global)
+            if (variable_data.scope == .global)
                 .set_global
-            else if (data.scope == .heap)
+            else if (variable_data.scope == .heap)
                 .set_heap
             else
                 .set_local,
-            @intCast(data.index),
+            @intCast(variable_data.index),
             start,
         );
     }
 
-    fn fieldAssignment(self: *Self, start: usize) Error!void {
+    fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
         self.writeOp(.field_assign, start);
-        try self.getMember();
+        try self.getMember(data);
     }
 
-    fn binop(self: *Self) Error!void {
+    fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
         const start = self.getStart();
-        const data = self.getData().binop;
-        self.manager.instr_idx += 1;
 
         // Special handle for logicals
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
@@ -383,18 +382,7 @@ const Compiler = struct {
         );
     }
 
-    fn cast(self: *Self) Error!void {
-        const data = self.getData();
-        const start = self.getStart();
-        self.manager.instr_idx += 1;
-
-        switch (data.cast_to) {
-            .float => self.writeOp(.cast_to_float, start),
-            .int => unreachable,
-        }
-    }
-
-    fn logicalBinop(self: *Self, start: usize, data: Instruction.Binop) Error!void {
+    fn logicalBinop(self: *Self, start: usize, data: *const Instruction.Binop) Error!void {
         switch (data.op) {
             .@"and" => {
                 try self.compileInstr();
@@ -415,10 +403,8 @@ const Compiler = struct {
         }
     }
 
-    fn block(self: *Self) Error!void {
-        const data = self.getData().block;
+    fn block(self: *Self, data: *const Instruction.Block) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         for (0..data.length) |_| try self.compileInstr();
 
@@ -431,23 +417,26 @@ const Compiler = struct {
         }
     }
 
-    fn boolInstr(self: *Self) Error!void {
-        const op: OpCode = if (self.getData().bool) .true else .false;
+    fn boolInstr(self: *Self, value: bool) Error!void {
+        const op: OpCode = if (value) .true else .false;
         self.writeOp(op, self.getStart());
-        self.manager.instr_idx += 1;
+    }
+
+    fn cast(self: *Self, typ: Rir.Type) Error!void {
+        const start = self.getStart();
+
+        switch (typ) {
+            .float => self.writeOp(.cast_to_float, start),
+            .int => unreachable,
+        }
     }
 
     fn discard(self: *Self) Error!void {
-        self.manager.instr_idx += 1;
         try self.compileInstr();
         self.writeOp(.pop, 0);
     }
 
-    fn getMember(self: *Self) Error!void {
-        const data = self.getData().member;
-        const start = self.getStart();
-        self.manager.instr_idx += 1;
-
+    fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
         self.writeOpAndByte(
             if (data.kind == .field)
                 .get_field
@@ -456,20 +445,17 @@ const Compiler = struct {
             else
                 .bound_method,
             @intCast(data.index),
-            start,
+            self.getStart(),
         );
         try self.compileInstr();
     }
 
-    fn floatInstr(self: *Self) Error!void {
-        try self.emitConstant(Value.makeFloat(self.getData().float), self.getStart());
-        self.manager.instr_idx += 1;
+    fn floatInstr(self: *Self, value: f64) Error!void {
+        try self.emitConstant(Value.makeFloat(value), self.getStart());
     }
 
-    fn fnCall(self: *Self) Error!void {
-        const data = self.getData().call;
+    fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         if (data.tag == .invoke)
             return self.invoke(data, start)
@@ -499,7 +485,7 @@ const Compiler = struct {
         }
     }
 
-    fn invoke(self: *Self, data: Instruction.Call, start: usize) Error!void {
+    fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
         // We do not compile the 'bound_method' op code
         const member_data = self.getData().member;
         self.manager.instr_idx += 1;
@@ -511,7 +497,7 @@ const Compiler = struct {
         self.writeByte(@intCast(member_data.index), start);
     }
 
-    fn invokeImport(self: *Self, data: Instruction.Call, start: usize) Error!void {
+    fn invokeImport(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
         const symbol_data = self.getData().member;
         self.manager.instr_idx += 1;
         // Compiles the receiver
@@ -527,22 +513,17 @@ const Compiler = struct {
         for (0..arity) |_| {
             try self.compileInstr();
 
-            if (self.manager.instr_idx < self.manager.instr_tags.len and
-                self.manager.instr_tags[self.manager.instr_idx] == .cast)
+            if (self.manager.instr_idx < self.manager.instr_data.len and
+                self.manager.instr_data[self.manager.instr_idx] == .cast)
                 try self.compileInstr();
         }
     }
 
-    fn fnDecl(self: *Self) Error!void {
-        const idx = self.manager.instr_idx;
-
-        const data = self.getData().fn_decl;
-        self.manager.instr_idx += 1;
-        const name_idx = self.getData().id;
+    fn fnDecl(self: *Self, data: *const Instruction.FnDecl) Error!void {
+        const idx = self.manager.instr_idx - 1;
+        const name_idx = self.next().name;
         const fn_name = self.manager.vm.interner.getKey(name_idx).?;
-        self.manager.instr_idx += 1;
-        const fn_var = self.getData().var_decl.variable;
-        self.manager.instr_idx += 1;
+        const fn_var = self.next().var_decl.variable;
 
         const func = try self.compileFn(fn_name, data);
 
@@ -561,7 +542,7 @@ const Compiler = struct {
     }
 
     // TODO: Check if *kind* is really needed
-    fn compileFn(self: *Self, name: []const u8, data: Instruction.FnDecl) Error!*ObjFunction {
+    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*ObjFunction {
         var compiler = Compiler.init(self.manager, name);
 
         for (0..data.body_len) |_| {
@@ -577,25 +558,16 @@ const Compiler = struct {
         return compiler.end();
     }
 
-    fn identifier(self: *Self, is_id: bool) Error!void {
-        const data = if (is_id) blk: {
-            const id = self.getData().id;
-            break :blk self.manager.instr_data[id].var_decl.variable;
-        } else self.getData().variable;
-
+    fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
         self.emitGetVar(data, self.getStart());
-        self.manager.instr_idx += 1;
     }
 
-    fn intInstr(self: *Self) Error!void {
-        try self.emitConstant(Value.makeInt(self.getData().int), self.getStart());
-        self.manager.instr_idx += 1;
+    fn intInstr(self: *Self, value: isize) Error!void {
+        try self.emitConstant(Value.makeInt(value), self.getStart());
     }
 
-    fn ifInstr(self: *Self) Error!void {
-        const data = self.getData().@"if";
+    fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         // Condition
         try self.compileInstr();
@@ -624,43 +596,33 @@ const Compiler = struct {
         try self.patchJump(else_jump);
     }
 
-    fn moduleImport(self: *Self) Error!void {
-        const data = self.getData().module_import;
-
+    fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
         if (data.scope == .global) {
             self.addGlobal(.makeModule(&self.manager.modules[data.index]));
         } else {
             const start = self.getStart();
             self.writeOpAndByte(.push_module, @intCast(data.index), start);
         }
-        self.manager.instr_idx += 1;
     }
 
-    fn multipleVarDecl(self: *Self) Error!void {
-        const data = self.getData().id;
-        self.manager.instr_idx += 1;
-
-        for (0..data) |_| {
+    fn multipleVarDecl(self: *Self, count: usize) Error!void {
+        for (0..count) |_| {
             try self.compileInstr();
         }
     }
 
     fn nullInstr(self: *Self) Error!void {
         self.writeOp(.null, self.getStart());
-        self.manager.instr_idx += 1;
     }
 
     fn print(self: *Self) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
         try self.compileInstr();
         self.getChunk().writeOp(.print, start);
     }
 
-    fn returnInstr(self: *Self) Error!void {
-        const data = self.getData().@"return";
+    fn returnInstr(self: *Self, data: *const Instruction.Return) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         if (data.value) {
             try self.compileInstr();
@@ -670,37 +632,31 @@ const Compiler = struct {
         } else self.writeOp(.naked_return, start);
     }
 
-    fn stringInstr(self: *Self) Error!void {
+    fn stringInstr(self: *Self, index: usize) Error!void {
         try self.emitConstant(
             Value.makeObj(ObjString.copy(
                 self.manager.vm,
-                self.manager.vm.interner.getKey(self.getData().id).?,
+                self.manager.vm.interner.getKey(index).?,
             ).asObj()),
             self.getStart(),
         );
-        self.manager.instr_idx += 1;
     }
 
-    fn structDecl(self: *Self) Error!void {
+    fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
         const start = self.getStart();
-        const data = self.getData().struct_decl;
-        self.manager.instr_idx += 1;
-        const name = self.getData().id;
-        self.manager.instr_idx += 1;
-        const struct_var = self.getData().var_decl;
-        self.manager.instr_idx += 1;
+        const name = self.next().name;
+        const struct_var = self.next().var_decl;
 
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
 
         for (0..data.func_count) |_| {
-            const fn_data = self.getData().fn_decl;
-            self.manager.instr_idx += 1;
-            const fn_name = self.manager.vm.interner.getKey(self.getData().id).?;
+            const fn_data = self.next().fn_decl;
+            const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
             // Skip `variable` cause not needed here
-            self.manager.instr_idx += 2;
+            self.manager.instr_idx += 1;
 
-            const func = try self.compileFn(fn_name, fn_data);
+            const func = try self.compileFn(fn_name, &fn_data);
             funcs.appendAssumeCapacity(func);
         }
 
@@ -722,14 +678,12 @@ const Compiler = struct {
         }
     }
 
-    fn structLiteral(self: *Self) Error!void {
+    fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
         const start = self.getStart();
-        const data = self.getData().struct_literal;
-        self.manager.instr_idx += 1;
 
         for (0..data.arity) |_| {
             const save = self.manager.instr_idx;
-            const field_value_start = self.getData().member;
+            const field_value_start = self.next().member;
             self.manager.instr_idx = field_value_start.index;
             try self.compileInstr();
             // Jumps the `field` tag
@@ -739,14 +693,11 @@ const Compiler = struct {
         self.manager.instr_idx = data.end;
 
         self.writeOpAndByte(.struct_literal, @intCast(data.arity), start);
-        self.emitGetVar(data.variable, start);
+        self.emitGetVar(&data.variable, start);
     }
 
-    fn unary(self: *Self) Error!void {
+    fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
         const start = self.getStart();
-        const data = self.getData().unary;
-        self.manager.instr_idx += 1;
-
         try self.compileInstr();
 
         if (data.op == .minus) {
@@ -757,18 +708,14 @@ const Compiler = struct {
         } else self.writeOp(.not, start);
     }
 
-    fn use(self: *Self) Error!void {
-        const data = self.getData().use;
-        self.manager.instr_idx += 1;
-
+    fn use(self: *Self, count: usize) Error!void {
         // NOTE: For now, analyzer places an empty import
         // to skip "std" by placing a Null instruction. Needs a rework
         self.manager.instr_idx += 1;
 
-        for (0..data) |_| {
-            const imported = self.getData().imported;
+        for (0..count) |_| {
             const start = self.getStart();
-            self.manager.instr_idx += 1;
+            const imported = self.next().imported;
 
             try self.emitConstant(
                 Value.makeObj(ObjNativeFn.create(
@@ -781,17 +728,14 @@ const Compiler = struct {
         }
     }
 
-    fn varDecl(self: *Self) Error!void {
+    fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {
         const start = self.getStart();
-        const data = self.getData().var_decl;
-        self.manager.instr_idx += 1;
 
-        if (self.manager.instr_tags[self.manager.instr_idx] == .null) {
-            self.writeOp(.null, start);
-            self.manager.instr_idx += 1;
-        } else {
+        if (data.has_value) {
             try self.compileInstr();
             if (data.cast) try self.compileInstr();
+        } else {
+            self.writeOp(.null, start);
         }
 
         // TODO: Fix this, just to avoid accessing an empty slot at runtime
@@ -811,7 +755,6 @@ const Compiler = struct {
 
     fn whileInstr(self: *Self) Error!void {
         const start = self.getStart();
-        self.manager.instr_idx += 1;
 
         const chunk = self.getChunk();
         const loop_start = chunk.code.items.len;

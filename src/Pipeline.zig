@@ -14,7 +14,7 @@ const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("frontend/rir_renderer.zig").RirRenderer;
+const RirRenderer = @import("frontend/RirRenderer.zig");
 const Symbols = @import("frontend/type_system.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
@@ -209,7 +209,6 @@ fn renderIr(
     var rir_renderer = RirRenderer.init(
         allocator,
         source,
-        analyzer.instructions.items(.tag)[start..],
         analyzer.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
