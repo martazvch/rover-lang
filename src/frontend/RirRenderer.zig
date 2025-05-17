@@ -232,12 +232,6 @@ fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
     // Variable
     try self.parseInstr();
 
-    if (data.tag == .import) {
-        self.indent();
-        try self.tree.appendSlice("- load module:\n");
-        try self.parseInstr();
-    }
-
     if (data.arity > 0) {
         self.indent();
         try self.tree.appendSlice("- args:\n");
@@ -248,6 +242,12 @@ fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
             if (self.instr_idx < self.instr_data.len and self.instr_data[self.instr_idx] == .cast)
                 try self.parseInstr();
         }
+    }
+
+    if (data.tag == .import) {
+        self.indent();
+        try self.tree.appendSlice("- load module:\n");
+        try self.parseInstr();
     }
 
     self.indent_level -= 1;
@@ -385,11 +385,14 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
     self.indent();
-    try self.writer.print(
-        "[Structure literal, index: {}, scope: {s}]\n",
-        .{ data.variable.index, @tagName(data.variable.scope) },
-    );
+    // try self.writer.print(
+    //     "[Structure literal, index: {}, scope: {s}]\n",
+    //     .{ data.variable.index, @tagName(data.variable.scope) },
+    // );
+    try self.tree.appendSlice("[Structure literal]\n");
     self.indent_level += 1;
+    // Variable containing type
+    try self.parseInstr();
 
     for (0..data.arity) |_| {
         const save = self.instr_idx;

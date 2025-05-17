@@ -1,15 +1,19 @@
 use data.math
 
 fn main() {
+    // No args
     math.introduce()
+    // Args + assignment
     var vec = math.getVecFromPos(1, 2)
 
     // Bounded
     var please = math.introduce
     please()
 
+    // Bounded with args producing a type defined in math
     var please2 = math.getVecFromPos
     var vec2 = please2(6, 89)
 
+    // Accessing fields of type defined in math
     print vec2.y
 }

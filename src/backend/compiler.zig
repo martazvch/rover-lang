@@ -681,6 +681,9 @@ const Compiler = struct {
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
         const start = self.getStart();
 
+        // Compile structure
+        try self.compileInstr();
+
         for (0..data.arity) |_| {
             const save = self.manager.instr_idx;
             const field_value_start = self.next().member;
@@ -693,7 +696,7 @@ const Compiler = struct {
         self.manager.instr_idx = data.end;
 
         self.writeOpAndByte(.struct_literal, @intCast(data.arity), start);
-        self.emitGetVar(&data.variable, start);
+        // self.emitGetVar(&data.variable, start);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

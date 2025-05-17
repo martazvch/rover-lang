@@ -100,7 +100,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { variable: Variable, arity: usize, end: usize };
+    pub const StructLiteral = struct { arity: usize, end: usize };
     pub const Unary = struct {
         op: Op,
         typ: Type,

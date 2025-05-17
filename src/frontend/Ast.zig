@@ -136,7 +136,7 @@ pub const Return = struct {
 };
 
 pub const StructLiteral = struct {
-    name: TokenIndex,
+    structure: *Expr,
     fields: []FieldAndValue,
 };
 
@@ -206,7 +206,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         If => self.getSpan(node.condition),
         Literal => self.token_spans[node.idx],
         Return => self.token_spans[node.kw],
-        StructLiteral => self.token_spans[node.name],
+        StructLiteral => self.getSpan(node.structure),
         Unary => .{
             .start = self.token_spans[node.op].start,
             .end = self.getSpan(node.expr).end,

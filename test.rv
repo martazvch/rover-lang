@@ -1,17 +1,22 @@
-struct Pet {
-    name: str,
-    has_eaten: bool,
-}
+use playground
 
-struct Person {
-    name: str,
-    pet: Pet,
-}
-
+struct Point {x: int, y: int }
 fn main() {
-    var pet = Pet{ name = "Vodka", has_eaten = true }
-    var tom = Person{ name = "Tom", pet }
-    tom.name = "Martin"
-    tom.pet.has_eaten = false
+    var vec = Point { x = 1, y = 3 }
+    // No args
+    // math.introduce()
+    // // Args + assignment
+    // var vec = math.getVecFromPos(1, 2)
+
+    // // Bounded
+    // var please = math.introduce
+    // please()
+
+    // // Bounded with args producing a type defined in math
+    // var please2 = math.getVecFromPos
+    // var vec2 = please2(6, 89)
+
+    // // Accessing fields of type defined in math
+    // print vec2.y
 }
 

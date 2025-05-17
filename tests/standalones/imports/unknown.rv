@@ -3,7 +3,7 @@ use data.mathh
 
 fn main() {
     {
-        use data.math
+        use math
     }
     
     math.introduce()

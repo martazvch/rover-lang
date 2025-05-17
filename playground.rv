@@ -1,1 +1,8 @@
-fn add(a: ooi) {}
+struct Vec2 {
+    x: int,
+    y: int
+
+    fn len(self) -> int {
+        self.x + self.y
+    }
+}

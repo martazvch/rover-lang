@@ -1,0 +1,28 @@
+use data.math
+use data.geom
+
+fn main() {
+    var middle = geom.Point { x = 1, y = 90 }
+    middle.print()
+    
+    var square = geom.Square { side = 10, middle }
+    print square.middle.x
+    print square.middle.y
+
+    math.introduce()
+    var vec = math.getVecFromPos(square.middle.x, square.middle.y)
+    print vec.x
+    print vec.y
+
+    {
+        use data.dub.simple_str
+        print simple_str.quote("local import")
+        middle.print()
+        print simple_str.concat("just ", "concaneted")
+    }
+
+    var new_middle = square.move(middle)
+    new_middle.print()
+    print square.middle.x
+    print square.middle.y
+}

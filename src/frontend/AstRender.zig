@@ -261,7 +261,9 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         },
         .struct_literal => |e| {
             try self.openKey(@tagName(expr.*), .block);
-            try self.pushKeyValue("name", self.spanToSrc(e.name), true);
+            try self.openKey("structure", .block);
+            try self.renderExpr(e.structure, false);
+            try self.closeKey(.block, true);
 
             if (e.fields.len == 0) {
                 try self.emptyKey("fields_values", .list, false);

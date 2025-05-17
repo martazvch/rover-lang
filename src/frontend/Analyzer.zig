@@ -1408,69 +1408,82 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
-    const decl = try self.resolveIdentifier(expr.name, true);
+    // const decl = try self.resolveIdentifier(expr.name, true);
+    // const decl = switch (expr.structure.*) {
+    //     .literal => |*lit| try self.resolveIdentifier(lit.idx, true),
+    //     .field => |*f| (try self.field(f)).field,
+    //     else => unreachable,
+    // };
     const index = self.reserveInstr();
+    const struct_type = try self.analyzeExpr(expr.structure);
 
-    if (self.type_manager.declared.get(decl.name)) |struct_type| {
-        const arity = expr.fields.len;
-        const value = struct_type.getValue();
-        const infos = self.type_manager.type_infos.items[value].@"struct";
-        var proto = infos.proto(self.allocator);
-        defer proto.deinit(self.allocator);
+    if (!struct_type.is(.@"struct")) {
+        return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.structure));
+    }
 
-        const start = self.instructions.len;
-        self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity) catch oom();
+    const infos = self.type_manager.type_infos.items[struct_type.getValue()].@"struct";
 
-        // TODO: needed?
-        for (0..arity) |_| {
-            self.instructions.appendAssumeCapacity(.{ .data = .{ .null = undefined } });
-        }
+    // if (self.type_manager.declared.get(decl.name)) |struct_type| {
+    const arity = expr.fields.len;
+    // const value = struct_type.getValue();
+    // const infos = self.type_manager.type_infos.items[value].@"struct";
+    var proto = infos.proto(self.allocator);
+    defer proto.deinit(self.allocator);
 
-        for (expr.fields) |*fv| {
-            const field_name = self.interner.intern(self.ast.toSource(fv.name));
+    const start = self.instructions.len;
+    self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity) catch oom();
 
-            if (infos.fields.get(field_name)) |f| {
-                proto.putAssumeCapacity(field_name, true);
-                self.instructions.items(.data)[start + f.index] = .{ .member = .{
-                    .index = self.instructions.len,
-                    .kind = .field,
-                } };
+    // TODO: needed?
+    for (0..arity) |_| {
+        self.instructions.appendAssumeCapacity(.{ .data = .{ .null = undefined } });
+    }
 
-                if (fv.value) |val| {
-                    _ = try self.analyzeExpr(val);
-                } else {
-                    // Syntax: { x } instead of { x = x }
-                    _ = try self.identifier(fv.name, true);
-                }
-            } else return self.err(
-                .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
-                self.ast.getSpan(fv.name),
-            );
-        }
+    for (expr.fields) |*fv| {
+        const field_name = self.interner.intern(self.ast.toSource(fv.name));
 
-        if (arity != proto.size) {
-            var kv = proto.iterator();
-            while (kv.next()) |entry| {
-                if (!entry.value_ptr.*) self.err(
-                    .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
-                    self.ast.getSpan(expr.name),
-                ) catch {};
+        if (infos.fields.get(field_name)) |f| {
+            proto.putAssumeCapacity(field_name, true);
+            self.instructions.items(.data)[start + f.index] = .{ .member = .{
+                .index = self.instructions.len,
+                .kind = .field,
+            } };
+
+            if (fv.value) |val| {
+                _ = try self.analyzeExpr(val);
+            } else {
+                // Syntax: { x } instead of { x = x }
+                _ = try self.identifier(fv.name, true);
             }
+        } else return self.err(
+            .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
+            self.ast.getSpan(fv.name),
+        );
+    }
 
-            return error.Err;
+    if (arity != proto.size) {
+        var kv = proto.iterator();
+        while (kv.next()) |entry| {
+            if (!entry.value_ptr.*) self.err(
+                .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
+                self.ast.getSpan(expr.structure),
+            ) catch {};
         }
 
-        // As the compiler is gonna jump around to compile in the correct order, we need a way
-        // to know where to go in the list at the end to continue compiling as normal
-        // self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
-        self.setInstr(index, .{ .struct_literal = .{
-            .variable = decl.toVar(),
-            .arity = expr.fields.len,
-            .end = self.instructions.len,
-        } });
+        return error.Err;
+    }
 
-        return decl.typ;
-    } else return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.name));
+    // As the compiler is gonna jump around to compile in the correct order, we need a way
+    // to know where to go in the list at the end to continue compiling as normal
+    // self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
+    self.setInstr(index, .{ .struct_literal = .{
+        .arity = expr.fields.len,
+        .end = self.instructions.len,
+    } });
+
+    // return decl.typ;
+    return struct_type;
+    // }
+    // else return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.name));
 }
 
 fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

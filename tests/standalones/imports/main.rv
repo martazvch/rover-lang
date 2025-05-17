@@ -1,54 +1,25 @@
 use math
-// use data.vehicle
-// use data.sub.speak
 
+// struct Point { x: int, y: int }
 fn main() {
-    // Math
-    math.introduce()
-
-    print "vec1"
-    var vec = math.getVecFromPos(1, 2)
+    var vec = math.Vec2 { x = 1, y = 6 }
+    // var vec = Point { x = 1, y = 6 }
     print vec.x
-    print vec.y
-    print vec.len()
-
-    print "vec2"
-    vec = math.getVecFromPos(8, 9)
-    print vec.x
-    print vec.y
-    print vec.len()
-
-    fn trash(a: int) -> bool {
-            a < 10
-    }
-    print trash(vec.y)
-
-    print "vec3"
-    vec = math.getVecFromPos(3, 7)
-    print vec.x
-    print vec.y
-    print vec.len()
-
-    var please = math.introduce
-    please()
-
-    print "vec4"
-    var please2 = math.getVecFromPos
-    var vec2 = please2(6, 89)
-    print vec2.x
-    print vec2.y
-    print vec2.len()
-
-    print "test bounded"
-    var bounded = vec2.len
-    print bounded()
+    // No args
+    // math.introduce()
+    // // Args + assignment
+    // var vec = math.getVecFromPos(1, 2)
     //
-    // // Vehicle
-    // vehicle.presentVehicle("AMG")
-    // var tires = 4
-    // var gas = 900
-    // //var amg = vehicle.Vehicle{ tires, gas }
+    // // Bounded
+    // var please = math.introduce
+    // please()
     //
-    // // Speak
-    // speak.speak("I'm a beautiful content to be displayed")
+    // // Bounded with args producing a type defined in math
+    // var please2 = math.getVecFromPos
+    // var vec2 = please2(6, 89)
+    //
+    // // Accessing fields of type defined in math
+    // print vec2.y
 }
+
+

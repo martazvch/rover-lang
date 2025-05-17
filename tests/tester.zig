@@ -20,7 +20,8 @@ pub fn main() !u8 {
         \\-h, --help             Display this help and exit
         \\--stage <STAGE>        Which stage to test [default: all]
         \\--file <FILE>          File to test
-        \\-v, --verbose          Show additional data about tests
+        \\-d, --diff             Shows a colored diff
+        \\-g, --got              Prints what we got
     );
 
     const parsers = comptime .{
@@ -43,7 +44,8 @@ pub fn main() !u8 {
         return 0;
     }
 
-    const diff = if (res.args.verbose == 1) true else false;
+    const diff = if (res.args.diff == 1) true else false;
+    const show_got = if (res.args.got == 1) true else false;
 
     const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(tester_dir);
@@ -53,7 +55,7 @@ pub fn main() !u8 {
     });
     defer allocator.free(exe_path);
 
-    var tester = Tester.init(allocator, exe_path, diff);
+    var tester = Tester.init(allocator, exe_path, diff, show_got);
     defer tester.deinit();
     const success = try tester.run(res.args.stage orelse .all);
 
@@ -65,17 +67,21 @@ const Diagnostic = struct {
     err_name: []const u8 = undefined,
     file_name: []const u8 = undefined,
     diff: []const u8 = undefined,
+    got: []const u8 = undefined,
 
-    pub fn display(self: Diagnostic, verbose: bool) void {
+    pub fn display(self: Diagnostic, show_diff: bool, show_got: bool) void {
         print("  {s}\n", .{self.file_name});
 
-        if (verbose)
+        if (show_diff)
             print("{s}\n", .{self.diff});
+        if (show_got)
+            print("{s}\n", .{self.got});
     }
 
     pub fn deinit(self: *Diagnostic, allocator: Allocator) void {
         allocator.free(self.file_name);
         allocator.free(self.diff);
+        allocator.free(self.got);
     }
 };
 
@@ -84,15 +90,17 @@ const Tester = struct {
     diags: ArrayList(Diagnostic),
     exe_path: []const u8,
     show_diff: bool,
+    show_got: bool,
 
     const Self = @This();
 
-    pub fn init(allocator: Allocator, exe_path: []const u8, show_diff: bool) Self {
+    pub fn init(allocator: Allocator, exe_path: []const u8, show_diff: bool, show_got: bool) Self {
         return .{
             .allocator = allocator,
             .diags = ArrayList(Diagnostic).init(allocator),
             .exe_path = exe_path,
             .show_diff = show_diff,
+            .show_got = show_got,
         };
     }
 
@@ -143,7 +151,7 @@ const Tester = struct {
 
             for (self.diags.items) |diag| {
                 print("    category {s:<10} ", .{diag.category});
-                diag.display(self.show_diff);
+                diag.display(self.show_diff, self.show_got);
             }
 
             return false;
@@ -228,8 +236,9 @@ const Tester = struct {
         std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), std.mem.trimRight(u8, clean_expect, "\n"))) catch |e| {
             try self.diags.append(.{
                 .category = category,
-                .diff = try self.colorizedDiff(clean_expect, got),
                 .file_name = try self.allocator.dupe(u8, entry.basename),
+                .diff = try self.colorizedDiff(clean_expect, got),
+                .got = try self.allocator.dupe(u8, std.mem.trimRight(u8, got, "\n")),
             });
             return e;
         };

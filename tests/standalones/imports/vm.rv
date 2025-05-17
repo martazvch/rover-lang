@@ -1,0 +1,55 @@
+use math
+// use data.vehicle
+// use data.sub.speak
+
+fn main() {
+    // Math
+    math.introduce()
+
+    print "vec1"
+    var vec = math.getVecFromPos(1, 2)
+    print vec.x
+    print vec.y
+    print vec.len()
+
+    print "vec2"
+    vec = math.getVecFromPos(8, 9)
+    print vec.x
+    print vec.y
+    print vec.len()
+
+    fn trash(a: int) -> bool {
+            a < 10
+    }
+    print trash(vec.y)
+
+    print "vec3"
+    vec = math.getVecFromPos(3, 7)
+    print vec.x
+    print vec.y
+    print vec.len()
+
+    var please = math.introduce
+    please()
+
+    print "vec4"
+    var please2 = math.getVecFromPos
+    var vec2 = please2(6, 89)
+    print vec2.x
+    print vec2.y
+    print vec2.len()
+
+    print "test bounded"
+    var bounded = vec2.len
+    print bounded()
+    //
+    // // Vehicle
+    // vehicle.presentVehicle("AMG")
+    // var tires = 4
+    // var gas = 900
+    // //var amg = vehicle.Vehicle{ tires, gas }
+    //
+    // // Speak
+    // speak.speak("I'm a beautiful content to be displayed")
+}
+

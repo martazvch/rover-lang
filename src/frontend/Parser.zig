@@ -810,10 +810,9 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
     const struct_lit = self.allocator.create(Expr) catch oom();
     var fields_values: ArrayListUnmanaged(Ast.FieldAndValue) = .{};
 
-    if (expr.* != .literal and expr.literal.tag != .identifier) {
-        // TODO: Error
+    // TODO: Error
+    if ((expr.* == .literal and expr.literal.tag != .identifier) and expr.* != .field)
         @panic("ERROR: Structure literal must be name");
-    }
 
     // All the skip_lines cover the different syntaxes
     while (!self.check(.right_brace)) {
@@ -837,7 +836,7 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
 
     try self.expect(.right_brace, .expect_brace_after_struct_lit);
     struct_lit.* = .{ .struct_literal = .{
-        .name = expr.literal.idx,
+        .structure = expr,
         .fields = fields_values.toOwnedSlice(self.allocator) catch oom(),
     } };
 
