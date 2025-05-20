@@ -833,8 +833,8 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
         if (!self.match(.comma)) break;
         self.skipNewLines();
     }
-
     try self.expect(.right_brace, .expect_brace_after_struct_lit);
+
     struct_lit.* = .{ .struct_literal = .{
         .structure = expr,
         .fields = fields_values.toOwnedSlice(self.allocator) catch oom(),

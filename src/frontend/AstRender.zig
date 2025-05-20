@@ -270,10 +270,16 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             } else {
                 try self.openKey("fields_values", .list);
                 for (e.fields, 0..) |fv, i| {
+                    const last = i != e.fields.len - 1;
+                    try self.openBrace();
                     try self.pushKeyValue("name", self.spanToSrc(fv.name), true);
                     if (fv.value) |v| {
-                        try self.renderExpr(v, i != e.fields.len - 1);
-                    }
+                        try self.openKey("value", .block);
+                        try self.renderExpr(v, false);
+                        try self.closeKey(.block, false);
+                    } else try self.emptyKey("value", .block, false);
+
+                    try self.closeBrace(last);
                 }
                 try self.closeKey(.list, false);
             }

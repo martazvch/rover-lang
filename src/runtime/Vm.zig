@@ -435,27 +435,14 @@ fn execute(self: *Self) !void {
             .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(ObjString), self.stack.peekRef(0).int),
             .struct_literal => {
                 const arity = frame.readByte();
-                // const scope: OpCode = @enumFromInt(frame.readByte());
-                // const idx = frame.readByte();
-
-                // const structure = switch (scope) {
-                //     .get_local => frame.slots[idx].obj.as(ObjStruct),
-                //     .get_global => self.module.globals[idx].obj.as(ObjStruct),
-                //     else => unreachable,
-                // };
-
-                // var instance = ObjInstance.create(self, structure);
                 var instance = ObjInstance.create(self, self.stack.peekRef(arity).asObj().?.as(ObjStruct));
 
                 for (0..arity) |i| {
                     instance.fields[i] = self.stack.peek(arity - i - 1);
                 }
 
-                // TODO: no need to push, can just overwrite
                 self.stack.peekRef(arity).* = Value.makeObj(instance.asObj());
                 self.stack.top -= arity;
-                // self.stack.top = Value.makeObj(instance.asObj());
-                // self.stack.push(Value.makeObj(instance.asObj()));
             },
             .sub_float => {
                 const rhs = self.stack.pop().float;
@@ -472,6 +459,7 @@ fn execute(self: *Self) !void {
     }
 }
 
+/// Allow to perform multiple field accesses without pushing/poping the stack
 fn getField(self: *Self, frame: *CallFrame) *Value {
     const field_idx = frame.readByte();
 

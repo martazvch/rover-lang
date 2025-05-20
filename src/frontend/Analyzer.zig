@@ -1045,11 +1045,6 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
                 @panic("Module doesn't have declaration");
             };
 
-            // TODO:
-            if (!symbol.type.is(.func)) {
-                @panic("support only function member access on imports for now");
-            }
-
             // TODO: for now we copy it as the type manager is shared accross all sub-pipelines. We want to
             // set the `module` field only for this analyzer pass
 
@@ -1057,12 +1052,14 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
             // import index (setModule) so that we can retreive its declaration later in the self.imports
             // list. As we updated the 'module' index field, we add a new type in the type manager and
             // create a type based on its index. We update the symbol's type to refer to the new one
-            var new_infos = self.type_manager.type_infos.items[symbol.type.getValue()];
+            const value = symbol.type.getValue();
+            var new_infos = self.type_manager.type_infos.items[value];
             new_infos.setModule(struct_value);
+            const kind: TypeSys.Kind = if (new_infos == .func) .func else .@"struct";
 
             const new_idx = try self.type_manager.reserveInfo();
             self.type_manager.setInfo(new_idx, new_infos);
-            const new_type = Type.create(.func, .imported, new_idx);
+            const new_type = Type.create(kind, .imported, new_idx);
             symbol.type = new_type;
 
             break :blk .{ symbol, .symbol };
@@ -1408,12 +1405,6 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
-    // const decl = try self.resolveIdentifier(expr.name, true);
-    // const decl = switch (expr.structure.*) {
-    //     .literal => |*lit| try self.resolveIdentifier(lit.idx, true),
-    //     .field => |*f| (try self.field(f)).field,
-    //     else => unreachable,
-    // };
     const index = self.reserveInstr();
     const struct_type = try self.analyzeExpr(expr.structure);
 
@@ -1422,11 +1413,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     }
 
     const infos = self.type_manager.type_infos.items[struct_type.getValue()].@"struct";
-
-    // if (self.type_manager.declared.get(decl.name)) |struct_type| {
     const arity = expr.fields.len;
-    // const value = struct_type.getValue();
-    // const infos = self.type_manager.type_infos.items[value].@"struct";
     var proto = infos.proto(self.allocator);
     defer proto.deinit(self.allocator);
 
@@ -1474,16 +1461,12 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
     // As the compiler is gonna jump around to compile in the correct order, we need a way
     // to know where to go in the list at the end to continue compiling as normal
-    // self.instructions.items(.data)[struct_lit_idx].struct_literal.end = self.instructions.len;
     self.setInstr(index, .{ .struct_literal = .{
         .arity = expr.fields.len,
         .end = self.instructions.len,
     } });
 
-    // return decl.typ;
     return struct_type;
-    // }
-    // else return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.name));
 }
 
 fn unary(self: *Self, expr: *const Ast.Unary) Error!Type {

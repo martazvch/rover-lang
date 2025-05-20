@@ -1,38 +1,85 @@
 {
     "struct_literal": {
-        "name": "A",
+        "structure": {
+            "literal": "A"
+        },
         "fields_values": [
-            "name": "x",
-            "name": "y",
-            "name": "z",
+            {
+                "name": "x",
+                "value": {}
+            },
+            {
+                "name": "y",
+                "value": {}
+            },
+            {
+                "name": "z",
+                "value": {}
+            }
         ]
     },
     "struct_literal": {
-        "name": "B",
+        "structure": {
+            "literal": "B"
+        },
         "fields_values": []
     },
     "struct_literal": {
-        "name": "C",
+        "structure": {
+            "literal": "C"
+        },
         "fields_values": [
-            "name": "x",
-            "literal": "x",
-            "name": "y",
-            "name": "z",
-            "binop": {
-                "lhs": {
-                    "literal": "12"
-                },
-                "rhs": {
-                    "fn_call": {
-                        "callee": {
-                            "literal": "add"
+            {
+                "name": "x",
+                "value": {
+                    "literal": "x"
+                }
+            },
+            {
+                "name": "y",
+                "value": {}
+            },
+            {
+                "name": "z",
+                "value": {
+                    "binop": {
+                        "lhs": {
+                            "literal": "12"
                         },
-                        "args": []
+                        "rhs": {
+                            "fn_call": {
+                                "callee": {
+                                    "literal": "add"
+                                },
+                                "args": []
+                            }
+                        },
+                        "op": "+"
                     }
+                }
+            }
+        ]
+    },
+    "struct_literal": {
+        "structure": {
+            "field": {
+                "structure": {
+                    "literal": "math"
                 },
-                "op": "+"
+                "field_name": "Vec2"
+            }
+        },
+        "fields_values": [
+            {
+                "name": "x",
+                "value": {
+                    "literal": "1"
+                }
+            },
+            {
+                "name": "y",
+                "value": {}
             }
         ]
     }
 }
-

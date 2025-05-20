@@ -385,10 +385,6 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
     self.indent();
-    // try self.writer.print(
-    //     "[Structure literal, index: {}, scope: {s}]\n",
-    //     .{ data.variable.index, @tagName(data.variable.scope) },
-    // );
     try self.tree.appendSlice("[Structure literal]\n");
     self.indent_level += 1;
     // Variable containing type

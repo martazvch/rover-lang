@@ -696,7 +696,6 @@ const Compiler = struct {
         self.manager.instr_idx = data.end;
 
         self.writeOpAndByte(.struct_literal, @intCast(data.arity), start);
-        // self.emitGetVar(&data.variable, start);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
