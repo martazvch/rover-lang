@@ -173,13 +173,29 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
         return error.ExitOnPrint;
     } else .{
-        .name = file_name[0 .. file_name.len - 3],
+        .name = file_name,
         .imports = self.analyzer.modules.toOwnedSlice(self.allocator) catch oom(),
         .symbols = self.analyzer.symbols,
         .function = function,
         // TODO: use only one allocator?
         .globals = compiler.globals.toOwnedSlice(self.vm.allocator) catch oom(),
     };
+}
+
+pub fn createSubPipeline(self: *Self) Self {
+    var pipeline: Self = .empty;
+    var sub_config = self.config;
+    // FIX: To make 'main' function not mandatory
+    sub_config.embedded = true;
+
+    pipeline.vm = self.vm;
+    pipeline.arena = self.arena;
+    pipeline.allocator = self.allocator;
+    pipeline.config = sub_config;
+    pipeline.analyzer.init(self.allocator, self, &self.vm.interner, true);
+    pipeline.is_sub = true;
+
+    return pipeline;
 }
 
 fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
@@ -219,20 +235,4 @@ fn renderIr(
 
     try rir_renderer.parse_ir(file_name);
     try rir_renderer.display();
-}
-
-pub fn createSubPipeline(self: *Self) Self {
-    var pipeline: Self = .empty;
-    var sub_config = self.config;
-    // FIX: To make 'main' function not mandatory
-    sub_config.embedded = true;
-
-    pipeline.vm = self.vm;
-    pipeline.arena = self.arena;
-    pipeline.allocator = self.allocator;
-    pipeline.config = sub_config;
-    pipeline.analyzer.init(self.allocator, self, &self.vm.interner, true);
-    pipeline.is_sub = true;
-
-    return pipeline;
 }

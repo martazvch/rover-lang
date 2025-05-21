@@ -163,7 +163,14 @@ fn renderType(self: *Self, typ: *Ast.Type) Error![]const u8 {
     var buf: std.ArrayListUnmanaged(u8) = .{};
 
     switch (typ.*) {
-        .scalar => |t| try buf.appendSlice(self.allocator, self.spanToSrc(t)),
+        .fields => |fields| {
+            for (fields, 0..) |f, i| {
+                try buf.appendSlice(self.allocator, self.spanToSrc(f));
+                if (i < fields.len - 1) {
+                    try buf.appendSlice(self.allocator, ".");
+                }
+            }
+        },
         .function => |t| {
             try buf.appendSlice(self.allocator, "fn(");
 
@@ -181,6 +188,7 @@ fn renderType(self: *Self, typ: *Ast.Type) Error![]const u8 {
                 try buf.appendSlice(self.allocator, try self.renderType(ret));
             } else try buf.appendSlice(self.allocator, "void");
         },
+        .scalar => |t| try buf.appendSlice(self.allocator, self.spanToSrc(t)),
         .self => try buf.appendSlice(self.allocator, "Self"),
     }
 

@@ -1,5 +1,6 @@
 use pipou
 use data.mathh
+use data.trash.trash2
 
 fn main() {
     {

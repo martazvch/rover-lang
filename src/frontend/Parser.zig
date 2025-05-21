@@ -268,7 +268,7 @@ fn fnDecl(self: *Self) Error!Node {
             typ.* = .{ .self = self.token_idx - 1 };
             param.typ = typ;
         } else {
-            try self.expect(.identifier, .{ .ExpectName = .{ .kind = "parameter" } });
+            try self.expect(.identifier, .{ .expect_name = .{ .kind = "parameter" } });
             try self.expect(.colon, .missing_fn_param_type);
             param.typ = try self.parseType();
         }
@@ -352,7 +352,7 @@ fn structDecl(self: *Self) !Node {
 
 fn varDecl(self: *Self) Error!Node {
     const name = self.token_idx;
-    try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
+    try self.expect(.identifier, .{ .expect_name = .{ .kind = "variable" } });
 
     if (self.check(.comma))
         return self.multiVarDecl(name);
@@ -378,7 +378,7 @@ fn multiVarDecl(self: *Self, first_name: usize) Error!Node {
     defer variables.deinit(self.allocator);
 
     while (self.match(.comma)) {
-        try self.expect(.identifier, .{ .ExpectName = .{ .kind = "variable" } });
+        try self.expect(.identifier, .{ .expect_name = .{ .kind = "variable" } });
         variables.append(self.allocator, self.token_idx - 1) catch oom();
     }
 
@@ -411,7 +411,7 @@ fn multiVarDecl(self: *Self, first_name: usize) Error!Node {
     }
 
     if (count > 1 and count != variables.items.len + 1)
-        return self.errAt(variables.items[count - 1], .{ .WrongValueCountVarDecl = .{
+        return self.errAt(variables.items[count - 1], .{ .wrong_value_count_var_decl = .{
             .expect = variables.items.len + 1,
         } });
 
@@ -433,7 +433,23 @@ fn parseType(self: *Self) Error!*Ast.Type {
     const typ = self.allocator.create(Ast.Type) catch oom();
 
     if (self.isIdentOrType()) {
-        typ.* = .{ .scalar = self.token_idx - 1 };
+        if (self.check(.dot)) {
+            var tokens: ArrayListUnmanaged(TokenIndex) = .{};
+            tokens.append(self.allocator, self.token_idx - 1) catch oom();
+
+            while (self.match(.dot)) {
+                try self.expect(.identifier, .non_ident_in_type);
+                tokens.append(self.allocator, self.token_idx - 1) catch oom();
+            }
+
+            // If there is a number in the chain ike: foo.1.bar, it will be considered
+            // as a float by the Lexer
+            if (self.check(.float)) return self.errAtCurrent(.non_ident_in_type);
+
+            typ.* = .{ .fields = tokens.toOwnedSlice(self.allocator) catch oom() };
+        } else {
+            typ.* = .{ .scalar = self.token_idx - 1 };
+        }
     } else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 
@@ -486,7 +502,7 @@ fn use(self: *Self) Error!Node {
     var names: ArrayListUnmanaged(usize) = .{};
 
     if (!self.check(.identifier)) {
-        return self.errAtCurrent(.{ .ExpectName = .{ .kind = "module" } });
+        return self.errAtCurrent(.{ .expect_name = .{ .kind = "module" } });
     }
 
     while (self.match(.identifier) and !self.check(.eof)) {
@@ -616,7 +632,7 @@ fn parseExpr(self: *Self) Error!*Expr {
         .true => self.literal(.bool),
         else => {
             const span = self.token_spans[self.token_idx - 1];
-            return self.errAtPrev(.{ .ExpectExpr = .{ .found = span.text(self.source) } });
+            return self.errAtPrev(.{ .expect_expr = .{ .found = span.text(self.source) } });
         },
     };
 
@@ -658,7 +674,7 @@ fn ifExpr(self: *Self) Error!*Expr {
     else if (self.matchAndSkip(.do))
         try self.declaration()
     else
-        return self.errAtPrev(.{ .ExpectBraceOrDo = .{ .what = "if" } });
+        return self.errAtPrev(.{ .expect_brace_or_do = .{ .what = "if" } });
 
     self.skipNewLines();
 
@@ -750,7 +766,6 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
         } else if (self.match(.dot)) {
             expr = try self.field(expr);
         } else if (self.match(.left_brace)) {
-            // TODO: structure literals are not limited to Identifier with this parsing
             if (self.in_cond and !self.in_group) {
                 self.token_idx -= 1;
                 return expr;
@@ -810,9 +825,13 @@ fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
     const struct_lit = self.allocator.create(Expr) catch oom();
     var fields_values: ArrayListUnmanaged(Ast.FieldAndValue) = .{};
 
-    // TODO: Error
-    if ((expr.* == .literal and expr.literal.tag != .identifier) and expr.* != .field)
-        @panic("ERROR: Structure literal must be name");
+    b: {
+        if (expr.* == .literal) {
+            if (expr.literal.tag == .identifier) break :b;
+        } else if (expr.* == .field) break :b;
+
+        return self.errAtPrev(.invalid_struct_literal);
+    }
 
     // All the skip_lines cover the different syntaxes
     while (!self.check(.right_brace)) {

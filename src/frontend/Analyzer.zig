@@ -627,8 +627,6 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         // We import the file as a structure
         //
         // Later, support special items imported like: use math.math{ vec2, vec3 } or use math.*
-        // TODO: what to do for local imports? We leave them all without discarding any of the imports
-        // even the nested ones so we keep the index good
         const module = try self.importModule(node);
         const last = node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(last));
@@ -677,7 +675,7 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
 
             var pipeline = self.pipeline.createSubPipeline();
             // Exit for now, just showing the error of the sub-pipeline
-            const module = pipeline.run(file_name, buf[0..size :0]) catch {
+            const module = pipeline.run(name, buf[0..size :0]) catch {
                 std.process.exit(0);
             };
 
@@ -717,7 +715,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         if (checked_type == .void) {
             checked_type = value_type;
             // Else, we check for coherence
-        } else if (checked_type != value_type and !self.checkEqualFnType(checked_type, value_type)) {
+        } else if (!self.equalType(checked_type, value_type)) {
             // One case in wich we can coerce, int -> float
             if (checked_type == .float and value_type == .int) {
                 data.cast = true;
@@ -1046,14 +1044,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         },
         .module => blk: {
             const module = &self.modules.items[struct_value];
-            var symbol = module.symbols.get(field_name) orelse {
-                // TODO: error
-                @panic("Module doesn't have declaration");
-            };
-
-            // TODO: for now we copy it as the type manager is shared accross all sub-pipelines. We want to
-            // set the `module` field only for this analyzer pass
-
+            var symbol = module.symbols.get(field_name) orelse return self.err(
+                .{ .missing_symbol_in_module = .{ .symbol = self.ast.toSource(expr.field), .module = module.name } },
+                self.ast.getSpan(expr.field),
+            );
             // Here, we get the symbol we are referencing, then we create a copy. We give it the correct
             // import index (setModule) so that we can retreive its declaration later in the self.imports
             // list. As we updated the 'module' index field, we add a new type in the type manager and
@@ -1164,10 +1158,7 @@ fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Err
     for (args, 0..) |arg, i| {
         const arg_type = try self.analyzeExpr(arg);
 
-        if (arg_type != params[i] and
-            !self.isEqualStruct(arg_type, params[i]) and
-            !self.checkEqualFnType(arg_type, params[i]))
-        {
+        if (!self.equalType(arg_type, params[i])) {
             if (params[i] == .float and arg_type == .int) {
                 self.addInstr(.{ .cast = .float });
             } else {
@@ -1569,13 +1560,31 @@ fn checkName(self: *Self, token: usize) !usize {
 /// `empty`, returns `void`
 fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
     return if (typ) |t| return switch (t.*) {
+        .fields => |fields| {
+            var module: Pipeline.Module = undefined;
+
+            for (fields[0 .. fields.len - 1]) |f| {
+                const module_variable = try self.resolveIdentifier(f, true);
+
+                if (module_variable.kind != .module) {
+                    @panic("can't have type names with dot on a non-module variable");
+                }
+
+                const module_index = module_variable.typ.getValue();
+                module = self.modules.items[module_index];
+            }
+
+            const name = self.interner.intern(self.ast.toSource(fields[fields.len - 1]));
+            const final = module.symbols.get(name) orelse @panic("no symbol in module");
+            return final.type;
+        },
+        .function => |*fn_type| self.createAnonymousFnType(fn_type),
         .scalar => self.type_manager.declared.get(
             self.interner.intern(self.ast.toSource(t)),
         ) orelse return self.err(
             .{ .undeclared_type = .{ .found = self.ast.toSource(t) } },
             self.ast.getSpan(t),
         ),
-        .function => |*fn_type| self.createAnonymousFnType(fn_type),
         .self => .self,
     } else .void;
 }
@@ -1729,6 +1738,10 @@ fn isEqualStruct(self: *const Self, s1: Type, s2: Type) bool {
     const final2 = if (infos2.module) |*mod| mod.type_index else v2;
 
     return final1 == final2;
+}
+
+fn equalType(self: *const Self, t1: Type, t2: Type) bool {
+    return t1 == t2 or self.isEqualStruct(t1, t2) or self.checkEqualFnType(t1, t2);
 }
 
 /// Helpers used for errors

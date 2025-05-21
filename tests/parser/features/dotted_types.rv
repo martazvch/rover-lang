@@ -1,0 +1,3 @@
+fn printPoint(p: geom.Point) {}
+var clr: tools.image.Color
+

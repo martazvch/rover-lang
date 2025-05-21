@@ -1,7 +1,7 @@
 expect_fn_name
 expect_paren_after_fn_name
-ExpectName, parameter
-ExpectName, parameter
+expect_name, parameter
+expect_name, parameter
 missing_fn_param_type
 expect_paren_after_fn_params
 expect_arrow_before_fn_type

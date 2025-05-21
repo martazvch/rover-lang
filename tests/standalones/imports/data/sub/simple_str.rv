@@ -5,3 +5,5 @@ fn concat(str1: str, str2: str) -> str {
 fn quote(text: str) -> str {
     "'" + text + "'"
 }
+
+struct Foo {}

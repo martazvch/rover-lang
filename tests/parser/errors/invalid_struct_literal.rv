@@ -1,0 +1,6 @@
+call(){}
+
+// Just to enable second error
+fn main() {}
+1{}
+

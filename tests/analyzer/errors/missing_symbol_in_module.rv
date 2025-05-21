@@ -1,0 +1,5 @@
+use data.math
+
+fn main() {
+    var p = math.Rect {}
+}

@@ -1,0 +1,11 @@
+use data.geom
+
+fn printPoint(p: geom.Point) {
+    print p.x
+}
+
+fn main() {
+    var p: geom.Point = geom.Point { x = 1, y = 2 }
+
+    printPoint(p)
+}

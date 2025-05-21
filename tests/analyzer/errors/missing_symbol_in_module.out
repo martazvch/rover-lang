@@ -1,4 +1,4 @@
-// IR from the valid import
+// Valid math.rv file
 [Structure declaration Vec2, index: 0, scope: global]
 [Fn declaration introduce, index: 1, scope: global, return kind: implicit_void]
     [Print]
@@ -11,7 +11,4 @@
         [Variable index: 1, scope: local]
         [Variable index: 2, scope: local]
 
-missing_file_in_cwd, pipou.rv
-missing_file_in_module, mathh.rv, data
-unknown_module, trash
-undeclared_var, math
+missing_symbol_in_module, Rect, math

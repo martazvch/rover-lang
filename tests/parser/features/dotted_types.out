@@ -1,0 +1,18 @@
+{
+    "fn_decl": {
+        "name": "printPoint",
+        "params": [
+            {
+                "name": "p",
+                "type": "geom.Point"
+            }
+        ],
+        "return_type": "void",
+        "block": []
+    },
+    "var_decl": {
+        "name": "clr",
+        "type": "tools.image.Color",
+        "value": {}
+    }
+}

@@ -47,6 +47,7 @@ pub const Param = struct {
 
 pub const Type = union(enum) {
     function: Fn,
+    fields: []TokenIndex,
     scalar: TokenIndex,
     self: TokenIndex,
 
@@ -181,6 +182,10 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
             .end = self.getSpan(node.decls[node.decls.len - 1]).end,
         },
         Type => switch (node) {
+            .fields => |t| .{
+                .start = self.token_spans[t[0]].start,
+                .end = self.token_spans[t[t.len - 1]].end,
+            },
             .function => |t| t.span,
             .scalar, .self => |t| self.token_spans[t],
         },
