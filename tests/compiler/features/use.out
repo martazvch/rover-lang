@@ -1,15 +1,23 @@
 //---- math.rv ----
 
+-- len --
+OP_GET_FIELD index 0 of next variable
+OP_GET_LOCAL index 0
+OP_GET_FIELD index 1 of next variable
+OP_GET_LOCAL index 0
+OP_ADD_INT
+OP_RETURN
+
 -- introduce --
 OP_CONSTANT index 0, value "This is a mathematical module"
 OP_PRINT
 OP_NAKED_RETURN
 
 -- getVecFromPos --
+OP_GET_GLOBAL index 0, <structure Vec2>
 OP_GET_LOCAL index 1
 OP_GET_LOCAL index 2
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0, <structure Vec2>
 OP_RETURN
 
 -- global scope --
@@ -18,28 +26,30 @@ OP_EXIT_REPL
 //---- main.rv ----
 
 -- main --
-OP_NULL
-OP_INVOKE_IMPORT arity 0, module index 0, symbol index: 1
+OP_GET_GLOBAL index 0
+OP_INVOKE_IMPORT arity 0, symbol index: 1
 OP_UNLOAD_MODULE
 
-OP_NULL
+OP_GET_GLOBAL index 0
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2
-OP_INVOKE_IMPORT arity 2, module index 0, symbol index: 2
+OP_INVOKE_IMPORT arity 2, symbol index: 2
 OP_UNLOAD_MODULE
 
-OP_MODULE_SYMBOL module 0, symbol 1
-
+OP_GET_SYMBOL index 1
+OP_GET_GLOBAL index 0
 OP_GET_LOCAL index 2
-OP_IMPORT_CALL arity 0, module 0
+OP_IMPORT_CALL arity 0, load following module:
+OP_GET_GLOBAL index 0
 OP_UNLOAD_MODULE
 
-OP_MODULE_SYMBOL module 0, symbol 2
-
+OP_GET_SYMBOL index 2
+OP_GET_GLOBAL index 0
 OP_GET_LOCAL index 3
 OP_CONSTANT index 2, value 6
 OP_CONSTANT index 3, value 89
-OP_IMPORT_CALL arity 2, module 0
+OP_IMPORT_CALL arity 2, load following module:
+OP_GET_GLOBAL index 0
 OP_UNLOAD_MODULE
 
 OP_GET_FIELD index 1 of next variable
@@ -49,5 +59,5 @@ OP_PRINT
 OP_NAKED_RETURN
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+OP_GET_GLOBAL index 1, <fn main>
 OP_CALL index 0

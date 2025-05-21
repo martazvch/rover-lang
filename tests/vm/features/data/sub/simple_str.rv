@@ -1,0 +1,7 @@
+fn concat(str1: str, str2: str) -> str {
+    str1 + str2
+}
+
+fn quote(text: str) -> str {
+    "'" + text + "'"
+}

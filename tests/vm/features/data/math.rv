@@ -1,6 +1,10 @@
 struct Vec2 {
     x: int,
     y: int,
+
+    fn len(self) -> int {
+        self.x + self.y
+    }
 }
 
 fn introduce() {
@@ -10,4 +14,3 @@ fn introduce() {
 fn getVecFromPos(x: int, y: int) -> Vec2 {
     Vec2{ x, y }
 }
-

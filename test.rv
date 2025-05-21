@@ -1,30 +1,12 @@
-// use playground
-//
-// struct Point {x: int, y: int }
-// fn main() {
-//     var vec = Point { x = 1, y = 3 }
-//     // No args
-//     // math.introduce()
-//     // // Args + assignment
-//     // var vec = math.getVecFromPos(1, 2)
-//
-//     // // Bounded
-//     // var please = math.introduce
-//     // please()
-//
-//     // // Bounded with args producing a type defined in math
-//     // var please2 = math.getVecFromPos
-//     // var vec2 = please2(6, 89)
-//
-//     // // Accessing fields of type defined in math
-//     // print vec2.y
-// }
-//
+struct Vec2 {
+    x: int, 
+    y: int,
+}
 
-A{x, y, z, }
+fn getVec(x: int, y: int) -> Vec2 {
+    Vec2 { x, y }
+}
 
-B{}
-
-C{x = x, y, z = 12 + add()}
-
-
+fn main() {
+    print getVec(5, 7).x
+}

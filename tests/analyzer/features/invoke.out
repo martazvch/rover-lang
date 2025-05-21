@@ -15,7 +15,10 @@
             [Variable index: 0, scope: local]
 [Fn declaration main, index: 1, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, index: 0, scope: global]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
             [Int 5]
             [String Tom]
     [Variable declaration index: 2, scope: local]

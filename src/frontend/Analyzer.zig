@@ -57,12 +57,19 @@ const Self = @This();
 const Error = error{Err} || TypeManager.Error;
 
 const Variable = struct {
+    /// Index in scope
     index: usize = 0,
+    /// Variable's type
     typ: Type = .void,
+    /// Scope depth if it's a local
     depth: usize,
+    /// Name interned
     name: usize,
+    /// Index of declaration instruction
     decl: usize = 0,
+    /// Is initialized
     initialized: bool = false,
+    /// Is captured
     captured: bool = false,
     kind: Tag = .variable,
 
@@ -248,7 +255,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            // TODO: later, when function's parameters will maybe be a reference, allow it
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
@@ -678,8 +684,8 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
             return module;
         } else {
             cwd = cwd.openDir(name, .{}) catch return self.err(
-                .{ .unknown_module = .{ .name = self.ast.toSource(node.names[0]) } },
-                self.ast.getSpan(node.names[0]),
+                .{ .unknown_module = .{ .name = self.ast.toSource(node.names[i]) } },
+                self.ast.getSpan(node.names[i]),
             );
         }
     }
@@ -1053,8 +1059,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
             // list. As we updated the 'module' index field, we add a new type in the type manager and
             // create a type based on its index. We update the symbol's type to refer to the new one
             const value = symbol.type.getValue();
-            var new_infos = self.type_manager.type_infos.items[value];
-            new_infos.setModule(struct_value);
+            const infos = &self.type_manager.type_infos.items[value];
+
+            var new_infos = infos.*;
+            new_infos.setModule(struct_value, value);
             const kind: TypeSys.Kind = if (new_infos == .func) .func else .@"struct";
 
             const new_idx = try self.type_manager.reserveInfo();
@@ -1077,7 +1085,6 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 
     return .init(struct_type, found_field.type);
 }
-
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
 
@@ -1112,7 +1119,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         if (sft.structure != .void) {
             call_tag = .invoke;
 
-            if (infos.params.len == 0 or infos.params[0] != sft.structure) return self.err(
+            if (infos.params.len == 0 or !self.isEqualStruct(infos.params[0], sft.structure)) return self.err(
                 .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
                 self.ast.getSpan(expr.callee.field.field),
             );
@@ -1143,7 +1150,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     // module is already just behind
     if (call_tag == .import) {
         // TODO: make declaration_id instead of full variable instruction?
-        self.addInstr(.{ .identifier = self.imports.items[infos.module] });
+        self.addInstr(.{ .identifier = self.imports.items[infos.module.?.import_index] });
     }
 
     self.setInstr(index, .{ .call = .{ .arity = @intCast(expr.args.len), .tag = call_tag } });
@@ -1157,7 +1164,10 @@ fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Err
     for (args, 0..) |arg, i| {
         const arg_type = try self.analyzeExpr(arg);
 
-        if (arg_type != params[i] and !self.checkEqualFnType(arg_type, params[i])) {
+        if (arg_type != params[i] and
+            !self.isEqualStruct(arg_type, params[i]) and
+            !self.checkEqualFnType(arg_type, params[i]))
+        {
             if (params[i] == .float and arg_type == .int) {
                 self.addInstr(.{ .cast = .float });
             } else {
@@ -1683,9 +1693,10 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
     if (!t1.is(.func) or !t2.is(.func)) return false;
 
     const v1 = t1.getValue();
-    const infos1 = self.type_manager.type_infos.items[v1].func;
-
     const v2 = t2.getValue();
+    if (v1 == v2) return true;
+
+    const infos1 = self.type_manager.type_infos.items[v1].func;
     const infos2 = self.type_manager.type_infos.items[v2].func;
 
     if (infos1.params.len == infos2.params.len and infos1.return_type == infos2.return_type) {
@@ -1697,6 +1708,27 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
     }
 
     return false;
+}
+
+/// Checks if two structures are identical
+fn isEqualStruct(self: *const Self, s1: Type, s2: Type) bool {
+    // Relies on the fact that we share the same type manager between all
+    // sub-pipelines. It means that if the index in the type infos field is
+    // the samen it's the same type
+    if (s1 == s2) return true;
+    if (!s1.is(.@"struct") or !s2.is(.@"struct")) return false;
+
+    const v1 = s1.getValue();
+    const v2 = s2.getValue();
+    if (v1 == v2) return true;
+
+    const infos1 = &self.type_manager.type_infos.items[v1].@"struct";
+    const infos2 = &self.type_manager.type_infos.items[v2].@"struct";
+
+    const final1 = if (infos1.module) |*mod| mod.type_index else v1;
+    const final2 = if (infos2.module) |*mod| mod.type_index else v2;
+
+    return final1 == final2;
 }
 
 /// Helpers used for errors

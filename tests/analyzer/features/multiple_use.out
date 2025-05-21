@@ -1,28 +1,169 @@
-use data.math
-use data.geom
+//-- math.rv --
+[Structure declaration Vec2, index: 0, scope: global]
+    [Fn declaration len, index: 0, scope: local, return kind: implicit_value]
+        [Binop type: add_int, cast: none]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+            [Field access 1]
+                [Variable index: 0, scope: local]
+[Fn declaration introduce, index: 1, scope: global, return kind: implicit_void]
+    [Print]
+        [String This is a mathematical module]
+[Fn declaration getVecFromPos, index: 2, scope: global, return kind: implicit_value]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
+        [Variable index: 1, scope: local]
+        [Variable index: 2, scope: local]
 
-fn main() {
-    var middle = geom.Point { x = 1, y = 90 }
-    middle.print()
-    
-    var square = geom.Square { side = 10, middle }
-    print square.middle.x
-    print square.middle.y
+//-- geom.rv --
+[Structure declaration Point, index: 0, scope: global]
+    [Fn declaration move, index: 0, scope: local, return kind: implicit_void]
+        [Binop type: add_int, cast: none]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+            [Variable index: 1, scope: local]
+        [Field assignment]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+        [Binop type: add_int, cast: none]
+            [Field access 1]
+                [Variable index: 0, scope: local]
+            [Variable index: 1, scope: local]
+        [Field assignment]
+            [Field access 1]
+                [Variable index: 0, scope: local]
+    [Fn declaration display, index: 1, scope: local, return kind: implicit_void]
+        [Print]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+        [Print]
+            [Field access 1]
+                [Variable index: 0, scope: local]
+[Fn declaration introduce, index: 1, scope: global, return kind: implicit_void]
+    [Print]
+        [String module for basic geometry]
+[Structure declaration Square, index: 2, scope: global]
+    [Fn declaration moveCenter, index: 0, scope: local, return kind: implicit_value]
+        [Binop type: add_int, cast: none]
+            [Field access 0]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+            [Field access 0]
+                [Variable index: 1, scope: local]
+        [Field assignment]
+            [Field access 0]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+        [Binop type: add_int, cast: none]
+            [Field access 1]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+            [Field access 1]
+                [Variable index: 1, scope: local]
+        [Field assignment]
+            [Field access 1]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+        [Field access 1]
+            [Variable index: 0, scope: local]
 
-    math.introduce()
-    var vec = math.getVecFromPos(square.middle.x, square.middle.y)
-    print vec.x
-    print vec.y
+//-- simple_str.rv --
+[Fn declaration concat, index: 0, scope: global, return kind: implicit_value]
+    [Binop type: add_str, cast: none]
+        [Variable index: 1, scope: local]
+        [Variable index: 2, scope: local]
+[Fn declaration quote, index: 1, scope: global, return kind: implicit_value]
+    [Binop type: add_str, cast: none]
+        [Binop type: add_str, cast: none]
+            [String ']
+            [Variable index: 1, scope: local]
+        [String ']
 
-    {
-        use data.dub.simple_str
-        print simple_str.quote("local import")
-        middle.print()
-        print simple_str.concat("just ", "concaneted")
-    }
-
-    var new_middle = square.move(middle)
-    new_middle.print()
-    print square.middle.x
-    print square.middle.y
-}
+//-- main.rv --
+[Import module 0, scope global]
+[Import module 1, scope global]
+[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [Structure literal]
+            - structure
+            [Method access 0]
+                [Variable index: 1, scope: global]
+            - args
+            [Int 1]
+            [Int 90]
+    [Fn call arity: 0, call_tag: invoke]
+        [Method access 1]
+            [Variable index: 1, scope: local]
+    [Variable declaration index: 2, scope: local]
+        [Structure literal]
+            - structure
+            [Method access 2]
+                [Variable index: 1, scope: global]
+            - args
+            [Int 10]
+            [Variable index: 1, scope: local]
+    [Print]
+        [Field access 0]
+            [Field access 1]
+                [Variable index: 2, scope: local]
+    [Print]
+        [Field access 1]
+            [Field access 1]
+                [Variable index: 2, scope: local]
+    [Fn call arity: 0, call_tag: invoke_import]
+        [Method access 1]
+            [Variable index: 0, scope: global]
+    [Variable declaration index: 3, scope: local]
+        [Fn call arity: 2, call_tag: invoke_import]
+            [Method access 2]
+                [Variable index: 0, scope: global]
+            - args:
+            [Field access 0]
+                [Field access 1]
+                    [Variable index: 2, scope: local]
+            [Field access 1]
+                [Field access 1]
+                    [Variable index: 2, scope: local]
+    [Print]
+        [Field access 0]
+            [Variable index: 3, scope: local]
+    [Print]
+        [Field access 1]
+            [Variable index: 3, scope: local]
+    [Block pop count: 1, is_expr: false]
+        [Import module 2, scope local]
+        [Print]
+            [Fn call arity: 1, call_tag: invoke_import]
+                [Method access 1]
+                    [Variable index: 4, scope: local]
+                - args:
+                [String local import]
+        [Fn call arity: 0, call_tag: invoke]
+            [Method access 1]
+                [Variable index: 1, scope: local]
+        [Print]
+            [Fn call arity: 2, call_tag: invoke_import]
+                [Method access 0]
+                    [Variable index: 4, scope: local]
+                - args:
+                [String just ]
+                [String concaneted]
+    [Variable declaration index: 4, scope: local]
+        [Fn call arity: 1, call_tag: invoke]
+            [Method access 0]
+                [Variable index: 2, scope: local]
+            - args:
+            [Variable index: 1, scope: local]
+    [Fn call arity: 0, call_tag: invoke]
+        [Method access 1]
+            [Variable index: 4, scope: local]
+    [Print]
+        [Field access 0]
+            [Field access 1]
+                [Variable index: 2, scope: local]
+    [Print]
+        [Field access 1]
+            [Field access 1]
+                [Variable index: 2, scope: local]

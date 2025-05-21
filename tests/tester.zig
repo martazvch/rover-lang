@@ -8,6 +8,12 @@ const builtin = @import("builtin");
 const clap = @import("clap");
 
 const Stage = enum { all, parser, analyzer, compiler, vm };
+const Config = struct {
+    stage: Stage = .all,
+    show_diff: bool = false,
+    show_got: bool = false,
+    file: ?[]const u8 = null,
+};
 
 pub fn main() !u8 {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -18,8 +24,8 @@ pub fn main() !u8 {
     const allocator = gpa.allocator();
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
-        \\--stage <STAGE>        Which stage to test [default: all]
-        \\--file <FILE>          File to test
+        \\-f, --file <FILE>      File to test (without '.rv' extension)
+        \\-s, --stage <STAGE>    Which stage to test [default: all]
         \\-d, --diff             Shows a colored diff
         \\-g, --got              Prints what we got
     );
@@ -44,8 +50,11 @@ pub fn main() !u8 {
         return 0;
     }
 
-    const diff = if (res.args.diff == 1) true else false;
-    const show_got = if (res.args.got == 1) true else false;
+    var config: Config = .{};
+    config.show_diff = if (res.args.diff == 1) true else false;
+    config.show_got = if (res.args.got == 1) true else false;
+    config.stage = res.args.stage orelse .all;
+    config.file = res.args.file;
 
     const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(tester_dir);
@@ -55,9 +64,9 @@ pub fn main() !u8 {
     });
     defer allocator.free(exe_path);
 
-    var tester = Tester.init(allocator, exe_path, diff, show_got);
+    var tester = Tester.init(allocator, exe_path, config);
     defer tester.deinit();
-    const success = try tester.run(res.args.stage orelse .all);
+    const success = try tester.run();
 
     return if (success) 0 else 1;
 }
@@ -89,18 +98,16 @@ const Tester = struct {
     allocator: Allocator,
     diags: ArrayList(Diagnostic),
     exe_path: []const u8,
-    show_diff: bool,
-    show_got: bool,
+    config: Config,
 
     const Self = @This();
 
-    pub fn init(allocator: Allocator, exe_path: []const u8, show_diff: bool, show_got: bool) Self {
+    pub fn init(allocator: Allocator, exe_path: []const u8, config: Config) Self {
         return .{
             .allocator = allocator,
             .diags = ArrayList(Diagnostic).init(allocator),
             .exe_path = exe_path,
-            .show_diff = show_diff,
-            .show_got = show_got,
+            .config = config,
         };
     }
 
@@ -116,10 +123,10 @@ const Tester = struct {
         self.diags.clearRetainingCapacity();
     }
 
-    fn run(self: *Self, stage: Stage) !bool {
+    fn run(self: *Self) !bool {
         var success = false;
 
-        switch (stage) {
+        switch (self.config.stage) {
             .all => {
                 // TODO: for loop
                 try self.runStage(.parser);
@@ -136,9 +143,9 @@ const Tester = struct {
                 try self.runStage(.vm);
                 success = self.report(.vm);
             },
-            else => {
-                try self.runStage(stage);
-                success = self.report(stage);
+            else => |s| {
+                try self.runStage(s);
+                success = self.report(s);
             },
         }
 
@@ -151,7 +158,7 @@ const Tester = struct {
 
             for (self.diags.items) |diag| {
                 print("    category {s:<10} ", .{diag.category});
-                diag.display(self.show_diff, self.show_got);
+                diag.display(self.config.show_diff, self.config.show_got);
             }
 
             return false;
@@ -176,12 +183,27 @@ const Tester = struct {
 
             var walker = try cwd.walk(self.allocator);
             defer walker.deinit();
+            var specific_tested = false;
 
             while (try walker.next()) |entry| {
                 // File ending with .rv and not a child of current directory
                 if (std.mem.endsWith(u8, entry.basename, ".rv") and entry.dir.fd == cwd.fd) {
+                    // If specific file asked
+                    if (self.config.file) |f| {
+                        // std.debug.print("Basename: '{s}'\nFile: '{s}'\n", .{ entry.basename, f });
+                        // std.debug.print("Len basename: {}, len file: {}\n", .{ entry.basename.len, f.len });
+                        // Check without extension
+                        if (!std.mem.eql(u8, entry.basename[0 .. entry.basename.len - 3], f)) {
+                            continue;
+                        }
+                        specific_tested = true;
+                    }
                     self.testFile(&cwd, stage, entry, category) catch continue;
                 }
+            }
+
+            if (self.config.file != null and !specific_tested) {
+                print("Failed to test specific file: '{s}' in category: {s}\n", .{ self.config.file.?, category });
             }
         }
     }

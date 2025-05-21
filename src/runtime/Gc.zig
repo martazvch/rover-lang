@@ -75,16 +75,15 @@ fn markRoots(self: *Self) Allocator.Error!void {
         try self.markValue(&value[0]);
     }
 
-    // No need because part of Vm's linked list
-    // for (self.vm.frame_stack.frames[0..self.vm.frame_stack.count]) |*frame| {
-    //     try self.markObject(frame.function.asObj());
-    // }
-
     try self.markModule(self.vm.module);
+    for (self.vm.module_chain.items) |mod| {
+        try self.markModule(mod);
+    }
 }
 
 fn markModule(self: *Self, module: *Module) Allocator.Error!void {
-    // No need to mark the fubctions it's in the Vm's linked list
+    // No need to mark the function, it's never gonna be called. We use only
+    // the global symbols
     try self.markArray(module.globals);
 
     for (module.imports) |*mod| {

@@ -1,25 +1,28 @@
-use math
+use data.math
+use data.geom
 
-// struct Point { x: int, y: int }
 fn main() {
-    var vec = math.Vec2 { x = 1, y = 6 }
-    // var vec = Point { x = 1, y = 6 }
+    var middle = geom.Point { x = 1, y = 90 }
+    middle.display()
+    
+    var square = geom.Square { side = 10, middle }
+    print square.middle.x
+    print square.middle.y
+
+    math.introduce()
+    var vec = math.getVecFromPos(square.middle.x, square.middle.y)
     print vec.x
-    // No args
-    // math.introduce()
-    // // Args + assignment
-    // var vec = math.getVecFromPos(1, 2)
-    //
-    // // Bounded
-    // var please = math.introduce
-    // please()
-    //
-    // // Bounded with args producing a type defined in math
-    // var please2 = math.getVecFromPos
-    // var vec2 = please2(6, 89)
-    //
-    // // Accessing fields of type defined in math
-    // print vec2.y
+    print vec.y
+
+    {
+        use data.sub.simple_str
+        print simple_str.quote("local import")
+        middle.display()
+        print simple_str.concat("just ", "concaneted")
+    }
+
+    var new_middle = square.moveCenter(middle)
+    new_middle.display()
+    print square.middle.x
+    print square.middle.y
 }
-
-

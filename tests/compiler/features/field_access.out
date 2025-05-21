@@ -1,13 +1,13 @@
 -- main --
+OP_GET_GLOBAL index 0, <structure Pet>
 OP_CONSTANT index 0, value "Vodka"
 OP_FALSE
 OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 0, <structure Pet>
+OP_GET_GLOBAL index 1, <structure Human>
 OP_CONSTANT index 1, value 5
 OP_CONSTANT index 2, value "Tom"
 OP_GET_LOCAL index 1
 OP_STRUCT_LIT index 3
-OP_GET_GLOBAL index 1, <structure Human>
 OP_GET_FIELD index 1 of next variable
 OP_GET_FIELD index 2 of next variable
 OP_GET_LOCAL index 2

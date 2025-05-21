@@ -2,11 +2,17 @@
 [Structure declaration Human, index: 1, scope: global]
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, index: 0, scope: global]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
             [String Vodka]
             [Bool false]
     [Variable declaration index: 2, scope: local]
-        [Structure literal, index: 1, scope: global]
+        [Structure literal]
+            - structure
+            [Variable index: 1, scope: global]
+            - args
             [Int 5]
             [String Tom]
             [Variable index: 1, scope: local]

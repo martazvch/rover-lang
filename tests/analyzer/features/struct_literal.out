@@ -3,11 +3,17 @@
     [Int 42]
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, index: 0, scope: global]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
             [Int 5]
             [String Tom]
 
-    [Structure literal, index: 0, scope: global]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
         [Int 5]
         [String Tom]
     [Assignment index: 1, scope: local]
@@ -15,7 +21,10 @@
     [Variable declaration index: 2, scope: local]
         [Int 95]
 
-    [Structure literal, index: 0, scope: global]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
         [Variable index: 2, scope: local]
         [String Tom]
     [Assignment index: 1, scope: local]
@@ -23,23 +32,35 @@
     [Variable declaration index: 3, scope: local]
         [String Tom]
 
-    [Structure literal, index: 0, scope: global]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
         [Int 6]
         [Variable index: 3, scope: local]
     [Assignment index: 1, scope: local]
 
-    [Structure literal, index: 0, scope: global]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
         [Variable index: 2, scope: local]
         [Variable index: 3, scope: local]
     [Assignment index: 1, scope: local]
 
-    [Structure literal, index: 0, scope: global]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
         [Variable index: 2, scope: local]
         [Variable index: 3, scope: local]
     [Assignment index: 1, scope: local]
 
     [Structure declaration Local, index: 4, scope: local]
     [Variable declaration index: 5, scope: local]
-        [Structure literal, index: 4, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 4, scope: local]
+            - args
             [Variable index: 1, scope: global]
 

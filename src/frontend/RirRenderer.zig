@@ -77,6 +77,8 @@ pub fn parse_ir(self: *Self, file_name: []const u8) !void {
         try self.parseErrs()
     else while (self.instr_idx < self.instr_data.len)
         try self.parseInstr();
+
+    try self.writer.writeAll("\n");
 }
 
 fn parseErrs(self: *Self) !void {
@@ -388,8 +390,12 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void
     try self.tree.appendSlice("[Structure literal]\n");
     self.indent_level += 1;
     // Variable containing type
+    self.indent();
+    try self.tree.appendSlice("- structure\n");
     try self.parseInstr();
 
+    self.indent();
+    if (data.arity > 0) try self.tree.appendSlice("- args\n");
     for (0..data.arity) |_| {
         const save = self.instr_idx;
         const field_data = self.next().member.index;

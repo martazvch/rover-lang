@@ -133,31 +133,24 @@ pub const Value = u24;
 // Custom types
 pub const TypeInfo = union(enum) {
     func: FnInfo,
-    module: Symbols,
     @"struct": StructInfo,
 
-    pub fn setModule(self: *TypeInfo, module: usize) void {
+    /// Sets the module reference if it has been imported
+    pub fn setModule(self: *TypeInfo, module_index: usize, type_index: usize) void {
         switch (self.*) {
-            .module => unreachable,
-            inline else => |*t| t.module = module,
+            inline else => |*t| t.module = .{
+                .import_index = module_index,
+                .type_index = type_index,
+            },
         }
-    }
-
-    pub fn getModule(self: *TypeInfo) usize {
-        return switch (self.*) {
-            .module => unreachable,
-            inline else => |*t| t.module,
-        };
     }
 };
 
-// TODO: slice instead of fixes size array
 pub const FnInfo = struct {
     params: []const Type,
     return_type: Type,
     tag: Tag = .function,
-    /// Modules from which it has been imported
-    module: usize = 0,
+    module: ?ModuleRef = null,
 
     pub const Tag = enum { builtin, function };
 };
@@ -166,8 +159,7 @@ pub const StructInfo = struct {
     functions: AutoHashMapUnmanaged(usize, MemberInfo),
     fields: AutoHashMapUnmanaged(usize, MemberInfo),
     default_value_fields: usize,
-    /// Module from which it has been imported
-    module: usize = 0,
+    module: ?ModuleRef = null,
 
     pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {
         var res = std.AutoHashMapUnmanaged(usize, bool){};
@@ -191,6 +183,13 @@ pub const MemberInfo = struct {
     type: Type,
     /// Has a default value
     default: bool = false,
+};
+
+pub const ModuleRef = struct {
+    /// Modules from which it has been imported
+    import_index: usize = 0,
+    /// Index in type manager
+    type_index: usize = 0,
 };
 
 pub const Symbols = AutoArrayHashMapUnmanaged(usize, MemberInfo);
