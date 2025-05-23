@@ -1,1 +1,2 @@
 use math as 1
+use math.geom{ Vec2 } as g

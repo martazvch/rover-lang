@@ -3,6 +3,7 @@
         "path": [
             "std"
         ],
+        "items": [],
         "alias": ""
     },
     "use": {
@@ -12,6 +13,7 @@
             "notime",
             "lost"
         ],
+        "items": [],
         "alias": ""
     },
     "use": {
@@ -19,7 +21,40 @@
             "math",
             "geom"
         ],
+        "items": [],
         "alias": "g"
+    },
+    "use": {
+        "path": [
+            "math"
+        ],
+        "items": [
+            {
+                "item": "Vec2",
+                "alias": ""
+            },
+            {
+                "item": "Point",
+                "alias": ""
+            }
+        ],
+        "alias": ""
+    },
+    "use": {
+        "path": [
+            "math",
+            "geom"
+        ],
+        "items": [
+            {
+                "item": "Vec2",
+                "alias": "V2"
+            },
+            {
+                "item": "Point",
+                "alias": "Pt"
+            }
+        ],
+        "alias": ""
     }
-
 }

@@ -1,20 +1,2 @@
-use data.math as m
-
-fn main() {
-    // No args
-    m.introduce()
-    // Args + assignment
-    var vec = m.getVecFromPos(1, 2)
-
-    // Bounded
-    var please = m.introduce
-    please()
-
-    // Bounded with args producing a type defined in math
-    var please2 = m.getVecFromPos
-    var vec2 = please2(6, 89)
-
-    // Accessing fields of type defined in math
-    print vec2.y
-}
-
+use math as 1
+use math{ Vec2 } as g

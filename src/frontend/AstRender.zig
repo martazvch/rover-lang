@@ -97,6 +97,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         },
         .use => |n| {
             try self.openKey("use", .block);
+
             try self.openKey("path", .list);
             for (n.names, 0..) |name, i| {
                 const last = i != n.names.len - 1;
@@ -105,6 +106,19 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
                 try self.finishPush(last);
             }
             try self.closeKey(.list, true);
+
+            if (n.items) |items| {
+                try self.openKey("items", .list);
+                for (items, 0..) |item, i| {
+                    const last = i != items.len - 1;
+                    try self.openBrace();
+                    try self.pushKeyValue("item", self.spanToSrc(item.item), true);
+                    try self.pushKeyValue("alias", if (item.alias) |alias| self.spanToSrc(alias) else "", false);
+                    try self.closeBrace(last);
+                }
+                try self.closeKey(.list, true);
+            } else try self.emptyKey("items", .list, true);
+
             try self.pushKeyValue("alias", if (n.alias) |alias| self.spanToSrc(alias) else "", false);
             try self.closeKey(.block, comma);
         },

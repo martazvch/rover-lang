@@ -214,7 +214,7 @@ fn synchronize(self: *Self) void {
 
     while (!self.check(.eof)) {
         switch (self.token_tags[self.token_idx]) {
-            .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .@"var", .@"while" => return,
+            .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .use, .@"var", .@"while" => return,
             else => self.advance(),
         }
     }
@@ -511,15 +511,42 @@ fn use(self: *Self) Error!Node {
         break;
     }
 
-    const alias = if (self.match(.as)) b: {
-        try self.expect(.identifier, .non_ident_alias);
-        break :b self.token_idx - 1;
+    const items = if (self.match(.left_brace)) b: {
+        var items: ArrayListUnmanaged(Ast.Use.ItemAndAlias) = .{};
+
+        while (self.match(.identifier)) {
+            items.append(self.allocator, .{
+                .item = self.token_idx - 1,
+                .alias = try self.getAlias(),
+            }) catch oom();
+
+            if (self.match(.comma)) continue;
+            // In case of trailing comma
+            if (self.check(.identifier)) break;
+        }
+        try self.expect(.right_brace, .missing_brace_items_import);
+
+        break :b items.toOwnedSlice(self.allocator) catch oom();
     } else null;
+
+    const alias = try self.getAlias();
+
+    if (alias != null and items != null) {
+        return self.errAtPrev(.import_alias_with_items);
+    }
 
     return .{ .use = .{
         .names = names.toOwnedSlice(self.allocator) catch oom(),
+        .items = items,
         .alias = alias,
     } };
+}
+
+fn getAlias(self: *Self) Error!?TokenIndex {
+    return if (self.match(.as)) b: {
+        try self.expect(.identifier, .non_ident_alias);
+        break :b self.token_idx - 1;
+    } else null;
 }
 
 fn statement(self: *Self) Error!Node {
