@@ -3,9 +3,9 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 
+const Value = @import("../runtime/values.zig").Value;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
-const Value = @import("../runtime/values.zig").Value;
 
 chunk: *const Chunk,
 globals: []const Value,
@@ -49,7 +49,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
     return switch (op) {
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
-        .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
+        .bound_method => self.getMember("OP_BOUND_METHOD", true, offset, writer),
         .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
@@ -68,7 +68,8 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .field_assign => self.simpleInstruction("OP_FIELD_ASSIGN", offset, writer),
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
-        .get_field => self.getMember("OP_GET_FIELD", offset, writer),
+        .get_field => self.getMember("OP_GET_FIELD", false, offset, writer),
+        .get_field_chain => self.getMember("OP_GET_FIELD", true, offset, writer),
         .get_global => self.getGlobal(offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
@@ -213,19 +214,19 @@ fn for_instruction(
     return offset + 4;
 }
 
-fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
+fn getMember(self: *const Self, name: []const u8, of_next: bool, offset: usize, writer: anytype) !usize {
     // Skips the struct_literal op
     var local_offset = offset + 1;
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} index {} of next variable\n", .{ name, idx });
+        try writer.print("{s} index {}{s}\n", .{ name, idx, if (of_next) " of next variable" else "" });
     } else {
-        try writer.print("{s:<24} index {:>4} of next variable\n", .{ name, idx });
+        try writer.print("{s:<24} index {:>4}{s}\n", .{ name, idx, if (of_next) " of next variable" else "" });
     }
 
-    local_offset = try self.disInstruction(local_offset, writer);
+    if (of_next) local_offset = try self.disInstruction(local_offset, writer);
 
     return local_offset;
 }

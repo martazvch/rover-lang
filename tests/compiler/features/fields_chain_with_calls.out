@@ -1,0 +1,38 @@
+// This test shows that when mixing calls with member access, we execute the call
+// first and access the first element on top of stack
+
+//---- test.rv ----
+
+-- getPt --
+OP_GET_GLOBAL index 0, <structure Point>
+OP_CONSTANT index 0, value 9
+OP_STRUCT_LIT index 1
+OP_RETURN
+
+-- getVec --
+OP_GET_GLOBAL index 1, <structure Vec2>
+OP_GET_LOCAL index 1
+OP_STRUCT_LIT index 1
+OP_RETURN
+
+-- main --
+OP_GET_GLOBAL index 1, <structure Vec2>
+OP_CONSTANT index 0, value 1
+OP_STRUCT_LIT index 1
+
+OP_GET_LOCAL index 1
+OP_INVOKE arity 0, method index 0
+OP_GET_FIELD index 0
+OP_PRINT
+
+OP_GET_GLOBAL index 2, <fn getVec>
+OP_CONSTANT index 1, value 5
+OP_CALL index 1
+OP_GET_FIELD index 0
+OP_PRINT
+
+OP_NAKED_RETURN
+
+-- global scope --
+OP_GET_GLOBAL index 3, <fn main>
+OP_CALL index 0

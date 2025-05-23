@@ -266,6 +266,10 @@ fn execute(self: *Self) !void {
                 field.* = self.stack.pop();
             },
             .get_field => {
+                const field_idx = frame.readByte();
+                self.stack.push(self.stack.pop().obj.as(ObjInstance).fields[field_idx]);
+            },
+            .get_field_chain => {
                 const field = self.getField(frame);
                 self.stack.push(field.*);
             },
@@ -308,7 +312,7 @@ fn execute(self: *Self) !void {
                     frame.slots[module_idx].module;
                 self.updateModule(module);
 
-                const callee = self.stack.peekRef(args_count).asObj().?.as(ObjFunction);
+                const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
                 try self.call(callee, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
@@ -327,7 +331,7 @@ fn execute(self: *Self) !void {
                 self.updateModule(module);
                 const imported = self.stack.peek(args_count).module.globals[symbol];
 
-                try self.call(imported.asObj().?.as(ObjFunction), args_count);
+                try self.call(imported.obj.as(ObjFunction), args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .jump => {
@@ -435,7 +439,7 @@ fn execute(self: *Self) !void {
             .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(ObjString), self.stack.peekRef(0).int),
             .struct_literal => {
                 const arity = frame.readByte();
-                var instance = ObjInstance.create(self, self.stack.peekRef(arity).asObj().?.as(ObjStruct));
+                var instance = ObjInstance.create(self, self.stack.peekRef(arity).obj.as(ObjStruct));
 
                 for (0..arity) |i| {
                     instance.fields[i] = self.stack.peek(arity - i - 1);
@@ -466,7 +470,7 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
     const instance = blk: {
         const op: OpCode = @enumFromInt(frame.readByte());
 
-        if (op == .get_field)
+        if (op == .get_field_chain)
             break :blk self.getField(frame);
 
         const idx = frame.readByte();

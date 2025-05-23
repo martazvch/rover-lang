@@ -436,18 +436,38 @@ const Compiler = struct {
         self.writeOp(.pop, 0);
     }
 
+    // getMember has two way of functionning:
+    // - If we're chaining fields accesslike a.b.c.d, we compile the Op code before
+    //   so that the Vm can resolve all of them without pushing/poping the stack
+    // - If there's a method call in-between, we have to resolve the call first
+    //   resulting in interacting with the top value of the stack after the call
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
-        self.writeOpAndByte(
-            if (data.kind == .field)
-                .get_field
-            else if (data.kind == .symbol)
-                .get_symbol
-            else
-                .bound_method,
-            @intCast(data.index),
-            self.getStart(),
-        );
-        try self.compileInstr();
+        if (self.manager.instr_data[self.manager.instr_idx] == .call) {
+            // We compile the call first
+            try self.compileInstr();
+
+            self.writeOpAndByte(
+                if (data.kind == .field)
+                    .get_field
+                else
+                    .bound_method,
+                @intCast(data.index),
+                self.getStart(),
+            );
+        } else {
+            self.writeOpAndByte(
+                if (data.kind == .field)
+                    .get_field_chain
+                else if (data.kind == .symbol)
+                    .get_symbol
+                else
+                    .bound_method,
+                @intCast(data.index),
+                self.getStart(),
+            );
+
+            try self.compileInstr();
+        }
     }
 
     fn floatInstr(self: *Self, value: f64) Error!void {
@@ -481,6 +501,7 @@ const Compiler = struct {
         if (data.tag == .import) {
             // Compiles the index + scope of the module to load it
             try self.compileInstr();
+            // At the end of the call, we unload it
             self.writeOp(.unload_module, start);
         }
     }

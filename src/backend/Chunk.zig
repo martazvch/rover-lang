@@ -73,6 +73,7 @@ pub const OpCode = enum(u8) {
     ge_float,
     ge_int,
     get_field,
+    get_field_chain,
     get_global,
     get_heap,
     get_local,
