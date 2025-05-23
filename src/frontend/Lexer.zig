@@ -97,12 +97,14 @@ pub const Token = struct {
         less,
         less_equal,
         minus,
+        minus_equal,
         modulo,
         new_line,
         not,
         null,
         @"or",
         plus,
+        plus_equal,
         print,
         question_mark,
         @"return",
@@ -110,8 +112,10 @@ pub const Token = struct {
         right_paren,
         self,
         slash,
+        slash_equal,
         small_arrow,
         star,
+        star_equal,
         str_kw,
         string,
         @"struct",
@@ -233,20 +237,34 @@ pub fn next(self: *Self) Token {
                     self.index += 1;
                 },
                 '+' => {
-                    res.tag = .plus;
                     self.index += 1;
+                    if (self.source[self.index] == '=') {
+                        self.index += 1;
+                        res.tag = .plus_equal;
+                    } else res.tag = .plus;
                 },
                 '-' => {
                     self.index += 1;
 
-                    if (self.source[self.index] == '>') {
-                        self.index += 1;
-                        res.tag = .small_arrow;
-                    } else res.tag = .minus;
+                    switch (self.source[self.index]) {
+                        '>' => {
+                            self.index += 1;
+                            res.tag = .small_arrow;
+                        },
+                        '=' => {
+                            self.index += 1;
+                            res.tag = .minus_equal;
+                        },
+                        else => res.tag = .minus,
+                    }
                 },
                 '*' => {
-                    res.tag = .star;
                     self.index += 1;
+
+                    if (self.source[self.index] == '=') {
+                        self.index += 1;
+                        res.tag = .star_equal;
+                    } else res.tag = .star;
                 },
                 '/' => continue :state .slash,
                 '\n' => {
@@ -443,6 +461,10 @@ pub fn next(self: *Self) Token {
 
             switch (self.source[self.index]) {
                 '/' => continue :state .comment,
+                '=' => {
+                    self.index += 1;
+                    res.tag = .slash_equal;
+                },
                 else => res.tag = .slash,
             }
         },
@@ -522,12 +544,13 @@ test "numbers" {
 test "tokens" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    lexer.lex("(){}.:,=!< ><= >= !=+-*/");
+    lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=");
 
     const res = [_]Token.Tag{
         .left_paren,    .right_paren, .left_brace, .right_brace, .dot,     .colon,
         .comma,         .equal,       .bang,       .less,        .greater, .less_equal,
         .greater_equal, .bang_equal,  .plus,       .minus,       .star,    .slash,
+        .plus_equal,    .minus_equal, .star_equal, .slash_equal,
     };
 
     for (0..res.len) |i| {

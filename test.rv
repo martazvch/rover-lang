@@ -1,1 +1,14 @@
-var clr: tools.image.1.Color
+fn main() {
+    var a = 2
+    a += 4
+    print a
+
+    a -= 7
+    print a
+
+    a *= 5
+    print a
+
+    a /= 4
+    print a
+}

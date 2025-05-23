@@ -100,7 +100,7 @@ pub const Block = struct {
 pub const Binop = struct {
     lhs: *Expr,
     rhs: *Expr,
-    op: TokenIndex,
+    op: Token.Tag,
 };
 
 pub const Field = struct {

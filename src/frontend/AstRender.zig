@@ -206,7 +206,20 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.openKey("rhs", .block);
             try self.renderExpr(e.rhs, false);
             try self.closeKey(.block, true);
-            try self.pushKeyValue("op", self.spanToSrc(e.op), false);
+            try self.pushKeyValue("op", switch (e.op) {
+                .greater => ">",
+                .greater_equal => ">=",
+                .less => "<",
+                .less_equal => "<=",
+                .bang_equal => "!=",
+                .equal_equal => "==",
+                .@"and", .@"or" => |tag| @tagName(tag),
+                .plus => "+",
+                .minus => "-",
+                .star => "*",
+                .slash => "/",
+                else => unreachable,
+            }, false);
             try self.closeKey(.block, comma);
         },
         .field => |e| {

@@ -90,27 +90,27 @@ pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, t
     };
 }
 
-const TokenField = enum { span, tag };
-
-fn TokenFieldType(tkField: TokenField) type {
-    return switch (tkField) {
+fn TokenFieldType(kind: anytype) type {
+    return switch (kind) {
         .span => Span,
         .tag => Token.Tag,
+        else => @compileError("Parser's 'next' function can accept only '.tag' and '.span' literal"),
     };
 }
 
-inline fn prev(self: *const Self, comptime tkField: TokenField) TokenFieldType(tkField) {
-    return self.getTkField(tkField, self.token_idx - 1);
+inline fn prev(self: *const Self, kind: anytype) TokenFieldType(kind) {
+    return self.getTkField(kind, self.token_idx - 1);
 }
 
-inline fn current(self: *const Self, comptime tkField: TokenField) TokenFieldType(tkField) {
-    return self.getTkField(tkField, self.token_idx);
+inline fn current(self: *const Self, kind: anytype) TokenFieldType(kind) {
+    return self.getTkField(kind, self.token_idx);
 }
 
-inline fn getTkField(self: *const Self, comptime tkField: TokenField, idx: usize) TokenFieldType(tkField) {
-    return switch (tkField) {
+inline fn getTkField(self: *const Self, kind: anytype, idx: usize) TokenFieldType(kind) {
+    return switch (kind) {
         .span => self.token_spans[idx],
         .tag => self.token_tags[idx],
+        else => @compileError("Parser's 'next' function can accept only '.tag' and '.span' literal"),
     };
 }
 
@@ -524,6 +524,8 @@ fn statement(self: *Self) Error!Node {
 
         return if (self.match(.equal))
             self.assignment(assigne)
+        else if (self.match(.plus_equal) or self.match(.minus_equal) or self.match(.star_equal) or self.match(.slash_equal))
+            self.compoundAssignment(assigne)
         else
             .{ .expr = assigne };
     }
@@ -533,6 +535,29 @@ fn assignment(self: *Self, assigne: *Expr) Error!Node {
     return .{ .assignment = .{
         .assigne = assigne,
         .value = try self.parsePrecedenceExpr(0),
+    } };
+}
+
+fn compoundAssignment(self: *Self, assigne: *Expr) Error!Node {
+    const op = self.prev(.tag);
+    const value = try self.parsePrecedenceExpr(0);
+    const binop = self.allocator.create(Expr) catch oom();
+
+    binop.* = .{ .binop = .{
+        .lhs = assigne,
+        .op = switch (op) {
+            .plus_equal => .plus,
+            .minus_equal => .minus,
+            .star_equal => .star,
+            .slash_equal => .slash,
+            else => unreachable,
+        },
+        .rhs = value,
+    } };
+
+    return .{ .assignment = .{
+        .assigne = assigne,
+        .value = binop,
     } };
 }
 
@@ -596,7 +621,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 
         // Here, we can safely use it
         self.advance();
-        const op = self.token_idx - 1;
+        const op = self.prev(.tag);
         const rhs = try self.parsePrecedenceExpr(next_rule.prec + 1);
 
         const expr = self.allocator.create(Expr) catch oom();

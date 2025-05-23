@@ -1,0 +1,66 @@
+{
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "a"
+                },
+                "rhs": {
+                    "literal": "4"
+                },
+                "op": "+"
+            }
+        }
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "a"
+                },
+                "rhs": {
+                    "literal": "7"
+                },
+                "op": "-"
+            }
+        }
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "a"
+                },
+                "rhs": {
+                    "literal": "5"
+                },
+                "op": "*"
+            }
+        }
+    },
+    "assignment": {
+        "assignee": {
+            "literal": "a"
+        },
+        "value": {
+            "binop": {
+                "lhs": {
+                    "literal": "a"
+                },
+                "rhs": {
+                    "literal": "4"
+                },
+                "op": "/"
+            }
+        }
+    }
+}

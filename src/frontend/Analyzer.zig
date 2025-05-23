@@ -785,7 +785,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
 }
 
 fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
-    const op = self.ast.token_tags[expr.op];
+    const op = expr.op;
     const index = self.reserveInstr();
 
     const lhs = try self.analyzeExpr(expr.lhs);
