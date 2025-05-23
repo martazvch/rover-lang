@@ -511,7 +511,15 @@ fn use(self: *Self) Error!Node {
         break;
     }
 
-    return .{ .use = .{ .names = names.toOwnedSlice(self.allocator) catch oom() } };
+    const alias = if (self.match(.as)) b: {
+        try self.expect(.identifier, .non_ident_alias);
+        break :b self.token_idx - 1;
+    } else null;
+
+    return .{ .use = .{
+        .names = names.toOwnedSlice(self.allocator) catch oom(),
+        .alias = alias,
+    } };
 }
 
 fn statement(self: *Self) Error!Node {

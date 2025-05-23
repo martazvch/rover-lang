@@ -83,9 +83,6 @@ pub const CompilationManager = struct {
         }
 
         self.compiler = Compiler.init(self, "global scope");
-
-        // TODO: maybe separate globals and put it in the manager as every other spawned compilers
-        // will be for local functions
         self.globals.ensureTotalCapacity(self.vm.allocator, symbols_count) catch oom();
 
         while (self.instr_idx < self.instr_data.len) {
@@ -127,7 +124,6 @@ const Compiler = struct {
         method,
     };
 
-    // TODO: error handling?
     pub fn init(manager: *CompilationManager, name: []const u8) Self {
         return .{
             .manager = manager,
@@ -230,8 +226,7 @@ const Compiler = struct {
             return error.Err;
         }
 
-        // TODO: I think I don't need the first & 0xff
-        chunk.code.items[offset] = @as(u8, @intCast(jump >> 8)) & 0xff;
+        chunk.code.items[offset] = @as(u8, @intCast(jump >> 8));
         chunk.code.items[offset + 1] = @intCast(jump & 0xff);
     }
 
@@ -447,10 +442,7 @@ const Compiler = struct {
             try self.compileInstr();
 
             self.writeOpAndByte(
-                if (data.kind == .field)
-                    .get_field
-                else
-                    .bound_method,
+                if (data.kind == .field) .get_field else .bound_method,
                 @intCast(data.index),
                 self.getStart(),
             );
@@ -551,7 +543,6 @@ const Compiler = struct {
         if (fn_var.scope == .global) {
             self.addGlobal(Value.makeObj(func.asObj()));
         } else {
-            // TODO: check if put on the stack, should be no need
             try self.emitConstant(Value.makeObj(func.asObj()), 0);
             self.defineVariable(fn_var, 0);
         }
@@ -562,7 +553,6 @@ const Compiler = struct {
         }
     }
 
-    // TODO: Check if *kind* is really needed
     fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*ObjFunction {
         var compiler = Compiler.init(self.manager, name);
 

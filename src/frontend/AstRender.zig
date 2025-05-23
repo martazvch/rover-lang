@@ -96,14 +96,17 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .use => |n| {
-            try self.openKey("use", .list);
+            try self.openKey("use", .block);
+            try self.openKey("path", .list);
             for (n.names, 0..) |name, i| {
                 const last = i != n.names.len - 1;
                 try self.indent();
                 try self.writer.print("\"{s}\"", .{self.spanToSrc(name)});
                 try self.finishPush(last);
             }
-            try self.closeKey(.list, comma);
+            try self.closeKey(.list, true);
+            try self.pushKeyValue("alias", if (n.alias) |alias| self.spanToSrc(alias) else "", false);
+            try self.closeKey(.block, comma);
         },
         .var_decl => |*n| {
             try self.openKey("var_decl", .block);

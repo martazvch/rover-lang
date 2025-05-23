@@ -17,4 +17,3 @@ fn main() {
     // Accessing fields of type defined in math
     print vec2.y
 }
-

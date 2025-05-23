@@ -1,11 +1,25 @@
 {
-    "use": [
-        "std"
-    ],
-    "use": [
-        "std",
-        "time",
-        "notime",
-        "lost"
-    ]
+    "use": {
+        "path": [
+            "std"
+        ],
+        "alias": ""
+    },
+    "use": {
+        "path": [
+            "std",
+            "time",
+            "notime",
+            "lost"
+        ],
+        "alias": ""
+    },
+    "use": {
+        "path": [
+            "math",
+            "geom"
+        ],
+        "alias": "g"
+    }
+
 }

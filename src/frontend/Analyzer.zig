@@ -632,11 +632,11 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         //
         // Later, support special items imported like: use math.math{ vec2, vec3 } or use math.*
         const module = try self.importModule(node);
-        const last = node.names[node.names.len - 1];
-        const module_name = self.interner.intern(self.ast.toSource(last));
+        const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
+        const module_name = self.interner.intern(self.ast.toSource(token));
         const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
 
-        const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, last);
+        const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, token);
         self.addInstr(.{ .module_import = .{ .index = self.modules.items.len, .scope = variable.scope } });
         self.modules.append(self.allocator, module) catch oom();
         self.imports.append(self.allocator, variable) catch oom();

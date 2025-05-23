@@ -1,0 +1,29 @@
+use data.math as m
+
+fn main() {
+    m.introduce()
+    var vec = m.getVecFromPos(1, 2)
+    print vec.x
+    print vec.y
+    vec = m.getVecFromPos(8, 9)
+    print vec.x
+    print vec.y
+
+    fn trash(a: int) -> bool {
+            a < 10
+    }
+    print trash(vec.y)
+
+    vec = m.getVecFromPos(3, 7)
+    print vec.x
+    print vec.y
+
+    var please = m.introduce
+    please()
+
+    var please2 = m.getVecFromPos
+    var vec2 = please2(6, 89)
+
+    print vec2.x
+    print vec2.y
+}

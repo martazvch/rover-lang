@@ -66,6 +66,7 @@ pub const StructDecl = struct {
 
 pub const Use = struct {
     names: []const TokenIndex,
+    alias: ?TokenIndex,
 };
 
 pub const VarDecl = struct {
