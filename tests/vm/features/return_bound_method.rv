@@ -1,6 +1,6 @@
 struct Person {
     fn speak(self, a: int) {
-        print "Oui"
+        print "Told you"
         print a
     }
 
@@ -17,3 +17,4 @@ fn main() {
     // Or
     p.getSpeak()(90)
 }
+

@@ -440,6 +440,10 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         );
     }
 
+    if (body_type.getExtra() == .bound_method) {
+        self.type_manager.type_infos.items[type_idx].func.return_type.setExtra(.bound_method);
+    }
+
     // We strip unused instructions for them not to be compiled
     if (deadcode_start > 0)
         self.instructions.shrinkRetainingCapacity(deadcode_start);
@@ -1378,7 +1382,7 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     const index = self.reserveInstr();
     var data: Instruction.Return = .{ .value = false, .cast = false };
 
-    const return_type = if (expr.expr) |e| blk: {
+    var return_type = if (expr.expr) |e| blk: {
         data.value = true;
 
         break :blk try self.analyzeExpr(e);
@@ -1387,9 +1391,11 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     // We check after to advance node idx
     if (!self.state.in_fn) return self.err(.return_outside_fn, self.ast.getSpan(expr));
 
+    // We do that here because we can insert a cast
     if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
         if (self.state.fn_type == .float and return_type == .int) {
             data.cast = true;
+            return_type = .float;
             self.addInstr(.{ .cast = .float });
         } else return self.err(
             .{ .incompatible_fn_type = .{
@@ -1402,7 +1408,8 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
 
     self.state.returns = true;
     self.setInstr(index, .{ .@"return" = data });
-    return self.state.fn_type;
+
+    return return_type;
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
