@@ -115,7 +115,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     self.analyzer.analyze(&ast);
     defer self.analyzer.reinit();
     errdefer {
-        for (self.analyzer.modules.items) |*mod| {
+        for (self.analyzer.modules.values()) |*mod| {
             mod.deinit(self.vm.allocator);
         }
     }
@@ -160,7 +160,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         self.analyzer.type_manager.natives.functions,
         self.instr_count,
         &self.analyzer.instructions,
-        self.analyzer.modules.items,
+        self.analyzer.modules.values(),
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
@@ -174,7 +174,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else .{
         .name = file_name,
-        .imports = self.analyzer.modules.toOwnedSlice(self.allocator) catch oom(),
+        .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
         .symbols = self.analyzer.symbols,
         .function = function,
         // TODO: use only one allocator?

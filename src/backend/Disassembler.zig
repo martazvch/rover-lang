@@ -64,7 +64,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .eq_str => self.simpleInstruction("OP_EQUAL_STRING", offset, writer),
         .exit_repl => self.simpleInstruction("OP_EXIT_REPL", offset, writer),
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
-        // .ForIter => self.for_instruction("OP_FOR_ITER", 1, offset),
         .field_assign => self.simpleInstruction("OP_FIELD_ASSIGN", offset, writer),
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
@@ -77,6 +76,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .import_call => self.importCall(offset, writer),
+        .import_item => self.importItem(offset, writer),
         .invoke => self.invokeInstruction(offset, writer),
         .invoke_import => self.invokeImportInstruction(offset, writer),
         .jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
@@ -247,17 +247,12 @@ fn invokeInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
 fn invokeImportInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
     const symbol = self.chunk.code.items[offset + 2];
+    const text = "OP_INVOKE_IMPORT";
 
     if (self.render_mode == .Test) {
-        try writer.print(
-            "{s} arity {}, symbol index: {}\n",
-            .{ "OP_INVOKE_IMPORT", arity, symbol },
-        );
+        try writer.print("{s} arity {}, symbol index: {}\n", .{ text, arity, symbol });
     } else {
-        try writer.print(
-            "{s:<24} arity {:>4}, symbol index: {:>4}\n",
-            .{ "OP_INVOKE_IMPORT", arity, symbol },
-        );
+        try writer.print("{s:<24} arity {:>4}, symbol index: {:>4}\n", .{ text, arity, symbol });
     }
 
     return offset + 3;
@@ -265,12 +260,27 @@ fn invokeImportInstruction(self: *const Self, offset: usize, writer: anytype) !u
 
 fn importCall(self: *const Self, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
+    const text = "OP_IMPORT_CALL";
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, load following module:\n", .{ "OP_IMPORT_CALL", arity });
+        try writer.print("{s} arity {}, load following module:\n", .{ text, arity });
     } else {
-        try writer.print("{s:<24} arity {:>4}, load following module:\n", .{ "OP_IMPORT_CALL", arity });
+        try writer.print("{s:<24} arity {:>4}, load following module:\n", .{ text, arity });
     }
 
     return offset + 2;
+}
+
+fn importItem(self: *const Self, offset: usize, writer: anytype) !usize {
+    const module = self.chunk.code.items[offset + 1];
+    const field = self.chunk.code.items[offset + 2];
+    const text = "OP_IMPORT_ITEM";
+
+    if (self.render_mode == .Test) {
+        try writer.print("{s} module index: {}, field index: {}\n", .{ text, module, field });
+    } else {
+        try writer.print("{s:<24} module index {:>4}: field index: {:>4}\n", .{ text, module, field });
+    }
+
+    return offset + 3;
 }

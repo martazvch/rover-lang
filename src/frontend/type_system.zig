@@ -37,10 +37,10 @@ pub const Type = enum(TypeSize) {
     }
 
     /// Get a type kind, discarding extra and value information bits
-    pub fn setKind(self: *Self, kind: Kind) Self {
+    pub fn setKind(self: *Self, kind: Kind) void {
         // Looking for the 28 last bits = 7 hexa numbers
         const erased = self.toIdx() & 0xfffffff;
-        self.* = @enumFromInt((@as(TypeSize, kind.toIdx()) << 28) | erased);
+        self.* = @enumFromInt((kind.toIdx() << 28) | erased);
     }
 
     // We shift to get the last 8bits. After, we want the first 4bits
@@ -88,7 +88,6 @@ pub const Kind = enum(u4) {
     nullable,
     ptr,
     @"error",
-    param,
     @"struct",
     module,
     _,

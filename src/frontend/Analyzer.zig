@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const Interner = @import("../Interner.zig");
 const Pipeline = @import("../Pipeline.zig");
@@ -40,7 +41,7 @@ heap_count: usize,
 main: ?usize,
 state: State,
 symbols: TypeSys.Symbols,
-modules: ArrayListUnmanaged(Pipeline.Module),
+modules: AutoArrayHashMapUnmanaged(usize, Pipeline.Module),
 
 // TODO: mettre en struct
 empty_interned: usize,
@@ -71,9 +72,9 @@ const Variable = struct {
     initialized: bool = false,
     /// Is captured
     captured: bool = false,
-    kind: Tag = .variable,
-
-    pub const Tag = enum { variable, func, param, module, @"struct" };
+    /// Flag to tell if this is a variable in comparison to structure or function declaration
+    /// Used to tell if we can assign to it
+    is_var: bool = true,
 
     pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
@@ -255,13 +256,15 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+            if (!assigne.is_var) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
         .field => |*e| (try self.field(e)).field,
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
+
+    // TODO: check if field type is a field, not a method
 
     // If type is unknown, we update it
     if (assigne_type == .void) {
@@ -322,8 +325,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type: Type = .create(.func, .none, type_idx);
-    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .func, node.name);
-    self.addInstr(.{ .var_decl = .{ .variable = fn_var, .cast = false } });
+    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, false, node.name);
+    self.addInstr(.{ .var_decl = .{ .variable = fn_var } });
 
     if (self.scope_depth == 0) {
         self.addSymbol(name_idx, fn_type);
@@ -338,7 +341,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.allow_partial = true;
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, .param, 0);
+    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, false, 0);
 
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
@@ -360,7 +363,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             const param_type = try self.checkAndGetType(p.typ);
             if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
 
-            _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
+            _ = try self.declareVariable(param_idx, param_type, true, decl, false, p.name);
             break :blk param_type;
         };
         params_type.appendAssumeCapacity(param_type);
@@ -496,7 +499,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
     errdefer self.state.struct_type = .void;
-    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .@"struct", node.name);
+    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, false, node.name);
 
     const index = self.reserveInstr();
     // We add function's name for runtime access
@@ -614,7 +617,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     // Declare the type and additional informations
                     const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                     // Declare the variable
-                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, .func, n);
+                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, false, n);
                     self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
                 }
 
@@ -627,29 +630,70 @@ fn use(self: *Self, node: *const Ast.Use) !void {
             );
         }
     } else {
-        // Here, we try to resolve imports like: use math or use math.matrix
-        // We import the file as a structure
-        //
-        // Later, support special items imported like: use math.math{ vec2, vec3 } or use math.*
-        const module = try self.importModule(node);
+        const module, const cached = try self.importModule(node);
         const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(token));
-        const module_type: Type = .create(.module, .none, @intCast(self.modules.items.len));
+        const module_type: Type = .create(.module, .none, @intCast(self.modules.count()));
 
-        const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .module, token);
-        self.addInstr(.{ .module_import = .{ .index = self.modules.items.len, .scope = variable.scope } });
-        self.modules.append(self.allocator, module) catch oom();
-        self.imports.append(self.allocator, variable) catch oom();
+        if (node.items) |items| {
+            const module_index = if (!cached) b: {
+                self.modules.put(self.allocator, module_name, module) catch oom();
+                break :b self.modules.count() - 1;
+            } else self.modules.getIndex(module_name).?;
+
+            for (items) |item| {
+                const item_name = self.interner.intern(self.ast.toSource(item.item));
+                // TODO: error
+                const symbol = module.symbols.get(item_name) orelse @panic("symbol not found");
+                const value = symbol.type.getValue();
+
+                var new_infos = self.type_manager.type_infos.items[value];
+                new_infos.setModule(self.modules.count(), value);
+                const kind: TypeSys.Kind = switch (new_infos) {
+                    .@"struct" => .@"struct",
+                    .func => .func,
+                };
+
+                const index = try self.type_manager.reserveInfo();
+                self.type_manager.setInfo(index, new_infos);
+                const typ = Type.create(kind, .imported, index);
+
+                const item_token = if (item.alias) |alias| alias else item.item;
+                const alias_name = self.interner.intern(self.ast.toSource(item_token));
+                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, false, item_token);
+
+                self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
+            }
+        } else {
+            if (cached) {
+                @panic("Already imported module");
+            }
+
+            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, false, token);
+            self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
+            self.modules.put(self.allocator, module_name, module) catch oom();
+            self.imports.append(self.allocator, variable) catch oom();
+        }
     }
 }
 
-fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
+/// Returns the module and a boolean indicating if the module has just been compiled or if
+/// we used a cached one
+fn importModule(self: *Self, node: *const Ast.Use) Error!struct { Pipeline.Module, bool } {
     var cwd = std.fs.cwd();
 
     for (node.names, 0..) |n, i| {
         const name = self.ast.toSource(n);
 
         if (i == node.names.len - 1) {
+            // TODO: manage this better. We should hash the whole path and later manage it even better
+            // because same module could be imported from different files with different path. We should
+            // create a path from the root folder for every import so that all path can be compared regardless
+            // of where files are
+
+            const interned = self.interner.intern(self.ast.toSource(n));
+            if (self.modules.get(interned)) |mod| return .{ mod, true };
+
             const file_name = self.allocator.alloc(u8, name.len + 3) catch oom();
             defer self.allocator.free(file_name);
 
@@ -683,7 +727,7 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!Pipeline.Module {
                 std.process.exit(0);
             };
 
-            return module;
+            return .{ module, false };
         } else {
             cwd = cwd.openDir(name, .{}) catch return self.err(
                 .{ .unknown_module = .{ .name = self.ast.toSource(node.names[i]) } },
@@ -745,7 +789,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         }
     }
 
-    data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
+    data.variable = try self.declareVariable(name, checked_type, initialized, index, true, node.name);
     self.setInstr(index, .{ .var_decl = data });
 
     if (data.variable.scope == .global) {
@@ -1047,7 +1091,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
                 );
         },
         .module => blk: {
-            const module = &self.modules.items[struct_value];
+            const module = &self.modules.values()[struct_value];
             var symbol = module.symbols.get(field_name) orelse return self.err(
                 .{ .missing_symbol_in_module = .{ .symbol = self.ast.toSource(expr.field), .module = module.name } },
                 self.ast.getSpan(expr.field),
@@ -1266,7 +1310,7 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
-    if (variable.kind == .variable) {
+    if (variable.is_var) {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = variable.decl });
     } else {
@@ -1573,12 +1617,12 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
             for (fields[0 .. fields.len - 1]) |f| {
                 const module_variable = try self.resolveIdentifier(f, true);
 
-                if (module_variable.kind != .module) {
+                if (module_variable.typ.getKind() != .module) {
                     @panic("can't have type names with dot on a non-module variable");
                 }
 
                 const module_index = module_variable.typ.getValue();
-                module = self.modules.items[module_index];
+                module = self.modules.values()[module_index];
             }
 
             const name = self.interner.intern(self.ast.toSource(fields[fields.len - 1]));
@@ -1631,7 +1675,7 @@ fn declareVariable(
     typ: Type,
     initialized: bool,
     decl_idx: usize,
-    kind: Variable.Tag,
+    is_var: bool,
     token: Ast.TokenIndex,
 ) !Instruction.Variable {
     // We put the current number of instruction for the declaration index
@@ -1641,7 +1685,7 @@ fn declareVariable(
         .decl = decl_idx,
         .depth = self.scope_depth,
         .initialized = initialized,
-        .kind = kind,
+        .is_var = is_var,
     };
 
     // Add the variable to the correct data structure

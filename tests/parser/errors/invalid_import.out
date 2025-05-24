@@ -1,2 +1,3 @@
 non_ident_alias
 import_alias_with_items
+missing_brace_items_import

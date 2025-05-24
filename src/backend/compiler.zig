@@ -95,11 +95,7 @@ pub const CompilationManager = struct {
             self.vm.heap_vars = try self.vm.allocator.alloc(Value, self.heap_count);
 
             // Insert a call to main with arity of 0 for now
-            self.compiler.writeOpAndByte(
-                .get_global,
-                self.main_index.?,
-                0,
-            );
+            self.compiler.writeOpAndByte(.get_global, self.main_index.?, 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
@@ -279,6 +275,7 @@ const Compiler = struct {
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
+            .item_import => |*data| self.itemImport(data),
             .member => |*data| self.getMember(data),
             .module_import => |*data| self.moduleImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -431,37 +428,6 @@ const Compiler = struct {
         self.writeOp(.pop, 0);
     }
 
-    // getMember has two way of functionning:
-    // - If we're chaining fields accesslike a.b.c.d, we compile the Op code before
-    //   so that the Vm can resolve all of them without pushing/poping the stack
-    // - If there's a method call in-between, we have to resolve the call first
-    //   resulting in interacting with the top value of the stack after the call
-    fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
-        if (self.manager.instr_data[self.manager.instr_idx] == .call) {
-            // We compile the call first
-            try self.compileInstr();
-
-            self.writeOpAndByte(
-                if (data.kind == .field) .get_field else .bound_method,
-                @intCast(data.index),
-                self.getStart(),
-            );
-        } else {
-            self.writeOpAndByte(
-                if (data.kind == .field)
-                    .get_field_chain
-                else if (data.kind == .symbol)
-                    .get_symbol
-                else
-                    .bound_method,
-                @intCast(data.index),
-                self.getStart(),
-            );
-
-            try self.compileInstr();
-        }
-    }
-
     fn floatInstr(self: *Self, value: f64) Error!void {
         try self.emitConstant(Value.makeFloat(value), self.getStart());
     }
@@ -569,6 +535,37 @@ const Compiler = struct {
         return compiler.end();
     }
 
+    // getMember has two way of functionning:
+    // - If we're chaining fields accesslike a.b.c.d, we compile the Op code before
+    //   so that the Vm can resolve all of them without pushing/poping the stack
+    // - If there's a method call in-between, we have to resolve the call first
+    //   resulting in interacting with the top value of the stack after the call
+    fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
+        if (self.manager.instr_data[self.manager.instr_idx] == .call) {
+            // We compile the call first
+            try self.compileInstr();
+
+            self.writeOpAndByte(
+                if (data.kind == .field) .get_field else .bound_method,
+                @intCast(data.index),
+                self.getStart(),
+            );
+        } else {
+            self.writeOpAndByte(
+                if (data.kind == .field)
+                    .get_field_chain
+                else if (data.kind == .symbol)
+                    .get_symbol
+                else
+                    .bound_method,
+                @intCast(data.index),
+                self.getStart(),
+            );
+
+            try self.compileInstr();
+        }
+    }
+
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
         self.emitGetVar(data, self.getStart());
     }
@@ -605,6 +602,17 @@ const Compiler = struct {
         }
 
         try self.patchJump(else_jump);
+    }
+
+    fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
+        if (data.scope == .global)
+            self.addGlobal(self.manager.modules[data.module_index].globals[data.field_index])
+        else {
+            const start = self.getStart();
+            // TODO: protect cast
+            self.writeOpAndByte(.import_item, @intCast(data.module_index), start);
+            self.writeByte(@intCast(data.field_index), start);
+        }
     }
 
     fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {

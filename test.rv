@@ -1,2 +1,16 @@
-use math as 1
-use math{ Vec2 } as g
+// use playground
+// use playground{Vec2}
+// fn main() {}
+
+use playground{Vec2}
+
+fn main() {
+    var v = Vec2 { x = 3, y = 9 }
+    print v.y
+
+    {
+        use playground{Vec2 as Pipou,}
+        var v = Pipou{ x = 55, y = 333 }
+        print v.y
+    }
+}

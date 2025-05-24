@@ -81,6 +81,7 @@ pub const OpCode = enum(u8) {
     gt_float,
     gt_int,
     import_call,
+    import_item,
     invoke,
     invoke_import,
     jump,

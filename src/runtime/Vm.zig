@@ -316,6 +316,11 @@ fn execute(self: *Self) !void {
                 try self.call(callee, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
+            .import_item => {
+                const module_idx = frame.readByte();
+                const field_idx = frame.readByte();
+                self.stack.push(self.module.imports[module_idx].globals[field_idx]);
+            },
             .invoke => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
@@ -518,11 +523,6 @@ fn updateModule(self: *Self, module: *Module) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
     self.module = module;
 }
-
-// fn updateModule(self: *Self, module_idx: usize) void {
-//     self.module_chain.append(self.allocator, self.module) catch oom();
-//     self.module = &self.module.imports[module_idx];
-// }
 
 fn strConcat(self: *Self) void {
     const s2 = self.stack.peekRef(0).obj.as(ObjString);

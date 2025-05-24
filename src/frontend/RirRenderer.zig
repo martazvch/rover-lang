@@ -118,7 +118,7 @@ fn parseInstr(self: *Self) !void {
         // TODO: delete later
         .imported => unreachable,
         .int => |data| self.intInstr(data),
-        // TODO: used?
+        .item_import => |*data| self.itemImport(data),
         .member => |*data| self.getMember(data),
         .module_import => |*data| self.moduleImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -157,7 +157,6 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
         .member => |*member| return self.fieldAssignment(member),
         else => unreachable,
     };
-
     self.indent();
     try self.writer.print("[Assignment index: {}, scope: {s}]\n", .{
         variable_data.index, @tagName(variable_data.scope),
@@ -328,6 +327,14 @@ fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
 fn intInstr(self: *Self, data: isize) Error!void {
     self.indent();
     try self.writer.print("[Int {}]\n", .{data});
+}
+
+fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
+    self.indent();
+    try self.writer.print(
+        "[Import field {} of module {} to scope {s}]\n",
+        .{ data.field_index, data.module_index, @tagName(data.scope) },
+    );
 }
 
 fn multipleVarDecl(self: *Self, count: usize) Error!void {

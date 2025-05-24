@@ -8,7 +8,7 @@ fn main() {
 
         // Bounded
         var please = math.introduce
-            please()
+        please()
 
         // Bounded with args producing a type defined in math
         var please2 = math.getVecFromPos
