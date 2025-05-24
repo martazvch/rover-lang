@@ -1,0 +1,15 @@
+// analyzed math.rv file
+[Structure declaration Vec2, index: 0, scope: global]
+[Fn declaration introduce, index: 1, scope: global, return kind: implicit_void]
+    [Print]
+        [String This is a mathematical module]
+[Fn declaration getVecFromPos, index: 2, scope: global, return kind: implicit_value]
+    [Structure literal]
+        - structure
+        [Variable index: 0, scope: global]
+        - args
+        [Variable index: 1, scope: local]
+        [Variable index: 2, scope: local]
+
+already_imported_module, math
+already_imported_module, math

@@ -2,6 +2,10 @@ const std = @import("std");
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
+// 0000    0     0    0    0   0000  0000000000 0000000000
+// |--|    |     |    |    |   |--|  |-------------------|
+// Extra  Save  Ref  Nul  Var  Kind          Value
+
 // Types are 32 bits long
 const TypeSize = u32;
 pub const Type = enum(TypeSize) {
@@ -28,41 +32,45 @@ pub const Type = enum(TypeSize) {
     pub fn create(kind: Kind, extra: Extra, value: Value) Self {
         const tmp: u32 = @intCast(kind.toIdx());
         const tmp2: u32 = @intCast(extra.toIdx());
-        return @enumFromInt(tmp << 28 | tmp2 << 24 | value);
+        // 0x1 for variable, reference, nullable and reserve. All false
+        return @enumFromInt(tmp2 << 28 | 0 << 24 | tmp << 20 | value);
+    }
+
+    /// Creates a type from kind and value information
+    pub fn createVar(kind: Kind, extra: Extra, value: Value) Self {
+        const tmp: u32 = @intCast(kind.toIdx());
+        const tmp2: u32 = @intCast(extra.toIdx());
+        // 0x1 for variable, reference, nullable and reserve. Activates only variable
+        return @enumFromInt(tmp2 << 28 | 1 << 24 | tmp << 20 | value);
     }
 
     /// Get a type kind, discarding extra and value information bits
     pub fn getKind(self: Self) Kind {
-        return @enumFromInt(self.toIdx() >> 28);
+        const erased = self.toIdx() & 0xf00000;
+        return @enumFromInt(erased >> 20);
     }
 
     /// Get a type kind, discarding extra and value information bits
     pub fn setKind(self: *Self, kind: Kind) void {
-        // Looking for the 28 last bits = 7 hexa numbers
-        const erased = self.toIdx() & 0xfffffff;
-        self.* = @enumFromInt((kind.toIdx() << 28) | erased);
+        const erased = self.toIdx() & 0xff0fffff;
+        self.* = @enumFromInt(erased | (kind.toIdx() << 28));
     }
 
-    // We shift to get the last 8bits. After, we want the first 4bits
-    //  value: x x x x  x x x x
-    //  mask:  0 0 0 0  1 1 1 1  -> 15 -> 0xf
     /// Get extra information bits about a type
     pub fn getExtra(self: Self) Extra {
-        return @enumFromInt(@as(u8, @intCast(self.toIdx() >> 24)) & 0xf);
+        return @enumFromInt(self.toIdx() >> 28);
     }
 
     /// Get a type kind, discarding extra and value information bits
     pub fn setExtra(self: *Self, extra: Extra) void {
-        // Looking for the 5-6-7-8 bits from left
-        const erased = self.toIdx() & 0xf0ffffff;
-        self.* = @enumFromInt(erased | extra.toIdx() << 24);
+        const erased = self.toIdx() & 0x0fffffff;
+        self.* = @enumFromInt(erased | extra.toIdx() << 28);
     }
 
-    // Looking for the 24 first bits. 24 bits = 6 hexa numbers. We set
-    // all to one and mask it
     /// Extract the value bits associated to a type
     pub fn getValue(self: Self) Value {
-        return @as(Value, @intCast(self.toIdx() & 0xffffff));
+        const erased = self.toIdx() & 0x000fffff;
+        return @as(Value, @intCast(erased));
     }
 
     /// Checks if a type is of a certain kind
@@ -70,23 +78,26 @@ pub const Type = enum(TypeSize) {
         return getKind(self) == kind;
     }
 
-    /// Checks if a type is a builtin one, regardless of the kind
-    pub fn isBuiltin(self: Self) bool {
-        const extra = getExtra(self);
-        return extra == .builtin;
+    /// Sets the 'Var' bit of the type
+    pub fn setVar(self: *Self) void {
+        const erased = self.toIdx() & 0xf0ffffff;
+        self.* = @enumFromInt(erased | (1 << 24));
+    }
+
+    /// Returns if the type is an instance
+    pub fn isVar(self: *const Self) bool {
+        return self.toIdx() & 0x01000000 == 1;
     }
 };
 
 // 4 first bits (16 values) are for:
 pub const Kind = enum(u4) {
-    variable,
+    none,
     func,
     array,
     tuple,
     @"enum",
     map,
-    nullable,
-    ptr,
     @"error",
     @"struct",
     module,
@@ -109,6 +120,13 @@ pub const Kind = enum(u4) {
     }
 };
 
+// 20 other allow 1048575 different types
+pub const Value = u20;
+// 1 bit for variable or not
+// 1 bit for reference or not
+// 1 bit for nullable or not
+// 1 bit of reserve
+
 // 4 next bits are for extra infos:
 pub const Extra = enum(u4) {
     none,
@@ -125,9 +143,6 @@ pub const Extra = enum(u4) {
         return @enumFromInt(index);
     }
 };
-
-// 24 other allow 16777215 different types
-pub const Value = u24;
 
 // Custom types
 pub const TypeInfo = union(enum) {

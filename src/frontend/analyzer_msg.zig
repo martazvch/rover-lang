@@ -5,6 +5,7 @@ pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
     already_declared_struct: struct { name: []const u8 },
+    already_imported_module: struct { name: []const u8 },
     dead_code,
     default_value_type_mismatch: struct { expect: []const u8, found: []const u8 },
     duplicate_param: struct { name: []const u8 },
@@ -61,6 +62,7 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
             .already_declared_struct => |e| writer.print("type '{s}' is already declared", .{e.name}),
+            .already_imported_module => |e| writer.print("module '{s}' as already been imported", .{e.name}),
             .dead_code => writer.print("unreachable code", .{}),
             .default_value_type_mismatch => |e| writer.print(
                 "field's default value doesn't match field's type, expect '{s}' but found '{s}'",
@@ -118,6 +120,7 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
             .already_declared_struct => writer.writeAll("this type"),
+            .already_imported_module => writer.writeAll("this module"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .float_equal_cast => writer.writeAll("this expression is implicitly casted to 'float'"),
@@ -167,6 +170,7 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
             .already_declared_struct => writer.writeAll("use another name"),
+            .already_imported_module => writer.writeAll("remove the import"),
             .default_value_type_mismatch => |e| writer.print(
                 "modify field's default value to match '{s}' type or change field's type",
                 .{e.expect},

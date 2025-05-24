@@ -48,6 +48,7 @@ empty_interned: usize,
 main_interned: usize,
 std_interned: usize,
 self_interned: usize,
+self_big_interned: usize,
 init_interned: usize,
 
 arena: std.heap.ArenaAllocator,
@@ -72,9 +73,6 @@ const Variable = struct {
     initialized: bool = false,
     /// Is captured
     captured: bool = false,
-    /// Flag to tell if this is a variable in comparison to structure or function declaration
-    /// Used to tell if we can assign to it
-    is_var: bool = true,
 
     pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
@@ -128,6 +126,7 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.main_interned = self.interner.intern("main");
     self.std_interned = self.interner.intern("std");
     self.self_interned = self.interner.intern("self");
+    self.self_big_interned = self.interner.intern("Self");
     self.init_interned = self.interner.intern("init");
 
     self.repl = repl;
@@ -256,7 +255,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            if (!assigne.is_var) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+            if (!assigne.typ.isVar()) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
@@ -325,7 +324,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type: Type = .create(.func, .none, type_idx);
-    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, false, node.name);
+    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, node.name);
     self.addInstr(.{ .var_decl = .{ .variable = fn_var } });
 
     if (self.scope_depth == 0) {
@@ -341,7 +340,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.allow_partial = true;
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, false, 0);
+    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, 0);
 
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
@@ -363,7 +362,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             const param_type = try self.checkAndGetType(p.typ);
             if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
 
-            _ = try self.declareVariable(param_idx, param_type, true, decl, false, p.name);
+            _ = try self.declareVariable(param_idx, param_type, true, decl, p.name);
             break :blk param_type;
         };
         params_type.appendAssumeCapacity(param_type);
@@ -490,8 +489,9 @@ fn print(self: *Self, expr: *const Expr) !void {
 fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     const name = self.interner.intern(self.ast.toSource(node.name));
 
-    if (self.type_manager.isDeclared(name))
+    if (self.type_manager.isDeclared(name)) {
         return self.err(.{ .already_declared_struct = .{ .name = self.ast.toSource(node.name) } }, self.ast.getSpan(node));
+    }
 
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
@@ -499,7 +499,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
     errdefer self.state.struct_type = .void;
-    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, false, node.name);
+    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, node.name);
 
     const index = self.reserveInstr();
     // We add function's name for runtime access
@@ -617,7 +617,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     // Declare the type and additional informations
                     const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                     // Declare the variable
-                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, false, n);
+                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, n);
                     self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
                 }
 
@@ -643,8 +643,13 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
             for (items) |item| {
                 const item_name = self.interner.intern(self.ast.toSource(item.item));
-                // TODO: error
-                const symbol = module.symbols.get(item_name) orelse @panic("symbol not found");
+                const symbol = module.symbols.get(item_name) orelse return self.err(
+                    .{ .missing_symbol_in_module = .{
+                        .module = self.ast.toSource(node.names[node.names.len - 1]),
+                        .symbol = self.ast.toSource(item.item),
+                    } },
+                    self.ast.getSpan(item.item),
+                );
                 const value = symbol.type.getValue();
 
                 var new_infos = self.type_manager.type_infos.items[value];
@@ -660,16 +665,17 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
                 const item_token = if (item.alias) |alias| alias else item.item;
                 const alias_name = self.interner.intern(self.ast.toSource(item_token));
-                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, false, item_token);
+                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, item_token);
 
                 self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
             }
         } else {
-            if (cached) {
-                @panic("Already imported module");
-            }
+            if (cached) return self.err(
+                .{ .already_imported_module = .{ .name = self.ast.toSource(node.names[node.names.len - 1]) } },
+                self.ast.getSpan(node.names[node.names.len - 1]),
+            );
 
-            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, false, token);
+            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, token);
             self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
             self.modules.put(self.allocator, module_name, module) catch oom();
             self.imports.append(self.allocator, variable) catch oom();
@@ -690,7 +696,6 @@ fn importModule(self: *Self, node: *const Ast.Use) Error!struct { Pipeline.Modul
             // because same module could be imported from different files with different path. We should
             // create a path from the root folder for every import so that all path can be compared regardless
             // of where files are
-
             const interned = self.interner.intern(self.ast.toSource(n));
             if (self.modules.get(interned)) |mod| return .{ mod, true };
 
@@ -789,7 +794,9 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         }
     }
 
-    data.variable = try self.declareVariable(name, checked_type, initialized, index, true, node.name);
+    checked_type.setVar();
+    std.debug.print("is var: {}\n", .{checked_type.isVar()});
+    data.variable = try self.declareVariable(name, checked_type, initialized, index, node.name);
     self.setInstr(index, .{ .var_decl = data });
 
     if (data.variable.scope == .global) {
@@ -1310,7 +1317,7 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
-    if (variable.is_var) {
+    if (variable.typ.isVar()) {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = variable.decl });
     } else {
@@ -1675,7 +1682,6 @@ fn declareVariable(
     typ: Type,
     initialized: bool,
     decl_idx: usize,
-    is_var: bool,
     token: Ast.TokenIndex,
 ) !Instruction.Variable {
     // We put the current number of instruction for the declaration index
@@ -1685,7 +1691,6 @@ fn declareVariable(
         .decl = decl_idx,
         .depth = self.scope_depth,
         .initialized = initialized,
-        .is_var = is_var,
     };
 
     // Add the variable to the correct data structure

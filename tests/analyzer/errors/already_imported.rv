@@ -1,0 +1,9 @@
+use data.math
+use data.math
+
+fn main() {
+    {
+        use data.math
+        use data.math
+    }
+}

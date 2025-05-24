@@ -515,10 +515,7 @@ fn use(self: *Self) Error!Node {
         var items: ArrayListUnmanaged(Ast.Use.ItemAndAlias) = .{};
 
         while (self.match(.identifier)) {
-            items.append(self.allocator, .{
-                .item = self.token_idx - 1,
-                .alias = try self.getAlias(),
-            }) catch oom();
+            items.append(self.allocator, .{ .item = self.token_idx - 1, .alias = try self.getAlias() }) catch oom();
 
             if (self.match(.comma)) continue;
             // In case of trailing comma
