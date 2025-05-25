@@ -128,7 +128,6 @@ const Tester = struct {
 
         switch (self.config.stage) {
             .all => {
-                // TODO: for loop
                 try self.runStage(.parser);
                 success = self.report(.parser);
                 self.clearDiags();

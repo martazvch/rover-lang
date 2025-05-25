@@ -1,9 +1,0 @@
-struct Foo {
-    fn init(self) {}
-}
-
-struct Bar {
-    fn init() {}
-}
-
-fn main() {}

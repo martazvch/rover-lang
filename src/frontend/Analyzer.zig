@@ -51,6 +51,8 @@ self_interned: usize,
 self_big_interned: usize,
 init_interned: usize,
 
+big_self: Variable,
+
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 repl: bool,
@@ -132,6 +134,8 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.self_interned = self.interner.intern("self");
     self.self_big_interned = self.interner.intern("Self");
     self.init_interned = self.interner.intern("init");
+
+    self.big_self = .{ .name = self.self_big_interned, .kind = .decl, .depth = 0 };
 
     self.repl = repl;
 }
@@ -377,14 +381,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     }
 
     const return_type = try self.checkAndGetType(node.return_type);
-
-    if (name_idx == self.init_interned and return_type != .self) {
-        return self.err(.non_self_init_return, if (node.return_type) |t|
-            self.ast.getSpan(t)
-        else
-            self.ast.getSpan(node.name));
-    }
-
     self.state.fn_type = return_type;
 
     self.type_manager.setInfo(type_idx, .{
@@ -504,8 +500,13 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
     const struct_type: Type = .create(.@"struct", .none, type_idx);
+
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
+
+    self.big_self.typ = struct_type;
+    defer self.big_self.typ = .void;
+
     errdefer self.state.struct_type = .void;
     const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .decl, node.name);
 
@@ -1327,6 +1328,13 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
         }
     }
 
+    if (name_idx == self.self_big_interned) {
+        if (self.state.struct_type == .void)
+            return self.err(.big_self_outside_struct, self.ast.getSpan(name));
+
+        return &self.big_self;
+    }
+
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(name));
 }
 
@@ -1653,25 +1661,39 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
             for (fields[0 .. fields.len - 1]) |f| {
                 const module_variable = try self.resolveIdentifier(f, true);
 
-                if (module_variable.typ.getKind() != .module) {
-                    @panic("can't have type names with dot on a non-module variable");
-                }
+                if (module_variable.typ.getKind() != .module) return self.err(
+                    .{ .dot_type_on_non_mod = .{ .found = self.getTypeName(module_variable.typ) } },
+                    self.ast.getSpan(f),
+                );
 
                 const module_index = module_variable.typ.getValue();
                 module = self.modules.values()[module_index];
             }
 
-            const name = self.interner.intern(self.ast.toSource(fields[fields.len - 1]));
-            const final = module.symbols.get(name) orelse @panic("no symbol in module");
+            const name_token = fields[fields.len - 1];
+            const name = self.interner.intern(self.ast.toSource(name_token));
+            const final = module.symbols.get(name) orelse return self.err(
+                .{ .missing_symbol_in_module = .{ .module = module.name, .symbol = self.ast.toSource(name_token) } },
+                self.ast.getSpan(name_token),
+            );
             return final.type;
         },
         .function => |*fn_type| self.createAnonymousFnType(fn_type),
-        .scalar => self.type_manager.declared.get(
-            self.interner.intern(self.ast.toSource(t)),
-        ) orelse return self.err(
-            .{ .undeclared_type = .{ .found = self.ast.toSource(t) } },
-            self.ast.getSpan(t),
-        ),
+        .scalar => {
+            const interned = self.interner.intern(self.ast.toSource(t));
+
+            return self.type_manager.declared.get(interned) orelse {
+                if (interned == self.self_big_interned) {
+                    if (self.state.struct_type == .void)
+                        return self.err(.big_self_outside_struct, self.ast.getSpan(t));
+
+                    return self.state.struct_type;
+                } else return self.err(
+                    .{ .undeclared_type = .{ .found = self.ast.toSource(t) } },
+                    self.ast.getSpan(t),
+                );
+            };
+        },
         .self => .self,
     } else .void;
 }

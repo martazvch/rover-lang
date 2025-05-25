@@ -32,7 +32,6 @@ pub fn init_builtins(self: *Self, interner: *Interner) void {
     self.declared.put(self.allocator, interner.intern("float"), .float) catch oom();
     self.declared.put(self.allocator, interner.intern("int"), .int) catch oom();
     self.declared.put(self.allocator, interner.intern("str"), .str) catch oom();
-    self.declared.put(self.allocator, interner.intern("Self"), .self) catch oom();
 }
 
 pub fn deinit(self: *Self) void {

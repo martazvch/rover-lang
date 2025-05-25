@@ -11,4 +11,5 @@
         [Variable index: 1, scope: local]
         [Variable index: 2, scope: local]
 
+missing_symbol_in_module, Triangle, math
 missing_symbol_in_module, Rect, math

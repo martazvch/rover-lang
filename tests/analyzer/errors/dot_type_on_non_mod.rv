@@ -1,0 +1,13 @@
+struct Vec2 {
+    x: int, y: int,
+
+    fn new(x: int, y: int) -> Self {
+        Self { x, y }
+    }
+}
+
+fn main() {
+    var v = Vec2.new(12, 99)
+
+    fn invalid(a: v.x) {}
+}
