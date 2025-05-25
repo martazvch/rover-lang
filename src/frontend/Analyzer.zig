@@ -73,9 +73,10 @@ const Variable = struct {
     initialized: bool = false,
     /// Is captured
     captured: bool = false,
-    /// Is a variable or not. For example, a variable holding a function is mutable, a function declaration isn't
-    /// Used to know if it's assignable and if we can refer to it's declaration instruction
-    is_var: bool = true,
+    /// Kind of variable
+    kind: Kind = .variable,
+
+    pub const Kind = enum { variable, param, decl };
 
     pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
@@ -258,7 +259,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            if (!assigne.is_var) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+            if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
@@ -327,7 +328,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type: Type = .create(.func, .none, type_idx);
-    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, false, node.name);
+    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .decl, node.name);
     self.addInstr(.{ .var_decl = .{ .variable = fn_var } });
 
     if (self.scope_depth == 0) {
@@ -343,11 +344,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.allow_partial = true;
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, true, 0);
-
-    if (self.state.struct_type != .void) {
-        self.locals.items[self.locals.items - 1] = undefined;
-    }
+    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, .param, 0);
 
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
@@ -373,7 +370,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             const param_type = try self.checkAndGetType(p.typ);
             if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
 
-            _ = try self.declareVariable(param_idx, param_type, true, decl, false, p.name);
+            _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
             break :blk param_type;
         };
         params_type.appendAssumeCapacity(param_type);
@@ -510,7 +507,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
     errdefer self.state.struct_type = .void;
-    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, false, node.name);
+    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .decl, node.name);
 
     const index = self.reserveInstr();
     // We add function's name for runtime access
@@ -598,7 +595,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
     // For now, "std" is interned at initialization in slot 1
     if (first_name == self.std_interned) {
         const index = self.reserveInstr();
-        // TODO: For now, il keeps synchronized the different arrays of
+        // TODO: For now, it keeps synchronized the different arrays of
         // nodes/instructions
         self.addInstr(.{ .null = undefined });
 
@@ -628,7 +625,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     // Declare the type and additional informations
                     const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                     // Declare the variable
-                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, false, n);
+                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, .decl, n);
                     self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
                 }
 
@@ -676,7 +673,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
                 const item_token = if (item.alias) |alias| alias else item.item;
                 const alias_name = self.interner.intern(self.ast.toSource(item_token));
-                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, false, item_token);
+                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, .decl, item_token);
 
                 self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
             }
@@ -686,7 +683,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 self.ast.getSpan(node.names[node.names.len - 1]),
             );
 
-            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, false, token);
+            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .decl, token);
             self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
             self.modules.put(self.allocator, module_name, module) catch oom();
             self.imports.append(self.allocator, variable) catch oom();
@@ -805,7 +802,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         }
     }
 
-    data.variable = try self.declareVariable(name, checked_type, initialized, index, true, node.name);
+    data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
     self.setInstr(index, .{ .var_decl = data });
 
     if (data.variable.scope == .global) {
@@ -1093,7 +1090,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const struct_type, const is_type = switch (expr.structure.*) {
         .literal => |*e| blk: {
             const assigne = try self.identifier(e.idx, false);
-            break :blk .{ assigne.typ, !assigne.is_var };
+            break :blk .{ assigne.typ, assigne.kind == .decl };
         },
         else => .{ try self.analyzeExpr(expr.structure), false },
     };
@@ -1336,16 +1333,29 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
     // There is no instruction for 'self'
-    if (variable.name != self.self_interned and variable.is_var) {
+    if (variable.name != self.self_interned and variable.kind == .variable) {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = variable.decl });
     } else {
-        // Params and imports aren't declared so we can't reference them, they just live on stack
-        // TODO: scope can't be 'heap'? Just use variable.scope()? Create a to() method?
-        self.addInstr(.{ .identifier = .{
-            .index = @intCast(variable.index),
-            .scope = if (variable.depth > 0) .local else .global,
-        } });
+        // In local scopes, we want sometimes to refer to local declarations like:
+        // fn main() {
+        //      struct Point {}
+        //      fn getPoint() -> Point {
+        //          Point {}
+        //      }
+        // }
+        // Here, `Point` is on the stack, so when we call `getPoint`, we can't see outside
+        // the function's callframe. So we first check if the variable is a declaration, if it's in
+        // an outer scope and if it's not a global declaration. Then, we use its index and the compiler
+        // will emit a special code to get it at runtime from the beginning of the stack, not the callframe
+        if (variable.kind == .decl and self.scope_depth > variable.depth and variable.depth > 0) {
+            self.addInstr(.{ .identifier_absolute = @intCast(variable.index) });
+        } else {
+            self.addInstr(.{ .identifier = .{
+                .index = @intCast(variable.index),
+                .scope = if (variable.depth > 0) .local else .global,
+            } });
+        }
     }
 }
 
@@ -1701,7 +1711,7 @@ fn declareVariable(
     typ: Type,
     initialized: bool,
     decl_idx: usize,
-    is_var: bool,
+    kind: Variable.Kind,
     token: Ast.TokenIndex,
 ) !Instruction.Variable {
     // We put the current number of instruction for the declaration index
@@ -1711,7 +1721,7 @@ fn declareVariable(
         .decl = decl_idx,
         .depth = self.scope_depth,
         .initialized = initialized,
-        .is_var = is_var,
+        .kind = kind,
     };
 
     // Add the variable to the correct data structure

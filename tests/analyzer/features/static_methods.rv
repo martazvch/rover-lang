@@ -25,3 +25,4 @@ fn main() {
     var new2 = Vec2.new
     v2 = new2(56, 78)
 }
+

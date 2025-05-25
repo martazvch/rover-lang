@@ -1,0 +1,19 @@
+fn main() {
+    struct Point { x: int }
+
+    struct Vec2 {
+        x: int, y: int,
+
+        fn getPt(self) -> Point {
+            Point { x = self.x }
+        }
+
+        fn new(x: int, y: int) -> Vec2 {
+            Vec2 { x, y }
+        }
+    }
+
+    fn local() -> Point {
+        Point { x = 3456 }
+    }
+}

@@ -18,10 +18,14 @@ fn main() {
     }
 
     var v = Vec1.new(5)
+    print v.x
     var new = Vec1.new
     v = new(65)
+    print v.x
 
     var v2 = Vec2.new(12, 99)
+    print v2.y
     var new2 = Vec2.new
     v2 = new2(56, 78)
+    print v2.x
 }

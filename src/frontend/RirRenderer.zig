@@ -114,6 +114,7 @@ fn parseInstr(self: *Self) !void {
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
         .identifier_id => |data| self.identifier(&self.instr_data[data].var_decl.variable),
+        .identifier_absolute => |data| self.identifierAbsolute(data),
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
@@ -294,6 +295,11 @@ fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
     try self.writer.print("[Variable index: {}, scope: {s}]\n", .{
         data.index, @tagName(data.scope),
     });
+}
+
+fn identifierAbsolute(self: *Self, data: usize) Error!void {
+    self.indent();
+    try self.writer.print("[Variable absolute index: {}]\n", .{data});
 }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {

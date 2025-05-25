@@ -73,6 +73,7 @@
 [Import field 0 of module 0 to scope global]
 [Import field 0 of module 1 to scope global]
 [Import field 2 of module 1 to scope global]
+
 [Fn declaration main, index: 3, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
         [Structure literal]

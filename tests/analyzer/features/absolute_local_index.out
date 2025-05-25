@@ -1,0 +1,23 @@
+[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+    [Structure declaration Point, index: 1, scope: local]
+    [Structure declaration Vec2, index: 2, scope: local]
+        [Fn declaration getPt, index: 3, scope: local, return kind: implicit_value]
+            [Structure literal]
+                - structure
+                [Variable absolute index: 1]
+                - args
+                [Field access 0]
+                    [Variable index: 0, scope: local]
+        [Fn declaration new, index: 4, scope: local, return kind: implicit_value]
+            [Structure literal]
+                - structure
+                [Variable absolute index: 2]
+                - args
+                [Variable index: 1, scope: local]
+                [Variable index: 2, scope: local]
+    [Fn declaration local, index: 3, scope: local, return kind: implicit_value]
+        [Structure literal]
+            - structure
+            [Variable absolute index: 1]
+            - args
+            [Int 3456]

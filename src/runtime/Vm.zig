@@ -280,6 +280,7 @@ fn execute(self: *Self) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_static_method => {
                 const method_idx = frame.readByte();
 

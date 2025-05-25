@@ -272,6 +272,7 @@ const Compiler = struct {
             .fn_decl => |*data| self.fnDecl(data),
             .identifier => |*data| self.identifier(data),
             .identifier_id => |data| self.identifier(&self.manager.instr_data[data].var_decl.variable),
+            .identifier_absolute => |data| self.identifierAbsolute(data),
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
@@ -573,6 +574,10 @@ const Compiler = struct {
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
         self.emitGetVar(data, self.getStart());
+    }
+
+    fn identifierAbsolute(self: *Self, data: usize) Error!void {
+        self.writeOpAndByte(.get_local_absolute, @intCast(data), self.getStart());
     }
 
     fn intInstr(self: *Self, value: isize) Error!void {

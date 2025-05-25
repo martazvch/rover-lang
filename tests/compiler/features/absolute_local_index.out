@@ -1,0 +1,31 @@
+//---- test.rv ----
+
+-- getPt --
+OP_GET_LOCAL_ABSOLUTE index 1
+OP_GET_FIELD index 0 of next variable
+OP_GET_LOCAL index 0
+OP_STRUCT_LIT index 1
+OP_RETURN
+
+-- new --
+OP_GET_LOCAL_ABSOLUTE index 2
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 2
+OP_STRUCT_LIT index 2
+OP_RETURN
+
+-- local --
+OP_GET_LOCAL_ABSOLUTE index 1
+OP_CONSTANT index 0, value 3456
+OP_STRUCT_LIT index 1
+OP_RETURN
+
+-- main --
+OP_CONSTANT index 0, value <structure Point>
+OP_CONSTANT index 1, value <structure Vec2>
+OP_CONSTANT index 2, value <fn local>
+OP_NAKED_RETURN
+
+-- global scope --
+OP_GET_GLOBAL index 0, <fn main>
+OP_CALL index 0

@@ -17,6 +17,7 @@ pub const Instruction = struct {
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
+        identifier_absolute: usize,
         identifier_id: usize,
         @"if": If,
         // TODO: delete later
