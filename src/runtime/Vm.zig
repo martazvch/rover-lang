@@ -280,6 +280,21 @@ fn execute(self: *Self) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_static_method => {
+                const method_idx = frame.readByte();
+
+                const structure = blk: {
+                    const scope_op: OpCode = @enumFromInt(frame.readByte());
+                    const idx = frame.readByte();
+
+                    break :blk if (scope_op == .get_global)
+                        &self.module.globals[idx]
+                    else
+                        &frame.slots[idx];
+                };
+                const method = structure.obj.as(ObjStruct).methods[method_idx];
+                self.stack.push(Value.makeObj(method.asObj()));
+            },
             .get_symbol => {
                 const symbol_idx = frame.readByte();
                 const scope: OpCode = @enumFromInt(frame.readByte());
@@ -288,8 +303,6 @@ fn execute(self: *Self) !void {
                 // TODO: make a method for that
                 const value = if (scope == .get_global)
                     &self.module.globals[module_idx]
-                    // else if (scope == .get_heap)
-                    //     &self.heap_vars[idx]
                 else
                     &frame.slots[module_idx];
 
@@ -306,8 +319,6 @@ fn execute(self: *Self) !void {
 
                 const module = if (scope == .get_global)
                     self.module.globals[module_idx].module
-                        // else if (scope == .get_heap)
-                        //     &self.heap_vars[idx]
                 else
                     frame.slots[module_idx].module;
                 self.updateModule(module);
@@ -337,6 +348,14 @@ fn execute(self: *Self) !void {
                 const imported = self.stack.peek(args_count).module.globals[symbol];
 
                 try self.call(imported.obj.as(ObjFunction), args_count);
+                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+            },
+            .invoke_static => {
+                const args_count = frame.readByte();
+                const method_idx = frame.readByte();
+                const structure = self.stack.peekRef(args_count).obj.as(ObjStruct);
+                const function = structure.methods[method_idx];
+                try self.call(function, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .jump => {

@@ -82,7 +82,7 @@ pub const Instruction = struct {
         arity: u8,
         tag: CallTag = .function,
 
-        pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import };
+        pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
     };
     pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
     pub const If = struct {
@@ -97,7 +97,7 @@ pub const Instruction = struct {
         index: usize,
         kind: Kind,
 
-        pub const Kind = enum { bound_method, field, symbol };
+        pub const Kind = enum { method, field, static_method, symbol };
     };
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };

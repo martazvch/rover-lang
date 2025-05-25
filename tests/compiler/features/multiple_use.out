@@ -127,7 +127,7 @@ OP_GET_FIELD index 1 of next variable
 OP_GET_LOCAL index 2
 OP_PRINT
 OP_GET_GLOBAL index 0
-OP_INVOKE_IMPORT arity 0, symbol index: 1
+OP_INVOKE_IMPORT arity 0, symbol index 1
 OP_UNLOAD_MODULE
 OP_GET_GLOBAL index 0
 OP_GET_FIELD index 0 of next variable
@@ -136,7 +136,7 @@ OP_GET_LOCAL index 2
 OP_GET_FIELD index 1 of next variable
 OP_GET_FIELD index 1 of next variable
 OP_GET_LOCAL index 2
-OP_INVOKE_IMPORT arity 2, symbol index: 2
+OP_INVOKE_IMPORT arity 2, symbol index 2
 OP_UNLOAD_MODULE
 OP_GET_FIELD index 0 of next variable
 OP_GET_LOCAL index 3
@@ -147,7 +147,7 @@ OP_PRINT
 OP_PUSH_MODULE index 2
 OP_GET_LOCAL index 4
 OP_CONSTANT index 3, value "local import"
-OP_INVOKE_IMPORT arity 1, symbol index: 1
+OP_INVOKE_IMPORT arity 1, symbol index 1
 OP_UNLOAD_MODULE
 OP_PRINT
 OP_GET_LOCAL index 1
@@ -155,7 +155,7 @@ OP_INVOKE arity 0, method index 1
 OP_GET_LOCAL index 4
 OP_CONSTANT index 4, value "just "
 OP_CONSTANT index 5, value "concaneted"
-OP_INVOKE_IMPORT arity 2, symbol index: 0
+OP_INVOKE_IMPORT arity 2, symbol index 0
 OP_UNLOAD_MODULE
 OP_PRINT
 OP_POP

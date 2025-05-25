@@ -73,6 +73,9 @@ const Variable = struct {
     initialized: bool = false,
     /// Is captured
     captured: bool = false,
+    /// Is a variable or not. For example, a variable holding a function is mutable, a function declaration isn't
+    /// Used to know if it's assignable and if we can refer to it's declaration instruction
+    is_var: bool = true,
 
     pub fn scope(self: *const Variable) rir.Scope {
         return if (self.captured) .heap else if (self.depth == 0) .global else .local;
@@ -255,7 +258,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            if (!assigne.typ.isVar()) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+            if (!assigne.is_var) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk assigne.typ;
         },
@@ -324,7 +327,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
     const fn_type: Type = .create(.func, .none, type_idx);
-    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, node.name);
+    const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, false, node.name);
     self.addInstr(.{ .var_decl = .{ .variable = fn_var } });
 
     if (self.scope_depth == 0) {
@@ -340,7 +343,11 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.allow_partial = true;
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, 0);
+    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, true, 0);
+
+    if (self.state.struct_type != .void) {
+        self.locals.items[self.locals.items - 1] = undefined;
+    }
 
     var params_type: ArrayListUnmanaged(Type) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
@@ -348,10 +355,14 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     for (node.params) |p| {
         const decl = self.instructions.len;
         const param_idx = self.checkName(p.name) catch |e| {
-            self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(.{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } }, self.ast.getSpan(p.name));
+            self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
+                .{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } },
+                self.ast.getSpan(p.name),
+            );
             return e;
         };
 
+        // TODO: no check on 'self' as being first?
         const param_type = if (param_idx == self.self_interned) blk: {
             if (self.state.struct_type == .void) return self.err(.self_outside_struct, self.ast.getSpan(p.name));
             if (name_idx == self.init_interned) return self.err(.self_in_init, self.ast.getSpan(p.name));
@@ -362,7 +373,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             const param_type = try self.checkAndGetType(p.typ);
             if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
 
-            _ = try self.declareVariable(param_idx, param_type, true, decl, p.name);
+            _ = try self.declareVariable(param_idx, param_type, true, decl, false, p.name);
             break :blk param_type;
         };
         params_type.appendAssumeCapacity(param_type);
@@ -499,7 +510,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
     errdefer self.state.struct_type = .void;
-    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, node.name);
+    const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, false, node.name);
 
     const index = self.reserveInstr();
     // We add function's name for runtime access
@@ -617,7 +628,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     // Declare the type and additional informations
                     const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
                     // Declare the variable
-                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, n);
+                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, false, n);
                     self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
                 }
 
@@ -665,7 +676,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
                 const item_token = if (item.alias) |alias| alias else item.item;
                 const alias_name = self.interner.intern(self.ast.toSource(item_token));
-                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, item_token);
+                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, false, item_token);
 
                 self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
             }
@@ -675,7 +686,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 self.ast.getSpan(node.names[node.names.len - 1]),
             );
 
-            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, token);
+            const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, false, token);
             self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
             self.modules.put(self.allocator, module_name, module) catch oom();
             self.imports.append(self.allocator, variable) catch oom();
@@ -794,9 +805,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         }
     }
 
-    checked_type.setVar();
-    std.debug.print("is var: {}\n", .{checked_type.isVar()});
-    data.variable = try self.declareVariable(name, checked_type, initialized, index, node.name);
+    data.variable = try self.declareVariable(name, checked_type, initialized, index, true, node.name);
     self.setInstr(index, .{ .var_decl = data });
 
     if (data.variable.scope == .global) {
@@ -1062,17 +1071,18 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 
 const StructAndFieldTypes = struct {
     structure: Type,
+    is_type: bool,
     field: Type,
 
-    pub fn init(structure_type: Type, field_type: Type) StructAndFieldTypes {
-        return .{ .structure = structure_type, .field = field_type };
+    pub fn init(structure_type: Type, is_type: bool, field_type: Type) StructAndFieldTypes {
+        return .{ .structure = structure_type, .is_type = is_type, .field = field_type };
     }
 };
 
 fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
     return switch (expr.*) {
         .field => |*e| try self.field(e),
-        else => .init(.void, try self.analyzeExpr(expr)),
+        else => .init(.void, false, try self.analyzeExpr(expr)),
     };
 }
 
@@ -1080,7 +1090,14 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const index = self.reserveInstr();
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
-    const struct_type = try self.analyzeExpr(expr.structure);
+    const struct_type, const is_type = switch (expr.structure.*) {
+        .literal => |*e| blk: {
+            const assigne = try self.identifier(e.idx, false);
+            break :blk .{ assigne.typ, !assigne.is_var };
+        },
+        else => .{ try self.analyzeExpr(expr.structure), false },
+    };
+
     const struct_value = struct_type.getValue();
 
     var found_field, const kind: Instruction.Member.Kind = switch (struct_type.getKind()) {
@@ -1090,7 +1107,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
             break :blk if (infos.fields.get(field_name)) |f|
                 .{ f, .field }
             else if (infos.functions.get(field_name)) |f|
-                .{ f, .bound_method }
+                .{ f, if (is_type) .static_method else .method }
             else
                 return self.err(
                     .{ .undeclared_field_access = .{ .name = self.ast.toSource(expr.field) } },
@@ -1129,10 +1146,10 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 
     self.setInstr(index, .{ .member = .{ .index = found_field.index, .kind = kind } });
 
-    if (kind == .bound_method)
+    if (kind == .method)
         found_field.type.setExtra(.bound_method);
 
-    return .init(struct_type, found_field.type);
+    return .init(struct_type, is_type, found_field.type);
 }
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
@@ -1166,9 +1183,9 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         call_tag = if (sft.structure.getKind() == .module) .invoke_import else .import;
     } else if (extra == .bound_method) {
         if (sft.structure != .void) {
-            call_tag = .invoke;
+            call_tag = if (sft.is_type) .invoke_static else .invoke;
 
-            if (infos.params.len == 0 or !self.isEqualStruct(infos.params[0], sft.structure)) return self.err(
+            if (!sft.is_type and (infos.params.len == 0 or !self.isEqualStruct(infos.params[0], sft.structure))) return self.err(
                 .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
                 self.ast.getSpan(expr.callee.field.field),
             );
@@ -1193,6 +1210,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         );
     }
 
+    // Analyzes the arguments
     try self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
 
     // To load the module's global before call. If it's an invoke_import, we know that the
@@ -1317,7 +1335,8 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
-    if (variable.typ.isVar()) {
+    // There is no instruction for 'self'
+    if (variable.name != self.self_interned and variable.is_var) {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = variable.decl });
     } else {
@@ -1339,7 +1358,7 @@ fn checkCapture(self: *Self, variable: *Variable) void {
     variable.captured = true;
     variable.index = self.heap_count;
     self.instructions.items(.data)[variable.decl].var_decl.variable.scope = .heap;
-    // TODO: protect the cast?
+    // TODO: protect the cast
     self.instructions.items(.data)[variable.decl].var_decl.variable.index = @intCast(self.heap_count);
     self.heap_count += 1;
 }
@@ -1682,6 +1701,7 @@ fn declareVariable(
     typ: Type,
     initialized: bool,
     decl_idx: usize,
+    is_var: bool,
     token: Ast.TokenIndex,
 ) !Instruction.Variable {
     // We put the current number of instruction for the declaration index
@@ -1691,6 +1711,7 @@ fn declareVariable(
         .decl = decl_idx,
         .depth = self.scope_depth,
         .initialized = initialized,
+        .is_var = is_var,
     };
 
     // Add the variable to the correct data structure

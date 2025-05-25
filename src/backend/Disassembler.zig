@@ -72,13 +72,15 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .get_global => self.getGlobal(offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
+        .get_static_method => self.getMember("OP_GET_STATIC_METHOD", false, offset, writer),
         .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .import_call => self.importCall(offset, writer),
         .import_item => self.importItem(offset, writer),
-        .invoke => self.invokeInstruction(offset, writer),
-        .invoke_import => self.invokeImportInstruction(offset, writer),
+        .invoke => self.invokeInstruction("OP_INVOKE", "method", offset, writer),
+        .invoke_import => self.invokeInstruction("OP_INVOKE_IMPORT", "symbol", offset, writer),
+        .invoke_static => self.invokeInstruction("OP_INVOKE_STATIC", "method", offset, writer),
         .jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
         .jump_if_false => self.jumpInstruction("OP_JUMP_IF_FALSE", 1, offset, writer),
         .jump_if_true => self.jumpInstruction("OP_JUMP_IF_TRUE", 1, offset, writer),
@@ -231,28 +233,14 @@ fn getMember(self: *const Self, name: []const u8, of_next: bool, offset: usize, 
     return local_offset;
 }
 
-fn invokeInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
+fn invokeInstruction(self: *const Self, text: []const u8, obj_name: []const u8, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
-    const method_idx = self.chunk.code.items[offset + 2];
+    const obj_idx = self.chunk.code.items[offset + 2];
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, method index {}\n", .{ "OP_INVOKE", arity, method_idx });
+        try writer.print("{s} arity {}, {s} index {}\n", .{ text, arity, obj_name, obj_idx });
     } else {
-        try writer.print("{s:<24} arity {:>4}, method index {:>4}\n", .{ "OP_INVOKE", arity, method_idx });
-    }
-
-    return offset + 3;
-}
-
-fn invokeImportInstruction(self: *const Self, offset: usize, writer: anytype) !usize {
-    const arity = self.chunk.code.items[offset + 1];
-    const symbol = self.chunk.code.items[offset + 2];
-    const text = "OP_INVOKE_IMPORT";
-
-    if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, symbol index: {}\n", .{ text, arity, symbol });
-    } else {
-        try writer.print("{s:<24} arity {:>4}, symbol index: {:>4}\n", .{ text, arity, symbol });
+        try writer.print("{s:<24} arity {:>4}, {s} index {:>4}\n", .{ text, arity, obj_name, obj_idx });
     }
 
     return offset + 3;

@@ -435,10 +435,8 @@ const Compiler = struct {
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         const start = self.getStart();
 
-        if (data.tag == .invoke)
-            return self.invoke(data, start)
-        else if (data.tag == .invoke_import)
-            return self.invokeImport(data, start);
+        if (data.tag == .invoke or data.tag == .invoke_import or data.tag == .invoke_static)
+            return self.invoke(data, start);
 
         // Compiles the identifier
         try self.compileInstr();
@@ -465,27 +463,32 @@ const Compiler = struct {
     }
 
     fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
-        // We do not compile the 'bound_method' op code
+        // We do not compile the member as we invoke it (it does not go on the stack)
         const member_data = self.getData().member;
         self.manager.instr_idx += 1;
         // Compiles the receiver
         try self.compileInstr();
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(.invoke, data.arity, start);
-        self.writeByte(@intCast(member_data.index), start);
-    }
-
-    fn invokeImport(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
-        const symbol_data = self.getData().member;
-        self.manager.instr_idx += 1;
-        // Compiles the receiver
-        try self.compileInstr();
-        try self.compileArgs(data.arity);
-
-        self.writeOpAndByte(.invoke_import, data.arity, start);
-        self.writeByte(@intCast(symbol_data.index), start);
-        self.writeOp(.unload_module, start);
+        switch (data.tag) {
+            .invoke => {
+                self.writeOpAndByte(.invoke, data.arity, start);
+                self.writeByte(@intCast(member_data.index), start);
+            },
+            .invoke_import => {
+                self.writeOpAndByte(.invoke_import, data.arity, start);
+                self.writeByte(@intCast(member_data.index), start);
+                self.writeOp(.unload_module, start);
+            },
+            .invoke_static => {
+                // TODO: add a scope info in Data so that when we're in local scope, we load the structure before
+                // entering function's body, otherwise we don't have access anymore to the stack above callframe
+                // and we can't reach the structure
+                self.writeOpAndByte(.invoke_static, data.arity, start);
+                self.writeByte(@intCast(member_data.index), start);
+            },
+            else => unreachable,
+        }
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
@@ -556,8 +559,10 @@ const Compiler = struct {
                     .get_field_chain
                 else if (data.kind == .symbol)
                     .get_symbol
+                else if (data.kind == .method)
+                    .bound_method
                 else
-                    .bound_method,
+                    .get_static_method,
                 @intCast(data.index),
                 self.getStart(),
             );
@@ -666,6 +671,20 @@ const Compiler = struct {
         const name = self.next().name;
         const struct_var = self.next().var_decl;
 
+        var structure = ObjStruct.create(
+            self.manager.vm,
+            ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+            data.fields_count,
+            &.{},
+        );
+
+        // We forward declare the structure in the globals because when disassembling the
+        // structure's method, they need to refer to the object. Only the name can be refered to
+        const idx = if (struct_var.variable.scope == .global) b: {
+            self.addGlobal(Value.makeObj(structure.asObj()));
+            break :b self.manager.globals.items.len - 1;
+        } else 0;
+
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
 
@@ -679,20 +698,13 @@ const Compiler = struct {
             funcs.appendAssumeCapacity(func);
         }
 
-        const structure = Value.makeObj(ObjStruct.create(
-            self.manager.vm,
-            ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
-            data.fields_count,
-            funcs.toOwnedSlice(self.manager.vm.allocator) catch oom(),
-        ).asObj());
+        structure.methods = funcs.toOwnedSlice(self.manager.vm.allocator) catch oom();
+        const struct_obj = Value.makeObj(structure.asObj());
 
         if (struct_var.variable.scope == .global) {
-            self.addGlobal(structure);
+            self.manager.globals.items[idx] = struct_obj;
         } else {
-            try self.emitConstant(
-                structure,
-                self.getStart(),
-            );
+            try self.emitConstant(struct_obj, self.getStart());
             self.defineVariable(struct_var.variable, start);
         }
     }

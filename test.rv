@@ -1,27 +1,30 @@
-var noval: int
-noval = 1
 
-var noval_type : float
-noval_type = .7
+struct Vec1 {
+    x: int
 
-var noval_binop: float
-noval_binop = 12/-.7
-
-var noval_binop_typed: float
-noval_binop_typed = 1/2
-
-// Implicit cast
-var noval2: float
-noval2 = 1
-
-// Locals
-fn main() {
-    var noval: float
-    noval = 1
-
-    {
-        var noval = 1
-        print noval
+    fn new(x: int) -> Vec1 {
+        Vec1 { x }
     }
-    print noval
+}
+
+fn main() {
+    struct Vec2 {
+        x: int, y: int,
+
+        fn new(x: int, y: int) -> Vec2 {
+            Vec2 { x, y }
+        }
+    }
+
+    // var v = Vec1.new(5)
+    // print v.x
+    // var new = Vec1.new
+    // v = new(65)
+    // print v.x
+
+    var v2 = Vec2.new(12, 99)
+    print v2.y
+    // var new2 = Vec2.new
+    // v2 = new2(56, 78)
+    // print v2.x
 }

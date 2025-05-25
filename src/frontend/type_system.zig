@@ -2,9 +2,9 @@ const std = @import("std");
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
-// 0000    0     0    0    0   0000  0000000000 0000000000
-// |--|    |     |    |    |   |--|  |-------------------|
-// Extra  Save  Ref  Nul  Var  Kind          Value
+// 0000    0     0     0    0   0000  0000000000 0000000000
+// |--|    |     |     |    |   |--|  |-------------------|
+// Extra  Save  Save  Ref  Nul  Kind          Value
 
 // Types are 32 bits long
 const TypeSize = u32;
@@ -19,74 +19,55 @@ pub const Type = enum(TypeSize) {
     _,
 
     const Self = @This();
+    const EXTRA_MASK: TypeSize = 0xf0000000;
+    const REF_MASK: TypeSize = 0x02000000;
+    const NUL_MASK: TypeSize = 0x01000000;
+    const KIND_MASK: TypeSize = 0x00f00000;
+    const VAL_MASK: TypeSize = 0x000fffff;
 
-    pub fn toIdx(self: Self) usize {
-        return @as(usize, @intFromEnum(self));
+    pub inline fn toIdx(self: Self) TypeSize {
+        return @as(TypeSize, @intFromEnum(self));
     }
 
-    pub fn fromIdx(index: usize) Self {
+    pub inline fn fromIdx(index: TypeSize) Self {
         return @enumFromInt(index);
     }
 
     /// Creates a type from kind and value information
-    pub fn create(kind: Kind, extra: Extra, value: Value) Self {
-        const tmp: u32 = @intCast(kind.toIdx());
-        const tmp2: u32 = @intCast(extra.toIdx());
-        // 0x1 for variable, reference, nullable and reserve. All false
-        return @enumFromInt(tmp2 << 28 | 0 << 24 | tmp << 20 | value);
-    }
-
-    /// Creates a type from kind and value information
-    pub fn createVar(kind: Kind, extra: Extra, value: Value) Self {
-        const tmp: u32 = @intCast(kind.toIdx());
-        const tmp2: u32 = @intCast(extra.toIdx());
-        // 0x1 for variable, reference, nullable and reserve. Activates only variable
-        return @enumFromInt(tmp2 << 28 | 1 << 24 | tmp << 20 | value);
+    pub inline fn create(kind: Kind, extra: Extra, value: Value) Self {
+        return @enumFromInt(extra.toIdx() << 28 | 0 << 24 | kind.toIdx() << 20 | value);
     }
 
     /// Get a type kind, discarding extra and value information bits
-    pub fn getKind(self: Self) Kind {
-        const erased = self.toIdx() & 0xf00000;
-        return @enumFromInt(erased >> 20);
+    pub inline fn getKind(self: Self) Kind {
+        return @enumFromInt((self.toIdx() & KIND_MASK) >> 20);
     }
 
     /// Get a type kind, discarding extra and value information bits
-    pub fn setKind(self: *Self, kind: Kind) void {
-        const erased = self.toIdx() & 0xff0fffff;
-        self.* = @enumFromInt(erased | (kind.toIdx() << 28));
+    pub inline fn setKind(self: *Self, kind: Kind) void {
+        const erased = self.toIdx() & ~KIND_MASK;
+        self.* = @enumFromInt(erased | (kind.toIdx() << 20));
     }
 
     /// Get extra information bits about a type
-    pub fn getExtra(self: Self) Extra {
+    pub inline fn getExtra(self: Self) Extra {
         return @enumFromInt(self.toIdx() >> 28);
     }
 
     /// Get a type kind, discarding extra and value information bits
-    pub fn setExtra(self: *Self, extra: Extra) void {
-        const erased = self.toIdx() & 0x0fffffff;
+    pub inline fn setExtra(self: *Self, extra: Extra) void {
+        const erased = self.toIdx() & ~EXTRA_MASK;
         self.* = @enumFromInt(erased | extra.toIdx() << 28);
     }
 
     /// Extract the value bits associated to a type
-    pub fn getValue(self: Self) Value {
-        const erased = self.toIdx() & 0x000fffff;
-        return @as(Value, @intCast(erased));
+    pub inline fn getValue(self: Self) Value {
+        return @as(Value, @intCast(self.toIdx() & VAL_MASK));
     }
 
     /// Checks if a type is of a certain kind
-    pub fn is(self: Self, kind: Kind) bool {
+    pub inline fn is(self: Self, kind: Kind) bool {
         return getKind(self) == kind;
-    }
-
-    /// Sets the 'Var' bit of the type
-    pub fn setVar(self: *Self) void {
-        const erased = self.toIdx() & 0xf0ffffff;
-        self.* = @enumFromInt(erased | (1 << 24));
-    }
-
-    /// Returns if the type is an instance
-    pub fn isVar(self: *const Self) bool {
-        return self.toIdx() & 0x01000000 == 1;
     }
 };
 
@@ -103,11 +84,11 @@ pub const Kind = enum(u4) {
     module,
     _,
 
-    pub fn toIdx(self: Kind) usize {
-        return @as(usize, @intFromEnum(self));
+    pub inline fn toIdx(self: Kind) TypeSize {
+        return @as(TypeSize, @intFromEnum(self));
     }
 
-    pub fn fromIdx(index: usize) Kind {
+    pub inline fn fromIdx(index: TypeSize) Kind {
         return @enumFromInt(index);
     }
 
@@ -135,11 +116,11 @@ pub const Extra = enum(u4) {
     imported,
     _,
 
-    pub fn toIdx(self: Extra) usize {
-        return @as(usize, @intFromEnum(self));
+    pub inline fn toIdx(self: Extra) TypeSize {
+        return @as(TypeSize, @intFromEnum(self));
     }
 
-    pub fn fromIdx(index: usize) Extra {
+    pub inline fn fromIdx(index: TypeSize) Extra {
         return @enumFromInt(index);
     }
 };
