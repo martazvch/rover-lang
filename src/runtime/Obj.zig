@@ -6,9 +6,9 @@ const options = @import("options");
 
 const Chunk = @import("../backend/Chunk.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
+const oom = @import("../utils.zig").oom;
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
-const oom = @import("../utils.zig").oom;
 
 kind: ObjKind,
 next: ?*Obj,
@@ -57,10 +57,6 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
             const instance = self.as(ObjInstance);
             instance.deinit(vm.gc_alloc);
         },
-        // .Iter => {
-        //     const iter = self.as(ObjIter);
-        //     vm.allocator.destroy(iter);
-        // },
         .native_fn => {
             const function = self.as(ObjNativeFn);
             function.deinit(vm.gc_alloc);
@@ -84,10 +80,6 @@ pub fn print(self: *Obj, writer: anytype) !void {
         .bound_method => self.as(ObjBoundMethod).method.log(),
         .func => self.as(ObjFunction).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
-        // .Iter => {
-        //     const iter = self.as(ObjIter);
-        //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
-        // },
         .native_fn => writer.print("<native fn>", .{}),
         .string => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
         .@"struct" => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
@@ -99,10 +91,6 @@ pub fn log(self: *Obj) void {
         .bound_method => self.as(ObjBoundMethod).method.log(),
         .func => self.as(ObjFunction).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
-        // .Iter => {
-        //     const iter = self.as(ObjIter);
-        //     try writer.print("iter: {} -> {}", .{ iter.current, iter.end });
-        // },
         .native_fn => std.debug.print("<native fn>", .{}),
         .string => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
         .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
@@ -266,14 +254,16 @@ pub const ObjStruct = struct {
     obj: Obj,
     name: *ObjString,
     field_count: usize,
+    default_values: []Value,
     methods: []*ObjFunction,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *ObjString, field_count: usize, methods: []*ObjFunction) *Self {
+    pub fn create(vm: *Vm, name: *ObjString, field_count: usize, default_count: usize, methods: []*ObjFunction) *Self {
         const obj = Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         obj.field_count = field_count;
+        obj.default_values = vm.gc_alloc.alloc(Value, default_count) catch oom();
         obj.methods = methods;
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
@@ -289,6 +279,7 @@ pub const ObjStruct = struct {
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
         vm.allocator.free(self.methods);
+        vm.gc_alloc.free(self.default_values);
         vm.gc_alloc.destroy(self);
     }
 };

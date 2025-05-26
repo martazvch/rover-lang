@@ -135,7 +135,8 @@ fn parseInstr(self: *Self) !void {
         .@"return" => |*data| self.returnInstr(data),
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
-        .struct_literal => |*data| self.structLiteral(data),
+        .struct_default => unreachable,
+        .struct_literal => |data| self.structLiteral(data),
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
@@ -376,29 +377,23 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
         struct_var.index,
         @tagName(struct_var.scope),
     });
-
     self.indent_level += 1;
 
-    for (0..data.default_fields) |_| {
+    if (data.default_fields > 0) {
         self.indent();
-        const field_idx = self.next().member.index;
-        try self.writer.print("[field {} default value\n", .{field_idx});
-
-        self.indent_level += 1;
-        try self.parseInstr();
-        self.indent_level -= 1;
-        self.indent();
-        try self.tree.appendSlice("]\n");
+        try self.tree.appendSlice("- default values\n");
+        for (0..data.default_fields) |_| {
+            try self.parseInstr();
+        }
     }
 
     for (0..data.func_count) |_| {
         try self.parseInstr();
     }
-
     self.indent_level -= 1;
 }
 
-fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
+fn structLiteral(self: *Self, field_count: usize) Error!void {
     self.indent();
     try self.tree.appendSlice("[Structure literal]\n");
     self.indent_level += 1;
@@ -408,16 +403,25 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void
     try self.parseInstr();
 
     self.indent();
-    if (data.arity > 0) try self.tree.appendSlice("- args\n");
-    for (0..data.arity) |_| {
-        const save = self.instr_idx;
-        const field_data = self.next().member.index;
-        self.instr_idx = field_data;
-        try self.parseInstr();
-        self.instr_idx = save + 1;
+    try self.tree.appendSlice("- args\n");
+    var last: usize = 0;
+
+    for (0..field_count) |_| {
+        switch (self.next()) {
+            .member => |data| {
+                const save = self.instr_idx;
+                self.instr_idx = data.index;
+                try self.parseInstr();
+                last = @max(last, self.instr_idx);
+
+                self.instr_idx = save;
+            },
+            .struct_default => {},
+            else => {},
+        }
     }
 
-    self.instr_idx = data.end;
+    if (last > self.instr_idx) self.instr_idx = last;
     self.indent_level -= 1;
 }
 

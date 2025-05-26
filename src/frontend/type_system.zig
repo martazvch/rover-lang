@@ -152,12 +152,12 @@ pub const FnInfo = struct {
 
 pub const StructInfo = struct {
     functions: AutoHashMapUnmanaged(usize, MemberInfo),
-    fields: AutoHashMapUnmanaged(usize, MemberInfo),
+    fields: AutoArrayHashMapUnmanaged(usize, MemberInfo),
     default_value_fields: usize,
     module: ?ModuleRef = null,
 
-    pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoHashMapUnmanaged(usize, bool) {
-        var res = std.AutoHashMapUnmanaged(usize, bool){};
+    pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoArrayHashMapUnmanaged(usize, bool) {
+        var res = std.AutoArrayHashMapUnmanaged(usize, bool){};
         res.ensureTotalCapacity(allocator, self.fields.capacity()) catch @panic("oom");
 
         var kv = self.fields.iterator();

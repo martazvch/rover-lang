@@ -1,0 +1,6 @@
+struct Vec2 {
+    x, y: int,
+    a: float,
+    c, b, h: bool,
+}
+

@@ -296,6 +296,11 @@ fn execute(self: *Self) !void {
                 const method = structure.obj.as(ObjStruct).methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
             },
+            .get_struct_default => {
+                const structure_idx = frame.readByte();
+                const default_idx = frame.readByte();
+                self.stack.push(self.stack.peekRef(structure_idx).obj.as(ObjStruct).default_values[default_idx]);
+            },
             .get_symbol => {
                 const symbol_idx = frame.readByte();
                 const scope: OpCode = @enumFromInt(frame.readByte());

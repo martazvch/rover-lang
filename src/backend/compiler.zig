@@ -286,7 +286,8 @@ const Compiler = struct {
             .@"return" => |*data| self.returnInstr(data),
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
-            .struct_literal => |*data| self.structLiteral(data),
+            .struct_default => unreachable,
+            .struct_literal => |data| self.structLiteral(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .var_decl => |*data| self.varDecl(data),
@@ -680,6 +681,7 @@ const Compiler = struct {
             self.manager.vm,
             ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
             data.fields_count,
+            data.default_fields,
             &.{},
         );
 
@@ -689,6 +691,19 @@ const Compiler = struct {
             self.addGlobal(Value.makeObj(structure.asObj()));
             break :b self.manager.globals.items.len - 1;
         } else 0;
+
+        // We compile each default value and as we know there are pure, we can extract them
+        // from the constants (they aren't global either). As we do that, we delete compiled
+        // code to not execute it at runtime
+        for (0..data.default_fields) |i| {
+            const code_start = self.function.chunk.code.items.len;
+            try self.compileInstr();
+            self.function.chunk.code.shrinkRetainingCapacity(code_start);
+
+            const value = self.function.chunk.constants[self.function.chunk.constant_count - 1];
+            self.function.chunk.constant_count -= 1;
+            structure.default_values[i] = value;
+        }
 
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
@@ -714,24 +729,36 @@ const Compiler = struct {
         }
     }
 
-    fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
+    fn structLiteral(self: *Self, field_count: usize) Error!void {
         const start = self.getStart();
 
         // Compile structure
         try self.compileInstr();
 
-        for (0..data.arity) |_| {
-            const save = self.manager.instr_idx;
-            const field_value_start = self.next().member;
-            self.manager.instr_idx = field_value_start.index;
-            try self.compileInstr();
-            // Jumps the `field` tag
-            self.manager.instr_idx = save + 1;
+        var last: usize = 0;
+
+        for (0..field_count) |i| {
+            switch (self.next()) {
+                .member => |data| {
+                    const save = self.manager.instr_idx;
+                    self.manager.instr_idx = data.index;
+                    try self.compileInstr();
+                    // Arguments may not be in the same order as the declaration, we could be
+                    // resolving the first value during the last iteration
+                    last = @max(last, self.manager.instr_idx);
+
+                    self.manager.instr_idx = save;
+                },
+                .struct_default => |idx| {
+                    self.writeOpAndByte(.get_struct_default, @intCast(i), start);
+                    self.writeByte(@intCast(idx), start);
+                },
+                else => unreachable,
+            }
         }
 
-        self.manager.instr_idx = data.end;
-
-        self.writeOpAndByte(.struct_literal, @intCast(data.arity), start);
+        if (last > self.manager.instr_idx) self.manager.instr_idx = last;
+        self.writeOpAndByte(.struct_literal, @intCast(field_count), start);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

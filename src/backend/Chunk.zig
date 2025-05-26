@@ -79,6 +79,7 @@ pub const OpCode = enum(u8) {
     get_local,
     get_local_absolute,
     get_static_method,
+    get_struct_default,
     get_symbol,
     gt_float,
     gt_int,

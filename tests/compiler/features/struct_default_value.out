@@ -1,0 +1,25 @@
+//---- test.rv ----
+
+-- main --
+OP_GET_GLOBAL index 0, <structure Vec2>
+OP_CONSTANT index 0, value 1
+OP_CONSTANT index 1, value 2
+OP_GET_STRUCT_DEFAULT index 2 on stack, default value index 0
+OP_TRUE
+OP_GET_STRUCT_DEFAULT index 4 on stack, default value index 1
+OP_GET_STRUCT_DEFAULT index 5 on stack, default value index 2
+OP_STRUCT_LIT index 6
+OP_GET_GLOBAL index 0, <structure Vec2>
+OP_CONSTANT index 2, value 3
+OP_CONSTANT index 3, value 99
+OP_CONSTANT index 4, value 7
+OP_FALSE
+OP_GET_STRUCT_DEFAULT index 4 on stack, default value index 1
+OP_CONSTANT index 5, value "Tom"
+OP_STRUCT_LIT index 6
+OP_SET_LOCAL index 1
+OP_NAKED_RETURN
+
+-- global scope --
+OP_GET_GLOBAL index 1, <fn main>
+OP_CALL index 0

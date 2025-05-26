@@ -1,0 +1,38 @@
+{
+    "struct_decl": {
+        "name": "Vec2",
+        "fields": [
+            {
+                "name": "x",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "y",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "a",
+                "type": "float",
+                "value": {}
+            },
+            {
+                "name": "c",
+                "type": "bool",
+                "value": {}
+            },
+            {
+                "name": "b",
+                "type": "bool",
+                "value": {}
+            },
+            {
+                "name": "h",
+                "type": "bool",
+                "value": {}
+            }
+        ],
+        "functions": []
+    }
+}

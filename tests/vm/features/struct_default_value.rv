@@ -20,7 +20,6 @@ fn main() {
     v.display()
 
 
-    var v2 = Vec2 { y = false, x = 7, a = 3, w = "Tom",  b = 99 }
-    v2.display()
-    v2.z = "trash"
+    v = Vec2 { y = false, x = 7, a = 3, w = "Tom",  b = 99 }
+    v.display()
 }

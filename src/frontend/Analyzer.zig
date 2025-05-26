@@ -366,7 +366,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         // TODO: no check on 'self' as being first?
         const param_type = if (param_idx == self.self_interned) blk: {
             if (self.state.struct_type == .void) return self.err(.self_outside_struct, self.ast.getSpan(p.name));
-            if (name_idx == self.init_interned) return self.err(.self_in_init, self.ast.getSpan(p.name));
 
             self.locals.items[self.locals.items.len - 1].name = self.self_interned;
             break :blk self.state.struct_type;
@@ -543,7 +542,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
             field_infos.default = true;
             infos.default_value_fields += 1;
 
-            self.addInstr(.{ .member = .{ .index = i, .kind = .field } });
+            // self.addInstr(.{ .member = .{ .index = i, .kind = .field } });
             break :blk try self.analyzeExpr(value);
         } else .void;
 
@@ -1514,11 +1513,15 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     defer proto.deinit(self.allocator);
 
     const start = self.instructions.len;
-    self.instructions.ensureTotalCapacity(self.allocator, self.instructions.len + arity) catch oom();
+    self.instructions.ensureUnusedCapacity(self.allocator, infos.fields.count()) catch oom();
 
-    // TODO: needed?
-    for (0..arity) |_| {
-        self.instructions.appendAssumeCapacity(.{ .data = .{ .null = undefined } });
+    // We initialize all the values used for the initialization. By default, we put empty data under
+    // the form of 'struct_default' but we check for all real struct default to mark their index (order
+    // of declaration) so that the compiler can emit the right index
+    var default_count: usize = 0;
+    for (infos.fields.values()) |f| {
+        self.instructions.appendAssumeCapacity(.{ .data = .{ .struct_default = default_count } });
+        if (f.default) default_count += 1;
     }
 
     for (expr.fields) |*fv| {
@@ -1526,10 +1529,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
         if (infos.fields.get(field_name)) |f| {
             proto.putAssumeCapacity(field_name, true);
-            self.instructions.items(.data)[start + f.index] = .{ .member = .{
-                .index = self.instructions.len,
-                .kind = .field,
-            } };
+            self.instructions.items(.data)[start + f.index] = .{ .member = .{ .index = self.instructions.len, .kind = .field } };
 
             if (fv.value) |val| {
                 _ = try self.analyzeExpr(val);
@@ -1537,13 +1537,14 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                 // Syntax: { x } instead of { x = x }
                 _ = try self.identifier(fv.name, true);
             }
+            // TODO: check type!!
         } else return self.err(
             .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
             self.ast.getSpan(fv.name),
         );
     }
 
-    if (arity != proto.size) {
+    if (arity != proto.count()) {
         var kv = proto.iterator();
         while (kv.next()) |entry| {
             if (!entry.value_ptr.*) self.err(
@@ -1555,12 +1556,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         return error.Err;
     }
 
-    // As the compiler is gonna jump around to compile in the correct order, we need a way
-    // to know where to go in the list at the end to continue compiling as normal
-    self.setInstr(index, .{ .struct_literal = .{
-        .arity = expr.fields.len,
-        .end = self.instructions.len,
-    } });
+    self.setInstr(index, .{ .struct_literal = infos.fields.count() });
 
     return struct_type;
 }

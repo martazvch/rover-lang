@@ -308,11 +308,23 @@ fn structDecl(self: *Self) !Node {
     self.skipNewLines();
 
     var fields: ArrayListUnmanaged(Ast.VarDecl) = .{};
+    var field_names: ArrayListUnmanaged(TokenIndex) = .{};
+    defer field_names.deinit(self.allocator);
 
     // If at least one field
     while (!self.check(.@"fn") and !self.check(.right_brace) and !self.check(.eof)) {
-        try self.expect(.identifier, .expect_field_name);
-        const field_name = self.token_idx - 1;
+        defer field_names.clearRetainingCapacity();
+
+        if (!self.check(.identifier))
+            return self.errAtCurrent(.expect_field_name);
+
+        // Support sharing type across fields
+        while (self.match(.identifier)) {
+            field_names.append(self.allocator, self.token_idx - 1) catch oom();
+
+            if (self.match(.comma)) continue;
+        }
+
         const typ = if (self.match(.colon)) try self.parseType() else null;
         const value = if (self.match(.equal)) try self.parsePrecedenceExpr(0) else null;
 
@@ -320,7 +332,9 @@ fn structDecl(self: *Self) !Node {
             return self.errAtCurrent(.expect_field_type_or_default);
         }
 
-        fields.append(self.allocator, .{ .name = field_name, .typ = typ, .value = value }) catch oom();
+        for (field_names.items) |field_name| {
+            fields.append(self.allocator, .{ .name = field_name, .typ = typ, .value = value }) catch oom();
+        }
 
         self.skipNewLines();
         if (!self.match(.comma)) break;

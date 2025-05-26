@@ -126,12 +126,11 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         .@"struct" => {
             const structure = obj.as(ObjStruct);
             try self.markObject(structure.name.asObj());
-
+            try self.markArray(structure.default_values);
             for (structure.methods) |m| {
                 try self.markObject(m.asObj());
             }
         },
-        // .Iter => {},
         .native_fn, .string => {},
     }
 }

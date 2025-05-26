@@ -33,7 +33,8 @@ pub const Instruction = struct {
         @"return": Return,
         string: usize,
         struct_decl: StructDecl,
-        struct_literal: StructLiteral,
+        struct_default: usize,
+        struct_literal: usize,
         unary: Unary,
         use: u64,
         var_decl: VarDecl,
@@ -103,7 +104,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { arity: usize, end: usize };
+    pub const StructLiteral = struct { field_count: usize, arity: usize };
     pub const Unary = struct {
         op: Op,
         typ: Type,
