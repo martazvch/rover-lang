@@ -542,7 +542,6 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
             field_infos.default = true;
             infos.default_value_fields += 1;
 
-            // self.addInstr(.{ .member = .{ .index = i, .kind = .field } });
             break :blk try self.analyzeExpr(value);
         } else .void;
 

@@ -2,7 +2,8 @@ struct Vec2 {
     a, b: float,
     x: int = 8,
     y: bool,
-    z, w: str = "yup",
+    z, w = "yup",
+    aa, bb = false,
 
     fn display(self) {
         print self.a
@@ -11,6 +12,8 @@ struct Vec2 {
         print self.y
         print self.z
         print self.w
+        print self.aa
+        print self.bb
     }
 }
 

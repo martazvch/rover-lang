@@ -1,6 +1,6 @@
 struct Vec2 {
     a, b: float,
-    x: int = 8,
+    x = 8,
     y: bool,
     z, w: str = "yup",
 }

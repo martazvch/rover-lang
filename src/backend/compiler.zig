@@ -698,19 +698,31 @@ const Compiler = struct {
         // code to not execute it at runtime
         for (0..data.default_fields) |i| {
             const code_start = self.function.chunk.code.items.len;
+            defer self.function.chunk.code.shrinkRetainingCapacity(code_start);
             try self.compileInstr();
-            self.function.chunk.code.shrinkRetainingCapacity(code_start);
 
-            const value = self.function.chunk.constants[self.function.chunk.constant_count - 1];
-            self.function.chunk.constant_count -= 1;
+            const value = switch (@as(OpCode, @enumFromInt(self.function.chunk.code.items[code_start]))) {
+                .constant => b: {
+                    self.function.chunk.constant_count -= 1;
+                    var val = self.function.chunk.constants[self.function.chunk.constant_count];
 
-            // TODO: manage better cast
-            const final = if (self.manager.instr_data[self.manager.instr_idx] == .cast) b: {
-                self.manager.instr_idx += 1;
-                break :b Value.makeFloat(@floatFromInt(value.int));
-            } else value;
+                    if (self.manager.instr_data[self.manager.instr_idx] == .cast) {
+                        self.manager.instr_idx += 1;
+                        val = Value.makeFloat(@floatFromInt(val.int));
+                    }
 
-            structure.default_values[i] = final;
+                    break :b val;
+                },
+                .false => Value.false_,
+                .true => Value.true_,
+                // Because we know it's pure
+                else => |c| {
+                    std.debug.print("Code: {s}\n", .{@tagName(c)});
+                    @panic("KO");
+                },
+            };
+
+            structure.default_values[i] = value;
         }
 
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};

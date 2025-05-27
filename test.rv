@@ -1,6 +1,10 @@
 struct Vec2 {
-    x: float = 4
+    x = 4,
+    a: bool,
+    y, z = true,
 }
 
-fn main() {}
+fn main() {
+    var v = Vec2{a = false}
+}
 
