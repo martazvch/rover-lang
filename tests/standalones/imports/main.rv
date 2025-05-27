@@ -1,9 +1,28 @@
+use data.math
 use data.geom
 
-fn printPt(pt: geom.Point) {
-    print pt.x
-}
-
 fn main() {
-    var p = geom.Array {}
+    var middle = geom.Point { x = 1, y = 90 }
+    middle.display()
+
+    var square = geom.Square { side = 10, middle }
+    print square.middle.x
+    print square.middle.y
+
+    // math.introduce()
+    // var vec = math.getVecFromPos(square.middle.x, square.middle.y)
+    // print vec.x
+    // print vec.y
+    //
+    // {
+    //     use data.sub.simple_str
+    //     print simple_str.quote("local import")
+    //     middle.display()
+    //     print simple_str.concat("just ", "concaneted")
+    // }
+    //
+    // var new_middle = square.moveCenter(middle)
+    // new_middle.display()
+    // print square.middle.x
+    // print square.middle.y
 }

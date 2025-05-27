@@ -288,6 +288,7 @@ const Compiler = struct {
             .struct_decl => |*data| self.structDecl(data),
             .struct_default => unreachable,
             .struct_literal => |data| self.structLiteral(data),
+            .struct_literal_value => unreachable,
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .var_decl => |*data| self.varDecl(data),
@@ -702,7 +703,14 @@ const Compiler = struct {
 
             const value = self.function.chunk.constants[self.function.chunk.constant_count - 1];
             self.function.chunk.constant_count -= 1;
-            structure.default_values[i] = value;
+
+            // TODO: manage better cast
+            const final = if (self.manager.instr_data[self.manager.instr_idx] == .cast) b: {
+                self.manager.instr_idx += 1;
+                break :b Value.makeFloat(@floatFromInt(value.int));
+            } else value;
+
+            structure.default_values[i] = final;
         }
 
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
@@ -739,15 +747,17 @@ const Compiler = struct {
 
         for (0..field_count) |i| {
             switch (self.next()) {
-                .member => |data| {
+                .struct_literal_value => |data| {
                     const save = self.manager.instr_idx;
-                    self.manager.instr_idx = data.index;
+                    self.manager.instr_idx = data.value_instr;
                     try self.compileInstr();
                     // Arguments may not be in the same order as the declaration, we could be
                     // resolving the first value during the last iteration
                     last = @max(last, self.manager.instr_idx);
 
                     self.manager.instr_idx = save;
+
+                    if (data.cast) self.writeOp(.cast_to_float, start);
                 },
                 .struct_default => |idx| {
                     self.writeOpAndByte(.get_struct_default, @intCast(i), start);

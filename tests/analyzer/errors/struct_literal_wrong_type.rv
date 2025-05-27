@@ -1,0 +1,9 @@
+struct Vec2 {
+    x: int,
+    y: bool,
+}
+
+fn main() {
+    var v = Vec2 { y = 1, x = true }
+    var v = Vec2 { x = true, y = false }
+}

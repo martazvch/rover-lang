@@ -102,6 +102,7 @@
             [Method access 2]
                 [Variable index: 1, scope: global]
             - args
+            [Cast next value to float]
             [Int 10]
             [Variable index: 1, scope: local]
     [Print]

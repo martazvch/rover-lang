@@ -547,7 +547,9 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         } else .void;
 
         if (field_value_type != .void and field_type != .void and field_value_type != field_type) {
-            return self.err(
+            if (field_type == .float and field_value_type == .int) {
+                self.addInstr(.{ .cast = .float });
+            } else return self.err(
                 .{ .default_value_type_mismatch = .{
                     .expect = self.getTypeName(field_type),
                     .found = self.getTypeName(field_value_type),
@@ -1529,15 +1531,23 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
         if (infos.fields.get(field_name)) |f| {
             proto.putAssumeCapacity(field_name, true);
-            self.instructions.items(.data)[start + f.index] = .{ .member = .{ .index = self.instructions.len, .kind = .field } };
+            const value_instr = self.instructions.len;
 
-            if (fv.value) |val| {
-                _ = try self.analyzeExpr(val);
-            } else {
-                // Syntax: { x } instead of { x = x }
-                _ = try self.identifier(fv.name, true);
-            }
-            // TODO: check type!!
+            const typ = if (fv.value) |val|
+                try self.analyzeExpr(val)
+            else // Syntax: { x } instead of { x = x }
+                (try self.identifier(fv.name, true)).typ;
+
+            const cast = if (!self.equalType(typ, f.type)) b: {
+                if (f.type == .float and typ == .int) break :b true;
+
+                return self.err(
+                    .{ .type_mismatch = .{ .expect = self.getTypeName(f.type), .found = self.getTypeName(typ) } },
+                    if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name),
+                );
+            } else false;
+
+            self.instructions.items(.data)[start + f.index] = .{ .struct_literal_value = .{ .value_instr = value_instr, .cast = cast } };
         } else return self.err(
             .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
             self.ast.getSpan(fv.name),

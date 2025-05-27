@@ -137,6 +137,7 @@ fn parseInstr(self: *Self) !void {
         .struct_decl => |*data| self.structDecl(data),
         .struct_default => unreachable,
         .struct_literal => |data| self.structLiteral(data),
+        .struct_literal_value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
@@ -408,9 +409,13 @@ fn structLiteral(self: *Self, field_count: usize) Error!void {
 
     for (0..field_count) |_| {
         switch (self.next()) {
-            .member => |data| {
+            .struct_literal_value => |data| {
+                if (data.cast) {
+                    self.indent();
+                    self.tree.appendSlice("[Cast next value to float]\n") catch oom();
+                }
                 const save = self.instr_idx;
-                self.instr_idx = data.index;
+                self.instr_idx = data.value_instr;
                 try self.parseInstr();
                 last = @max(last, self.instr_idx);
 

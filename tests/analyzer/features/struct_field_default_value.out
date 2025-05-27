@@ -11,7 +11,9 @@
             - structure
             [Variable index: 0, scope: global]
             - args
+            [Cast next value to float]
             [Int 1]
+            [Cast next value to float]
             [Int 2]
             [Bool true]
 
@@ -19,7 +21,9 @@
         - structure
         [Variable index: 0, scope: global]
         - args
+        [Cast next value to float]
         [Int 3]
+        [Cast next value to float]
         [Int 99]
         [Int 7]
         [Bool false]
