@@ -82,7 +82,7 @@ pub const CompilationManager = struct {
             try stdout.print("//---- {s} ----\n\n", .{self.file_name});
         }
 
-        self.compiler = Compiler.init(self, "global scope");
+        self.compiler = Compiler.init(self, "global scope", 0);
         self.globals.ensureTotalCapacity(self.vm.allocator, symbols_count) catch oom();
 
         while (self.instr_idx < self.instr_data.len) {
@@ -120,10 +120,10 @@ const Compiler = struct {
         method,
     };
 
-    pub fn init(manager: *CompilationManager, name: []const u8) Self {
+    pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize) Self {
         return .{
             .manager = manager,
-            .function = ObjFunction.create(manager.vm, ObjString.copy(manager.vm, name)),
+            .function = ObjFunction.create(manager.vm, ObjString.copy(manager.vm, name), default_count),
         };
     }
 
@@ -267,6 +267,7 @@ const Compiler = struct {
             .bool => |data| self.boolInstr(data),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
+            .default_value => unreachable,
             .discard => self.discard(),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.fnDecl(data),
@@ -286,11 +287,10 @@ const Compiler = struct {
             .@"return" => |*data| self.returnInstr(data),
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
-            .struct_default => unreachable,
             .struct_literal => |data| self.structLiteral(data),
-            .struct_literal_value => unreachable,
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
+            .value => unreachable,
             .var_decl => |*data| self.varDecl(data),
             .@"while" => self.whileInstr(),
         };
@@ -526,7 +526,11 @@ const Compiler = struct {
     }
 
     fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*ObjFunction {
-        var compiler = Compiler.init(self.manager, name);
+        var compiler = Compiler.init(self.manager, name, data.default_params);
+
+        for (0..data.default_params) |i| {
+            compiler.function.default_values[i] = try self.compileDefaultValue();
+        }
 
         for (0..data.body_len) |_| {
             try compiler.compileInstr();
@@ -697,32 +701,7 @@ const Compiler = struct {
         // from the constants (they aren't global either). As we do that, we delete compiled
         // code to not execute it at runtime
         for (0..data.default_fields) |i| {
-            const code_start = self.function.chunk.code.items.len;
-            defer self.function.chunk.code.shrinkRetainingCapacity(code_start);
-            try self.compileInstr();
-
-            const value = switch (@as(OpCode, @enumFromInt(self.function.chunk.code.items[code_start]))) {
-                .constant => b: {
-                    self.function.chunk.constant_count -= 1;
-                    var val = self.function.chunk.constants[self.function.chunk.constant_count];
-
-                    if (self.manager.instr_data[self.manager.instr_idx] == .cast) {
-                        self.manager.instr_idx += 1;
-                        val = Value.makeFloat(@floatFromInt(val.int));
-                    }
-
-                    break :b val;
-                },
-                .false => Value.false_,
-                .true => Value.true_,
-                // Because we know it's pure
-                else => |c| {
-                    std.debug.print("Code: {s}\n", .{@tagName(c)});
-                    @panic("KO");
-                },
-            };
-
-            structure.default_values[i] = value;
+            structure.default_values[i] = try self.compileDefaultValue();
         }
 
         var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
@@ -759,7 +738,7 @@ const Compiler = struct {
 
         for (0..field_count) |i| {
             switch (self.next()) {
-                .struct_literal_value => |data| {
+                .value => |data| {
                     const save = self.manager.instr_idx;
                     self.manager.instr_idx = data.value_instr;
                     try self.compileInstr();
@@ -771,7 +750,7 @@ const Compiler = struct {
 
                     if (data.cast) self.writeOp(.cast_to_float, start);
                 },
-                .struct_default => |idx| {
+                .default_value => |idx| {
                     self.writeOpAndByte(.get_struct_default, @intCast(i), start);
                     self.writeByte(@intCast(idx), start);
                 },
@@ -857,5 +836,29 @@ const Compiler = struct {
         try self.patchJump(exit_jump);
         // If false
         chunk.writeOp(.pop, start);
+    }
+
+    fn compileDefaultValue(self: *Self) Error!Value {
+        const code_start = self.function.chunk.code.items.len;
+        defer self.function.chunk.code.shrinkRetainingCapacity(code_start);
+        try self.compileInstr();
+
+        return switch (@as(OpCode, @enumFromInt(self.function.chunk.code.items[code_start]))) {
+            .constant => b: {
+                self.function.chunk.constant_count -= 1;
+                var val = self.function.chunk.constants[self.function.chunk.constant_count];
+
+                if (self.manager.instr_data[self.manager.instr_idx] == .cast) {
+                    self.manager.instr_idx += 1;
+                    val = Value.makeFloat(@floatFromInt(val.int));
+                }
+
+                break :b val;
+            },
+            .false => Value.false_,
+            .true => Value.true_,
+            // Because we know it's pure
+            else => unreachable,
+        };
     }
 };

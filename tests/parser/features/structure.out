@@ -8,11 +8,13 @@
                 "params": [
                     {
                         "name": "self",
-                        "type": "Self"
+                        "type": "Self",
+                        "value": {}
                     },
                     {
                         "name": "a",
-                        "type": "int"
+                        "type": "int",
+                        "value": {}
                     }
                 ],
                 "return_type": "void",
@@ -27,7 +29,8 @@
                 "params": [
                     {
                         "name": "c",
-                        "type": "bool"
+                        "type": "bool",
+                        "value": {}
                     }
                 ],
                 "return_type": "Self",
@@ -109,11 +112,13 @@
                 "params": [
                     {
                         "name": "self",
-                        "type": "Self"
+                        "type": "Self",
+                        "value": {}
                     },
                     {
                         "name": "a",
-                        "type": "int"
+                        "type": "int",
+                        "value": {}
                     }
                 ],
                 "return_type": "void",
@@ -128,7 +133,8 @@
                 "params": [
                     {
                         "name": "c",
-                        "type": "bool"
+                        "type": "bool",
+                        "value": {}
                     }
                 ],
                 "return_type": "Self",

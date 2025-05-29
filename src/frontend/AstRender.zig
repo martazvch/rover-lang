@@ -151,7 +151,14 @@ fn renderFnDecl(self: *Self, decl: *const Ast.FnDecl, comma: bool) !void {
             const last = i != decl.params.len - 1;
             try self.openBrace();
             try self.pushKeyValue("name", self.spanToSrc(p.name), true);
-            try self.pushKeyValue("type", try self.renderType(p.typ), false);
+            if (p.typ) |typ| {
+                try self.pushKeyValue("type", try self.renderType(typ), true);
+            } else try self.pushKeyValue("type", "void", true);
+            if (p.value) |val| {
+                try self.openKey("value", .block);
+                try self.renderExpr(val, false);
+                try self.closeKey(.block, false);
+            } else try self.emptyKey("value", .block, false);
             try self.closeBrace(last);
         }
         try self.closeKey(.list, true);
@@ -176,10 +183,12 @@ fn renderNameTypeValue(self: *Self, decl: *const Ast.VarDecl, comma: bool) !void
     } else try self.emptyKey("value", .block, comma);
 }
 
-fn renderType(self: *Self, typ: *Ast.Type) Error![]const u8 {
+fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
+    if (typ == null) return "";
+
     var buf: std.ArrayListUnmanaged(u8) = .{};
 
-    switch (typ.*) {
+    switch (typ.?.*) {
         .fields => |fields| {
             for (fields, 0..) |f, i| {
                 try buf.appendSlice(self.allocator, self.spanToSrc(f));
@@ -289,6 +298,14 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             const text = self.spanToSrc(e.idx);
             const final = if (e.tag == .string) text[1 .. text.len - 1] else text;
             try self.pushKeyValue(@tagName(expr.*), final, comma);
+        },
+        .named_arg => |e| {
+            try self.openKey("named arg", .block);
+            try self.pushKeyValue("name", self.ast.toSource(e.name), true);
+            try self.openKey("value", .block);
+            try self.renderExpr(e.value, false);
+            try self.closeKey(.block, false);
+            try self.closeKey(.block, false);
         },
         .@"return" => |e| {
             if (e.expr) |data| {

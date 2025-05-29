@@ -1,0 +1,2 @@
+default_value_type_mismatch, int, float, param
+invalid_assign_type, int, float

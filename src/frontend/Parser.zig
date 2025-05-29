@@ -98,14 +98,17 @@ fn TokenFieldType(kind: anytype) type {
     };
 }
 
+/// `kind` should be `.tag` or `.span`
 inline fn prev(self: *const Self, kind: anytype) TokenFieldType(kind) {
     return self.getTkField(kind, self.token_idx - 1);
 }
 
+/// `kind` should be `.tag` or `.span`
 inline fn current(self: *const Self, kind: anytype) TokenFieldType(kind) {
     return self.getTkField(kind, self.token_idx);
 }
 
+/// `kind` should be `.tag` or `.span`
 inline fn getTkField(self: *const Self, kind: anytype, idx: usize) TokenFieldType(kind) {
     return switch (kind) {
         .span => self.token_spans[idx],
@@ -242,8 +245,11 @@ fn fnDecl(self: *Self) Error!Node {
     self.skipNewLines();
 
     var params: ArrayListUnmanaged(Ast.Param) = .{};
+    var param_names: ArrayListUnmanaged(TokenIndex) = .{};
 
-    while (!self.check(.right_paren)) {
+    param_list: while (!self.check(.right_paren)) {
+        defer param_names.clearRetainingCapacity();
+
         if (self.check(.eof)) {
             return self.errAtPrev(.expect_paren_after_fn_params);
         }
@@ -252,9 +258,10 @@ fn fnDecl(self: *Self) Error!Node {
             .{ .too_many_fn_args = .{ .what = "parameter" } },
         );
 
-        var param: Ast.Param = .{ .name = self.token_idx, .typ = undefined };
-
+        // self managment
         if (self.match(.self)) {
+            const name_idx = self.token_idx - 1;
+
             if (params.items.len > 0) {
                 return self.errAtPrev(.self_as_non_first_param);
             }
@@ -263,17 +270,40 @@ fn fnDecl(self: *Self) Error!Node {
                 return self.errAtCurrent(.typed_self);
             }
 
+            // Potential other argument following self
+            _ = self.match(.comma);
+
             // TODO: Allocate only one `Self` type for all
             const typ = self.allocator.create(Ast.Type) catch oom();
-            typ.* = .{ .self = self.token_idx - 1 };
-            param.typ = typ;
-        } else {
-            try self.expect(.identifier, .{ .expect_name = .{ .kind = "parameter" } });
-            try self.expect(.colon, .missing_fn_param_type);
-            param.typ = try self.parseType();
+            typ.* = .{ .self = name_idx };
+            params.append(self.allocator, .{ .name = name_idx, .typ = typ }) catch oom();
+            continue :param_list;
         }
 
-        params.append(self.allocator, param) catch oom();
+        while (self.match(.identifier)) {
+            param_names.append(self.allocator, self.token_idx - 1) catch oom();
+            if (self.match(.comma)) {
+                // TODO: Error
+                if (!self.check(.identifier)) @panic("can't have trailing commas params");
+                continue;
+            }
+        }
+
+        if (param_names.items.len == 0) {
+            try self.expect(.identifier, .{ .expect_name = .{ .kind = "parameter" } });
+        }
+
+        const typ = if (self.match(.colon)) try self.parseType() else null;
+        const value = if (self.match(.equal)) try self.parsePrecedenceExpr(0) else null;
+
+        if (typ == null and value == null) {
+            //  TODO: change error for ':' or '='
+            try self.expect(.colon, .missing_fn_param_type);
+        }
+
+        for (param_names.items) |p| {
+            params.append(self.allocator, .{ .name = p, .typ = typ, .value = value }) catch oom();
+        }
 
         self.skipNewLines();
         if (!self.match(.comma)) break;
@@ -852,8 +882,8 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
     const call_expr = self.allocator.create(Expr) catch oom();
 
-    // TODO: init with capacity of 255?
-    var args: std.ArrayListUnmanaged(*Expr) = .{};
+    var args: ArrayListUnmanaged(*Expr) = .{};
+    args.ensureTotalCapacity(self.allocator, 256) catch oom();
 
     // All the skip_lines cover the different syntaxes
     while (!self.check(.right_paren)) {
@@ -863,7 +893,20 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
         if (args.items.len == 255)
             return self.errAtCurrent(.{ .too_many_fn_args = .{ .what = "argument" } });
 
-        args.append(self.allocator, try self.parsePrecedenceExpr(0)) catch oom();
+        const param_expr = if (self.check(.identifier)) b: {
+            const param_expr = try self.parsePrecedenceExpr(0);
+
+            if (self.check(.comma) or self.check(.right_paren) or self.check(.new_line)) {
+                break :b param_expr;
+            }
+
+            try self.expect(.equal, .missing_equal_named_param);
+            const tmp = self.allocator.create(Expr) catch oom();
+            tmp.* = .{ .named_arg = .{ .name = self.token_idx - 1, .value = try self.parsePrecedenceExpr(0) } };
+            break :b tmp;
+        } else try self.parsePrecedenceExpr(0);
+
+        args.appendAssumeCapacity(param_expr);
 
         self.skipNewLines();
         if (!self.match(.comma)) break;

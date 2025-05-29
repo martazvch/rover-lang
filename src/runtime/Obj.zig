@@ -51,7 +51,7 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
         .bound_method => self.as(ObjBoundMethod).deinit(vm.allocator),
         .func => {
             const function = self.as(ObjFunction);
-            function.deinit(vm.gc_alloc);
+            function.deinit(vm);
         },
         .instance => {
             const instance = self.as(ObjInstance);
@@ -182,15 +182,16 @@ pub const ObjFunction = struct {
     arity: u8,
     chunk: Chunk,
     name: ?*ObjString,
+    default_values: []Value,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: ?*ObjString) *Self {
+    pub fn create(vm: *Vm, name: ?*ObjString, default_count: usize) *Self {
         const obj = Obj.allocate(vm, Self, .func);
-
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
+        obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
 
         if (options.log_gc) {
             const display_name = if (name) |n| n.chars else "";
@@ -216,11 +217,12 @@ pub const ObjFunction = struct {
         std.debug.print("<fn {s}>", .{if (self.name) |n| n.chars else "script"});
     }
 
-    pub fn deinit(self: *Self, allocator: Allocator) void {
+    pub fn deinit(self: *Self, vm: *Vm) void {
         self.chunk.deinit();
+        vm.allocator.free(self.default_values);
 
         // Name already in the linked list, don't free manually
-        allocator.destroy(self);
+        vm.gc_alloc.destroy(self);
     }
 };
 
@@ -263,7 +265,7 @@ pub const ObjStruct = struct {
         const obj = Obj.allocate(vm, Self, .@"struct");
         obj.name = name;
         obj.field_count = field_count;
-        obj.default_values = vm.gc_alloc.alloc(Value, default_count) catch oom();
+        obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.methods = methods;
 
         if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
@@ -279,7 +281,7 @@ pub const ObjStruct = struct {
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
         vm.allocator.free(self.methods);
-        vm.gc_alloc.free(self.default_values);
+        vm.allocator.free(self.default_values);
         vm.gc_alloc.destroy(self);
     }
 };

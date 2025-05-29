@@ -42,7 +42,8 @@ pub const MultiVarDecl = struct {
 
 pub const Param = struct {
     name: TokenIndex,
-    typ: *Type,
+    typ: ?*Type = null,
+    value: ?*Expr = null,
 };
 
 pub const Type = union(enum) {
@@ -94,6 +95,7 @@ pub const Expr = union(enum) {
     grouping: Grouping,
     @"if": If,
     literal: Literal,
+    named_arg: NamedArg,
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
@@ -118,6 +120,11 @@ pub const Field = struct {
 pub const FnCall = struct {
     callee: *Expr,
     args: []*Expr,
+};
+
+pub const NamedArg = struct {
+    name: TokenIndex,
+    value: *Expr,
 };
 
 pub const Grouping = struct {
@@ -168,6 +175,7 @@ pub fn toSource(self: *const Ast, node: anytype) []const u8 {
     return self.source[span.start..span.end];
 }
 
+/// Should be either a token index or a Node
 pub fn getSpan(self: *const Ast, anynode: anytype) Span {
     const NodeType, const node = switch (@typeInfo(@TypeOf(anynode))) {
         .pointer => |ptr| .{ ptr.child, anynode.* },
@@ -217,13 +225,17 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         Grouping => node.span,
         If => self.getSpan(node.condition),
         Literal => self.token_spans[node.idx],
+        NamedArg => .{
+            .start = self.token_spans[node.name].start,
+            .end = self.getSpan(node.value).end,
+        },
         Return => self.token_spans[node.kw],
         StructLiteral => self.getSpan(node.structure),
         Unary => .{
             .start = self.token_spans[node.op].start,
             .end = self.getSpan(node.expr).end,
         },
-        else => @compileError("Trying to get span on a non Node object"),
+        else => @compileError("Trying to get span on a non Node object and not usize"),
     };
 }
 

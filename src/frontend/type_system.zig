@@ -1,6 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
+const oom = @import("../utils.zig").oom;
 
 // 0000    0     0     0    0   0000  0000000000 0000000000
 // |--|    |     |     |    |   |--|  |-------------------|
@@ -142,12 +144,25 @@ pub const TypeInfo = union(enum) {
 };
 
 pub const FnInfo = struct {
-    params: []const Type,
+    params: AutoArrayHashMapUnmanaged(usize, ParamInfo),
     return_type: Type,
     tag: Tag = .function,
     module: ?ModuleRef = null,
 
     pub const Tag = enum { builtin, function };
+
+    pub const ParamInfo = struct {
+        /// Order of declaration
+        index: usize,
+        /// Field's type
+        type: Type,
+        /// Has a default value
+        default: bool = false,
+    };
+
+    pub fn proto(self: *const FnInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
+        return getProto(ParamInfo, &self.params, allocator);
+    }
 };
 
 pub const StructInfo = struct {
@@ -156,29 +171,33 @@ pub const StructInfo = struct {
     default_value_fields: usize,
     module: ?ModuleRef = null,
 
-    pub fn proto(self: *const StructInfo, allocator: std.mem.Allocator) std.AutoArrayHashMapUnmanaged(usize, bool) {
-        var res = std.AutoArrayHashMapUnmanaged(usize, bool){};
-        res.ensureTotalCapacity(allocator, self.fields.capacity()) catch @panic("oom");
+    pub const MemberInfo = struct {
+        /// Order of declaration
+        index: usize,
+        /// Field's type
+        type: Type,
+        /// Has a default value
+        default: bool = false,
+    };
 
-        var kv = self.fields.iterator();
-        while (kv.next()) |entry| {
-            if (!entry.value_ptr.default) {
-                res.putAssumeCapacity(entry.key_ptr.*, false);
-            }
-        }
-
-        return res;
+    pub fn proto(self: *const StructInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
+        return getProto(MemberInfo, &self.fields, allocator);
     }
 };
 
-pub const MemberInfo = struct {
-    /// Order of declaration
-    index: usize,
-    /// Field's type
-    type: Type,
-    /// Has a default value
-    default: bool = false,
-};
+fn getProto(T: type, data: *const AutoArrayHashMapUnmanaged(usize, T), allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
+    var res = AutoArrayHashMapUnmanaged(usize, bool){};
+    res.ensureTotalCapacity(allocator, data.count()) catch oom();
+
+    var kv = data.iterator();
+    while (kv.next()) |entry| {
+        if (!entry.value_ptr.default) {
+            res.putAssumeCapacity(entry.key_ptr.*, false);
+        }
+    }
+
+    return res;
+}
 
 pub const ModuleRef = struct {
     /// Modules from which it has been imported
@@ -187,7 +206,7 @@ pub const ModuleRef = struct {
     type_index: usize = 0,
 };
 
-pub const Symbols = AutoArrayHashMapUnmanaged(usize, MemberInfo);
+pub const Symbols = AutoArrayHashMapUnmanaged(usize, StructInfo.MemberInfo);
 
 test "types" {
     const expect = @import("std").testing.expect;

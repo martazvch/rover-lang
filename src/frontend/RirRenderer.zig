@@ -135,9 +135,9 @@ fn parseInstr(self: *Self) !void {
         .@"return" => |*data| self.returnInstr(data),
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
-        .struct_default => unreachable,
+        .default_value => unreachable,
         .struct_literal => |data| self.structLiteral(data),
-        .struct_literal_value => unreachable,
+        .value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
@@ -236,16 +236,33 @@ fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
     // Variable
     try self.parseInstr();
 
-    if (data.arity > 0) {
+    if ((data.tag == .invoke or data.tag == .bound) and data.arity == 1) {
+        self.instr_idx += 1;
+    } else if (data.arity > 0) {
         self.indent();
         try self.tree.appendSlice("- args:\n");
 
+        var last: usize = 0;
         for (0..data.arity) |_| {
-            try self.parseInstr();
+            switch (self.next()) {
+                .value => |param_data| {
+                    if (param_data.cast) {
+                        self.indent();
+                        self.tree.appendSlice("[Cast next value to float]\n") catch oom();
+                    }
+                    const save = self.instr_idx;
+                    self.instr_idx = param_data.value_instr;
+                    try self.parseInstr();
+                    last = @max(last, self.instr_idx);
 
-            if (self.instr_idx < self.instr_data.len and self.instr_data[self.instr_idx] == .cast)
-                try self.parseInstr();
+                    self.instr_idx = save;
+                },
+                .default_value => {},
+                else => unreachable,
+            }
         }
+
+        if (last > self.instr_idx) self.instr_idx = last;
     }
 
     if (data.tag == .import) {
@@ -286,6 +303,19 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) Error!void {
     );
 
     self.indent_level += 1;
+    if (data.default_params > 0) {
+        self.indent();
+        try self.tree.appendSlice("- default params\n");
+        for (0..data.default_params) |_| {
+            try self.parseInstr();
+        }
+
+        if (data.body_len > 0) {
+            self.indent();
+            try self.tree.appendSlice("- body\n");
+        }
+    }
+
     for (0..data.body_len) |_| {
         try self.parseInstr();
     }
@@ -403,31 +433,33 @@ fn structLiteral(self: *Self, field_count: usize) Error!void {
     try self.tree.appendSlice("- structure\n");
     try self.parseInstr();
 
-    self.indent();
-    try self.tree.appendSlice("- args\n");
-    var last: usize = 0;
+    if (field_count > 0) {
+        self.indent();
+        try self.tree.appendSlice("- args\n");
+        var last: usize = 0;
 
-    for (0..field_count) |_| {
-        switch (self.next()) {
-            .struct_literal_value => |data| {
-                if (data.cast) {
-                    self.indent();
-                    self.tree.appendSlice("[Cast next value to float]\n") catch oom();
-                }
-                const save = self.instr_idx;
-                self.instr_idx = data.value_instr;
-                try self.parseInstr();
-                last = @max(last, self.instr_idx);
+        for (0..field_count) |_| {
+            switch (self.next()) {
+                .value => |data| {
+                    if (data.cast) {
+                        self.indent();
+                        self.tree.appendSlice("[Cast next value to float]\n") catch oom();
+                    }
+                    const save = self.instr_idx;
+                    self.instr_idx = data.value_instr;
+                    try self.parseInstr();
+                    last = @max(last, self.instr_idx);
 
-                self.instr_idx = save;
-            },
-            .struct_default => {},
-            else => {},
+                    self.instr_idx = save;
+                },
+                .default_value => {},
+                else => {},
+            }
         }
-    }
 
-    if (last > self.instr_idx) self.instr_idx = last;
-    self.indent_level -= 1;
+        if (last > self.instr_idx) self.instr_idx = last;
+        self.indent_level -= 1;
+    }
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

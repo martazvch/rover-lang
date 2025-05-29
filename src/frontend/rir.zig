@@ -33,11 +33,11 @@ pub const Instruction = struct {
         @"return": Return,
         string: usize,
         struct_decl: StructDecl,
-        struct_default: usize,
+        default_value: usize,
         struct_literal: usize,
-        struct_literal_value: StructLiteralValue,
         unary: Unary,
         use: u64,
+        value: Value,
         var_decl: VarDecl,
         @"while": void,
     };
@@ -87,7 +87,7 @@ pub const Instruction = struct {
 
         pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
     };
-    pub const FnDecl = struct { body_len: u64, return_kind: ReturnKind };
+    pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const If = struct {
         cast: Cast,
         has_else: bool,
@@ -105,7 +105,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteralValue = struct { value_instr: usize, cast: bool = false };
+    pub const Value = struct { value_instr: usize, cast: bool = false };
     pub const Unary = struct {
         op: Op,
         typ: Type,

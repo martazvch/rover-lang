@@ -10,7 +10,8 @@
         "params": [
             {
                 "name": "arg1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -21,7 +22,8 @@
         "params": [
             {
                 "name": "arg1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -32,7 +34,8 @@
         "params": [
             {
                 "name": "arg1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -43,7 +46,8 @@
         "params": [
             {
                 "name": "arg1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -54,7 +58,8 @@
         "params": [
             {
                 "name": "arg1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -65,11 +70,13 @@
         "params": [
             {
                 "name": "param1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             },
             {
                 "name": "param2",
-                "type": "Person"
+                "type": "Person",
+                "value": {}
             }
         ],
         "return_type": "void",
@@ -94,14 +101,145 @@
         "params": [
             {
                 "name": "p1",
-                "type": "int"
+                "type": "int",
+                "value": {}
             },
             {
                 "name": "p2",
-                "type": "Creation"
+                "type": "Creation",
+                "value": {}
             }
         ],
         "return_type": "Promise",
+        "block": []
+    },
+    "fn_decl": {
+        "name": "shareType",
+        "params": [
+            {
+                "name": "a",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "b",
+                "type": "int",
+                "value": {}
+            },
+            {
+                "name": "c",
+                "type": "Color",
+                "value": {}
+            },
+            {
+                "name": "d",
+                "type": "bool",
+                "value": {}
+            },
+            {
+                "name": "e",
+                "type": "bool",
+                "value": {}
+            },
+            {
+                "name": "f",
+                "type": "bool",
+                "value": {}
+            }
+        ],
+        "return_type": "void",
+        "block": []
+    },
+    "fn_decl": {
+        "name": "defaultValue",
+        "params": [
+            {
+                "name": "a",
+                "type": "void",
+                "value": {
+                    "literal": "1"
+                }
+            },
+            {
+                "name": "b",
+                "type": "void",
+                "value": {
+                    "literal": "true"
+                }
+            },
+            {
+                "name": "c",
+                "type": "void",
+                "value": {
+                    "literal": "true"
+                }
+            },
+            {
+                "name": "d",
+                "type": "float",
+                "value": {}
+            },
+            {
+                "name": "e",
+                "type": "void",
+                "value": {
+                    "literal": "Tom"
+                }
+            }
+        ],
+        "return_type": "void",
+        "block": []
+    },
+    "fn_decl": {
+        "name": "mixAll",
+        "params": [
+            {
+                "name": "a",
+                "type": "int",
+                "value": {
+                    "literal": "4"
+                }
+            },
+            {
+                "name": "b",
+                "type": "int",
+                "value": {
+                    "literal": "4"
+                }
+            },
+            {
+                "name": "c",
+                "type": "void",
+                "value": {
+                    "literal": "6."
+                }
+            },
+            {
+                "name": "d",
+                "type": "str",
+                "value": {}
+            },
+            {
+                "name": "e",
+                "type": "str",
+                "value": {}
+            },
+            {
+                "name": "f",
+                "type": "float",
+                "value": {
+                    "literal": "99"
+                }
+            },
+            {
+                "name": "g",
+                "type": "float",
+                "value": {
+                    "literal": "99"
+                }
+            }
+        ],
+        "return_type": "void",
         "block": []
     }
 }

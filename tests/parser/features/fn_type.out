@@ -10,7 +10,8 @@
         "params": [
             {
                 "name": "arg",
-                "type": "float"
+                "type": "float",
+                "value": {}
             }
         ],
         "return_type": "fn(float, bool) -> float",
@@ -21,7 +22,8 @@
         "params": [
             {
                 "name": "arg",
-                "type": "fn() -> int"
+                "type": "fn() -> int",
+                "value": {}
             }
         ],
         "return_type": "int",

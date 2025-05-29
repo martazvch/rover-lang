@@ -4,7 +4,8 @@
         "params": [
             {
                 "name": "p",
-                "type": "geom.Point"
+                "type": "geom.Point",
+                "value": {}
             }
         ],
         "return_type": "void",

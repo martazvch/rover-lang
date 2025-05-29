@@ -29,3 +29,11 @@ fn foo(
 ) -> Promise
 {}
 
+// Share type
+fn shareType(a, b: int, c: Color, d, e, f: bool) {}
+
+// Default value
+fn defaultValue(a = 1, b, c = true, d: float, e = "Tom") {}
+
+// Mix types and value
+fn mixAll(a, b: int = 4, c = 6., d, e: str, f, g: float = 99) {}

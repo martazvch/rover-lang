@@ -21,6 +21,8 @@ const TypeManager = @import("TypeManager.zig");
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
+const FnInfo = TypeSys.FnInfo;
+const StructInfo = TypeSys.StructInfo;
 
 ast: *const Ast,
 pipeline: *Pipeline,
@@ -271,7 +273,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
-    // TODO: check if field type is a field, not a method
+    // TODO: check if field type is a field, not a method?
 
     // If type is unknown, we update it
     if (assigne_type == .void) {
@@ -324,7 +326,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         self.main = self.instructions.len;
     }
 
-    // Check in current scope
     const fn_idx = self.reserveInstr();
     // We add function's name for runtime access
     self.addInstr(.{ .name = name_idx });
@@ -350,10 +351,11 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We reserve slot 0 for potential 'self'
     _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, .param, 0);
 
-    var params_type: ArrayListUnmanaged(Type) = .{};
+    var default_params: usize = 0;
+    var params_type: AutoArrayHashMapUnmanaged(usize, FnInfo.ParamInfo) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
 
-    for (node.params) |p| {
+    for (node.params, 0..) |*p, i| {
         const decl = self.instructions.len;
         const param_idx = self.checkName(p.name) catch |e| {
             self.errs.items[self.errs.items.len - 1] = AnalyzerReport.err(
@@ -363,31 +365,54 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             return e;
         };
 
-        // TODO: no check on 'self' as being first?
-        const param_type = if (param_idx == self.self_interned) blk: {
-            if (self.state.struct_type == .void) return self.err(.self_outside_struct, self.ast.getSpan(p.name));
+        const param_type, const default = if (param_idx == self.self_interned) blk: {
+            if (self.state.struct_type == .void) {
+                return self.err(.self_outside_struct, self.ast.getSpan(p.name));
+            }
 
             self.locals.items[self.locals.items.len - 1].name = self.self_interned;
-            break :blk self.state.struct_type;
+            break :blk .{ self.state.struct_type, false };
         } else blk: {
-            const param_type = try self.checkAndGetType(p.typ);
-            if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
+            var param_type = try self.checkAndGetType(p.typ);
+
+            // Default value
+            const default_value = if (p.value) |value| b: {
+                if (!self.isPure(value.*)) {
+                    return self.err(.{ .unpure_default = .new(.param) }, self.ast.getSpan(value));
+                }
+
+                var value_type = try self.analyzeExpr(value);
+
+                // TODO: manage cast a unified way with call, structure decl and structure literals
+                if (param_type != .void and value_type != param_type) {
+                    if (param_type == .float and value_type == .int) {
+                        value_type = .float;
+                        self.addInstr(.{ .cast = .float });
+                    } else return self.err(
+                        .{ .default_value_type_mismatch = .new(self.getTypeName(param_type), self.getTypeName(value_type), .param) },
+                        self.ast.getSpan(value),
+                    );
+                }
+                // Assign in case param type was void, we infer from value
+                param_type = value_type;
+
+                default_params += 1;
+                break :b true;
+            } else b: {
+                if (param_type == .void) return self.err(.void_param, self.ast.getSpan(p.name));
+                break :b false;
+            };
 
             _ = try self.declareVariable(param_idx, param_type, true, decl, .param, p.name);
-            break :blk param_type;
+            break :blk .{ param_type, default_value };
         };
-        params_type.appendAssumeCapacity(param_type);
+
+        params_type.putAssumeCapacity(param_idx, .{ .index = i, .type = param_type, .default = default });
     }
 
     const return_type = try self.checkAndGetType(node.return_type);
     self.state.fn_type = return_type;
-
-    self.type_manager.setInfo(type_idx, .{
-        .func = .{
-            .params = params_type.toOwnedSlice(self.allocator) catch oom(),
-            .return_type = return_type,
-        },
-    });
+    self.type_manager.setInfo(type_idx, .{ .func = .{ .params = params_type, .return_type = return_type } });
 
     // ------
     //  Body
@@ -409,8 +434,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         }
 
         // If last statement, we don't allow partial anymore (for return)
-        // Usefull for 'if' for example, in this case we want all the branches
-        // to return something
+        // Usefull for 'if' for example, in this case we want all the branches to return something
         if (i == len - 1) self.state.allow_partial = false;
 
         // We try to analyze the whole body
@@ -425,8 +449,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         // If we analyze dead code, we don't update the type
         if (deadcode_start == 0) body_type = typ;
 
-        // If last expression produced a value and that it wasn't the last one and it
-        // wasn't a return, error
+        // If last expression produced a value and that it wasn't the last one and it wasn't a return, error
         if (body_type != .void and i != len - 1 and !self.state.returns) {
             self.err(.unused_value, self.ast.getSpan(n)) catch {};
         }
@@ -468,7 +491,11 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         .implicit_value;
 
     self.state = save_state;
-    self.setInstr(fn_idx, .{ .fn_decl = .{ .body_len = len - deadcode_count, .return_kind = return_kind } });
+    self.setInstr(fn_idx, .{ .fn_decl = .{
+        .body_len = len - deadcode_count,
+        .default_params = default_params,
+        .return_kind = return_kind,
+    } });
 
     return fn_type;
 }
@@ -522,7 +549,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     infos.fields.ensureTotalCapacity(self.allocator, @intCast(node.fields.len)) catch oom();
 
     for (node.fields, 0..) |*f, i| {
-        var field_infos: TypeSys.MemberInfo = .{ .type = undefined, .index = i };
+        var field_infos: StructInfo.MemberInfo = .{ .type = undefined, .index = i };
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (infos.fields.get(field_name) != null) {
@@ -536,7 +563,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
         const field_value_type = if (f.value) |value| blk: {
             if (!self.isPure(value.*)) {
-                return self.err(.unpure_field_default, self.ast.getSpan(value));
+                return self.err(.{ .unpure_default = .new(.field) }, self.ast.getSpan(value));
             }
 
             field_infos.default = true;
@@ -549,10 +576,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
             if (field_type == .float and field_value_type == .int) {
                 self.addInstr(.{ .cast = .float });
             } else return self.err(
-                .{ .default_value_type_mismatch = .{
-                    .expect = self.getTypeName(field_type),
-                    .found = self.getTypeName(field_value_type),
-                } },
+                .{ .default_value_type_mismatch = .new(self.getTypeName(field_type), self.getTypeName(field_value_type), .field) },
                 self.ast.getSpan(f.name),
             );
         }
@@ -595,49 +619,49 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
     // For now, "std" is interned at initialization in slot 1
     if (first_name == self.std_interned) {
-        const index = self.reserveInstr();
-        // TODO: For now, it keeps synchronized the different arrays of
-        // nodes/instructions
-        self.addInstr(.{ .null = undefined });
-
-        // TODO: support real imports
-        if (node.names.len > 2) @panic("Use statements can't import more than std + one module");
-
-        // 1 less because we parsed "std"
-        for (node.names[1..]) |n| {
-            if (self.type_manager.importNative(self.ast.toSource(n))) |*module| {
-                const all_fn_names = module.keys();
-
-                for (all_fn_names) |fn_name| {
-                    const name_idx = self.interner.intern(fn_name);
-
-                    // TODO: Error handling
-                    const func = module.get(fn_name).?;
-
-                    const info: TypeInfo = .{
-                        .func = .{
-                            // TODO: One side is fixed size, not the other one. Delete allocation?
-                            .params = self.allocator.dupe(Type, func.params[0..func.arity]) catch oom(),
-                            .return_type = func.return_type,
-                            .tag = .builtin,
-                        },
-                    };
-
-                    // Declare the type and additional informations
-                    const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
-                    // Declare the variable
-                    const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, .decl, n);
-                    self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
-                }
-
-                self.setInstr(index, .{ .use = all_fn_names.len });
-
-                return;
-            } else return self.err(
-                .{ .unknown_module = .{ .name = self.ast.toSource(n) } },
-                self.ast.getSpan(n),
-            );
-        }
+        // const index = self.reserveInstr();
+        // // TODO: For now, it keeps synchronized the different arrays of
+        // // nodes/instructions
+        // self.addInstr(.{ .null = undefined });
+        //
+        // // TODO: support real imports
+        // if (node.names.len > 2) @panic("Use statements can't import more than std + one module");
+        //
+        // // 1 less because we parsed "std"
+        // for (node.names[1..]) |n| {
+        //     if (self.type_manager.importNative(self.ast.toSource(n))) |*module| {
+        //         const all_fn_names = module.keys();
+        //
+        //         for (all_fn_names) |fn_name| {
+        //             const name_idx = self.interner.intern(fn_name);
+        //
+        //             // TODO: Error handling
+        //             const func = module.get(fn_name).?;
+        //
+        //             const info: TypeInfo = .{
+        //                 .func = .{
+        //                     // TODO: One side is fixed size, not the other one. Delete allocation?
+        //                     .params = func.params[0..func.arity],
+        //                     .return_type = func.return_type,
+        //                     .tag = .builtin,
+        //                 },
+        //             };
+        //
+        //             // Declare the type and additional informations
+        //             const typ = try self.type_manager.declare(name_idx, .func, .builtin, info);
+        //             // Declare the variable
+        //             const variable = try self.declareVariable(name_idx, typ, true, self.instructions.len, .decl, n);
+        //             self.addInstr(.{ .imported = .{ .index = func.index, .variable = variable } });
+        //         }
+        //
+        //         self.setInstr(index, .{ .use = all_fn_names.len });
+        //
+        //         return;
+        //     } else return self.err(
+        //         .{ .unknown_module = .{ .name = self.ast.toSource(n) } },
+        //         self.ast.getSpan(n),
+        //     );
+        // }
     } else {
         const module, const cached = try self.importModule(node);
         const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
@@ -840,6 +864,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
         .literal => |*e| self.literal(e),
+        .named_arg => unreachable,
         .@"return" => |*e| self.returnExpr(e),
         .struct_literal => |*e| self.structLiteral(e),
         .unary => |*e| self.unary(e),
@@ -1167,7 +1192,9 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         } else {
             return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
         }
-    } else return self.err(.invalid_call_target, self.ast.getSpan(expr));
+    } else {
+        return self.err(.invalid_call_target, self.ast.getSpan(expr));
+    };
 
     var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
         .builtin => .builtin,
@@ -1183,19 +1210,22 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         if (sft.structure != .void) {
             call_tag = if (sft.is_type) .invoke_static else .invoke;
 
-            if (!sft.is_type and (infos.params.len == 0 or !self.isEqualStruct(infos.params[0], sft.structure))) return self.err(
-                .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
-                self.ast.getSpan(expr.callee.field.field),
-            );
+            if (!sft.is_type and (infos.params.count() == 0 or !self.isEqualStruct(infos.params.values()[0].type, sft.structure))) {
+                return self.err(
+                    .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
+                    self.ast.getSpan(expr.callee.field.field),
+                );
+            }
         } else call_tag = .bound;
     }
 
+    // TODO: put in fnArgsList
     b: {
-        if (infos.params.len == expr.args.len) {
+        if (infos.params.count() == expr.args.len) {
             break :b;
         }
 
-        const args_diff = @max(infos.params.len, expr.args.len) - @min(infos.params.len, expr.args.len);
+        const args_diff = @max(infos.params.count(), expr.args.len) - @min(infos.params.count(), expr.args.len);
 
         // For bounded method, the difference of 1 is the invisible 'self' parameter
         if (args_diff == 1 and extra == .bound_method) {
@@ -1203,13 +1233,13 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         }
 
         return self.err(
-            AnalyzerMsg.wrongArgsCount(infos.params.len, expr.args.len),
+            AnalyzerMsg.wrongArgsCount(infos.params.count(), expr.args.len),
             self.ast.getSpan(expr),
         );
     }
 
     // Analyzes the arguments
-    try self.fnCall(expr.args, infos, call_tag == .bound or call_tag == .invoke);
+    try self.fnArgsList(expr.args, &infos, extra == .bound_method);
 
     // To load the module's global before call. If it's an invoke_import, we know that the
     // module is already just behind
@@ -1218,30 +1248,77 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         self.addInstr(.{ .identifier = self.imports.items[infos.module.?.import_index] });
     }
 
-    self.setInstr(index, .{ .call = .{ .arity = @intCast(expr.args.len), .tag = call_tag } });
+    // self.setInstr(index, .{ .call = .{ .arity = @intCast(expr.args.len), .tag = call_tag } });
+    self.setInstr(index, .{ .call = .{ .arity = @intCast(infos.params.count()), .tag = call_tag } });
 
     return infos.return_type;
 }
 
-fn fnCall(self: *Self, args: []*Expr, infos: TypeSys.FnInfo, is_bound: bool) Error!void {
-    const params = if (is_bound) infos.params[1..] else infos.params;
+fn fnArgsList(self: *Self, args: []*Expr, infos: *const TypeSys.FnInfo, is_bound: bool) Error!void {
+    // const params = if (is_bound) infos.params.values()[1..] else infos.params.values();
+    // For bound functions, the first parameter is 'self' which is implicitly in the object, we skip it
+    const offset = @intFromBool(is_bound);
+    var proto = infos.proto(self.allocator);
+    var named_started = false;
+
+    const start = self.instructions.len;
+    self.instructions.ensureUnusedCapacity(self.allocator, infos.params.count()) catch oom();
+
+    // We initialize all the values used for the initialization. By default, we put empty data under
+    // the form of 'struct_default' but we check for all real struct default to mark their index (order
+    // of declaration) so that the compiler can emit the right index
+    var default_count: usize = 0;
+    for (infos.params.values()) |f| {
+        self.instructions.appendAssumeCapacity(.{ .data = .{ .default_value = default_count } });
+        if (f.default) default_count += 1;
+    }
 
     for (args, 0..) |arg, i| {
-        const arg_type = try self.analyzeExpr(arg);
+        var cast = false;
+        var value_instr: usize = 0;
+        var param_info: *const FnInfo.ParamInfo = undefined;
 
-        if (!self.equalType(arg_type, params[i])) {
-            if (params[i] == .float and arg_type == .int) {
-                self.addInstr(.{ .cast = .float });
-            } else {
-                return self.err(
-                    .{ .type_mismatch = .{
-                        .expect = self.getTypeName(params[i]),
-                        .found = self.getTypeName(arg_type),
-                    } },
-                    self.ast.getSpan(arg),
-                );
-            }
+        switch (arg.*) {
+            .named_arg => |na| {
+                named_started = true;
+                const name = self.interner.intern(self.ast.toSource(na.name));
+                // TODO: error
+                param_info = infos.params.getPtr(name) orelse @panic("Unknown param");
+                proto.putAssumeCapacity(name, true);
+                value_instr = self.instructions.len;
+                const value_type = try self.analyzeExpr(na.value);
+
+                if (!self.equalType(value_type, param_info.type)) {
+                    if (param_info.type == .float and value_type == .int) {
+                        cast = true;
+                    } else return self.err(
+                        .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
+                        self.ast.getSpan(na.value),
+                    );
+                }
+            },
+            else => {
+                // TODO: error
+                if (named_started) @panic("Positional after named parameter");
+
+                param_info = &infos.params.values()[i + offset];
+                value_instr = self.instructions.len;
+                const value_type = try self.analyzeExpr(arg);
+
+                if (!self.equalType(value_type, param_info.type)) {
+                    if (param_info.type == .float and value_type == .int) {
+                        cast = true;
+                    } else return self.err(
+                        .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
+                        self.ast.getSpan(arg),
+                    );
+                }
+
+                proto.values()[i + offset] = true;
+            },
         }
+
+        self.instructions.items(.data)[start + param_info.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
     }
 }
 
@@ -1521,7 +1598,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
     for (infos.fields.values()) |f| {
-        self.instructions.appendAssumeCapacity(.{ .data = .{ .struct_default = default_count } });
+        self.instructions.appendAssumeCapacity(.{ .data = .{ .default_value = default_count } });
         if (f.default) default_count += 1;
     }
 
@@ -1529,8 +1606,8 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         const field_name = self.interner.intern(self.ast.toSource(fv.name));
 
         if (infos.fields.get(field_name)) |f| {
-            proto.putAssumeCapacity(field_name, true);
             const value_instr = self.instructions.len;
+            proto.putAssumeCapacity(field_name, true);
 
             const typ = if (fv.value) |val|
                 try self.analyzeExpr(val)
@@ -1546,7 +1623,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                 );
             } else false;
 
-            self.instructions.items(.data)[start + f.index] = .{ .struct_literal_value = .{ .value_instr = value_instr, .cast = cast } };
+            self.instructions.items(.data)[start + f.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
         } else return self.err(
             .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
             self.ast.getSpan(fv.name),
@@ -1707,23 +1784,23 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
 /// of functions
 fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
     const type_idx = try self.type_manager.reserveInfo();
-    var params_type: ArrayListUnmanaged(Type) = .{};
+    var params_type: AutoArrayHashMapUnmanaged(usize, FnInfo.ParamInfo) = .{};
     params_type.ensureTotalCapacity(self.allocator, fn_type.params.len) catch oom();
 
-    for (fn_type.params) |p| {
+    for (fn_type.params, 0..) |p, i| {
         const param_type = try self.checkAndGetType(p);
 
         if (param_type == .void) {
             return self.err(.void_param, fn_type.span);
         }
 
-        params_type.appendAssumeCapacity(param_type);
+        params_type.putAssumeCapacity(i, .{ .index = i, .type = param_type });
     }
 
     // Set all the informations now that we have every thing
     self.type_manager.setInfo(type_idx, .{
         .func = .{
-            .params = params_type.toOwnedSlice(self.allocator) catch oom(),
+            .params = params_type,
             .return_type = try self.checkAndGetType(fn_type.return_type),
         },
     });
@@ -1822,9 +1899,9 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
     const infos1 = self.type_manager.type_infos.items[v1].func;
     const infos2 = self.type_manager.type_infos.items[v2].func;
 
-    if (infos1.params.len == infos2.params.len and infos1.return_type == infos2.return_type) {
-        for (infos1.params, infos2.params) |p1, p2| {
-            if (p1 != p2) return false;
+    if (infos1.params.count() == infos2.params.count() and infos1.return_type == infos2.return_type) {
+        for (infos1.params.values(), infos2.params.values()) |p1, p2| {
+            if (p1.type != p2.type) return false;
         }
 
         return true;
@@ -1877,10 +1954,10 @@ fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     var writer = res.writer(self.allocator);
     try writer.writeAll("fn(");
 
-    for (decl.params, 0..) |p, i| {
+    for (decl.params.values(), 0..) |p, i| {
         try writer.print("{s}{s}", .{
-            self.getTypeName(p),
-            if (i < decl.params.len - 1) ", " else "",
+            self.getTypeName(p.type),
+            if (i < decl.params.count() - 1) ", " else "",
         });
     }
     try writer.print(") -> {s}", .{self.getTypeName(decl.return_type)});

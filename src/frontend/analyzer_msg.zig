@@ -8,7 +8,15 @@ pub const AnalyzerMsg = union(enum) {
     already_imported_module: struct { name: []const u8 },
     big_self_outside_struct,
     dead_code,
-    default_value_type_mismatch: struct { expect: []const u8, found: []const u8 },
+    default_value_type_mismatch: struct {
+        expect: []const u8,
+        found: []const u8,
+        kind: []const u8,
+
+        pub fn new(expect: []const u8, found: []const u8, kind: enum { field, param }) @This() {
+            return @This(){ .expect = expect, .found = found, .kind = @tagName(kind) };
+        }
+    },
     dot_type_on_non_mod: struct { found: []const u8 },
     duplicate_param: struct { name: []const u8 },
     float_equal,
@@ -46,7 +54,13 @@ pub const AnalyzerMsg = union(enum) {
     unknown_module: struct { name: []const u8 },
     unknown_struct_field: struct { name: []const u8 },
     unpure_in_global,
-    unpure_field_default,
+    unpure_default: struct {
+        kind: []const u8,
+
+        pub fn new(kind: enum { field, param }) @This() {
+            return @This(){ .kind = @tagName(kind) };
+        }
+    },
     unused_value,
     use_uninit_var: struct { name: []const u8 },
     void_assignment,
@@ -66,8 +80,8 @@ pub const AnalyzerMsg = union(enum) {
             .big_self_outside_struct => writer.writeAll("can't use 'Self' outside a structure"),
             .dead_code => writer.print("unreachable code", .{}),
             .default_value_type_mismatch => |e| writer.print(
-                "field's default value doesn't match field's type, expect '{s}' but found '{s}'",
-                .{ e.expect, e.found },
+                "{s}'s default value doesn't match {s}'s type, expect '{s}' but found '{s}'",
+                .{ e.kind, e.kind, e.expect, e.found },
             ),
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
             .duplicate_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
@@ -105,7 +119,8 @@ pub const AnalyzerMsg = union(enum) {
             .undeclared_var => |e| writer.print("undeclared variable '{s}'", .{e.name}),
             .unknown_module => |e| writer.print("unknown module '{s}'", .{e.name}),
             .unknown_struct_field => |e| writer.print("unknown structure's field '{s}'", .{e.name}),
-            .unpure_in_global, .unpure_field_default => writer.print("non-constant expressions are not allowed in global scope", .{}),
+            .unpure_in_global => writer.print("non-constant expressions are not allowed in global scope", .{}),
+            .unpure_default => |e| writer.print("non-constant expressions are not allowed for {s}", .{e.kind}),
             .unused_value => writer.print("unused value", .{}),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .void_assignment => writer.print("assigned value is of type 'void'", .{}),
@@ -128,7 +143,7 @@ pub const AnalyzerMsg = union(enum) {
             .float_equal_cast => writer.writeAll("this expression is implicitly casted to 'float'"),
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .incompatible_fn_type => |e| writer.print("this expression is of type '{s}'", .{e.found}),
-            .incompatible_if_type, .unpure_in_global, .unpure_field_default => writer.writeAll("this expression"),
+            .incompatible_if_type, .unpure_in_global, .unpure_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
             .invalid_call_target => writer.writeAll("this is neither a function neither a method"),
@@ -174,8 +189,8 @@ pub const AnalyzerMsg = union(enum) {
             .already_imported_module => writer.writeAll("remove the import"),
             .big_self_outside_struct => writer.writeAll("'Self' can only be used in structure to refer to the current structure's type"),
             .default_value_type_mismatch => |e| writer.print(
-                "modify field's default value to match '{s}' type or change field's type",
-                .{e.expect},
+                "modify {s}'s default value to match '{s}' type or change {s}'s type",
+                .{ e.kind, e.expect, e.kind },
             ),
             .dead_code => writer.writeAll("remove unreachable code"),
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
@@ -235,7 +250,7 @@ pub const AnalyzerMsg = union(enum) {
             .undeclared_var => writer.writeAll("consider declaring or importing the variable before use"),
             .unknown_module => writer.writeAll("create the module first and bring it in project scope (or maybe just a typo?)"),
             .unknown_struct_field => writer.writeAll("refer to the structure's declaration to see available fields"),
-            .unpure_field_default => writer.writeAll("only constant expressions are allowed for fields' default value"),
+            .unpure_default => writer.writeAll("only constant expressions are allowed for default values"),
             .unpure_in_global => writer.writeAll("use a constant expression or initialize the value later in a local scope"),
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .unused_value => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),

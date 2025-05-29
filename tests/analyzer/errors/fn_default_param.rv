@@ -1,0 +1,7 @@
+fn foo(a: int = 5.) {}
+
+fn bar(a = 4.) {
+    var b: int = a
+}
+
+fn main() {}

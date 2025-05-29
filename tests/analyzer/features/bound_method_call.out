@@ -31,10 +31,10 @@
     [Variable declaration index: 5, scope: local]
         [Method access 1]
             [Variable index: 1, scope: local]
-    [Fn call arity: 0, call_tag: bound]
+    [Fn call arity: 1, call_tag: bound]
         [Variable index: 3, scope: local]
     [Discard]
-        [Fn call arity: 1, call_tag: bound]
+        [Fn call arity: 2, call_tag: bound]
             [Variable index: 5, scope: local]
             - args:
             [Int 10]
