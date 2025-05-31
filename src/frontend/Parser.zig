@@ -246,6 +246,7 @@ fn fnDecl(self: *Self) Error!Node {
 
     var params: ArrayListUnmanaged(Ast.Param) = .{};
     var param_names: ArrayListUnmanaged(TokenIndex) = .{};
+    var named_started = false;
 
     param_list: while (!self.check(.right_paren)) {
         defer param_names.clearRetainingCapacity();
@@ -270,6 +271,10 @@ fn fnDecl(self: *Self) Error!Node {
                 return self.errAtCurrent(.typed_self);
             }
 
+            if (self.match(.equal)) {
+                return self.errAtCurrent(.default_value_self);
+            }
+
             // Potential other argument following self
             _ = self.match(.comma);
 
@@ -283,8 +288,6 @@ fn fnDecl(self: *Self) Error!Node {
         while (self.match(.identifier)) {
             param_names.append(self.allocator, self.token_idx - 1) catch oom();
             if (self.match(.comma)) {
-                // TODO: Error
-                if (!self.check(.identifier)) @panic("can't have trailing commas params");
                 continue;
             }
         }
@@ -294,7 +297,10 @@ fn fnDecl(self: *Self) Error!Node {
         }
 
         const typ = if (self.match(.colon)) try self.parseType() else null;
-        const value = if (self.match(.equal)) try self.parsePrecedenceExpr(0) else null;
+        const value = if (self.match(.equal)) b: {
+            named_started = true;
+            break :b try self.parsePrecedenceExpr(0);
+        } else if (named_started) return self.errAtCurrent(.positional_after_default_param) else null;
 
         if (typ == null and value == null) {
             //  TODO: change error for ':' or '='
@@ -884,6 +890,7 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
 
     var args: ArrayListUnmanaged(*Expr) = .{};
     args.ensureTotalCapacity(self.allocator, 256) catch oom();
+    var named_started = false;
 
     // All the skip_lines cover the different syntaxes
     while (!self.check(.right_paren)) {
@@ -893,18 +900,16 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
         if (args.items.len == 255)
             return self.errAtCurrent(.{ .too_many_fn_args = .{ .what = "argument" } });
 
-        const param_expr = if (self.check(.identifier)) b: {
-            const param_expr = try self.parsePrecedenceExpr(0);
-
-            if (self.check(.comma) or self.check(.right_paren) or self.check(.new_line)) {
-                break :b param_expr;
-            }
-
-            try self.expect(.equal, .missing_equal_named_param);
+        const param_expr = if (self.check(.identifier) and self.token_tags[self.token_idx + 1] == .equal) b: {
+            named_started = true;
+            self.token_idx += 2;
             const tmp = self.allocator.create(Expr) catch oom();
-            tmp.* = .{ .named_arg = .{ .name = self.token_idx - 1, .value = try self.parsePrecedenceExpr(0) } };
+            tmp.* = .{ .named_arg = .{ .name = self.token_idx - 2, .value = try self.parsePrecedenceExpr(0) } };
             break :b tmp;
-        } else try self.parsePrecedenceExpr(0);
+        } else b: {
+            if (named_started) return self.errAtCurrent(.positional_after_default_param);
+            break :b try self.parsePrecedenceExpr(0);
+        };
 
         args.appendAssumeCapacity(param_expr);
 

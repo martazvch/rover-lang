@@ -1,0 +1,26 @@
+//---- test.rv ----
+
+-- default --
+OP_NAKED_RETURN
+
+-- main --
+OP_GET_GLOBAL index 0, <fn default>
+OP_CONSTANT index 0, value "abcd"
+OP_CONSTANT index 1, value 8
+OP_GET_FN_DEFAULT index 2 on stack, default value index 1
+OP_GET_FN_DEFAULT index 3 on stack, default value index 2
+OP_GET_FN_DEFAULT index 4 on stack, default value index 3
+OP_CALL index 5
+OP_GET_GLOBAL index 0, <fn default>
+OP_CONSTANT index 2, value "abcd"
+OP_CONSTANT index 3, value 8
+OP_GET_FN_DEFAULT index 2 on stack, default value index 1
+OP_GET_FN_DEFAULT index 3 on stack, default value index 2
+OP_TRUE
+OP_CALL index 5
+OP_NAKED_RETURN
+
+-- global scope --
+OP_GET_GLOBAL index 1, <fn main>
+OP_CALL index 0
+

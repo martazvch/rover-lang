@@ -93,7 +93,7 @@
             - args
             [Int 1]
             [Int 90]
-    [Fn call arity: 1, call_tag: invoke]
+    [Fn call arity: 0, call_tag: invoke]
         [Method access 1]
             [Variable index: 1, scope: local]
     [Variable declaration index: 2, scope: local]
@@ -141,7 +141,7 @@
                     [Variable index: 4, scope: local]
                 - args:
                 [String local import]
-        [Fn call arity: 1, call_tag: invoke]
+        [Fn call arity: 0, call_tag: invoke]
             [Method access 1]
                 [Variable index: 1, scope: local]
         [Print]
@@ -152,12 +152,12 @@
                 [String just ]
                 [String concaneted]
     [Variable declaration index: 4, scope: local]
-        [Fn call arity: 2, call_tag: invoke]
+        [Fn call arity: 1, call_tag: invoke]
             [Method access 0]
                 [Variable index: 2, scope: local]
             - args:
             [Variable index: 1, scope: local]
-    [Fn call arity: 1, call_tag: invoke]
+    [Fn call arity: 0, call_tag: invoke]
         [Method access 1]
             [Variable index: 4, scope: local]
     [Print]

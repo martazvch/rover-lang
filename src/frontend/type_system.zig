@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
+
 const oom = @import("../utils.zig").oom;
 
 // 0000    0     0     0    0   0000  0000000000 0000000000
@@ -161,7 +162,15 @@ pub const FnInfo = struct {
     };
 
     pub fn proto(self: *const FnInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-        return getProto(ParamInfo, &self.params, allocator);
+        var res = AutoArrayHashMapUnmanaged(usize, bool){};
+        res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
+
+        var kv = self.params.iterator();
+        while (kv.next()) |entry| {
+            res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
+        }
+
+        return res;
     }
 };
 
@@ -181,23 +190,19 @@ pub const StructInfo = struct {
     };
 
     pub fn proto(self: *const StructInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-        return getProto(MemberInfo, &self.fields, allocator);
+        var res = AutoArrayHashMapUnmanaged(usize, bool){};
+        res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
+
+        var kv = self.fields.iterator();
+        while (kv.next()) |entry| {
+            if (!entry.value_ptr.default) {
+                res.putAssumeCapacity(entry.key_ptr.*, false);
+            }
+        }
+
+        return res;
     }
 };
-
-fn getProto(T: type, data: *const AutoArrayHashMapUnmanaged(usize, T), allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-    var res = AutoArrayHashMapUnmanaged(usize, bool){};
-    res.ensureTotalCapacity(allocator, data.count()) catch oom();
-
-    var kv = data.iterator();
-    while (kv.next()) |entry| {
-        if (!entry.value_ptr.default) {
-            res.putAssumeCapacity(entry.key_ptr.*, false);
-        }
-    }
-
-    return res;
-}
 
 pub const ModuleRef = struct {
     /// Modules from which it has been imported

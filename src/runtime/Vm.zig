@@ -281,6 +281,7 @@ fn execute(self: *Self) !void {
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
+            .get_fn_default => self.getDefaultValue(frame, ObjFunction),
             .get_static_method => {
                 const method_idx = frame.readByte();
 
@@ -296,11 +297,7 @@ fn execute(self: *Self) !void {
                 const method = structure.obj.as(ObjStruct).methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
             },
-            .get_struct_default => {
-                const structure_idx = frame.readByte();
-                const default_idx = frame.readByte();
-                self.stack.push(self.stack.peekRef(structure_idx).obj.as(ObjStruct).default_values[default_idx]);
-            },
+            .get_struct_default => self.getDefaultValue(frame, ObjStruct),
             .get_symbol => {
                 const symbol_idx = frame.readByte();
                 const scope: OpCode = @enumFromInt(frame.readByte());
@@ -547,6 +544,13 @@ fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver:
 fn updateModule(self: *Self, module: *Module) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
     self.module = module;
+}
+
+/// Gets and pushes on the stack a default value. Should be used for types `ObjFunction` and `ObjStruct`
+fn getDefaultValue(self: *Self, frame: *CallFrame, T: type) void {
+    const obj_idx = frame.readByte();
+    const default_idx = frame.readByte();
+    self.stack.push(self.stack.peekRef(obj_idx).obj.as(T).default_values[default_idx]);
 }
 
 fn strConcat(self: *Self) void {

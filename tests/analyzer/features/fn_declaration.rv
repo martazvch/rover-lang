@@ -26,3 +26,6 @@ fn add1() { return }
 fn add2() -> int { 5 }
 fn add3()  {  }
 fn add4() -> int { return 5 }
+
+// Default param
+fn default(c: str, a, b = 7, d, e: bool=false) {}

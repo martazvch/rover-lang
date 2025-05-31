@@ -30,3 +30,9 @@
 [Fn declaration add4, index: 5, scope: global, return kind: explicit]
     [Return expr: true, cast: false]
         [Int 5]
+[Fn declaration default, index: 6, scope: global, return kind: implicit_void]
+    - default params
+    [Int 7]
+    [Int 7]
+    [Bool false]
+    [Bool false]

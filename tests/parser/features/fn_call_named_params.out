@@ -1,0 +1,21 @@
+{
+    "fn_call": {
+        "callee": {
+            "literal": "foo"
+        },
+        "args": [
+            "named arg": {
+                "name": "arg1",
+                "value": {
+                    "literal": "8"
+                }
+            }
+            "named arg": {
+                "name": "secondArg",
+                "value": {
+                    "literal": "azerty"
+                }
+            }
+        ]
+    }
+}

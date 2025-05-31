@@ -1,0 +1,3 @@
+fn foo(a: int=8, b: bool) {}
+
+foo(a=5, "abcd")

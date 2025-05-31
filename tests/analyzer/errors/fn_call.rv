@@ -5,6 +5,6 @@ fn sub(arg1: float, args2: bool) {}
 fn main() {
     add(1)
     add(1, 2)
-    sub("true")
+    sub(4.5)
     var a = add("hoy")
 }

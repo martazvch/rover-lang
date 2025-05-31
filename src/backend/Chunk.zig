@@ -78,6 +78,7 @@ pub const OpCode = enum(u8) {
     get_heap,
     get_local,
     get_local_absolute,
+    get_fn_default,
     get_static_method,
     get_struct_default,
     get_symbol,

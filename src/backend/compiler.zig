@@ -443,7 +443,7 @@ const Compiler = struct {
 
         // Compiles the identifier
         try self.compileInstr();
-        try self.compileArgs(data.arity);
+        try self.compileArgs(data.arity, .get_fn_default);
 
         self.writeOpAndByte(
             switch (data.tag) {
@@ -471,7 +471,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
         // Compiles the receiver
         try self.compileInstr();
-        try self.compileArgs(data.arity);
+        try self.compileArgs(data.arity, .get_fn_default);
 
         switch (data.tag) {
             .invoke => {
@@ -494,14 +494,33 @@ const Compiler = struct {
         }
     }
 
-    fn compileArgs(self: *Self, arity: usize) Error!void {
-        for (0..arity) |_| {
-            try self.compileInstr();
+    fn compileArgs(self: *Self, arity: usize, default_op: OpCode) Error!void {
+        const start = self.getStart();
+        var last: usize = 0;
 
-            if (self.manager.instr_idx < self.manager.instr_data.len and
-                self.manager.instr_data[self.manager.instr_idx] == .cast)
-                try self.compileInstr();
+        for (0..arity) |i| {
+            switch (self.next()) {
+                .value => |data| {
+                    const save = self.manager.instr_idx;
+                    self.manager.instr_idx = data.value_instr;
+                    try self.compileInstr();
+                    // Arguments may not be in the same order as the declaration, we could be
+                    // resolving the first value during the last iteration
+                    last = @max(last, self.manager.instr_idx);
+
+                    self.manager.instr_idx = save;
+
+                    if (data.cast) self.writeOp(.cast_to_float, start);
+                },
+                .default_value => |idx| {
+                    self.writeOpAndByte(default_op, @intCast(i), start);
+                    self.writeByte(@intCast(idx), start);
+                },
+                else => unreachable,
+            }
         }
+
+        if (last > self.manager.instr_idx) self.manager.instr_idx = last;
     }
 
     fn fnDecl(self: *Self, data: *const Instruction.FnDecl) Error!void {
@@ -730,35 +749,9 @@ const Compiler = struct {
 
     fn structLiteral(self: *Self, field_count: usize) Error!void {
         const start = self.getStart();
-
         // Compile structure
         try self.compileInstr();
-
-        var last: usize = 0;
-
-        for (0..field_count) |i| {
-            switch (self.next()) {
-                .value => |data| {
-                    const save = self.manager.instr_idx;
-                    self.manager.instr_idx = data.value_instr;
-                    try self.compileInstr();
-                    // Arguments may not be in the same order as the declaration, we could be
-                    // resolving the first value during the last iteration
-                    last = @max(last, self.manager.instr_idx);
-
-                    self.manager.instr_idx = save;
-
-                    if (data.cast) self.writeOp(.cast_to_float, start);
-                },
-                .default_value => |idx| {
-                    self.writeOpAndByte(.get_struct_default, @intCast(i), start);
-                    self.writeByte(@intCast(idx), start);
-                },
-                else => unreachable,
-            }
-        }
-
-        if (last > self.manager.instr_idx) self.manager.instr_idx = last;
+        try self.compileArgs(field_count, .get_struct_default);
         self.writeOpAndByte(.struct_literal, @intCast(field_count), start);
     }
 

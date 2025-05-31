@@ -154,6 +154,11 @@
         "name": "defaultValue",
         "params": [
             {
+                "name": "d",
+                "type": "float",
+                "value": {}
+            },
+            {
                 "name": "a",
                 "type": "void",
                 "value": {
@@ -175,11 +180,6 @@
                 }
             },
             {
-                "name": "d",
-                "type": "float",
-                "value": {}
-            },
-            {
                 "name": "e",
                 "type": "void",
                 "value": {
@@ -193,6 +193,16 @@
     "fn_decl": {
         "name": "mixAll",
         "params": [
+            {
+                "name": "d",
+                "type": "str",
+                "value": {}
+            },
+            {
+                "name": "e",
+                "type": "str",
+                "value": {}
+            },
             {
                 "name": "a",
                 "type": "int",
@@ -213,16 +223,6 @@
                 "value": {
                     "literal": "6."
                 }
-            },
-            {
-                "name": "d",
-                "type": "str",
-                "value": {}
-            },
-            {
-                "name": "e",
-                "type": "str",
-                "value": {}
             },
             {
                 "name": "f",

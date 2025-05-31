@@ -73,8 +73,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
         .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
+        .get_fn_default => self.getDefaultValue("OP_GET_FN_DEFAULT", offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", false, offset, writer),
-        .get_struct_default => self.getStructDefault(offset, writer),
+        .get_struct_default => self.getDefaultValue("OP_GET_STRUCT_DEFAULT", offset, writer),
         .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
@@ -235,10 +236,9 @@ fn getMember(self: *const Self, name: []const u8, of_next: bool, offset: usize, 
     return local_offset;
 }
 
-fn getStructDefault(self: *const Self, offset: usize, writer: anytype) !usize {
+fn getDefaultValue(self: *const Self, text: []const u8, offset: usize, writer: anytype) !usize {
     const struct_idx = self.chunk.code.items[offset + 1];
     const default_idx = self.chunk.code.items[offset + 2];
-    const text = "OP_GET_STRUCT_DEFAULT";
 
     if (self.render_mode == .Test) {
         try writer.print("{s} index {} on stack, default value index {}\n", .{ text, struct_idx, default_idx });

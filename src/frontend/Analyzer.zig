@@ -248,7 +248,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         return self.err(.void_assignment, self.ast.getSpan(node.value));
     }
 
-    var assigne_type = switch (node.assigne.*) {
+    const assigne_type = switch (node.assigne.*) {
         .literal => |*e| blk: {
             if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
@@ -274,11 +274,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     };
 
     // TODO: check if field type is a field, not a method?
-
-    // If type is unknown, we update it
-    if (assigne_type == .void) {
-        assigne_type = value_type;
-    } else if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
+    if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
         // One case in wich we can coerce; int -> float
         if (assigne_type == .float and value_type == .int) {
             cast = true;
@@ -371,7 +367,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             }
 
             self.locals.items[self.locals.items.len - 1].name = self.self_interned;
-            break :blk .{ self.state.struct_type, false };
+            break :blk .{ self.state.struct_type, true };
         } else blk: {
             var param_type = try self.checkAndGetType(p.typ);
 
@@ -395,7 +391,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
                 }
                 // Assign in case param type was void, we infer from value
                 param_type = value_type;
-
                 default_params += 1;
                 break :b true;
             } else b: {
@@ -1174,17 +1169,18 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 
     return .init(struct_type, is_type, found_field.type);
 }
+
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
 
     const sft = try self.getStructAndFieldTypes(expr.callee);
     const extra = sft.field.getExtra();
+    const type_value = sft.field.getValue();
 
     const infos = if (sft.field.is(.func))
-        self.type_manager.type_infos.items[sft.field.getValue()].func
+        self.type_manager.type_infos.items[type_value].func
     else if (sft.field.is(.@"struct")) blk: {
-        const val = sft.field.getValue();
-        const struct_infos = self.type_manager.type_infos.items[val].@"struct";
+        const struct_infos = self.type_manager.type_infos.items[type_value].@"struct";
 
         if (struct_infos.functions.get(self.init_interned)) |init_fn| {
             const type_idx = init_fn.type.getValue();
@@ -1219,27 +1215,8 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         } else call_tag = .bound;
     }
 
-    // TODO: put in fnArgsList
-    b: {
-        if (infos.params.count() == expr.args.len) {
-            break :b;
-        }
-
-        const args_diff = @max(infos.params.count(), expr.args.len) - @min(infos.params.count(), expr.args.len);
-
-        // For bounded method, the difference of 1 is the invisible 'self' parameter
-        if (args_diff == 1 and extra == .bound_method) {
-            break :b;
-        }
-
-        return self.err(
-            AnalyzerMsg.wrongArgsCount(infos.params.count(), expr.args.len),
-            self.ast.getSpan(expr),
-        );
-    }
-
-    // Analyzes the arguments
-    try self.fnArgsList(expr.args, &infos, extra == .bound_method);
+    const arity = try self.fnArgsList(expr, &infos, extra == .bound_method);
+    self.setInstr(index, .{ .call = .{ .arity = @intCast(arity), .tag = call_tag } });
 
     // To load the module's global before call. If it's an invoke_import, we know that the
     // module is already just behind
@@ -1248,43 +1225,49 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         self.addInstr(.{ .identifier = self.imports.items[infos.module.?.import_index] });
     }
 
-    // self.setInstr(index, .{ .call = .{ .arity = @intCast(expr.args.len), .tag = call_tag } });
-    self.setInstr(index, .{ .call = .{ .arity = @intCast(infos.params.count()), .tag = call_tag } });
-
     return infos.return_type;
 }
 
-fn fnArgsList(self: *Self, args: []*Expr, infos: *const TypeSys.FnInfo, is_bound: bool) Error!void {
-    // const params = if (is_bound) infos.params.values()[1..] else infos.params.values();
-    // For bound functions, the first parameter is 'self' which is implicitly in the object, we skip it
+fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnInfo, is_bound: bool) Error!usize {
+    // Take 'self' into account
     const offset = @intFromBool(is_bound);
-    var proto = infos.proto(self.allocator);
-    var named_started = false;
+    const param_count = infos.params.count() - offset;
 
+    if (callee.args.len > param_count) return self.err(
+        AnalyzerMsg.tooManyFnArgs(param_count, callee.args.len),
+        self.ast.getSpan(callee),
+    );
+
+    var proto = infos.proto(self.allocator);
+    var proto_values = proto.values()[offset..];
     const start = self.instructions.len;
-    self.instructions.ensureUnusedCapacity(self.allocator, infos.params.count()) catch oom();
+    self.instructions.ensureUnusedCapacity(self.allocator, param_count) catch oom();
 
     // We initialize all the values used for the initialization. By default, we put empty data under
-    // the form of 'struct_default' but we check for all real struct default to mark their index (order
+    // the form of 'default_value' but we check for all real param default to mark their index (order
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
-    for (infos.params.values()) |f| {
+    // Self is always the first parameter
+    for (infos.params.values()[offset..]) |*f| {
         self.instructions.appendAssumeCapacity(.{ .data = .{ .default_value = default_count } });
         if (f.default) default_count += 1;
     }
 
-    for (args, 0..) |arg, i| {
+    for (callee.args, 0..) |arg, i| {
         var cast = false;
         var value_instr: usize = 0;
         var param_info: *const FnInfo.ParamInfo = undefined;
 
         switch (arg.*) {
             .named_arg => |na| {
-                named_started = true;
                 const name = self.interner.intern(self.ast.toSource(na.name));
-                // TODO: error
-                param_info = infos.params.getPtr(name) orelse @panic("Unknown param");
                 proto.putAssumeCapacity(name, true);
+
+                param_info = infos.params.getPtr(name) orelse return self.err(
+                    .{ .unknown_param = .{ .name = self.ast.toSource(na.name) } },
+                    self.ast.getSpan(na.name),
+                );
+
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(na.value);
 
@@ -1298,12 +1281,9 @@ fn fnArgsList(self: *Self, args: []*Expr, infos: *const TypeSys.FnInfo, is_bound
                 }
             },
             else => {
-                // TODO: error
-                if (named_started) @panic("Positional after named parameter");
-
-                param_info = &infos.params.values()[i + offset];
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(arg);
+                param_info = &infos.params.values()[i + offset];
 
                 if (!self.equalType(value_type, param_info.type)) {
                     if (param_info.type == .float and value_type == .int) {
@@ -1314,12 +1294,26 @@ fn fnArgsList(self: *Self, args: []*Expr, infos: *const TypeSys.FnInfo, is_bound
                     );
                 }
 
-                proto.values()[i + offset] = true;
+                proto_values[i] = true;
             },
         }
 
-        self.instructions.items(.data)[start + param_info.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
+        // We take into account here too
+        self.instructions.items(.data)[start + param_info.index - offset] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
     }
+
+    // Check if any missing non-default parameter
+    var has_err = false;
+    for (proto_values, 0..) |has_value, i| if (!has_value) {
+        has_err = true;
+
+        self.err(
+            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i]).? } },
+            self.ast.getSpan(callee),
+        ) catch {};
+    };
+
+    return if (has_err) error.Err else param_count;
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {

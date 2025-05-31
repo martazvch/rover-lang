@@ -236,9 +236,7 @@ fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
     // Variable
     try self.parseInstr();
 
-    if ((data.tag == .invoke or data.tag == .bound) and data.arity == 1) {
-        self.instr_idx += 1;
-    } else if (data.arity > 0) {
+    if (data.arity > 0) {
         self.indent();
         try self.tree.appendSlice("- args:\n");
 
