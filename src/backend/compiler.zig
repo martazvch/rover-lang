@@ -443,7 +443,7 @@ const Compiler = struct {
 
         // Compiles the identifier
         try self.compileInstr();
-        try self.compileArgs(data.arity, .get_fn_default);
+        try self.compileArgs(data.arity, .get_fn_default, 0);
 
         self.writeOpAndByte(
             switch (data.tag) {
@@ -471,7 +471,11 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
         // Compiles the receiver
         try self.compileInstr();
-        try self.compileArgs(data.arity, .get_fn_default);
+        try self.compileArgs(data.arity, .get_method_default, member_data.index);
+
+        // PERF: put the invoked function in a register so that we can refer to it when
+        // emitting 'get_default_value' and then the 'invoke*' can refer to it too, avoiding
+        // to emit data.arity + member_data.index
 
         switch (data.tag) {
             .invoke => {
@@ -484,9 +488,6 @@ const Compiler = struct {
                 self.writeOp(.unload_module, start);
             },
             .invoke_static => {
-                // TODO: add a scope info in Data so that when we're in local scope, we load the structure before
-                // entering function's body, otherwise we don't have access anymore to the stack above callframe
-                // and we can't reach the structure
                 self.writeOpAndByte(.invoke_static, data.arity, start);
                 self.writeByte(@intCast(member_data.index), start);
             },
@@ -494,7 +495,7 @@ const Compiler = struct {
         }
     }
 
-    fn compileArgs(self: *Self, arity: usize, default_op: OpCode) Error!void {
+    fn compileArgs(self: *Self, arity: usize, default_op: OpCode, method_idx: usize) Error!void {
         const start = self.getStart();
         var last: usize = 0;
 
@@ -507,13 +508,17 @@ const Compiler = struct {
                     // Arguments may not be in the same order as the declaration, we could be
                     // resolving the first value during the last iteration
                     last = @max(last, self.manager.instr_idx);
-
                     self.manager.instr_idx = save;
 
                     if (data.cast) self.writeOp(.cast_to_float, start);
                 },
+                // TODO: optimize this? like put the current accessed function/method in a register something
+                // like this to avoid all those op codes and ip read at runtime
                 .default_value => |idx| {
                     self.writeOpAndByte(default_op, @intCast(i), start);
+                    // If we want a default of an invoked method, we have to access the method's defaults
+                    // of the instance on the stack, so we need to know which method we're gonna call
+                    if (default_op == .get_method_default) self.writeByte(@intCast(method_idx), start);
                     self.writeByte(@intCast(idx), start);
                 },
                 else => unreachable,
@@ -751,7 +756,7 @@ const Compiler = struct {
         const start = self.getStart();
         // Compile structure
         try self.compileInstr();
-        try self.compileArgs(field_count, .get_struct_default);
+        try self.compileArgs(field_count, .get_struct_default, 0);
         self.writeOpAndByte(.struct_literal, @intCast(field_count), start);
     }
 

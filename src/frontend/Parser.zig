@@ -500,6 +500,8 @@ fn parseType(self: *Self) Error!*Ast.Type {
         } else {
             typ.* = .{ .scalar = self.token_idx - 1 };
         }
+    } else if (self.match(.left_bracket)) {
+        try self.expect(.right_bracket, .missing_bracket_array_type);
     } else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 

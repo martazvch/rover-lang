@@ -1308,7 +1308,7 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnIn
         has_err = true;
 
         self.err(
-            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i]).? } },
+            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i + offset]).? } },
             self.ast.getSpan(callee),
         ) catch {};
     };

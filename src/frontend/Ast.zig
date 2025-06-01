@@ -47,6 +47,7 @@ pub const Param = struct {
 };
 
 pub const Type = union(enum) {
+    array: *Type,
     function: Fn,
     fields: []TokenIndex,
     scalar: TokenIndex,

@@ -233,7 +233,6 @@ fn execute(self: *Self) !void {
                 try self.call(callee, args_count);
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
-
             // TODO: Cast could only 'transmute' or bitcast the value on stack to change the union tag
             .cast_to_float => self.stack.push(Value.makeFloat(@floatFromInt(self.stack.pop().int))),
             .constant => self.stack.push(frame.readConstant()),
@@ -282,6 +281,12 @@ fn execute(self: *Self) !void {
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_fn_default => self.getDefaultValue(frame, ObjFunction),
+            .get_method_default => {
+                const obj_idx = frame.readByte();
+                const method_idx = frame.readByte();
+                const default_idx = frame.readByte();
+                self.stack.push(self.stack.peekRef(obj_idx).obj.as(ObjInstance).parent.methods[method_idx].default_values[default_idx]);
+            },
             .get_static_method => {
                 const method_idx = frame.readByte();
 
@@ -289,6 +294,7 @@ fn execute(self: *Self) !void {
                     const scope_op: OpCode = @enumFromInt(frame.readByte());
                     const idx = frame.readByte();
 
+                    // TODO: avoid logic at runtime
                     break :blk if (scope_op == .get_global)
                         &self.module.globals[idx]
                     else
@@ -303,7 +309,7 @@ fn execute(self: *Self) !void {
                 const scope: OpCode = @enumFromInt(frame.readByte());
                 const module_idx = frame.readByte();
 
-                // TODO: make a method for that
+                // TODO: make a method for that and avoid logic at runtime
                 const value = if (scope == .get_global)
                     &self.module.globals[module_idx]
                 else
@@ -320,6 +326,7 @@ fn execute(self: *Self) !void {
                 const scope: OpCode = @enumFromInt(frame.readByte());
                 const module_idx = frame.readByte();
 
+                // TODO: avoid logic at runtime
                 const module = if (scope == .get_global)
                     self.module.globals[module_idx].module
                 else
@@ -394,6 +401,7 @@ fn execute(self: *Self) !void {
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
+                // TODO: avoid logic at runtime, just emit a special OpCode for `main` naked return
                 if (self.frame_stack.count == 1) {
                     _ = self.stack.pop();
                     break;
@@ -440,6 +448,7 @@ fn execute(self: *Self) !void {
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
+                // TODO: avoid logic at runtime, just emit a special OpCode for `main` return
                 if (self.frame_stack.count == 1) {
                     _ = self.stack.pop();
                     break;
@@ -483,7 +492,6 @@ fn execute(self: *Self) !void {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
             },
-            // PERF: we could avoid a function call here and cache a 'true' value?
             .true => self.stack.push(Value.true_),
             .unload_module => self.module = self.module_chain.pop().?,
         }

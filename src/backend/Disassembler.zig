@@ -74,6 +74,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
         .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
         .get_fn_default => self.getDefaultValue("OP_GET_FN_DEFAULT", offset, writer),
+        .get_method_default => self.getMethodDefaultValue(offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", false, offset, writer),
         .get_struct_default => self.getDefaultValue("OP_GET_STRUCT_DEFAULT", offset, writer),
         .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
@@ -244,6 +245,27 @@ fn getDefaultValue(self: *const Self, text: []const u8, offset: usize, writer: a
         try writer.print("{s} index {} on stack, default value index {}\n", .{ text, struct_idx, default_idx });
     } else {
         try writer.print("{s:<24} index {:>4} on stack, default value index {:>4}\n", .{ text, struct_idx, default_idx });
+    }
+
+    return offset + 3;
+}
+
+fn getMethodDefaultValue(self: *const Self, offset: usize, writer: anytype) !usize {
+    const struct_idx = self.chunk.code.items[offset + 1];
+    const method_idx = self.chunk.code.items[offset + 2];
+    const default_idx = self.chunk.code.items[offset + 3];
+    const text = "OP_GET_METHOD_DEFAULT";
+
+    if (self.render_mode == .Test) {
+        try writer.print(
+            "{s} index {} on stack, method index {}, default value index {}\n",
+            .{ text, struct_idx, method_idx, default_idx },
+        );
+    } else {
+        try writer.print(
+            "{s:<24} index {:>4} on stack, method index {}, default value index {:>4}\n",
+            .{ text, struct_idx, method_idx, default_idx },
+        );
     }
 
     return offset + 3;

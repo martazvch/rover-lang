@@ -10,6 +10,7 @@ struct Vec2 {
 
 fn main() {
     var v = Vec2{}
+    print v.len(45)
     print v.len()
 }
 
