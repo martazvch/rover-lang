@@ -47,6 +47,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
 
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
+        .array => self.indexInstruction("OP_ARRAY", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", true, offset, writer),
@@ -268,7 +269,7 @@ fn getMethodDefaultValue(self: *const Self, offset: usize, writer: anytype) !usi
         );
     }
 
-    return offset + 3;
+    return offset + 4;
 }
 
 fn invokeInstruction(self: *const Self, text: []const u8, obj_name: []const u8, offset: usize, writer: anytype) !usize {

@@ -13,6 +13,7 @@ const Module = Pipeline.Module;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
+const ObjArray = Obj.ObjArray;
 const ObjFunction = Obj.ObjFunction;
 const ObjInstance = Obj.ObjInstance;
 const ObjNativeFn = Obj.ObjNativeFn;
@@ -209,6 +210,12 @@ fn execute(self: *Self) !void {
         const op: OpCode = @enumFromInt(instruction);
 
         switch (op) {
+            .array => {
+                const len = frame.readByte();
+                self.stack.top -= len;
+                const array = ObjArray.create(self, self.stack.top[0..len]);
+                self.stack.push(Value.makeObj(array.asObj()));
+            },
             .add_float => {
                 const rhs = self.stack.pop().float;
                 self.stack.peekRef(0).float += rhs;

@@ -17,7 +17,6 @@ OP_GET_STRUCT_DEFAULT index 1 on stack, default value index 1
 OP_STRUCT_LIT index 2
 OP_GET_LOCAL index 1
 OP_GET_METHOD_DEFAULT index 0 on stack, method index 1, default value index 0
-OP_ADD_INT
 OP_INVOKE arity 1, method index 1
 OP_PRINT
 OP_NAKED_RETURN

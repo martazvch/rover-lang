@@ -852,6 +852,7 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
 
 fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
+        .array => |*e| self.array(e),
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
         .field => |*e| (try self.field(e)).field,
@@ -1061,6 +1062,23 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
     self.setInstr(index, .{ .binop = data });
 
     return res;
+}
+
+fn array(self: *Self, expr: *const Ast.Array) Error!Type {
+    const index = self.reserveInstr();
+    var value_type: Type = .void;
+
+    for (expr.values) |val| {
+        const typ = try self.analyzeExpr(val);
+
+        // TODO: Error
+        if (value_type != typ and value_type != .void) @panic("Element should be of same type");
+        value_type = typ;
+    }
+
+    self.setInstr(index, .{ .array = expr.values.len });
+
+    return value_type;
 }
 
 fn block(self: *Self, expr: *const Ast.Block) Error!Type {
@@ -1731,6 +1749,10 @@ fn checkName(self: *Self, token: usize) !usize {
 /// `empty`, returns `void`
 fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
     return if (typ) |t| return switch (t.*) {
+        .array => {
+            //
+            return .void;
+        },
         .fields => |fields| {
             var module: Pipeline.Module = undefined;
 

@@ -103,6 +103,7 @@ fn next(self: *Self) Instruction.Data {
 
 fn parseInstr(self: *Self) !void {
     try switch (self.next()) {
+        .array => |len| self.array(len),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
@@ -143,6 +144,17 @@ fn parseInstr(self: *Self) !void {
         .var_decl => |*data| self.varDecl(data),
         .@"while" => self.whileInstr(),
     };
+}
+
+fn array(self: *Self, len: usize) Error!void {
+    self.indent();
+    try self.writer.writeAll("[Array]\n");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+
+    for (0..len) |_| {
+        try self.parseInstr();
+    }
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {

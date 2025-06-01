@@ -1,0 +1,48 @@
+{
+    "var_decl": {
+        "name": "arr",
+        "type": "[]int",
+        "value": {}
+    },
+    "var_decl": {
+        "name": "arr2",
+        "type": "[][]float",
+        "value": {}
+    },
+    "var_decl": {
+        "name": "arr3",
+        "type": {},
+        "value": {
+            "array": [
+                "binop": {
+                    "lhs": {
+                        "literal": "1"
+                    },
+                    "rhs": {
+                        "literal": "4"
+                    },
+                    "op": "+"
+                },
+                "literal": "2",
+                "literal": "3",
+                "fn_call": {
+                    "callee": {
+                        "literal": "get"
+                    },
+                    "args": []
+                }
+            ]
+        }
+    },
+    "var_decl": {
+        "name": "arr4",
+        "type": "[]bool",
+        "value": {
+            "array": [
+                "literal": "true",
+                "literal": "false",
+                "literal": "true"
+            ]
+        }
+    }
+}

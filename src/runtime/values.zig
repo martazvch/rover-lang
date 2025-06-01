@@ -49,7 +49,7 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn print(self: *const Self, writer: anytype) !void {
+    pub fn print(self: *const Self, writer: anytype) Obj.PrintError!void {
         try switch (self.*) {
             .bool => |v| writer.print("{}", .{v}),
             .float => |v| writer.print("{d}", .{v}),

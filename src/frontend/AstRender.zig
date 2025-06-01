@@ -189,6 +189,10 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
     var buf: std.ArrayListUnmanaged(u8) = .{};
 
     switch (typ.?.*) {
+        .array => |t| {
+            try buf.appendSlice(self.allocator, "[]");
+            try buf.appendSlice(self.allocator, try self.renderType(t.child));
+        },
         .fields => |fields| {
             for (fields, 0..) |f, i| {
                 try buf.appendSlice(self.allocator, self.spanToSrc(f));
@@ -223,8 +227,9 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
 
 fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
     switch (expr.*) {
+        .array => |*e| try self.renderArray(e, comma),
         .block => |*e| try self.renderBlock(e, comma),
-        .binop => |e| {
+        .binop => |*e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.openKey("lhs", .block);
             try self.renderExpr(e.lhs, false);
@@ -348,6 +353,18 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, false);
             try self.closeKey(.block, comma);
         },
+    }
+}
+
+fn renderArray(self: *Self, array: *const Ast.Array, comma: bool) !void {
+    if (array.values.len == 0)
+        try self.emptyKey("array", .list, comma)
+    else {
+        try self.openKey("array", .list);
+        for (array.values, 0..) |val, i| {
+            try self.renderExpr(val, i != array.values.len - 1);
+        }
+        try self.closeKey(.list, comma);
     }
 }
 

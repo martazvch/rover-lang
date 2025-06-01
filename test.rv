@@ -1,13 +1,5 @@
-fn default(c: str, a, b = 7, d, e: bool=false) {
-    print a
-    print b
-    print c
-    print d
-    print e
-}
-
-
 fn main() {
-    default("abcd", a=8)
-    default(e=true, a=8, c="abcd")
+    var array = [1, 2, 3]
+    print array
 }
+

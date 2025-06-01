@@ -7,6 +7,7 @@ pub const Instruction = struct {
     offset: usize = 0,
 
     pub const Data = union(enum) {
+        array: usize,
         assignment: Assignment,
         binop: Binop,
         block: Block,

@@ -47,7 +47,10 @@ pub const Param = struct {
 };
 
 pub const Type = union(enum) {
-    array: *Type,
+    array: struct {
+        openning: TokenIndex,
+        child: *Type,
+    },
     function: Fn,
     fields: []TokenIndex,
     scalar: TokenIndex,
@@ -89,6 +92,7 @@ pub const While = struct {
 };
 
 pub const Expr = union(enum) {
+    array: Array,
     block: Block,
     binop: Binop,
     field: Field,
@@ -100,6 +104,11 @@ pub const Expr = union(enum) {
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
+};
+
+pub const Array = struct {
+    values: []*Expr,
+    span: Span,
 };
 
 pub const Block = struct {
@@ -198,6 +207,10 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
             .end = self.getSpan(node.decls[node.decls.len - 1]).end,
         },
         Type => switch (node) {
+            .array => |t| .{
+                .start = self.token_spans[t.openning].start,
+                .end = self.getSpan(t.child).end,
+            },
             .fields => |t| .{
                 .start = self.token_spans[t[0]].start,
                 .end = self.token_spans[t[t.len - 1]].end,
@@ -213,6 +226,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         Expr => switch (node) {
             inline else => |*e| self.getSpan(e.*),
         },
+        Array => node.span,
         Block => node.span,
         Binop => .{
             .start = self.getSpan(node.lhs.*).start,

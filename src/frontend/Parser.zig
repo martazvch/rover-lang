@@ -501,7 +501,9 @@ fn parseType(self: *Self) Error!*Ast.Type {
             typ.* = .{ .scalar = self.token_idx - 1 };
         }
     } else if (self.match(.left_bracket)) {
+        const openning = self.token_idx - 1;
         try self.expect(.right_bracket, .missing_bracket_array_type);
+        typ.* = .{ .array = .{ .openning = openning, .child = try self.parseType() } };
     } else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 
@@ -639,10 +641,7 @@ fn compoundAssignment(self: *Self, assigne: *Expr) Error!Node {
         .rhs = value,
     } };
 
-    return .{ .assignment = .{
-        .assigne = assigne,
-        .value = binop,
-    } };
+    return .{ .assignment = .{ .assigne = assigne, .value = binop } };
 }
 
 fn print(self: *Self) Error!Node {
@@ -727,6 +726,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 fn parseExpr(self: *Self) Error!*Expr {
     const expr = try switch (self.prev(.tag)) {
         .left_brace => self.block(),
+        .left_bracket => self.array(),
         .@"if" => self.ifExpr(),
         .minus, .not => self.unary(),
         .false => self.literal(.bool),
@@ -746,6 +746,28 @@ fn parseExpr(self: *Self) Error!*Expr {
     };
 
     return self.postfix(expr);
+}
+
+fn array(self: *Self) Error!*Expr {
+    const start = self.token_idx - 1;
+    const expr = self.allocator.create(Expr) catch oom();
+    var values: ArrayListUnmanaged(*Expr) = .{};
+
+    self.skipNewLines();
+    while (!self.check(.eof) and !self.check(.right_bracket)) {
+        values.append(self.allocator, try self.parsePrecedenceExpr(0)) catch oom();
+        self.skipNewLines();
+        if (self.matchAndSkip(.comma)) continue;
+    }
+
+    try self.expect(.right_bracket, .missing_array_close_bracket);
+    const end = self.token_idx - 1;
+    expr.* = .{ .array = .{
+        .values = values.toOwnedSlice(self.allocator) catch oom(),
+        .span = .{ .start = start, .end = end },
+    } };
+
+    return expr;
 }
 
 fn block(self: *Self) Error!*Expr {

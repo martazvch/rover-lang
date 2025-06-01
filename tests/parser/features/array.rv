@@ -8,4 +8,3 @@ var arr4: []bool = [
     ,
     true
 ]
-

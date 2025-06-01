@@ -9,6 +9,7 @@ const Obj = @import("Obj.zig");
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
 
+const ObjArray = Obj.ObjArray;
 const ObjFunction = Obj.ObjFunction;
 const ObjStruct = Obj.ObjStruct;
 const ObjInstance = Obj.ObjInstance;
@@ -106,6 +107,10 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
     }
 
     switch (obj.kind) {
+        .array => {
+            const array = obj.as(ObjArray);
+            try self.markArray(array.values.items);
+        },
         .bound_method => {
             const bound = obj.as(ObjBoundMethod);
             try self.markValue(&bound.receiver);

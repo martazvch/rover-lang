@@ -1,6 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const options = @import("options");
 
@@ -17,10 +18,10 @@ is_marked: bool,
 const Obj = @This();
 
 const ObjKind = enum {
+    array,
     bound_method,
     func,
     instance,
-    // Iter,
     native_fn,
     string,
     @"struct",
@@ -48,6 +49,7 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) *T {
 
 pub fn destroy(self: *Obj, vm: *Vm) void {
     switch (self.kind) {
+        .array => self.as(ObjArray).deinit(vm),
         .bound_method => self.as(ObjBoundMethod).deinit(vm.allocator),
         .func => {
             const function = self.as(ObjFunction);
@@ -75,9 +77,13 @@ pub fn as(self: *Obj, comptime T: type) *T {
     return @alignCast(@fieldParentPtr("obj", self));
 }
 
-pub fn print(self: *Obj, writer: anytype) !void {
+// Used in Disassembler with a buffer and so Allocator errors
+pub const PrintError = std.fs.File.WriteError || std.mem.Allocator.Error;
+
+pub fn print(self: *Obj, writer: anytype) PrintError!void {
     try switch (self.kind) {
-        .bound_method => self.as(ObjBoundMethod).method.log(),
+        .array => self.as(ObjArray).print(writer),
+        .bound_method => self.as(ObjBoundMethod).method.print(writer),
         .func => self.as(ObjFunction).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
         .native_fn => writer.print("<native fn>", .{}),
@@ -88,6 +94,7 @@ pub fn print(self: *Obj, writer: anytype) !void {
 
 pub fn log(self: *Obj) void {
     switch (self.kind) {
+        .array => std.debug.print("<array>", .{}),
         .bound_method => self.as(ObjBoundMethod).method.log(),
         .func => self.as(ObjFunction).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
@@ -96,6 +103,45 @@ pub fn log(self: *Obj) void {
         .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
     }
 }
+
+pub const ObjArray = struct {
+    obj: Obj,
+    values: ArrayListUnmanaged(Value),
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, values: []Value) *Self {
+        const obj = Obj.allocate(vm, Self, .array);
+        obj.values = .{};
+        obj.values.ensureTotalCapacity(vm.allocator, values.len) catch oom();
+        for (values) |val| obj.values.appendAssumeCapacity(val);
+
+        if (options.log_gc) {
+            std.debug.print("<array>\n", .{});
+        }
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
+        try writer.writeAll("[");
+        for (self.values.items, 0..) |val, i| {
+            try val.print(writer);
+            if (i < self.values.items.len - 1) try writer.writeAll(", ");
+        }
+        try writer.writeAll("]");
+    }
+
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        for (self.values.items) |val| if (val == .obj) val.obj.destroy(vm);
+        self.values.deinit(vm.allocator);
+        vm.allocator.destroy(self);
+    }
+};
 
 pub const ObjString = struct {
     obj: Obj,
@@ -205,7 +251,7 @@ pub const ObjFunction = struct {
         return &self.obj;
     }
 
-    pub fn print(self: *const Self, writer: anytype) (std.fs.File.WriteError || Allocator.Error)!void {
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
         if (self.name) |n| {
             try writer.print("<fn {s}>", .{n.chars});
         } else {
