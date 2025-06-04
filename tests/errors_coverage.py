@@ -4,27 +4,46 @@ from subprocess import Popen, PIPE
 def test(name: str, errs_path: str, tests_path: str, skip=[]):
     errs = []
     success = True
+    indent = 0
+    first = True
 
     # Get all error messages
     with open(errs_path) as f:
         start = False
 
         for line in f.readlines():
-            line = line.strip()
-            if not line: continue
+            # We get the indentation level
+            if first and start:
+                for c in line:
+                    if c == " ":
+                        indent += 1
+                    else:
+                        break
+
+                first = False
 
             if "union(enum)" in line:
                 start = True
-            elif line.startswith("const Self"):
+            elif "const Self" in line:
                 break
             elif start:
+                # Could be a inline struct definition which in one indent level higher
+                # Check if at least one more space from margin
+                if line.startswith(" " * (indent + 1)):
+                    continue
+
+                line = line.strip()
+
+                # Empty line
+                if not line: continue
+
                 # Check if there is a type
                 splitted = line.split(":")
 
                 if len(splitted) > 1:
                     errs.append(splitted[0])
                 else:
-                     errs.append(line.split(",")[0])
+                    errs.append(line.split(",")[0])
 
     # Check if there are all tested
     first = True

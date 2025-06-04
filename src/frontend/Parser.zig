@@ -65,7 +65,6 @@ pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, t
                 self.synchronize();
                 continue;
             },
-            // else => return e,
         };
         self.nodes.append(self.allocator, stmt) catch oom();
 

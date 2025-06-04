@@ -46,3 +46,4 @@ fn main() {
     foo.method("sixth", arg2=54, arg1=65, arg3=3.14)
 }
 
+
