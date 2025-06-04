@@ -44,15 +44,7 @@ main: ?usize,
 state: State,
 symbols: TypeSys.Symbols,
 modules: AutoArrayHashMapUnmanaged(usize, Pipeline.Module),
-
-// TODO: mettre en struct
-empty_interned: usize,
-main_interned: usize,
-std_interned: usize,
-self_interned: usize,
-self_big_interned: usize,
-init_interned: usize,
-
+cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 big_self: Variable,
 
 arena: std.heap.ArenaAllocator,
@@ -129,15 +121,15 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.modules = .{};
     self.interner = interner;
 
-    // TODO: cache this?
-    self.empty_interned = self.interner.intern("");
-    self.main_interned = self.interner.intern("main");
-    self.std_interned = self.interner.intern("std");
-    self.self_interned = self.interner.intern("self");
-    self.self_big_interned = self.interner.intern("Self");
-    self.init_interned = self.interner.intern("init");
-
-    self.big_self = .{ .name = self.self_big_interned, .kind = .decl, .depth = 0 };
+    self.cached_names = .{
+        .empty = self.interner.intern("empty"),
+        .main = self.interner.intern("main"),
+        .std = self.interner.intern("std"),
+        .self = self.interner.intern("self"),
+        .Self = self.interner.intern("Self"),
+        .init = self.interner.intern("init"),
+    };
+    self.big_self = .{ .name = self.cached_names.Self, .kind = .decl, .depth = 0 };
 
     self.repl = repl;
 }
@@ -318,7 +310,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     const name_idx = try self.checkName(node.name);
 
-    if (self.main == null and self.scope_depth == 0 and name_idx == self.main_interned) {
+    if (self.main == null and self.scope_depth == 0 and name_idx == self.cached_names.main) {
         self.main = self.instructions.len;
     }
 
@@ -345,7 +337,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     self.state.allow_partial = true;
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.empty_interned, self.state.struct_type, true, self.instructions.len, .param, 0);
+    _ = try self.declareVariable(self.cached_names.empty, self.state.struct_type, true, self.instructions.len, .param, 0);
 
     var default_params: usize = 0;
     var params_type: AutoArrayHashMapUnmanaged(usize, FnInfo.ParamInfo) = .{};
@@ -361,12 +353,12 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
             return e;
         };
 
-        const param_type, const default = if (param_idx == self.self_interned) blk: {
+        const param_type, const default = if (param_idx == self.cached_names.self) blk: {
             if (self.state.struct_type == .void) {
                 return self.err(.self_outside_struct, self.ast.getSpan(p.name));
             }
 
-            self.locals.items[self.locals.items.len - 1].name = self.self_interned;
+            self.locals.items[self.locals.items.len - 1].name = self.cached_names.self;
             break :blk .{ self.state.struct_type, true };
         } else blk: {
             var param_type = try self.checkAndGetType(p.typ);
@@ -613,7 +605,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
     const first_name = self.interner.intern(self.ast.toSource(node.names[0]));
 
     // For now, "std" is interned at initialization in slot 1
-    if (first_name == self.std_interned) {
+    if (first_name == self.cached_names.std) {
         // const index = self.reserveInstr();
         // // TODO: For now, it keeps synchronized the different arrays of
         // // nodes/instructions
@@ -853,6 +845,7 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
 fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .array => |*e| self.array(e),
+        .array_access => |*e| self.arrayAccess(e),
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
         .field => |*e| (try self.field(e)).field,
@@ -865,6 +858,30 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
         .struct_literal => |*e| self.structLiteral(e),
         .unary => |*e| self.unary(e),
     };
+}
+
+fn array(self: *Self, expr: *const Ast.Array) Error!Type {
+    const index = self.reserveInstr();
+    var value_type: Type = .void;
+
+    for (expr.values) |val| {
+        const typ = try self.analyzeExpr(val);
+
+        // TODO: Error
+        if (value_type != typ and value_type != .void) @panic("Element should be of same type");
+        value_type = typ;
+    }
+
+    self.setInstr(index, .{ .array = expr.values.len });
+
+    return value_type;
+}
+
+fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
+    _ = self;
+    _ = expr;
+
+    return .void;
 }
 
 fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
@@ -1064,23 +1081,6 @@ fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
     return res;
 }
 
-fn array(self: *Self, expr: *const Ast.Array) Error!Type {
-    const index = self.reserveInstr();
-    var value_type: Type = .void;
-
-    for (expr.values) |val| {
-        const typ = try self.analyzeExpr(val);
-
-        // TODO: Error
-        if (value_type != typ and value_type != .void) @panic("Element should be of same type");
-        value_type = typ;
-    }
-
-    self.setInstr(index, .{ .array = expr.values.len });
-
-    return value_type;
-}
-
 fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     self.scope_depth += 1;
     errdefer self.scope_depth -= 1;
@@ -1200,7 +1200,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     else if (sft.field.is(.@"struct")) blk: {
         const struct_infos = self.type_manager.type_infos.items[type_value].@"struct";
 
-        if (struct_infos.functions.get(self.init_interned)) |init_fn| {
+        if (struct_infos.functions.get(self.cached_names.init)) |init_fn| {
             const type_idx = init_fn.type.getValue();
             break :blk self.type_manager.type_infos.items[type_idx].func;
         } else {
@@ -1417,7 +1417,7 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
         }
     }
 
-    if (name_idx == self.self_big_interned) {
+    if (name_idx == self.cached_names.Self) {
         if (self.state.struct_type == .void)
             return self.err(.big_self_outside_struct, self.ast.getSpan(name));
 
@@ -1430,7 +1430,7 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
     // There is no instruction for 'self'
-    if (variable.name != self.self_interned and variable.kind == .variable) {
+    if (variable.name != self.cached_names.self and variable.kind == .variable) {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = variable.decl });
     } else {
@@ -1781,7 +1781,7 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
             const interned = self.interner.intern(self.ast.toSource(t));
 
             return self.type_manager.declared.get(interned) orelse {
-                if (interned == self.self_big_interned) {
+                if (interned == self.cached_names.Self) {
                     if (self.state.struct_type == .void)
                         return self.err(.big_self_outside_struct, self.ast.getSpan(t));
 

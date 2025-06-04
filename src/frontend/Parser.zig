@@ -753,13 +753,19 @@ fn array(self: *Self) Error!*Expr {
     var values: ArrayListUnmanaged(*Expr) = .{};
 
     self.skipNewLines();
-    while (!self.check(.eof) and !self.check(.right_bracket)) {
+    while (!self.check(.eof) and !self.match(.right_bracket)) {
+        const value_token = self.token_idx;
         values.append(self.allocator, try self.parsePrecedenceExpr(0)) catch oom();
         self.skipNewLines();
         if (self.matchAndSkip(.comma)) continue;
+        if (self.match(.right_bracket)) break;
+
+        return if (self.check(.eof))
+            self.errAt(value_token, .missing_array_close_bracket)
+        else
+            self.errAtCurrent(.expect_comma_array_values);
     }
 
-    try self.expect(.right_bracket, .missing_array_close_bracket);
     const end = self.token_idx - 1;
     expr.* = .{ .array = .{
         .values = values.toOwnedSlice(self.allocator) catch oom(),
@@ -891,10 +897,12 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
     var expr = prefixExpr;
 
     while (true) {
-        if (self.match(.left_paren)) {
-            expr = try self.finishCall(expr);
-        } else if (self.match(.dot)) {
+        if (self.match(.dot)) {
             expr = try self.field(expr);
+        } else if (self.match(.left_paren)) {
+            expr = try self.finishCall(expr);
+        } else if (self.match(.left_bracket)) {
+            expr = try self.arrayAccess(expr);
         } else if (self.match(.left_brace)) {
             if (self.in_cond and !self.in_group) {
                 self.token_idx -= 1;
@@ -905,6 +913,32 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
     }
 
     return expr;
+}
+
+fn arrayAccess(self: *Self, expr: *Expr) Error!*Expr {
+    const array_access = self.allocator.create(Expr) catch oom();
+    const index = try self.parsePrecedenceExpr(0);
+    try self.expect(.right_bracket, .missing_array_access_close_bracket);
+
+    array_access.* = .{ .array_access = .{
+        .array = expr,
+        .index = index,
+        .end = self.token_idx - 1,
+    } };
+
+    return array_access;
+}
+
+fn field(self: *Self, expr: *Expr) Error!*Expr {
+    try self.expect(.identifier, .expect_name_after_dot);
+
+    const field_access = self.allocator.create(Expr) catch oom();
+    field_access.* = .{ .field = .{
+        .structure = expr,
+        .field = self.token_idx - 1,
+    } };
+
+    return field_access;
 }
 
 // Takes the callee expression as input and output the full function call expression
@@ -949,18 +983,6 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
     } };
 
     return call_expr;
-}
-
-fn field(self: *Self, expr: *Expr) Error!*Expr {
-    try self.expect(.identifier, .expect_name_after_dot);
-
-    const field_access = self.allocator.create(Expr) catch oom();
-    field_access.* = .{ .field = .{
-        .structure = expr,
-        .field = self.token_idx - 1,
-    } };
-
-    return field_access;
 }
 
 fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {

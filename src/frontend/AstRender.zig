@@ -227,7 +227,27 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
 
 fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
     switch (expr.*) {
-        .array => |*e| try self.renderArray(e, comma),
+        .array => |*e| {
+            if (e.values.len == 0)
+                try self.emptyKey("array", .list, comma)
+            else {
+                try self.openKey("array", .list);
+                for (e.values, 0..) |val, i| {
+                    try self.renderExpr(val, i != e.values.len - 1);
+                }
+                try self.closeKey(.list, comma);
+            }
+        },
+        .array_access => |*e| {
+            try self.openKey("array access", .block);
+            try self.openKey("array", .block);
+            try self.renderExpr(e.array, false);
+            try self.closeKey(.block, true);
+            try self.openKey("index", .block);
+            try self.renderExpr(e.index, false);
+            try self.closeKey(.block, false);
+            try self.closeKey(.block, comma);
+        },
         .block => |*e| try self.renderBlock(e, comma),
         .binop => |*e| {
             try self.openKey(@tagName(expr.*), .block);
@@ -353,18 +373,6 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, false);
             try self.closeKey(.block, comma);
         },
-    }
-}
-
-fn renderArray(self: *Self, array: *const Ast.Array, comma: bool) !void {
-    if (array.values.len == 0)
-        try self.emptyKey("array", .list, comma)
-    else {
-        try self.openKey("array", .list);
-        for (array.values, 0..) |val, i| {
-            try self.renderExpr(val, i != array.values.len - 1);
-        }
-        try self.closeKey(.list, comma);
     }
 }
 

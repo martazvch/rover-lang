@@ -93,6 +93,7 @@ pub const While = struct {
 
 pub const Expr = union(enum) {
     array: Array,
+    array_access: ArrayAccess,
     block: Block,
     binop: Binop,
     field: Field,
@@ -109,6 +110,12 @@ pub const Expr = union(enum) {
 pub const Array = struct {
     values: []*Expr,
     span: Span,
+};
+
+pub const ArrayAccess = struct {
+    array: *Expr,
+    index: *Expr,
+    end: TokenIndex,
 };
 
 pub const Block = struct {
@@ -227,6 +234,10 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
             inline else => |*e| self.getSpan(e.*),
         },
         Array => node.span,
+        ArrayAccess => .{
+            .start = self.getSpan(node.array).start,
+            .end = node.end,
+        },
         Block => node.span,
         Binop => .{
             .start = self.getSpan(node.lhs.*).start,
