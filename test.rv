@@ -1,11 +1,11 @@
-var arr: []int
-var arr2: [][]float
+fn main() {
+    var arr: []int = [1, 2,]
 
-var arr3 = [1+4, 2, 3, get(),]
-var arr4: []bool = [
-    true,
-    false
-    ,
-    true
-]
+    print arr
+    print arr[0]
+    print arr[1]
+    print arr[-1]
+    print arr[-2]
 
+    print arr[-3]
+}

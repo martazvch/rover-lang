@@ -106,9 +106,10 @@ pub const Kind = enum(u4) {
 
 // 20 other allow 1048575 different types
 pub const Value = u20;
-// 1 bit for variable or not
+
 // 1 bit for reference or not
 // 1 bit for nullable or not
+// 1 bit of reserve
 // 1 bit of reserve
 
 // 4 next bits are for extra infos:
@@ -130,6 +131,7 @@ pub const Extra = enum(u4) {
 
 // Custom types
 pub const TypeInfo = union(enum) {
+    array: ArrayInfo,
     func: FnInfo,
     @"struct": StructInfo,
 
@@ -142,6 +144,11 @@ pub const TypeInfo = union(enum) {
             },
         }
     }
+};
+
+pub const ArrayInfo = struct {
+    child: Type,
+    module: ?ModuleRef = null,
 };
 
 pub const FnInfo = struct {

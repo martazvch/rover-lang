@@ -104,6 +104,7 @@ fn next(self: *Self) Instruction.Data {
 fn parseInstr(self: *Self) !void {
     try switch (self.next()) {
         .array => |len| self.array(len),
+        .array_access => self.arrayAccess(),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
@@ -155,6 +156,21 @@ fn array(self: *Self, len: usize) Error!void {
     for (0..len) |_| {
         try self.parseInstr();
     }
+}
+
+fn arrayAccess(self: *Self) Error!void {
+    self.indent();
+    try self.writer.writeAll("[Array access]\n");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+
+    self.indent();
+    try self.writer.writeAll("- array\n");
+    try self.parseInstr();
+
+    self.indent();
+    try self.writer.writeAll("- index\n");
+    try self.parseInstr();
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {

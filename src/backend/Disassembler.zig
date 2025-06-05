@@ -48,6 +48,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
         .array => self.indexInstruction("OP_ARRAY", offset, writer),
+        .array_access => self.simpleInstruction("OP_ARRAY_ACCESS", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", true, offset, writer),

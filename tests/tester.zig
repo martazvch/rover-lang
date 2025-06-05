@@ -133,14 +133,14 @@ const Tester = struct {
                 self.clearDiags();
 
                 try self.runStage(.analyzer);
-                success = self.report(.analyzer) or success;
+                success = self.report(.analyzer) and success;
                 self.clearDiags();
 
                 try self.runStage(.compiler);
-                success = self.report(.compiler) or success;
+                success = self.report(.compiler) and success;
 
                 try self.runStage(.vm);
-                success = self.report(.vm);
+                success = self.report(.vm) and success;
             },
             else => |s| {
                 try self.runStage(s);

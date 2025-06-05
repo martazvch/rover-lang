@@ -262,6 +262,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |len| self.array(len),
+            .array_access => self.arrayAccess(),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
@@ -302,6 +303,13 @@ const Compiler = struct {
         for (0..len) |_| try self.compileInstr();
         // TODO: protect cast
         self.writeOpAndByte(.array, @intCast(len), start);
+    }
+
+    fn arrayAccess(self: *Self) Error!void {
+        const start = self.getStart();
+        try self.compileInstr();
+        try self.compileInstr();
+        self.writeOp(.array_access, start);
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {

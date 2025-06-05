@@ -216,6 +216,23 @@ fn execute(self: *Self) !void {
                 const array = ObjArray.create(self, self.stack.top[0..len]);
                 self.stack.push(Value.makeObj(array.asObj()));
             },
+            .array_access => {
+                const index = self.stack.pop().int;
+                const array = self.stack.peekRef(0).obj.as(ObjArray);
+                const final: usize = if (index >= 0)
+                    @intCast(index)
+                else b: {
+                    const tmp: usize = @abs(index);
+                    if (tmp > array.values.items.len - 1) @panic("Out of bound");
+
+                    break :b array.values.items.len - tmp;
+                };
+
+                // TODO: runtime error desactivable with release fast mode
+                if (index > array.values.items.len - 1) @panic("Out of bound access");
+
+                self.stack.push(array.values.items[final]);
+            },
             .add_float => {
                 const rhs = self.stack.pop().float;
                 self.stack.peekRef(0).float += rhs;

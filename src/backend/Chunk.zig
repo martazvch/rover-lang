@@ -53,6 +53,7 @@ pub fn writeConstant(self: *Self, value: Value) Error!u8 {
 
 pub const OpCode = enum(u8) {
     array,
+    array_access,
     add_int,
     add_float,
     bound_method,

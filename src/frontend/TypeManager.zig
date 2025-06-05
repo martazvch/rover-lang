@@ -16,6 +16,7 @@ const oom = @import("../utils.zig").oom;
 allocator: Allocator,
 declared: AutoHashMapUnmanaged(usize, Type) = .{},
 type_infos: ArrayListUnmanaged(TypeInfo) = .{},
+array_cache: AutoHashMapUnmanaged(Type, u32) = .{},
 natives: BuiltinAnalyzer = builtin_init(),
 
 const Self = @This();
@@ -37,6 +38,7 @@ pub fn init_builtins(self: *Self, interner: *Interner) void {
 pub fn deinit(self: *Self) void {
     self.declared.deinit(self.allocator);
     self.type_infos.deinit(self.allocator);
+    self.array_cache.deinit(self.allocator);
 }
 
 /// Adds information about a type. Requires the kind and extra info, the value (aka
@@ -73,6 +75,21 @@ pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extr
     self.addType(name, typ);
 
     return typ;
+}
+
+/// If an array of `child` type as already been declared, return a type with the
+/// index as `Value`, otherwise create it
+pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
+    if (self.array_cache.get(child)) |cached_index| {
+        return Type.create(.array, .none, @intCast(cached_index));
+    }
+
+    const index = try self.reserveInfo();
+    const info = TypeInfo{ .array = .{ .child = child } };
+    self.setInfo(index, info);
+    self.array_cache.put(self.allocator, child, index) catch oom();
+
+    return Type.create(.array, .none, index);
 }
 
 /// Checks if the type has already been declared

@@ -23,6 +23,7 @@ const Type = TypeSys.Type;
 const TypeInfo = TypeSys.TypeInfo;
 const FnInfo = TypeSys.FnInfo;
 const StructInfo = TypeSys.StructInfo;
+const ArrayInfo = TypeSys.ArrayInfo;
 
 ast: *const Ast,
 pipeline: *Pipeline,
@@ -677,6 +678,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 const kind: TypeSys.Kind = switch (new_infos) {
                     .@"struct" => .@"struct",
                     .func => .func,
+                    else => @panic("Not supported yet"),
                 };
 
                 const index = try self.type_manager.reserveInfo();
@@ -867,21 +869,39 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
     for (expr.values) |val| {
         const typ = try self.analyzeExpr(val);
 
-        // TODO: Error
-        if (value_type != typ and value_type != .void) @panic("Element should be of same type");
+        if (value_type != typ and value_type != .void) {
+            return self.err(.{ .array_elem_different_type = .{
+                .found1 = self.getTypeName(value_type),
+                .found2 = self.getTypeName(typ),
+            } }, self.ast.getSpan(val));
+        }
         value_type = typ;
     }
 
     self.setInstr(index, .{ .array = expr.values.len });
 
-    return value_type;
+    return self.type_manager.getOrCreateArray(value_type);
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
-    _ = self;
-    _ = expr;
+    self.addInstr(.{ .array_access = {} });
+    const arr = try self.analyzeExpr(expr.array);
 
-    return .void;
+    if (!arr.is(.array)) return self.err(
+        .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
+        self.ast.getSpan(expr.array),
+    );
+
+    const index = try self.analyzeExpr(expr.index);
+
+    if (index != .int) return self.err(
+        .{ .non_integer_index = .{ .found = self.getTypeName(index) } },
+        self.ast.getSpan(expr.index),
+    );
+
+    const type_value = arr.getValue();
+
+    return self.type_manager.type_infos.items[type_value].array.child;
 }
 
 fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {
@@ -1749,9 +1769,9 @@ fn checkName(self: *Self, token: usize) !usize {
 /// `empty`, returns `void`
 fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
     return if (typ) |t| return switch (t.*) {
-        .array => {
-            //
-            return .void;
+        .array => |arr_type| {
+            const child = try self.checkAndGetType(arr_type.child);
+            return self.type_manager.getOrCreateArray(child);
         },
         .fields => |fields| {
             var module: Pipeline.Module = undefined;
@@ -1955,10 +1975,23 @@ fn equalType(self: *const Self, t1: Type, t2: Type) bool {
 fn getTypeName(self: *const Self, typ: Type) []const u8 {
     if (typ.is(.func)) {
         return self.getFnTypeName(typ) catch oom();
+    } else if (typ.is(.array)) {
+        return self.getArrayTypeName(typ) catch oom();
     } else {
         const index = self.type_manager.idx(typ);
         return self.interner.getKey(index).?;
     }
+}
+
+fn getArrayTypeName(self: *const Self, typ: Type) ![]const u8 {
+    const value = typ.getValue();
+    const child = self.type_manager.type_infos.items[value].array.child;
+
+    var res: std.ArrayListUnmanaged(u8) = .{};
+    var writer = res.writer(self.allocator);
+    try writer.print("[]{s}", .{self.getTypeName(child)});
+
+    return try res.toOwnedSlice(self.allocator);
 }
 
 /// Helpers used for errors
