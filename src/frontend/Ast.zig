@@ -236,7 +236,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         Array => node.span,
         ArrayAccess => .{
             .start = self.getSpan(node.array).start,
-            .end = node.end,
+            .end = self.token_spans[node.end].end,
         },
         Block => node.span,
         Binop => .{

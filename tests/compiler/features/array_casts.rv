@@ -1,0 +1,11 @@
+fn main() {
+    // Backtrack casts
+    var arr1 = [1, 2, 56.7]
+    // Forward casts
+    var arr2 = [45.6, 3, 2]
+    // Mix
+    var arr3 = [1, 4.5, 6]
+    // Infer type
+    var arr4: []float = [1, 56, 34, 6.1]
+}
+

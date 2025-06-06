@@ -7,7 +7,7 @@ pub const Instruction = struct {
     offset: usize = 0,
 
     pub const Data = union(enum) {
-        array: usize,
+        array: Array,
         array_access: void,
         assignment: Assignment,
         binop: Binop,
@@ -81,6 +81,16 @@ pub const Instruction = struct {
         };
     };
 
+    pub const Array = struct {
+        /// Number of expressions
+        len: usize,
+        /// Number of casts after the cast_until field
+        cast_count: usize,
+        /// Cast all element until this one. Used for cases where we discover later in the
+        /// array analysis that all previous expressions should be casted like in this case:
+        /// [1, 3, 4.5]. Here, we need to backtrack all the casts
+        cast_until: usize,
+    };
     pub const Assignment = struct { cast: bool };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {

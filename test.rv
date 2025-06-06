@@ -1,23 +1,6 @@
-struct Point {
-    x, y: int
-}
-
 fn main() {
-    var pt1 = Point{x=1, y=2}
-    var pt2 = Point{x=3, y=4}
+    var arr1 = [1, 2]
 
-    var vertex = [pt1, pt2]
-    print vertex
-    print vertex[0]
-    print vertex[0].x
-    pt1.x = 9
-    print pt1.x
-    print vertex[0].x
-
-    var s = "pipou"
-    var arr = [s]
-    print arr[0]
-    s += "tom"
-    print arr[0]
+    arr1[0] = 9
 }
 

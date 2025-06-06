@@ -262,14 +262,18 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             break :blk assigne.typ;
         },
+        // TODO: check if field type is a field, not a method?
         .field => |*e| (try self.field(e)).field,
-        else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
+        else => |got| {
+            std.debug.print("Got: {any}\n", .{got});
+            std.debug.print("Span: {any}\n", .{self.ast.getSpan(node.assigne)});
+            return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+        },
     };
 
-    // TODO: check if field type is a field, not a method?
     if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
         // One case in wich we can coerce; int -> float
-        if (assigne_type == .float and value_type == .int) {
+        if (self.checkCast(assigne_type, value_type, false)) {
             cast = true;
         } else return self.err(
             .{ .invalid_assign_type = .{
@@ -372,11 +376,9 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
                 var value_type = try self.analyzeExpr(value);
 
-                // TODO: manage cast a unified way with call, structure decl and structure literals
                 if (param_type != .void and value_type != param_type) {
-                    if (param_type == .float and value_type == .int) {
+                    if (self.checkCast(param_type, value_type, true)) {
                         value_type = .float;
-                        self.addInstr(.{ .cast = .float });
                     } else return self.err(
                         .{ .default_value_type_mismatch = .new(self.getTypeName(param_type), self.getTypeName(value_type), .param) },
                         self.ast.getSpan(value),
@@ -561,9 +563,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
         } else .void;
 
         if (field_value_type != .void and field_type != .void and field_value_type != field_type) {
-            if (field_type == .float and field_value_type == .int) {
-                self.addInstr(.{ .cast = .float });
-            } else return self.err(
+            if (!self.checkCast(field_type, field_value_type, true)) return self.err(
                 .{ .default_value_type_mismatch = .new(self.getTypeName(field_type), self.getTypeName(field_value_type), .field) },
                 self.ast.getSpan(f.name),
             );
@@ -792,9 +792,8 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
             // Else, we check for coherence
         } else if (!self.equalType(checked_type, value_type)) {
             // One case in wich we can coerce, int -> float
-            if (checked_type == .float and value_type == .int) {
+            if (self.checkCast(checked_type, value_type, true)) {
                 data.cast = true;
-                self.addInstr(.{ .cast = .float });
             } else return self.err(
                 .{ .invalid_assign_type = .{
                     .expect = self.getTypeName(checked_type),
@@ -865,12 +864,20 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
 fn array(self: *Self, expr: *const Ast.Array) Error!Type {
     const index = self.reserveInstr();
     var value_type: Type = .void;
+    var cast_count: usize = 0;
+    var cast_until: usize = 0;
 
-    for (expr.values) |val| {
-        const typ = try self.analyzeExpr(val);
+    for (expr.values, 0..) |val, i| {
+        var typ = try self.analyzeExpr(val);
 
         if (value_type != typ and value_type != .void) {
-            return self.err(.{ .array_elem_different_type = .{
+            // Backtrack casts without emitting an instruction
+            if (cast_until == 0 and self.checkCast(typ, value_type, false)) {
+                cast_until = i + 1;
+            } else if (self.checkCast(value_type, typ, true)) {
+                cast_count += 1;
+                typ = value_type;
+            } else return self.err(.{ .array_elem_different_type = .{
                 .found1 = self.getTypeName(value_type),
                 .found2 = self.getTypeName(typ),
             } }, self.ast.getSpan(val));
@@ -878,7 +885,11 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
         value_type = typ;
     }
 
-    self.setInstr(index, .{ .array = expr.values.len });
+    self.setInstr(index, .{ .array = .{
+        .len = expr.values.len,
+        .cast_count = cast_count,
+        .cast_until = cast_until,
+    } });
 
     return self.type_manager.getOrCreateArray(value_type);
 }
@@ -1310,7 +1321,7 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnIn
                 const value_type = try self.analyzeExpr(na.value);
 
                 if (!self.equalType(value_type, param_info.type)) {
-                    if (param_info.type == .float and value_type == .int) {
+                    if (self.checkCast(param_info.type, value_type, false)) {
                         cast = true;
                     } else return self.err(
                         .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
@@ -1324,7 +1335,7 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnIn
                 param_info = &infos.params.values()[i + offset];
 
                 if (!self.equalType(value_type, param_info.type)) {
-                    if (param_info.type == .float and value_type == .int) {
+                    if (self.checkCast(param_info.type, value_type, false)) {
                         cast = true;
                     } else return self.err(
                         .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
@@ -1539,14 +1550,14 @@ fn ifExpr(self: *Self, expr: *const Ast.If) Error!Type {
         // Type coherence. If branches don't exit scope and branches have
         // diffrent types
         if (!then_return and !else_return and then_type != else_type) {
-            if (then_type == .int and else_type == .float) {
+            if (self.checkCast(else_type, then_type, false)) {
                 data.cast = .then;
 
                 self.warn(
                     AnalyzerMsg.implicitCast("then branch", "float"),
                     self.ast.getSpan(expr.then),
                 );
-            } else if (then_type == .float and else_type == .int) {
+            } else if (self.checkCast(then_type, else_type, false)) {
                 data.cast = .@"else";
 
                 // Safe unsafe access, if there is a non void type
@@ -1590,10 +1601,9 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
 
     // We do that here because we can insert a cast
     if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
-        if (self.state.fn_type == .float and return_type == .int) {
+        if (self.checkCast(self.state.fn_type, return_type, true)) {
             data.cast = true;
             return_type = .float;
-            self.addInstr(.{ .cast = .float });
         } else return self.err(
             .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(self.state.fn_type),
@@ -1647,7 +1657,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
                 (try self.identifier(fv.name, true)).typ;
 
             const cast = if (!self.equalType(typ, f.type)) b: {
-                if (f.type == .float and typ == .int) break :b true;
+                if (self.checkCast(f.type, typ, false)) break :b true;
 
                 return self.err(
                     .{ .type_mismatch = .{ .expect = self.getTypeName(f.type), .found = self.getTypeName(typ) } },
@@ -1883,6 +1893,14 @@ fn declareVariable(
         self.locals.append(self.allocator, variable) catch oom();
         return .{ .index = @intCast(index), .scope = .local };
     }
+}
+
+fn checkCast(self: *Self, to: Type, typ: Type, emit_instr: bool) bool {
+    const cast = to == .float and typ == .int;
+
+    if (emit_instr) self.addInstr(.{ .cast = .float });
+
+    return cast;
 }
 
 fn isPure(self: *const Self, node: anytype) bool {

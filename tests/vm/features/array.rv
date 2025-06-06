@@ -2,6 +2,10 @@ struct Point {
     x, y: int
 }
 
+struct Data {
+    list: []float,
+}
+
 fn main() {
     // Index test
     var arr: []int = [1, 2,]
@@ -23,5 +27,8 @@ fn main() {
     pt1.x = 9
     print pt1.x
     print vertex[0].x
+
+    var data = Data{list=[1., 4., 567.43]}
+    print data.list
 }
 

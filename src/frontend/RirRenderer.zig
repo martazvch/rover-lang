@@ -95,6 +95,14 @@ fn parseErrs(self: *Self) !void {
     }
 }
 
+fn at(self: *const Self) *const Instruction.Data {
+    return &self.instr_data[self.instr_idx];
+}
+
+fn eof(self: *const Self) bool {
+    return self.instr_idx == self.instr_data.len;
+}
+
 fn next(self: *Self) Instruction.Data {
     defer self.instr_idx += 1;
 
@@ -103,7 +111,7 @@ fn next(self: *Self) Instruction.Data {
 
 fn parseInstr(self: *Self) !void {
     try switch (self.next()) {
-        .array => |len| self.array(len),
+        .array => |*data| self.array(data),
         .array_access => self.arrayAccess(),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
@@ -147,14 +155,25 @@ fn parseInstr(self: *Self) !void {
     };
 }
 
-fn array(self: *Self, len: usize) Error!void {
+fn array(self: *Self, data: *const Instruction.Array) Error!void {
     self.indent();
     try self.writer.writeAll("[Array]\n");
     self.indent_level += 1;
     defer self.indent_level -= 1;
+    var cast_count: usize = 0;
 
-    for (0..len) |_| {
+    for (0..data.len) |i| {
         try self.parseInstr();
+
+        if (data.cast_until > 0 and i < data.cast_until - 1) {
+            self.indent();
+            try self.writer.writeAll("[Cast to float]\n");
+        }
+
+        if (!self.eof() and self.at().* == .cast and cast_count < data.cast_count) {
+            cast_count += 1;
+            try self.parseInstr();
+        }
     }
 }
 

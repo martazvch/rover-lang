@@ -127,10 +127,18 @@ const Compiler = struct {
         };
     }
 
+    inline fn at(self: *const Self) *const Instruction.Data {
+        return &self.manager.instr_data[self.manager.instr_idx];
+    }
+
     fn next(self: *Self) Instruction.Data {
         defer self.manager.instr_idx += 1;
 
         return self.manager.instr_data[self.manager.instr_idx];
+    }
+
+    inline fn eof(self: *const Self) bool {
+        return self.manager.instr_idx == self.manager.instr_data.len;
     }
 
     inline fn getChunk(self: *Self) *Chunk {
@@ -261,7 +269,7 @@ const Compiler = struct {
 
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
-            .array => |len| self.array(len),
+            .array => |*data| self.array(data),
             .array_access => self.arrayAccess(),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -298,11 +306,24 @@ const Compiler = struct {
         };
     }
 
-    fn array(self: *Self, len: usize) Error!void {
+    fn array(self: *Self, data: *const Instruction.Array) Error!void {
         const start = self.getStart();
-        for (0..len) |_| try self.compileInstr();
+        var cast_count: usize = 0;
+
+        for (0..data.len) |i| {
+            try self.compileInstr();
+
+            if (data.cast_until > 0 and i < data.cast_until - 1) {
+                self.writeOp(.cast_to_float, start);
+            }
+
+            if (!self.eof() and self.at().* == .cast and cast_count < data.cast_count) {
+                cast_count += 1;
+                try self.compileInstr();
+            }
+        }
         // TODO: protect cast
-        self.writeOpAndByte(.array, @intCast(len), start);
+        self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
     fn arrayAccess(self: *Self) Error!void {
