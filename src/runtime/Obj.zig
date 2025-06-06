@@ -47,6 +47,15 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) *T {
     return ptr;
 }
 
+pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
+    return switch (self.kind) {
+        .array => self.as(ObjArray).deepCopy(vm).asObj(),
+        .instance => self.as(ObjInstance).deepCopy(vm).asObj(),
+        // Immutable, shallow copy ok
+        .bound_method, .string, .func, .native_fn, .@"struct" => self,
+    };
+}
+
 pub fn destroy(self: *Obj, vm: *Vm) void {
     switch (self.kind) {
         .array => self.as(ObjArray).deinit(vm),
@@ -114,7 +123,12 @@ pub const ObjArray = struct {
         const obj = Obj.allocate(vm, Self, .array);
         obj.values = .{};
         obj.values.ensureTotalCapacity(vm.allocator, values.len) catch oom();
-        for (values) |val| obj.values.appendAssumeCapacity(val);
+        vm.gc.pushTmpRoot(obj.asObj());
+        defer vm.gc.popTmpRoot();
+
+        for (values) |val| {
+            obj.values.appendAssumeCapacity(val.deepCopy(vm));
+        }
 
         if (options.log_gc) {
             std.debug.print("<array>\n", .{});
@@ -127,6 +141,10 @@ pub const ObjArray = struct {
         return &self.obj;
     }
 
+    pub fn deepCopy(self: *const Self, vm: *Vm) *Self {
+        return Self.create(vm, self.values.items);
+    }
+
     pub fn print(self: *const Self, writer: anytype) PrintError!void {
         try writer.writeAll("[");
         for (self.values.items, 0..) |val, i| {
@@ -137,7 +155,7 @@ pub const ObjArray = struct {
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
-        for (self.values.items) |val| if (val == .obj) val.obj.destroy(vm);
+        // We don't own the values, just the array
         self.values.deinit(vm.allocator);
         vm.allocator.destroy(self);
     }
@@ -159,9 +177,9 @@ pub const ObjString = struct {
         // The set method can trigger a GC to grow hashmap before
         // inserting. We put the value on the stack so that it is marked
         // as a root
-        vm.stack.push(Value.makeObj(obj.asObj()));
+        vm.gc.pushTmpRoot(obj.asObj());
+        defer vm.gc.popTmpRoot();
         _ = vm.strings.set(obj, Value.null_);
-        _ = vm.stack.pop();
 
         if (options.log_gc) {
             std.debug.print("{s}\n", .{str});
@@ -356,6 +374,18 @@ pub const ObjInstance = struct {
 
     pub fn asObj(self: *Self) *Obj {
         return &self.obj;
+    }
+
+    pub fn deepCopy(self: *Self, vm: *Vm) *Self {
+        var obj = Self.create(vm, self.parent);
+        vm.gc.pushTmpRoot(obj.asObj());
+        defer vm.gc.popTmpRoot();
+
+        for (self.fields, 0..) |*field, i| {
+            obj.fields[i] = field.deepCopy(vm);
+        }
+
+        return obj;
     }
 
     pub fn deinit(self: *Self, allocator: Allocator) void {

@@ -1,8 +1,10 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 
 const Obj = @import("Obj.zig");
 const Module = @import("../Pipeline.zig").Module;
+const Vm = @import("Vm.zig");
 
 pub const Value = union(enum) {
     bool: bool,
@@ -46,6 +48,15 @@ pub const Value = union(enum) {
         return switch (self.*) {
             .obj => |v| v,
             else => null,
+        };
+    }
+
+    pub fn deepCopy(self: Self, vm: *Vm) Self {
+        return switch (self) {
+            .bool, .float, .int, .null => self,
+            // TODO: see if protected in Analyzer
+            .module => unreachable,
+            .obj => |obj| Self.makeObj(obj.deepCopy(vm)),
         };
     }
 

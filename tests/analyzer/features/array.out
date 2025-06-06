@@ -1,0 +1,38 @@
+//-- array.rv --
+[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [Array]
+            [Int 1]
+            [Int 2]
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Int 0]
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Int 1]
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Unary minus]
+                [Int 1]
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Unary minus]
+                [Int 2]
+    [Variable declaration index: 2, scope: local]
+        [Array]
+            [Int 1]
+            [Int 2]
+
+

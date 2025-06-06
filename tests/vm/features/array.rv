@@ -3,21 +3,25 @@ struct Point {
 }
 
 fn main() {
+    // Index test
+    var arr: []int = [1, 2,]
+
+    print arr[0]
+    print arr[1]
+    print arr[-1]
+    print arr[-2]
+
     var pt1 = Point{x=1, y=2}
     var pt2 = Point{x=3, y=4}
 
+    // Object array test
     var vertex = [pt1, pt2]
     print vertex
     print vertex[0]
     print vertex[0].x
+    // Here, we test that we do a deep copy and not just passing reference
     pt1.x = 9
     print pt1.x
     print vertex[0].x
-
-    var s = "pipou"
-    var arr = [s]
-    print arr[0]
-    s += "tom"
-    print arr[0]
 }
 

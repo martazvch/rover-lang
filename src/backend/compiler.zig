@@ -588,11 +588,13 @@ const Compiler = struct {
     // getMember has two way of functionning:
     // - If we're chaining fields accesslike a.b.c.d, we compile the Op code before
     //   so that the Vm can resolve all of them without pushing/poping the stack
-    // - If there's a method call in-between, we have to resolve the call first
+    // - If there's a method call or an array access in-between, we have to resolve it first,
     //   resulting in interacting with the top value of the stack after the call
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
-        if (self.manager.instr_data[self.manager.instr_idx] == .call) {
-            // We compile the call first
+        const member_data = self.getData();
+
+        if (member_data == .call or member_data == .array_access) {
+            // We compile the call/array access first
             try self.compileInstr();
 
             self.writeOpAndByte(

@@ -218,12 +218,12 @@ fn execute(self: *Self) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                const array = self.stack.peekRef(0).obj.as(ObjArray);
+                const array = self.stack.pop().obj.as(ObjArray);
                 const final: usize = if (index >= 0)
                     @intCast(index)
                 else b: {
                     const tmp: usize = @abs(index);
-                    if (tmp > array.values.items.len - 1) @panic("Out of bound");
+                    if (tmp > array.values.items.len) @panic("Out of bound");
 
                     break :b array.values.items.len - tmp;
                 };

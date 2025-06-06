@@ -2,6 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
+const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const options = @import("options");
 
@@ -16,12 +17,15 @@ const ObjInstance = Obj.ObjInstance;
 const ObjBoundMethod = Obj.ObjBoundMethod;
 const Module = @import("../Pipeline.zig").Module;
 
+const oom = @import("../utils.zig").oom;
+
 vm: *Vm,
 parent_allocator: Allocator,
 grays: std.ArrayList(*Obj),
 bytes_allocated: usize,
 next_gc: usize,
 active: bool,
+tmp_roots: ArrayListUnmanaged(*Obj) = .{},
 
 const Self = @This();
 const GROW_FACTOR = 2;
@@ -39,10 +43,22 @@ pub fn init(parent_allocator: Allocator) Self {
 
 pub fn deinit(self: *Self) void {
     self.grays.deinit();
+    self.tmp_roots.deinit(self.vm.allocator);
 }
 
 pub fn link(self: *Self, vm: *Vm) void {
     self.vm = vm;
+}
+
+/// Pushes a reference to an object that's being created, to allow marking it as root
+/// even if it's not finished yet and not in any root location
+pub fn pushTmpRoot(self: *Self, root: *Obj) void {
+    self.tmp_roots.append(self.vm.allocator, root) catch oom();
+}
+
+/// Removes a temporary reference to a root object
+pub fn popTmpRoot(self: *Self) void {
+    _ = self.tmp_roots.pop();
 }
 
 pub fn collect(self: *Self) Allocator.Error!void {
@@ -70,6 +86,10 @@ pub fn collect(self: *Self) Allocator.Error!void {
 }
 
 fn markRoots(self: *Self) Allocator.Error!void {
+    for (self.tmp_roots.items) |root| {
+        try self.markObject(root);
+    }
+
     var value = self.vm.stack.values[0..].ptr;
 
     while (value != self.vm.stack.top) : (value += 1) {
