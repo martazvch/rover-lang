@@ -4,7 +4,7 @@
 OP_NAKED_RETURN
 
 -- len --
-OP_GET_FIELD index 0 of next variable
+OP_GET_FIELD_CHAIN index 0 of next variable
 OP_GET_LOCAL index 0
 OP_GET_LOCAL index 1
 OP_ADD_INT

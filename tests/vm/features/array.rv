@@ -6,6 +6,8 @@ struct Data {
     list: []float,
 }
 
+fn getIdx() -> int { 2 }
+
 fn main() {
     // Index test
     var arr: []int = [1, 2,]
@@ -30,5 +32,8 @@ fn main() {
 
     var data = Data{list=[1., 4., 567.43]}
     print data.list
+    print data.list[getIdx()]
+    data.list[getIdx() - 1] = 65.
+    print data.list[1]
 }
 

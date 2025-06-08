@@ -200,7 +200,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
             switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
-                .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
+                .array_access, .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
                 .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
                 else => {},
             }
@@ -501,14 +501,18 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
 /// Read the two next bytes as `scope` then `index` then get value from according scope
 inline fn getValueFromScope(self: *Self, frame: *CallFrame) *Value {
     const scope: OpCode = @enumFromInt(frame.readByte());
+
+    // Check before because get field reads a byte frome ip
+    if (scope == .get_field_chain) return self.getField(frame);
+
     const idx = frame.readByte();
 
-    return if (scope == .get_global)
+    return if (scope == .get_local)
+        &frame.slots[idx]
+    else if (scope == .get_global)
         &self.module.globals[idx]
-    else if (scope == .get_heap)
-        &self.heap_vars[idx]
     else
-        &frame.slots[idx];
+        &self.heap_vars[idx];
 }
 
 /// Allow to perform multiple field accesses without pushing/poping the stack

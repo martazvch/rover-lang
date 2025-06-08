@@ -1,35 +1,27 @@
-struct Point {
-    x, y: int
+struct Foo {
+    arr: []int,
 }
 
-struct Data {
-    list: []float,
+fn getIdx() -> int {
+    2
 }
 
 fn main() {
-    // Index test
-    var arr: []int = [1, 2,]
+    var arr: []int = [1, 2, 3,]
 
     print arr[0]
     print arr[1]
     print arr[-1]
     print arr[-2]
 
-    var pt1 = Point{x=1, y=2}
-    var pt2 = Point{x=3, y=4}
+    // Without type
+    var arr2 = [1, 2,]
 
-    // Object array test
-    var vertex = [pt1, pt2]
-    print vertex
-    print vertex[0]
-    print vertex[0].x
-    // Here, we test that we do a deep copy and not just passing reference
-    pt1.x = 9
-    print pt1.x
-    print vertex[0].x
+    arr[2] = 4
+    arr[getIdx()] = 2
 
-    var data = Data{list=[1., 4., 567.43]}
-    print data.list
+    var foo = Foo{arr=[6, 7, getIdx()]}
+    foo.arr[getIdx()] = -9
 }
 
 

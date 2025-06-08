@@ -71,7 +71,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", false, offset, writer),
-        .get_field_chain => self.getMember("OP_GET_FIELD", true, offset, writer),
+        .get_field_chain => self.getMember("OP_GET_FIELD_CHAIN", true, offset, writer),
         .get_global => self.getGlobal(offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),

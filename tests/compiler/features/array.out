@@ -1,37 +1,70 @@
-// ---- array.rv ----
+//---- array.rv ----
+
+-- getIdx --
+OP_CONSTANT index 0, value 2
+OP_RETURN
 
 -- main --
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2
-OP_ARRAY index 2
+OP_CONSTANT index 2, value 3
+OP_ARRAY index 3
 
-OP_CONSTANT index 2, value 0
-OP_ARRAY_ACCESS of next variable
-OP_GET_LOCAL index 1
-OP_PRINT
-
-OP_CONSTANT index 3, value 1
+OP_CONSTANT index 3, value 0
 OP_ARRAY_ACCESS of next variable
 OP_GET_LOCAL index 1
 OP_PRINT
 
 OP_CONSTANT index 4, value 1
+OP_ARRAY_ACCESS of next variable
+OP_GET_LOCAL index 1
+OP_PRINT
+
+OP_CONSTANT index 5, value 1
 OP_NEGATE_INT
 OP_ARRAY_ACCESS of next variable
 OP_GET_LOCAL index 1
 OP_PRINT
 
-OP_CONSTANT index 5, value 2
+OP_CONSTANT index 6, value 2
 OP_NEGATE_INT
 OP_ARRAY_ACCESS of next variable
 OP_GET_LOCAL index 1
 OP_PRINT
 
-OP_CONSTANT index 6, value 1
-OP_CONSTANT index 7, value 2
+OP_CONSTANT index 7, value 1
+OP_CONSTANT index 8, value 2
 OP_ARRAY index 2
+
+OP_CONSTANT index 9, value 4
+OP_CONSTANT index 10, value 2
+OP_ARRAY_ASSIGN of next variable
+OP_GET_LOCAL index 1
+
+OP_CONSTANT index 11, value 2
+OP_GET_GLOBAL index 1, <fn getIdx>
+OP_CALL index 0
+OP_ARRAY_ASSIGN of next variable
+OP_GET_LOCAL index 1
+
+OP_GET_GLOBAL index 0, <structure Foo>
+OP_CONSTANT index 12, value 6
+OP_CONSTANT index 13, value 7
+OP_GET_GLOBAL index 1, <fn getIdx>
+OP_CALL index 0
+OP_ARRAY index 3
+OP_STRUCT_LIT index 1
+
+OP_CONSTANT index 14, value 9
+OP_NEGATE_INT
+OP_GET_GLOBAL index 1, <fn getIdx>
+OP_CALL index 0
+OP_ARRAY_ASSIGN of next variable
+OP_GET_FIELD_CHAIN index 0 of next variable
+
+OP_GET_LOCAL index 3
 OP_NAKED_RETURN
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+OP_GET_GLOBAL index 2, <fn main>
 OP_CALL index 0

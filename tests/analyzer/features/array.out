@@ -1,21 +1,30 @@
 //-- array.rv --
-[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+[Structure declaration Foo, index: 0, scope: global]
+
+[Fn declaration getIdx, index: 1, scope: global, return kind: implicit_value]
+    [Int 2]
+
+[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
         [Array]
             [Int 1]
             [Int 2]
+            [Int 3]
+
     [Print]
         [Array access]
             - index
             [Int 0]
             - array
             [Variable index: 1, scope: local]
+
     [Print]
         [Array access]
             - index
             [Int 1]
             - array
             [Variable index: 1, scope: local]
+
     [Print]
         [Array access]
             - index
@@ -23,6 +32,7 @@
                 [Int 1]
             - array
             [Variable index: 1, scope: local]
+
     [Print]
         [Array access]
             - index
@@ -30,9 +40,46 @@
                 [Int 2]
             - array
             [Variable index: 1, scope: local]
+
     [Variable declaration index: 2, scope: local]
         [Array]
             [Int 1]
             [Int 2]
+
+    [Int 4]
+    [Array assignment]
+        - index
+        [Int 2]
+        - variable
+        [Variable index: 1, scope: local]
+
+    [Int 2]
+    [Array assignment]
+        - index
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+        - variable
+        [Variable index: 1, scope: local]
+
+    [Variable declaration index: 3, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Array]
+                [Int 6]
+                [Int 7]
+                [Fn call arity: 0, call_tag: function]
+                    [Variable index: 1, scope: global]
+
+    [Unary minus]
+        [Int 9]
+    [Array assignment]
+        - index
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+        - variable
+        [Field access 0]
+            [Variable index: 3, scope: local]
 
 
