@@ -1,6 +1,19 @@
-fn main() {
-    var arr1 = [1, 2]
+struct Foo {
+    x: int = 0,
+    //y: float = [1., 2.] // TODO:error
+    y: []float
+}
 
-    arr1[0] = 9
+fn main() {
+    var foo = Foo{y=[1., 2.]}
+    //foo.x = 9
+
+    print foo.y[1]
+foo.y[1] = 8
+    print foo.y
+        //var a = [1, 2]
+        //print a[0]
+        //a[0] = 9
+        //print a[0]
 }
 

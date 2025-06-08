@@ -217,8 +217,8 @@ fn execute(self: *Self) !void {
                 self.stack.push(Value.makeObj(array.asObj()));
             },
             .array_access => {
-                const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(ObjArray);
+                const index = self.stack.pop().int;
                 const final: usize = if (index >= 0)
                     @intCast(index)
                 else b: {
@@ -232,6 +232,22 @@ fn execute(self: *Self) !void {
                 if (index > array.values.items.len - 1) @panic("Out of bound access");
 
                 self.stack.push(array.values.items[final]);
+            },
+            .array_assign => {
+                const array_index: usize = @intCast(self.stack.pop().int);
+                const value = self.stack.pop();
+                const scope: OpCode = @enumFromInt(frame.readByte());
+                const idx = frame.readByte();
+
+                // TODO: put in a function to share with other part of the Vm
+                const array = if (scope == .get_global)
+                    &self.module.globals[idx]
+                else if (scope == .get_heap)
+                    &self.heap_vars[idx]
+                else
+                    &frame.slots[idx];
+
+                array.obj.as(ObjArray).values.items[array_index] = value;
             },
             .add_float => {
                 const rhs = self.stack.pop().float;
@@ -283,6 +299,7 @@ fn execute(self: *Self) !void {
             .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(ObjString) == self.stack.pop().obj.as(ObjString))),
             .false => self.stack.push(Value.false_),
             .field_assign => {
+                // // TODO: don't emit it so we don't have to skip it?
                 // Skips the 'get_field' or 'bound_method' code
                 frame.ip += 1;
                 const field = self.getField(frame);

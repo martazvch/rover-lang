@@ -202,6 +202,7 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
     }
 
     const variable_data = switch (self.next()) {
+        .array_access => return self.arrayAssignment(),
         .identifier => |*variable| variable,
         .identifier_id => |idx| &self.instr_data[idx].var_decl.variable,
         .member => |*member| return self.fieldAssignment(member),
@@ -211,6 +212,23 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
     try self.writer.print("[Assignment index: {}, scope: {s}]\n", .{
         variable_data.index, @tagName(variable_data.scope),
     });
+}
+
+fn arrayAssignment(self: *Self) Error!void {
+    self.indent();
+    try self.writer.writeAll("[Array assignment]\n");
+
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+
+    // Index
+    self.indent();
+    try self.writer.writeAll("- index\n");
+    try self.parseInstr();
+    // Array
+    self.indent();
+    try self.writer.writeAll("- variable\n");
+    try self.parseInstr();
 }
 
 fn fieldAssignment(self: *Self, data: *const Instruction.Member) Error!void {

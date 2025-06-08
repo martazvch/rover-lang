@@ -264,11 +264,8 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         },
         // TODO: check if field type is a field, not a method?
         .field => |*e| (try self.field(e)).field,
-        else => |got| {
-            std.debug.print("Got: {any}\n", .{got});
-            std.debug.print("Span: {any}\n", .{self.ast.getSpan(node.assigne)});
-            return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
-        },
+        .array_access => |*e| try self.arrayAccess(e),
+        else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
     if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
@@ -895,14 +892,7 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
-    self.addInstr(.{ .array_access = {} });
-    const arr = try self.analyzeExpr(expr.array);
-
-    if (!arr.is(.array)) return self.err(
-        .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
-        self.ast.getSpan(expr.array),
-    );
-
+    const idx = self.reserveInstr();
     const index = try self.analyzeExpr(expr.index);
 
     if (index != .int) return self.err(
@@ -910,7 +900,15 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
         self.ast.getSpan(expr.index),
     );
 
+    const arr = try self.analyzeExpr(expr.array);
+
+    if (!arr.is(.array)) return self.err(
+        .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
+        self.ast.getSpan(expr.array),
+    );
+
     const type_value = arr.getValue();
+    self.setInstr(idx, .{ .array_access = {} });
 
     return self.type_manager.type_infos.items[type_value].array.child;
 }

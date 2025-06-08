@@ -328,7 +328,9 @@ const Compiler = struct {
 
     fn arrayAccess(self: *Self) Error!void {
         const start = self.getStart();
+        // Index
         try self.compileInstr();
+        // Variable
         try self.compileInstr();
         self.writeOp(.array_access, start);
     }
@@ -345,6 +347,7 @@ const Compiler = struct {
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .identifier_id => |idx| &self.manager.instr_data[idx].var_decl.variable,
+            .array_access => return self.arrayAssignment(start),
             .member => |*member| return self.fieldAssignment(member, start),
             else => unreachable,
         };
@@ -361,6 +364,14 @@ const Compiler = struct {
             @intCast(variable_data.index),
             start,
         );
+    }
+
+    fn arrayAssignment(self: *Self, start: usize) Error!void {
+        // Index
+        try self.compileInstr();
+        self.writeOp(.array_assign, start);
+        // Variable
+        try self.compileInstr();
     }
 
     fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
@@ -614,6 +625,7 @@ const Compiler = struct {
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
         const member_data = self.getData();
 
+        // TODO: for array access, we just have to compute the index, not put the entire array on stack
         if (member_data == .call or member_data == .array_access) {
             // We compile the call/array access first
             try self.compileInstr();
