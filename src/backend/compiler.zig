@@ -331,8 +331,8 @@ const Compiler = struct {
         // Index
         try self.compileInstr();
         // Variable
-        try self.compileInstr();
         self.writeOp(.array_access, start);
+        try self.compileInstr();
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {

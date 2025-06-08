@@ -184,11 +184,11 @@ fn arrayAccess(self: *Self) Error!void {
     defer self.indent_level -= 1;
 
     self.indent();
-    try self.writer.writeAll("- array\n");
+    try self.writer.writeAll("- index\n");
     try self.parseInstr();
 
     self.indent();
-    try self.writer.writeAll("- index\n");
+    try self.writer.writeAll("- array\n");
     try self.parseInstr();
 }
 

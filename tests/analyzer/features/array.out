@@ -6,30 +6,30 @@
             [Int 2]
     [Print]
         [Array access]
-            - array
-            [Variable index: 1, scope: local]
             - index
             [Int 0]
-    [Print]
-        [Array access]
             - array
             [Variable index: 1, scope: local]
+    [Print]
+        [Array access]
             - index
             [Int 1]
-    [Print]
-        [Array access]
             - array
             [Variable index: 1, scope: local]
+    [Print]
+        [Array access]
             - index
             [Unary minus]
                 [Int 1]
-    [Print]
-        [Array access]
             - array
             [Variable index: 1, scope: local]
+    [Print]
+        [Array access]
             - index
             [Unary minus]
                 [Int 2]
+            - array
+            [Variable index: 1, scope: local]
     [Variable declaration index: 2, scope: local]
         [Array]
             [Int 1]

@@ -142,9 +142,8 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
     };
 
     self.module = &self.start_module;
-    try self.call(self.module.function, 0);
     self.gc.active = true;
-    try self.execute();
+    try self.execute(self.module.function);
 }
 
 // TODO: put outside of VM, in another module
@@ -173,8 +172,9 @@ pub fn runRepl(self: *Self) !void {
     }
 }
 
-fn execute(self: *Self) !void {
-    var frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+fn execute(self: *Self, entry_point: *ObjFunction) !void {
+    var frame: *CallFrame = undefined;
+    try self.call(&frame, entry_point, 0);
 
     while (true) {
         if (comptime options.print_stack) {
@@ -200,7 +200,7 @@ fn execute(self: *Self) !void {
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
             switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
-                .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
+                .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
                 .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
                 else => {},
             }
@@ -217,8 +217,8 @@ fn execute(self: *Self) !void {
                 self.stack.push(Value.makeObj(array.asObj()));
             },
             .array_access => {
-                const array = self.stack.pop().obj.as(ObjArray);
                 const index = self.stack.pop().int;
+                const array = self.getValueFromScope(frame).obj.as(ObjArray);
                 const final: usize = if (index >= 0)
                     @intCast(index)
                 else b: {
@@ -236,17 +236,7 @@ fn execute(self: *Self) !void {
             .array_assign => {
                 const array_index: usize = @intCast(self.stack.pop().int);
                 const value = self.stack.pop();
-                const scope: OpCode = @enumFromInt(frame.readByte());
-                const idx = frame.readByte();
-
-                // TODO: put in a function to share with other part of the Vm
-                const array = if (scope == .get_global)
-                    &self.module.globals[idx]
-                else if (scope == .get_heap)
-                    &self.heap_vars[idx]
-                else
-                    &frame.slots[idx];
-
+                const array = self.getValueFromScope(frame).obj.as(ObjArray);
                 array.obj.as(ObjArray).values.items[array_index] = value;
             },
             .add_float => {
@@ -270,8 +260,7 @@ fn execute(self: *Self) !void {
             .call => {
                 const args_count = frame.readByte();
                 const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
-                try self.call(callee, args_count);
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                try self.call(&frame, callee, args_count);
             },
             // TODO: Cast could only 'transmute' or bitcast the value on stack to change the union tag
             .cast_to_float => self.stack.push(Value.makeFloat(@floatFromInt(self.stack.pop().int))),
@@ -330,32 +319,14 @@ fn execute(self: *Self) !void {
             },
             .get_static_method => {
                 const method_idx = frame.readByte();
-
-                const structure = blk: {
-                    const scope_op: OpCode = @enumFromInt(frame.readByte());
-                    const idx = frame.readByte();
-
-                    // TODO: avoid logic at runtime
-                    break :blk if (scope_op == .get_global)
-                        &self.module.globals[idx]
-                    else
-                        &frame.slots[idx];
-                };
-                const method = structure.obj.as(ObjStruct).methods[method_idx];
+                const structure = self.getValueFromScope(frame).obj.as(ObjStruct);
+                const method = structure.methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
             },
             .get_struct_default => self.getDefaultValue(frame, ObjStruct),
             .get_symbol => {
                 const symbol_idx = frame.readByte();
-                const scope: OpCode = @enumFromInt(frame.readByte());
-                const module_idx = frame.readByte();
-
-                // TODO: make a method for that and avoid logic at runtime
-                const value = if (scope == .get_global)
-                    &self.module.globals[module_idx]
-                else
-                    &frame.slots[module_idx];
-
+                const value = self.getValueFromScope(frame);
                 self.stack.push(value.module.globals[symbol_idx]);
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
@@ -364,19 +335,10 @@ fn execute(self: *Self) !void {
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .import_call => {
                 const args_count = frame.readByte();
-                const scope: OpCode = @enumFromInt(frame.readByte());
-                const module_idx = frame.readByte();
-
-                // TODO: avoid logic at runtime
-                const module = if (scope == .get_global)
-                    self.module.globals[module_idx].module
-                else
-                    frame.slots[module_idx].module;
+                const module = self.getValueFromScope(frame).module;
                 self.updateModule(module);
-
                 const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
-                try self.call(callee, args_count);
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                try self.call(&frame, callee, args_count);
             },
             .import_item => {
                 const module_idx = frame.readByte();
@@ -397,17 +359,14 @@ fn execute(self: *Self) !void {
                 const module = self.stack.peek(args_count).module;
                 self.updateModule(module);
                 const imported = self.stack.peek(args_count).module.globals[symbol];
-
-                try self.call(imported.obj.as(ObjFunction), args_count);
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                try self.call(&frame, imported.obj.as(ObjFunction), args_count);
             },
             .invoke_static => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
                 const structure = self.stack.peekRef(args_count).obj.as(ObjStruct);
                 const function = structure.methods[method_idx];
-                try self.call(function, args_count);
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+                try self.call(&frame, function, args_count);
             },
             .jump => {
                 const jump = frame.readShort();
@@ -539,6 +498,19 @@ fn execute(self: *Self) !void {
     }
 }
 
+/// Read the two next bytes as `scope` then `index` then get value from according scope
+inline fn getValueFromScope(self: *Self, frame: *CallFrame) *Value {
+    const scope: OpCode = @enumFromInt(frame.readByte());
+    const idx = frame.readByte();
+
+    return if (scope == .get_global)
+        &self.module.globals[idx]
+    else if (scope == .get_heap)
+        &self.heap_vars[idx]
+    else
+        &frame.slots[idx];
+}
+
 /// Allow to perform multiple field accesses without pushing/poping the stack
 fn getField(self: *Self, frame: *CallFrame) *Value {
     const field_idx = frame.readByte();
@@ -565,17 +537,7 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
 fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction } {
     const method_idx = frame.readByte();
 
-    const instance = blk: {
-        const scope_op: OpCode = @enumFromInt(frame.readByte());
-        const idx = frame.readByte();
-
-        break :blk if (scope_op == .get_global)
-            &self.module.globals[idx]
-        else if (scope_op == .get_heap)
-            &self.heap_vars[idx]
-        else
-            &frame.slots[idx];
-    };
+    const instance = self.getValueFromScope(frame);
     const receiver = instance;
     const method = instance.obj.as(ObjInstance).parent.methods[method_idx];
 
@@ -584,10 +546,7 @@ fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction }
 
 fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver: Value, method: *ObjFunction) !void {
     self.stack.peekRef(args_count).* = receiver;
-    try self.call(method, args_count);
-
-    // If call success, we need to to set frame pointer back
-    frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
+    try self.call(frame, method, args_count);
 }
 
 fn updateModule(self: *Self, module: *Module) void {
@@ -632,17 +591,19 @@ fn strMul(self: *Self, str: *const ObjString, factor: i64) void {
     self.stack.push(Value.makeObj(ObjString.take(self, res).asObj()));
 }
 
-fn call(self: *Self, callee: *ObjFunction, args_count: usize) Error!void {
+fn call(self: *Self, frame: **CallFrame, callee: *ObjFunction, args_count: usize) Error!void {
     if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
         return error.StackOverflow;
     }
 
-    const frame = &self.frame_stack.frames[self.frame_stack.count];
+    const new_frame = &self.frame_stack.frames[self.frame_stack.count];
     self.frame_stack.count += 1;
-    frame.function = callee;
-    frame.ip = callee.chunk.code.items.ptr;
+    new_frame.function = callee;
+    new_frame.ip = callee.chunk.code.items.ptr;
     // -1 for the function itself
-    frame.slots = self.stack.top - args_count - 1;
+    new_frame.slots = self.stack.top - args_count - 1;
+
+    frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 }
 
 // PERF: bench avec BoundedArray
