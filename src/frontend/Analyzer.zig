@@ -892,25 +892,58 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
+    if (expr.array.* == .array_access) {
+        return self.arrayAccessChain(expr);
+    }
+
     const idx = self.reserveInstr();
-    const index = try self.analyzeExpr(expr.index);
-
-    if (index != .int) return self.err(
-        .{ .non_integer_index = .{ .found = self.getTypeName(index) } },
-        self.ast.getSpan(expr.index),
-    );
-
     const arr = try self.analyzeExpr(expr.array);
+    const type_value = arr.getValue();
 
     if (!arr.is(.array)) return self.err(
         .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
         self.ast.getSpan(expr.array),
     );
 
-    const type_value = arr.getValue();
+    try self.expectArrayIndex(expr.index);
     self.setInstr(idx, .{ .array_access = {} });
 
     return self.type_manager.type_infos.items[type_value].array.child;
+}
+
+fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
+    const idx = self.reserveInstr();
+    // We use 1 here because we're gonna compile last index too at the end
+    // of the chain, resulting in 1 more length that the chain
+    var depth: usize = 1;
+    var current = expr;
+
+    while (current.array.* == .array_access) : (depth += 1) {
+        try self.expectArrayIndex(current.index);
+        current = &current.array.array_access;
+    }
+
+    try self.expectArrayIndex(current.index);
+    const arr = try self.analyzeExpr(current.array);
+    self.setInstr(idx, .{ .array_access_chain = depth });
+
+    var final_type: Type = arr;
+    for (0..depth) |_| {
+        const type_value = final_type.getValue();
+        final_type = self.type_manager.type_infos.items[type_value].array.child;
+    }
+
+    return final_type;
+}
+
+/// Analyze the expression and return an error if the type isn't an integer
+fn expectArrayIndex(self: *Self, expr: *const Expr) Error!void {
+    const index = try self.analyzeExpr(expr);
+
+    if (index != .int) return self.err(
+        .{ .non_integer_index = .{ .found = self.getTypeName(index) } },
+        self.ast.getSpan(expr),
+    );
 }
 
 fn binop(self: *Self, expr: *const Ast.Binop) Error!Type {

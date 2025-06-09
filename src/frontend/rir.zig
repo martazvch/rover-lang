@@ -9,6 +9,7 @@ pub const Instruction = struct {
     pub const Data = union(enum) {
         array: Array,
         array_access: void,
+        array_access_chain: usize,
         assignment: Assignment,
         binop: Binop,
         block: Block,

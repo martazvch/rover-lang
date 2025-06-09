@@ -113,6 +113,7 @@ fn parseInstr(self: *Self) !void {
     try switch (self.next()) {
         .array => |*data| self.array(data),
         .array_access => self.arrayAccess(),
+        .array_access_chain => |depth| self.arrayAccessChain(depth),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
@@ -184,12 +185,30 @@ fn arrayAccess(self: *Self) Error!void {
     defer self.indent_level -= 1;
 
     self.indent();
+    try self.writer.writeAll("- array\n");
+    try self.parseInstr();
+
+    self.indent();
     try self.writer.writeAll("- index\n");
     try self.parseInstr();
+}
+
+fn arrayAccessChain(self: *Self, depth: usize) Error!void {
+    self.indent();
+    try self.writer.writeAll("[Array chain access]\n");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
 
     self.indent();
     try self.writer.writeAll("- array\n");
     try self.parseInstr();
+
+    self.indent();
+    try self.writer.writeAll("- indicies\n");
+
+    for (0..depth) |_| {
+        try self.parseInstr();
+    }
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
@@ -221,13 +240,13 @@ fn arrayAssignment(self: *Self) Error!void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    // Index
-    self.indent();
-    try self.writer.writeAll("- index\n");
-    try self.parseInstr();
     // Array
     self.indent();
     try self.writer.writeAll("- variable\n");
+    try self.parseInstr();
+    // Index
+    self.indent();
+    try self.writer.writeAll("- index\n");
     try self.parseInstr();
 }
 

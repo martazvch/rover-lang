@@ -48,8 +48,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
         .array => self.indexInstruction("OP_ARRAY", offset, writer),
-        .array_access => self.simpleInstruction("OP_ARRAY_ACCESS of next variable", offset, writer),
-        .array_assign => self.arrayAssign(offset, writer),
+        .array_access => self.simpleInstruction("OP_ARRAY_ACCESS", offset, writer),
+        .array_access_chain => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN", offset, writer),
+        .array_assign => self.simpleInstruction("OP_ARRAY_ASSIGN", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", true, offset, writer),
@@ -200,18 +201,6 @@ fn jumpInstruction(
     }
 
     return offset + 3;
-}
-
-fn arrayAssign(self: *const Self, offset: usize, writer: anytype) !usize {
-    const text = "OP_ARRAY_ASSIGN";
-
-    if (self.render_mode == .Test) {
-        try writer.print("{s} of next variable\n", .{text});
-    } else {
-        try writer.print("{s:<24} of next variable\n", .{text});
-    }
-
-    return offset + 1;
 }
 
 fn for_instruction(

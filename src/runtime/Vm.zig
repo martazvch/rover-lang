@@ -172,6 +172,20 @@ pub fn runRepl(self: *Self) !void {
     }
 }
 
+fn checkArrayIndex(array: *const ObjArray, index: i64) usize {
+    // TODO: runtime error desactivable with release fast mode
+    if (index > array.values.items.len - 1) @panic("Out of bound access");
+
+    return if (index >= 0)
+        @intCast(index)
+    else b: {
+        const tmp: usize = @abs(index);
+        if (tmp > array.values.items.len) @panic("Out of bound");
+
+        break :b array.values.items.len - tmp;
+    };
+}
+
 fn execute(self: *Self, entry_point: *ObjFunction) !void {
     var frame: *CallFrame = undefined;
     try self.call(&frame, entry_point, 0);
@@ -200,7 +214,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
             switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
-                .array_access, .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
+                .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
                 .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
                 else => {},
             }
@@ -218,26 +232,29 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                const array = self.getValueFromScope(frame).obj.as(ObjArray);
-                const final: usize = if (index >= 0)
-                    @intCast(index)
-                else b: {
-                    const tmp: usize = @abs(index);
-                    if (tmp > array.values.items.len) @panic("Out of bound");
-
-                    break :b array.values.items.len - tmp;
-                };
-
-                // TODO: runtime error desactivable with release fast mode
-                if (index > array.values.items.len - 1) @panic("Out of bound access");
+                const array = self.stack.pop().obj.as(ObjArray);
+                const final = checkArrayIndex(array, index);
 
                 self.stack.push(array.values.items[final]);
             },
+            .array_access_chain => {
+                const depth = frame.readByte();
+                var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+
+                for (0..depth - 1) |_| {
+                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                    tmp = tmp.values.items[idx].obj.as(ObjArray);
+                }
+
+                const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                self.stack.push(tmp.values.items[idx]);
+            },
             .array_assign => {
-                const array_index: usize = @intCast(self.stack.pop().int);
+                const index = self.stack.pop().int;
+                const array = self.stack.pop().obj.as(ObjArray);
+                const final = checkArrayIndex(array, index);
                 const value = self.stack.pop();
-                const array = self.getValueFromScope(frame).obj.as(ObjArray);
-                array.obj.as(ObjArray).values.items[array_index] = value;
+                array.obj.as(ObjArray).values.items[final] = value;
             },
             .add_float => {
                 const rhs = self.stack.pop().float;

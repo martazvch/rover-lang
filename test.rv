@@ -1,27 +1,36 @@
-struct Foo {
-    arr: []int,
-}
-
-fn getIdx() -> int {
-    2
-}
-
+// struct Foo {
+//     arr: []int,
+// }
+//
+// fn getIdx() -> int {
+//     2
+// }
+//
 fn main() {
-    var arr: []int = [1, 2, 3,]
+    // var arr: []int = [1, 2, 3,]
+    //
+    // print arr[0]
+    // print arr[1]
+    // print arr[-1]
+    // print arr[-2]
+    //
+    // // Without type
+    // var arr2 = [1, 2,]
+    //
+    // arr[2] = 4
+    // arr[getIdx()] = 2
+    //
+    // var foo = Foo{arr=[6, 7, getIdx()]}
+    // print foo.arr[0]
+    // foo.arr[getIdx()] = -9
+    //
 
-    print arr[0]
-    print arr[1]
-    print arr[-1]
-    print arr[-2]
-
-    // Without type
-    var arr2 = [1, 2,]
-
-    arr[2] = 4
-    arr[getIdx()] = 2
-
-    var foo = Foo{arr=[6, 7, getIdx()]}
-    foo.arr[getIdx()] = -9
+    var doubleArr = [[1, 2, 3], [4, 5, 6]]
+    // print doubleArr
+    // print doubleArr[1]
+    print doubleArr[1][2]
+    doubleArr[1][1] = 98
+    // print doubleArr[1][1]
 }
 
 
