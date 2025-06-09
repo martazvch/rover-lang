@@ -270,8 +270,8 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => self.arrayAccess(),
-            .array_access_chain => |depth| self.arrayAccessChain(depth),
+            .array_access => self.compileArrayInstr(.access, self.getStart()),
+            .array_access_chain => |depth| self.compileArrayChain(.access, depth, self.getStart()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
@@ -327,21 +327,22 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
-    // TODO: group this one with arrayAssign
-    fn arrayAccess(self: *Self) Error!void {
-        const start = self.getStart();
-
+    fn compileArrayInstr(self: *Self, tag: enum { access, assign }, start: usize) Error!void {
         // Variable
         try self.compileInstr();
         // Index
         try self.compileInstr();
-        self.writeOp(.array_access, start);
+
+        self.writeOp(
+            switch (tag) {
+                .access => .array_access,
+                .assign => .array_assign,
+            },
+            start,
+        );
     }
 
-    // TODO: group this one with a chain assign
-    fn arrayAccessChain(self: *Self, depth: usize) Error!void {
-        const start = self.getStart();
-
+    fn compileArrayChain(self: *Self, tag: enum { access, assign }, depth: usize, start: usize) Error!void {
         // Indicies
         for (0..depth) |_| {
             try self.compileInstr();
@@ -351,7 +352,14 @@ const Compiler = struct {
         try self.compileInstr();
 
         // TODO: protect the cast
-        self.writeOpAndByte(.array_access_chain, @intCast(depth), start);
+        self.writeOpAndByte(
+            switch (tag) {
+                .access => .array_access_chain,
+                .assign => .array_assign_chain,
+            },
+            @intCast(depth),
+            start,
+        );
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
@@ -366,8 +374,8 @@ const Compiler = struct {
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .identifier_id => |idx| &self.manager.instr_data[idx].var_decl.variable,
-            .array_access => return self.arrayAssignment(start),
-            .array_access_chain => unreachable,
+            .array_access => return self.compileArrayInstr(.assign, start),
+            .array_access_chain => |depth| return self.compileArrayChain(.assign, depth, start),
             .member => |*member| return self.fieldAssignment(member, start),
             else => unreachable,
         };
@@ -384,14 +392,6 @@ const Compiler = struct {
             @intCast(variable_data.index),
             start,
         );
-    }
-
-    fn arrayAssignment(self: *Self, start: usize) Error!void {
-        // Variable
-        try self.compileInstr();
-        // Index
-        try self.compileInstr();
-        self.writeOp(.array_assign, start);
     }
 
     fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
@@ -646,7 +646,7 @@ const Compiler = struct {
         const member_data = self.getData();
 
         // TODO: for array access, we just have to compute the index, not put the entire array on stack
-        if (member_data == .call or member_data == .array_access) {
+        if (member_data == .call or member_data == .array_access or member_data == .array_access_chain) {
             // We compile the call/array access first
             try self.compileInstr();
 

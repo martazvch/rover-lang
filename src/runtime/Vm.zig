@@ -224,6 +224,14 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
         const op: OpCode = @enumFromInt(instruction);
 
         switch (op) {
+            .add_float => {
+                const rhs = self.stack.pop().float;
+                self.stack.peekRef(0).float += rhs;
+            },
+            .add_int => {
+                const rhs = self.stack.pop().int;
+                self.stack.peekRef(0).int += rhs;
+            },
             .array => {
                 const len = frame.readByte();
                 self.stack.top -= len;
@@ -256,13 +264,17 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const value = self.stack.pop();
                 array.obj.as(ObjArray).values.items[final] = value;
             },
-            .add_float => {
-                const rhs = self.stack.pop().float;
-                self.stack.peekRef(0).float += rhs;
-            },
-            .add_int => {
-                const rhs = self.stack.pop().int;
-                self.stack.peekRef(0).int += rhs;
+            .array_assign_chain => {
+                const depth = frame.readByte();
+                var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+
+                for (0..depth - 1) |_| {
+                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                    tmp = tmp.values.items[idx].obj.as(ObjArray);
+                }
+
+                const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                tmp.values.items[idx] = self.stack.pop();
             },
             .bound_method => {
                 const receiver, const method = self.getBoundMethod(frame);

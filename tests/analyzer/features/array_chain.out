@@ -1,0 +1,147 @@
+//-- array_chain.rv --
+
+[Structure declaration Point, index: 0, scope: global]
+[Structure declaration Poly, index: 1, scope: global]
+[Structure declaration Object, index: 2, scope: global]
+    - default values
+    [String object]
+
+[Fn declaration main, index: 3, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Int 1]
+            [Int 2]
+            [Array]
+                [Array]
+                    [Int 1]
+                    [Int 2]
+                [Array]
+                    [Int 3]
+                    [Int 4]
+    [Variable declaration index: 2, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Int 5]
+            [Int 6]
+            [Array]
+                [Array]
+                    [Int 7]
+                    [Int 8]
+                [Array]
+                    [Int 9]
+                    [Int 10]
+    [Variable declaration index: 3, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Int 11]
+            [Int 12]
+            [Array]
+                [Array]
+                    [Int 13]
+                    [Int 14]
+                [Array]
+                    [Int 15]
+                    [Int 16]
+    [Variable declaration index: 4, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Int 17]
+            [Int 18]
+            [Array]
+                [Array]
+                    [Int 19]
+                    [Int 20]
+                [Array]
+                    [Int 21]
+                    [Int 22]
+    [Variable declaration index: 5, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 1, scope: global]
+            - args
+            [Array]
+                [Array]
+                    [Variable index: 1, scope: local]
+                    [Variable index: 2, scope: local]
+                [Array]
+                    [Variable index: 3, scope: local]
+                    [Variable index: 4, scope: local]
+    [Variable declaration index: 6, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 2, scope: global]
+            - args
+            [Variable index: 5, scope: local]
+    [Print]
+        [Array chain access]
+            - array
+            [Int 0]
+            - indicies
+            [Int 1]
+            [Field access 0]
+                [Field access 0]
+                    [Variable index: 6, scope: local]
+    [Print]
+        [Field access 0]
+            [Array chain access]
+                - array
+                [Int 0]
+                - indicies
+                [Int 1]
+                [Field access 0]
+                    [Field access 0]
+                        [Variable index: 6, scope: local]
+    [Print]
+        [Array access]
+            - array
+            [Field access 2]
+                [Array chain access]
+                    - array
+                    [Int 0]
+                    - indicies
+                    [Int 1]
+                    [Field access 0]
+                        [Field access 0]
+                            [Variable index: 6, scope: local]
+            - index
+            [Int 0]
+    [Print]
+        [Array chain access]
+            - array
+            [Int 1]
+            - indicies
+            [Int 1]
+            [Field access 2]
+                [Array chain access]
+                    - array
+                    [Int 0]
+                    - indicies
+                    [Int 1]
+                    [Field access 0]
+                        [Field access 0]
+                            [Variable index: 6, scope: local]
+    [Array]
+        [Int 55]
+        [Int 66]
+    [Array assignment]
+        - variable
+        [Field access 2]
+            [Array chain access]
+                - array
+                [Int 0]
+                - indicies
+                [Int 1]
+                [Field access 0]
+                    [Field access 0]
+                        [Variable index: 6, scope: local]
+        - index
+        [Int 0]

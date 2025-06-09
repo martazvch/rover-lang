@@ -28,4 +28,3 @@ fn main() {
 
     obj.poly.vertex[1][0].past[0] = [55, 66]
 }
-

@@ -55,6 +55,7 @@ pub const OpCode = enum(u8) {
     array,
     array_access,
     array_access_chain,
+    array_assign_chain,
     array_assign,
     add_int,
     add_float,

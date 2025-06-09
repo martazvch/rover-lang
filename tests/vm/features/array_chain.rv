@@ -26,6 +26,10 @@ fn main() {
     print obj.poly.vertex[1][0].past[0]
     print obj.poly.vertex[1][0].past[1][1]
 
+    // Don't change
+    p3.past = [[11, 22], [33, 44]]
+    print obj.poly.vertex[1][0].past[0]
+    
     obj.poly.vertex[1][0].past[0] = [55, 66]
+    print obj.poly.vertex[1][0].past
 }
-

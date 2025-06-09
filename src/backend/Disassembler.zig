@@ -50,6 +50,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .array => self.indexInstruction("OP_ARRAY", offset, writer),
         .array_access => self.simpleInstruction("OP_ARRAY_ACCESS", offset, writer),
         .array_access_chain => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN", offset, writer),
+        .array_assign_chain => self.indexInstruction("OP_ARRAY_ASSIGN_CHAIN", offset, writer),
         .array_assign => self.simpleInstruction("OP_ARRAY_ASSIGN", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
