@@ -13,7 +13,8 @@ const Vm = @import("Vm.zig");
 
 kind: ObjKind,
 next: ?*Obj,
-is_marked: bool,
+is_marked: bool = false,
+ref_count: usize = 0,
 
 const Obj = @This();
 
@@ -32,11 +33,7 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: ObjKind) *T {
     comptime assert(@hasDecl(T, "asObj"));
 
     const ptr = vm.gc_alloc.create(T) catch oom();
-    ptr.obj = .{
-        .kind = kind,
-        .next = vm.objects,
-        .is_marked = false,
-    };
+    ptr.obj = .{ .kind = kind, .next = vm.objects };
 
     vm.objects = &ptr.obj;
 
@@ -126,6 +123,7 @@ pub const ObjArray = struct {
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
 
+        // TODO: with cow, no need to deep copy anymore?
         for (values) |val| {
             obj.values.appendAssumeCapacity(val.deepCopy(vm));
         }

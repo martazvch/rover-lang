@@ -8,7 +8,7 @@ pub const Instruction = struct {
 
     pub const Data = union(enum) {
         array: Array,
-        array_access: void,
+        array_access: ArrayAccess,
         array_access_chain: usize,
         assignment: Assignment,
         binop: Binop,
@@ -16,23 +16,25 @@ pub const Instruction = struct {
         bool: bool,
         call: Call,
         cast: Type,
-        discard: void,
+        // check_cow,
+        discard,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
         identifier_absolute: usize,
-        identifier_id: usize,
+        identifier_id: IdentifierId,
         @"if": If,
         // TODO: delete later
         imported: Imported,
+        incr_ref_count,
         int: i64,
         item_import: ItemImport,
         member: Member,
         module_import: ModuleImport,
         multiple_var_decl: usize,
         name: usize,
-        null: void,
-        print: void,
+        null,
+        print,
         @"return": Return,
         string: usize,
         struct_decl: StructDecl,
@@ -42,7 +44,7 @@ pub const Instruction = struct {
         use: u64,
         value: Value,
         var_decl: VarDecl,
-        @"while": void,
+        @"while",
     };
 
     pub const Binop = struct {
@@ -92,7 +94,16 @@ pub const Instruction = struct {
         /// [1, 3, 4.5]. Here, we need to backtrack all the casts
         cast_until: usize,
     };
-    pub const Assignment = struct { cast: bool };
+    pub const ArrayAccess = struct { incr_ref: bool };
+    pub const Assignment = struct {
+        /// Casts to float the value before assignment
+        cast: bool,
+        /// When the assigne is a heap allocated object, we check if there are shallow copy
+        /// of it before mutation. If so, check the reference count and perform a deep copy if
+        /// it is referenced
+        check_cow: bool,
+        // incr_ref: bool,
+    };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {
         arity: u8,
@@ -101,6 +112,8 @@ pub const Instruction = struct {
         pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
+    // pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
+    pub const IdentifierId = struct { index: usize };
     pub const If = struct {
         cast: Cast,
         has_else: bool,

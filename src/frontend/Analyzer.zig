@@ -88,6 +88,10 @@ const Variable = struct {
 const State = struct {
     /// In a context that allow partially returning a value
     allow_partial: bool = true,
+    /// Indicates if we should check for reference count increment
+    check_incr_ref: bool = false,
+    /// Should increment reference count of objects (in assignment for example)
+    // incr_ref: bool = false,
     /// In a function
     in_fn: bool = false,
     /// Current function's type
@@ -230,18 +234,20 @@ fn analyzeNode(self: *Self, node: *const Node) Error!Type {
 fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     const last = self.state.allow_partial;
     self.state.allow_partial = false;
-    errdefer self.state.allow_partial = last;
+    defer self.state.allow_partial = last;
 
     var cast = false;
     const index = self.reserveInstr();
 
+    self.state.check_incr_ref = true;
     const value_type = try self.analyzeExpr(node.value);
+    self.state.check_incr_ref = false;
 
     if (value_type == .void) {
         return self.err(.void_assignment, self.ast.getSpan(node.value));
     }
 
-    const assigne_type = switch (node.assigne.*) {
+    const assigne_type, const check_cow = switch (node.assigne.*) {
         .literal => |*e| blk: {
             if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
@@ -260,11 +266,11 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
 
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
-            break :blk assigne.typ;
+            break :blk .{ assigne.typ, false };
         },
         // TODO: check if field type is a field, not a method?
-        .field => |*e| (try self.field(e)).field,
-        .array_access => |*e| try self.arrayAccess(e),
+        .field => |*e| .{ (try self.field(e)).field, false },
+        .array_access => |*e| .{ try self.arrayAccess(e), true },
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
@@ -281,8 +287,13 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         );
     }
 
-    self.state.allow_partial = last;
-    self.setInstr(index, .{ .assignment = .{ .cast = cast } });
+    self.setInstr(index, .{
+        .assignment = .{
+            .cast = cast,
+            .check_cow = check_cow,
+            // .incr_ref = self.state.incr_ref,
+        },
+    });
 }
 
 fn discard(self: *Self, expr: *const Expr) !void {
@@ -485,14 +496,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     } });
 
     return fn_type;
-}
-
-fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
-    self.addInstr(.{ .multiple_var_decl = node.decls.len });
-
-    for (node.decls) |*n| {
-        try self.varDeclaration(n);
-    }
 }
 
 fn print(self: *Self, expr: *const Expr) !void {
@@ -776,8 +779,11 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
 
         const last = self.state.allow_partial;
         self.state.allow_partial = false;
+        self.state.check_incr_ref = true;
 
         const value_type = try self.analyzeExpr(value);
+
+        self.state.check_incr_ref = false;
         self.state.allow_partial = last;
 
         // Void assignment check
@@ -817,6 +823,14 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
 
     if (data.variable.scope == .global) {
         self.addSymbol(name, checked_type);
+    }
+}
+
+fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl) !void {
+    self.addInstr(.{ .multiple_var_decl = node.decls.len });
+
+    for (node.decls) |*n| {
+        try self.varDeclaration(n);
     }
 }
 
@@ -891,10 +905,28 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
     return self.type_manager.getOrCreateArray(value_type);
 }
 
+// TODO: ne pas donner un champ 'check_cow' ou 'incr_ref' a chaque instruction, utiliser
+// global state pour savoir qu'on est dans un assignment, que la partie rhs set un flag
+// 'incr_ref' si l'objet a gauche est heap-allocated et la partie lhs set un flag
+// 'check_cow' si c'est heap allocated.
+// On emet l'instruction 'Assignment' avec ces deux flags et c'est ensuite au compilateur
+// de les utiliser au bon moment en fonction de si l'assignment est un array, identifier, ...
+
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     if (expr.array.* == .array_access) {
         return self.arrayAccessChain(expr);
     }
+
+    // If we are in an array access and that we should increment the reference, we unmark
+    // the flag so that the identifier instruction doesn't trigger a reference increment
+    // but only the last array access, for example:
+    //   var arr = [[1, 2], [3, 4]]
+    //   var arrRef = arr[0]
+    //
+    // Here, we don't want to increment the reference of 'arr' when resolving the identifier,
+    // we want to increment the nested array's reference count
+    const save_check_inr_ref = self.state.check_incr_ref;
+    self.state.check_incr_ref = false;
 
     const idx = self.reserveInstr();
     const arr = try self.analyzeExpr(expr.array);
@@ -906,7 +938,7 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     );
 
     try self.expectArrayIndex(expr.index);
-    self.setInstr(idx, .{ .array_access = {} });
+    self.setInstr(idx, .{ .array_access = .{ .incr_ref = save_check_inr_ref } });
 
     return self.type_manager.type_infos.items[type_value].array.child;
 }
@@ -1491,10 +1523,11 @@ fn resolveIdentifier(self: *Self, name: Ast.TokenIndex, initialized: bool) Error
 
 /// Generates the instruction to get the current variable
 fn makeVariableInstr(self: *Self, variable: *Variable) void {
-    // There is no instruction for 'self'
-    if (variable.name != self.cached_names.self and variable.kind == .variable) {
+    if (variable.kind == .variable) {
         self.checkCapture(variable);
-        self.addInstr(.{ .identifier_id = variable.decl });
+        // TODO: put inside intruction
+        if (self.state.check_incr_ref) self.addInstr(.incr_ref_count);
+        self.addInstr(.{ .identifier_id = .{ .index = variable.decl } });
     } else {
         // In local scopes, we want sometimes to refer to local declarations like:
         // fn main() {
@@ -1510,6 +1543,7 @@ fn makeVariableInstr(self: *Self, variable: *Variable) void {
         if (variable.kind == .decl and self.scope_depth > variable.depth and variable.depth > 0) {
             self.addInstr(.{ .identifier_absolute = @intCast(variable.index) });
         } else {
+            // TODO: document what it can be
             self.addInstr(.{ .identifier = .{
                 .index = @intCast(variable.index),
                 .scope = if (variable.depth > 0) .local else .global,

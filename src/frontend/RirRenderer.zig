@@ -76,7 +76,7 @@ pub fn parse_ir(self: *Self, file_name: []const u8) !void {
     else if (self.static_analyzis and self.warns.len > 0)
         try self.parseErrs()
     else while (self.instr_idx < self.instr_data.len)
-        try self.parseInstr();
+        self.parseInstr();
 
     try self.writer.writeAll("\n");
 }
@@ -109,8 +109,8 @@ fn next(self: *Self) Instruction.Data {
     return self.instr_data[self.instr_idx];
 }
 
-fn parseInstr(self: *Self) !void {
-    try switch (self.next()) {
+fn parseInstr(self: *Self) void {
+    switch (self.next()) {
         .array => |*data| self.array(data),
         .array_access => self.arrayAccess(),
         .array_access_chain => |depth| self.arrayAccessChain(depth),
@@ -120,28 +120,33 @@ fn parseInstr(self: *Self) !void {
         .bool => |data| self.boolInstr(data),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
+        // .check_cow => {
+        //     self.indent();
+        //     try self.tree.appendSlice("[Check cow]\n");
+        // },
         .discard => self.discard(),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
-        .identifier_id => |data| self.identifier(&self.instr_data[data].var_decl.variable),
+        .identifier_id => |*data| self.identifierId(data),
         .identifier_absolute => |data| self.identifierAbsolute(data),
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
+        .incr_ref_count => self.indentAndAppendSlice("[Incr ref count]"),
         .int => |data| self.intInstr(data),
         .item_import => |*data| self.itemImport(data),
+        // .mark_freeze => self.indentAndAppendSlice("[Mark freeze]"),
         .member => |*data| self.getMember(data),
         .module_import => |*data| self.moduleImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
         .null => unreachable,
         .print => {
-            self.indent();
-            try self.tree.appendSlice("[Print]\n");
+            self.indentAndAppendSlice("[Print]");
             self.indent_level += 1;
-            try self.parseInstr();
-            self.indent_level -= 1;
+            defer self.indent_level -= 1;
+            self.parseInstr();
         },
         .@"return" => |*data| self.returnInstr(data),
         .string => |data| self.stringInstr(data),
@@ -153,188 +158,161 @@ fn parseInstr(self: *Self) !void {
         .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
         .@"while" => self.whileInstr(),
-    };
+    }
 }
 
-fn array(self: *Self, data: *const Instruction.Array) Error!void {
-    self.indent();
-    try self.writer.writeAll("[Array]\n");
+fn array(self: *Self, data: *const Instruction.Array) void {
+    self.indentAndAppendSlice("[Array]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
     var cast_count: usize = 0;
 
     for (0..data.len) |i| {
-        try self.parseInstr();
+        self.parseInstr();
 
         if (data.cast_until > 0 and i < data.cast_until - 1) {
-            self.indent();
-            try self.writer.writeAll("[Cast to float]\n");
+            self.indentAndAppendSlice("[Cast to float]");
         }
 
         if (!self.eof() and self.at().* == .cast and cast_count < data.cast_count) {
             cast_count += 1;
-            try self.parseInstr();
+            self.parseInstr();
         }
     }
 }
 
-fn arrayAccess(self: *Self) Error!void {
-    self.indent();
-    try self.writer.writeAll("[Array access]\n");
+fn arrayAccess(self: *Self) void {
+    self.indentAndAppendSlice("[Array access]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    self.indent();
-    try self.writer.writeAll("- array\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- array");
+    self.parseInstr();
 
-    self.indent();
-    try self.writer.writeAll("- index\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- index");
+    self.parseInstr();
 }
 
-fn arrayAccessChain(self: *Self, depth: usize) Error!void {
-    self.indent();
-    try self.writer.writeAll("[Array chain access]\n");
+fn arrayAccessChain(self: *Self, depth: usize) void {
+    self.indentAndAppendSlice("[Array chain access]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    self.indent();
-    try self.writer.writeAll("- array\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- array");
+    self.parseInstr();
 
-    self.indent();
-    try self.writer.writeAll("- indicies\n");
+    self.indentAndAppendSlice("- indicies");
 
     for (0..depth) |_| {
-        try self.parseInstr();
+        self.parseInstr();
     }
 }
 
-fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
+fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     // Value
-    try self.parseInstr();
+    self.parseInstr();
 
     if (data.cast) {
-        self.indent();
-        try self.writer.writeAll("[Cast to float]\n");
+        self.indentAndAppendSlice("[Cast to float]");
     }
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAssignment(),
+        .array_access => return self.arrayAssignment(data.check_cow),
         .identifier => |*variable| variable,
-        .identifier_id => |idx| &self.instr_data[idx].var_decl.variable,
+        .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
         .member => |*member| return self.fieldAssignment(member),
         else => unreachable,
     };
-    self.indent();
-    try self.writer.print("[Assignment index: {}, scope: {s}]\n", .{
+
+    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}]", .{
         variable_data.index, @tagName(variable_data.scope),
     });
+
+    if (data.check_cow) self.indentAndAppendSlice("[Check cow]");
 }
 
-fn arrayAssignment(self: *Self) Error!void {
-    self.indent();
-    try self.writer.writeAll("[Array assignment]\n");
-
+fn arrayAssignment(self: *Self, cehck_cow: bool) void {
+    self.indentAndAppendSlice("[Array assignment]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
     // Array
-    self.indent();
-    try self.writer.writeAll("- variable\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- variable");
+    self.parseInstr();
+    if (cehck_cow) self.indentAndAppendSlice("[Check cow]");
     // Index
-    self.indent();
-    try self.writer.writeAll("- index\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- index");
+    self.parseInstr();
 }
 
-fn fieldAssignment(self: *Self, data: *const Instruction.Member) Error!void {
-    self.indent();
-    try self.writer.writeAll("[Field assignment]\n");
-
+fn fieldAssignment(self: *Self, data: *const Instruction.Member) void {
+    self.indentAndAppendSlice("[Field assignment]");
     self.indent_level += 1;
-    try self.getMember(data);
-    self.indent_level -= 1;
+    defer self.indent_level -= 1;
+    self.getMember(data);
 }
 
-fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
-    self.indent();
-    try self.writer.print(
-        "[Binop type: {s}, cast: {s}]\n",
-        .{ @tagName(data.op), @tagName(data.cast) },
-    );
-
+fn binop(self: *Self, data: *const Instruction.Binop) void {
+    self.indentAndPrintSlice("[Binop type: {s}, cast: {s}]", .{ @tagName(data.op), @tagName(data.cast) });
     self.indent_level += 1;
-    try self.parseInstr();
-    try self.parseInstr();
-    self.indent_level -= 1;
+    defer self.indent_level -= 1;
+    self.parseInstr();
+    self.parseInstr();
 }
 
-fn block(self: *Self, data: *const Instruction.Block) Error!void {
-    self.indent();
-    try self.writer.print(
-        "[Block pop count: {}, is_expr: {}]\n",
-        .{ data.pop_count, data.is_expr },
-    );
+fn block(self: *Self, data: *const Instruction.Block) void {
+    self.indentAndPrintSlice("[Block pop count: {}, is_expr: {}]", .{ data.pop_count, data.is_expr });
 
     self.indent_level += 1;
+    defer self.indent_level -= 1;
     for (0..data.length) |_| {
-        try self.parseInstr();
+        self.parseInstr();
     }
-    self.indent_level -= 1;
 }
 
-fn boolInstr(self: *Self, value: bool) Error!void {
-    self.indent();
-    try self.writer.print("[Bool {}]\n", .{value});
+fn boolInstr(self: *Self, value: bool) void {
+    self.indentAndPrintSlice("[Bool {}]", .{value});
 }
 
-fn cast(self: *Self, typ: Type) Error!void {
-    self.indent();
-    try self.writer.print("[Cast to {s}]\n", .{@tagName(typ)});
+fn cast(self: *Self, typ: Type) void {
+    self.indentAndPrintSlice("[Cast to {s}]", .{@tagName(typ)});
 }
 
-fn discard(self: *Self) Error!void {
-    self.indent();
-    try self.tree.appendSlice("[Discard]\n");
+fn discard(self: *Self) void {
+    self.indentAndAppendSlice("[Discard]");
     self.indent_level += 1;
-    try self.parseInstr();
-    self.indent_level -= 1;
+    defer self.indent_level -= 1;
+    self.parseInstr();
 }
 
-fn floatInstr(self: *Self, value: f64) Error!void {
-    self.indent();
-    try self.writer.print("[Float {d}]\n", .{value});
+fn floatInstr(self: *Self, value: f64) void {
+    self.indentAndPrintSlice("[Float {d}]", .{value});
 }
 
-fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
-    self.indent();
-    try self.writer.print("[Fn call arity: {}, call_tag: {s}]\n", .{
+fn fnCall(self: *Self, data: *const Instruction.Call) void {
+    self.indentAndPrintSlice("[Fn call arity: {}, call_tag: {s}]", .{
         data.arity, @tagName(data.tag),
     });
 
     self.indent_level += 1;
+    defer self.indent_level -= 1;
 
     // Variable
-    try self.parseInstr();
+    self.parseInstr();
 
     if (data.arity > 0) {
-        self.indent();
-        try self.tree.appendSlice("- args:\n");
+        self.indentAndAppendSlice("- args:");
 
         var last: usize = 0;
         for (0..data.arity) |_| {
             switch (self.next()) {
                 .value => |param_data| {
                     if (param_data.cast) {
-                        self.indent();
-                        self.tree.appendSlice("[Cast next value to float]\n") catch oom();
+                        self.indentAndAppendSlice("[Cast next value to float]");
                     }
                     const save = self.instr_idx;
                     self.instr_idx = param_data.value_instr;
-                    try self.parseInstr();
+                    self.parseInstr();
                     last = @max(last, self.instr_idx);
 
                     self.instr_idx = save;
@@ -348,188 +326,173 @@ fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
     }
 
     if (data.tag == .import) {
-        self.indent();
-        try self.tree.appendSlice("- load module:\n");
-        try self.parseInstr();
+        self.indentAndAppendSlice("- load module:");
+        self.parseInstr();
     }
-
-    self.indent_level -= 1;
 }
 
-fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
-    self.indent();
-    try self.writer.print(
-        "[{s} access {}]\n",
+fn getMember(self: *Self, data: *const Instruction.Member) void {
+    self.indentAndPrintSlice(
+        "[{s} access {}]",
         .{ if (data.kind == .field) "Field" else "Method", data.index },
     );
     self.indent_level += 1;
+    defer self.indent_level -= 1;
 
     // Variable
-    try self.parseInstr();
-    self.indent_level -= 1;
+    self.parseInstr();
 }
 
-fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
-    self.indent();
-    try self.writer.print("[Import module {}, scope {s}]\n", .{ data.index, @tagName(data.scope) });
-}
-
-fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) Error!void {
+fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     const fn_name = self.interner.getKey(self.next().name).?;
     const fn_var = self.next().var_decl.variable;
 
-    self.indent();
-    try self.writer.print(
-        "[Fn declaration {s}, index: {}, scope: {s}, return kind: {s}]\n",
+    self.indentAndPrintSlice(
+        "[Fn declaration {s}, index: {}, scope: {s}, return kind: {s}]",
         .{ fn_name, fn_var.index, @tagName(fn_var.scope), @tagName(data.return_kind) },
     );
 
     self.indent_level += 1;
+    defer self.indent_level -= 1;
+
     if (data.default_params > 0) {
-        self.indent();
-        try self.tree.appendSlice("- default params\n");
+        self.indentAndAppendSlice("- default params");
         for (0..data.default_params) |_| {
-            try self.parseInstr();
+            self.parseInstr();
         }
 
         if (data.body_len > 0) {
-            self.indent();
-            try self.tree.appendSlice("- body\n");
+            self.indentAndAppendSlice("- body");
         }
     }
 
     for (0..data.body_len) |_| {
-        try self.parseInstr();
+        self.parseInstr();
     }
-    self.indent_level -= 1;
 }
 
-fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
-    self.indent();
-    try self.writer.print("[Variable index: {}, scope: {s}]\n", .{
+fn identifier(self: *Self, data: *const Instruction.Variable) void {
+    self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
         data.index, @tagName(data.scope),
     });
 }
 
-fn identifierAbsolute(self: *Self, data: usize) Error!void {
-    self.indent();
-    try self.writer.print("[Variable absolute index: {}]\n", .{data});
+fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
+    const variable_data = self.instr_data[data.index].var_decl.variable;
+    self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
+        variable_data.index, @tagName(variable_data.scope),
+    });
 }
 
-fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
-    self.indent();
-    try self.writer.print("[If cast: {s}, has else: {}]\n", .{
+fn identifierAbsolute(self: *Self, data: usize) void {
+    self.indentAndPrintSlice("[Variable absolute index: {}]", .{data});
+}
+
+fn ifInstr(self: *Self, data: *const Instruction.If) void {
+    self.indentAndPrintSlice("[If cast: {s}, has else: {}]", .{
         @tagName(data.cast),
         data.has_else,
     });
 
-    self.indent();
-    try self.tree.appendSlice("- condition:\n");
+    self.indentAndAppendSlice("- condition:");
     self.indent_level += 1;
-    try self.parseInstr();
+    self.parseInstr();
     self.indent_level -= 1;
 
-    self.indent();
-    try self.tree.appendSlice("- then:\n");
+    self.indentAndAppendSlice("- then:");
     self.indent_level += 1;
-    try self.parseInstr();
+    self.parseInstr();
     self.indent_level -= 1;
 
     if (data.has_else) {
-        self.indent();
-        try self.tree.appendSlice("- else:\n");
+        self.indentAndAppendSlice("- else:");
         self.indent_level += 1;
-        try self.parseInstr();
+        self.parseInstr();
         self.indent_level -= 1;
     }
 }
 
-fn intInstr(self: *Self, data: isize) Error!void {
-    self.indent();
-    try self.writer.print("[Int {}]\n", .{data});
+fn intInstr(self: *Self, data: isize) void {
+    self.indentAndPrintSlice("[Int {}]", .{data});
 }
 
-fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
-    self.indent();
-    try self.writer.print(
-        "[Import field {} of module {} to scope {s}]\n",
+fn itemImport(self: *Self, data: *const Instruction.ItemImport) void {
+    self.indentAndPrintSlice(
+        "[Import field {} of module {} to scope {s}]",
         .{ data.field_index, data.module_index, @tagName(data.scope) },
     );
 }
 
-fn multipleVarDecl(self: *Self, count: usize) Error!void {
+fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) void {
+    self.indentAndPrintSlice("[Import module {}, scope {s}]", .{ data.index, @tagName(data.scope) });
+}
+
+fn multipleVarDecl(self: *Self, count: usize) void {
     for (0..count) |_| {
-        try self.parseInstr();
+        self.parseInstr();
     }
 }
 
-fn returnInstr(self: *Self, data: *const Instruction.Return) Error!void {
-    self.indent();
-    try self.writer.print("[Return expr: {}, cast: {}]\n", .{ data.value, data.cast });
+fn returnInstr(self: *Self, data: *const Instruction.Return) void {
+    self.indentAndPrintSlice("[Return expr: {}, cast: {}]", .{ data.value, data.cast });
 
     if (data.value) {
         self.indent_level += 1;
-        try self.parseInstr();
-        if (data.cast) try self.parseInstr();
+        self.parseInstr();
+        if (data.cast) self.parseInstr();
         self.indent_level -= 1;
     }
 }
 
-fn stringInstr(self: *Self, index: usize) Error!void {
-    self.indent();
-    try self.writer.print("[String {s}]\n", .{self.interner.getKey(index).?});
+fn stringInstr(self: *Self, index: usize) void {
+    self.indentAndPrintSlice("[String {s}]", .{self.interner.getKey(index).?});
 }
 
-fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
+fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
     const name = self.next().name;
     const struct_var = self.next().var_decl.variable;
 
-    self.indent();
-    try self.writer.print("[Structure declaration {s}, index: {}, scope: {s}]\n", .{
+    self.indentAndPrintSlice("[Structure declaration {s}, index: {}, scope: {s}]", .{
         self.interner.getKey(name).?,
         struct_var.index,
         @tagName(struct_var.scope),
     });
     self.indent_level += 1;
+    defer self.indent_level -= 1;
 
     if (data.default_fields > 0) {
-        self.indent();
-        try self.tree.appendSlice("- default values\n");
+        self.indentAndAppendSlice("- default values");
         for (0..data.default_fields) |_| {
-            try self.parseInstr();
+            self.parseInstr();
         }
     }
 
     for (0..data.func_count) |_| {
-        try self.parseInstr();
+        self.parseInstr();
     }
-    self.indent_level -= 1;
 }
 
-fn structLiteral(self: *Self, field_count: usize) Error!void {
-    self.indent();
-    try self.tree.appendSlice("[Structure literal]\n");
+fn structLiteral(self: *Self, field_count: usize) void {
+    self.indentAndAppendSlice("[Structure literal]");
     self.indent_level += 1;
+    defer self.indent_level -= 1;
     // Variable containing type
-    self.indent();
-    try self.tree.appendSlice("- structure\n");
-    try self.parseInstr();
+    self.indentAndAppendSlice("- structure");
+    self.parseInstr();
 
     if (field_count > 0) {
-        self.indent();
-        try self.tree.appendSlice("- args\n");
+        self.indentAndAppendSlice("- args");
         var last: usize = 0;
 
         for (0..field_count) |_| {
             switch (self.next()) {
                 .value => |data| {
                     if (data.cast) {
-                        self.indent();
-                        self.tree.appendSlice("[Cast next value to float]\n") catch oom();
+                        self.indentAndAppendSlice("[Cast next value to float]");
                     }
                     const save = self.instr_idx;
                     self.instr_idx = data.value_instr;
-                    try self.parseInstr();
+                    self.parseInstr();
                     last = @max(last, self.instr_idx);
 
                     self.instr_idx = save;
@@ -540,25 +503,21 @@ fn structLiteral(self: *Self, field_count: usize) Error!void {
         }
 
         if (last > self.instr_idx) self.instr_idx = last;
-        self.indent_level -= 1;
     }
 }
 
-fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
-    self.indent();
-    try self.writer.print("[Unary {s}]\n", .{@tagName(data.op)});
+fn unary(self: *Self, data: *const Instruction.Unary) void {
+    self.indentAndPrintSlice("[Unary {s}]", .{@tagName(data.op)});
     self.indent_level += 1;
-    try self.parseInstr();
-    self.indent_level -= 1;
+    defer self.indent_level -= 1;
+    self.parseInstr();
 }
 
-fn use(self: *Self, count: u64) Error!void {
+fn use(self: *Self, count: u64) void {
     // NOTE: For now, skips the first 'Null' placed by the analyzer
     // Needs a rework
     self.instr_idx += 1;
-
-    self.indent();
-    try self.writer.print("[Use count: {}]\n", .{count});
+    self.indentAndPrintSlice("[Use count: {}]", .{count});
     self.instr_idx += 1;
 
     for (0..count) |_| {
@@ -566,37 +525,44 @@ fn use(self: *Self, count: u64) Error!void {
     }
 }
 
-fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {
-    self.indent();
-    try self.writer.print("[Variable declaration index: {}, scope: {s}]\n", .{
+fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
+    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}]", .{
         data.variable.index,
         @tagName(data.variable.scope),
     });
 
     self.indent_level += 1;
+    defer self.indent_level -= 1;
     if (data.has_value)
-        try self.parseInstr()
+        self.parseInstr()
     else {
-        self.indent();
-        try self.tree.appendSlice("[Null]\n");
+        self.indentAndAppendSlice("[Null]");
     }
 
-    if (data.cast) try self.parseInstr();
+    if (data.cast) self.parseInstr();
+}
+
+fn whileInstr(self: *Self) void {
+    self.indentAndAppendSlice("[While]");
+    self.instr_idx += 1;
+    self.indentAndAppendSlice("- condition:");
+    self.indent_level += 1;
+    self.parseInstr();
+    self.indent_level -= 1;
+    self.indentAndAppendSlice("- body:");
+    self.indent_level += 1;
+    self.parseInstr();
     self.indent_level -= 1;
 }
 
-fn whileInstr(self: *Self) Error!void {
+fn indentAndAppendSlice(self: *Self, text: []const u8) void {
     self.indent();
-    try self.tree.appendSlice("[While]\n");
-    self.instr_idx += 1;
+    self.tree.appendSlice(text) catch oom();
+    self.tree.appendSlice("\n") catch oom();
+}
+
+fn indentAndPrintSlice(self: *Self, comptime fmt: []const u8, args: anytype) void {
     self.indent();
-    try self.tree.appendSlice("- condition:\n");
-    self.indent_level += 1;
-    try self.parseInstr();
-    self.indent_level -= 1;
-    self.indent();
-    try self.tree.appendSlice("- body:\n");
-    self.indent_level += 1;
-    try self.parseInstr();
-    self.indent_level -= 1;
+    self.writer.print(fmt, args) catch oom();
+    self.tree.appendSlice("\n") catch oom();
 }

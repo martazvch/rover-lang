@@ -108,11 +108,16 @@ pub const CompilationManager = struct {
 const Compiler = struct {
     manager: *CompilationManager,
     function: *ObjFunction,
+    state: State = .{},
 
     const Self = @This();
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
+
+    const State = struct {
+        cow: bool = false,
+    };
 
     const FnKind = enum {
         global,
@@ -193,7 +198,14 @@ const Compiler = struct {
     fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         self.writeOpAndByte(
-            if (variable.scope == .heap) .get_heap else if (variable.scope == .global) .get_global else .get_local,
+            if (variable.scope == .heap)
+                .get_heap
+            else if (variable.scope == .global)
+                .get_global
+            else if (self.state.cow)
+                .get_local_cow
+            else
+                .get_local,
             @intCast(variable.index),
             offset,
         );
@@ -270,7 +282,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => self.compileArrayInstr(.access, self.getStart()),
+            .array_access => |*data| self.compileArrayInstr(.access, data.incr_ref, self.getStart()),
             .array_access_chain => |depth| self.compileArrayChain(.access, depth, self.getStart()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -283,12 +295,16 @@ const Compiler = struct {
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.fnDecl(data),
             .identifier => |*data| self.identifier(data),
-            .identifier_id => |data| self.identifier(&self.manager.instr_data[data].var_decl.variable),
+            .identifier_id => |*data| self.identifierId(data),
             .identifier_absolute => |data| self.identifierAbsolute(data),
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
             .item_import => |*data| self.itemImport(data),
+            .incr_ref_count => {
+                try self.compileInstr();
+                self.writeOp(.incr_ref_count, self.getStart());
+            },
             .member => |*data| self.getMember(data),
             .module_import => |*data| self.moduleImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -327,7 +343,7 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
-    fn compileArrayInstr(self: *Self, tag: enum { access, assign }, start: usize) Error!void {
+    fn compileArrayInstr(self: *Self, tag: enum { access, assign }, incr_ref: bool, start: usize) Error!void {
         // Variable
         try self.compileInstr();
         // Index
@@ -340,6 +356,8 @@ const Compiler = struct {
             },
             start,
         );
+
+        if (incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
     fn compileArrayChain(self: *Self, tag: enum { access, assign }, depth: usize, start: usize) Error!void {
@@ -371,10 +389,13 @@ const Compiler = struct {
         // We cast the value on top of stack if needed
         if (data.cast) self.writeOp(.cast_to_float, start);
 
+        self.state.cow = data.check_cow;
+        defer self.state.cow = false;
+
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
-            .identifier_id => |idx| &self.manager.instr_data[idx].var_decl.variable,
-            .array_access => return self.compileArrayInstr(.assign, start),
+            .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
+            .array_access => |*array_data| return self.compileArrayInstr(.assign, array_data.incr_ref, start),
             .array_access_chain => |depth| return self.compileArrayChain(.assign, depth, start),
             .member => |*member| return self.fieldAssignment(member, start),
             else => unreachable,
@@ -645,7 +666,6 @@ const Compiler = struct {
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
         const member_data = self.getData();
 
-        // TODO: for array access, we just have to compute the index, not put the entire array on stack
         if (member_data == .call or member_data == .array_access or member_data == .array_access_chain) {
             // We compile the call/array access first
             try self.compileInstr();
@@ -675,6 +695,11 @@ const Compiler = struct {
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
         self.emitGetVar(data, self.getStart());
+    }
+
+    fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
+        const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
+        self.emitGetVar(variable_data, self.getStart());
     }
 
     fn identifierAbsolute(self: *Self, data: usize) Error!void {

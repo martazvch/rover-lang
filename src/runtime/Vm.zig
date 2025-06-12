@@ -186,6 +186,10 @@ fn checkArrayIndex(array: *const ObjArray, index: i64) usize {
     };
 }
 
+fn printArr(obj: *Obj) void {
+    std.debug.print("Obj {*}, values: {*}, {any}\n", .{ obj, obj.as(ObjArray), obj.as(ObjArray).values.items });
+}
+
 fn execute(self: *Self, entry_point: *ObjFunction) !void {
     var frame: *CallFrame = undefined;
     try self.call(&frame, entry_point, 0);
@@ -214,7 +218,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
             switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
-                .array_assign, .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
+                .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
                 .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
                 else => {},
             }
@@ -273,6 +277,13 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                     tmp = tmp.values.items[idx].obj.as(ObjArray);
                 }
 
+                // Cow check
+                const array = tmp.asObj();
+                if (array.ref_count > 0) {
+                    array.ref_count -= 1;
+                    tmp = array.deepCopy(self).as(ObjArray);
+                }
+
                 const idx = checkArrayIndex(tmp, self.stack.pop().int);
                 tmp.values.items[idx] = self.stack.pop();
             },
@@ -317,8 +328,8 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(ObjString) == self.stack.pop().obj.as(ObjString))),
             .false => self.stack.push(Value.false_),
             .field_assign => {
-                // // TODO: don't emit it so we don't have to skip it?
                 // Skips the 'get_field' or 'bound_method' code
+                // TODO: don't emit it so we don't have to skip it?
                 frame.ip += 1;
                 const field = self.getField(frame);
                 field.* = self.stack.pop();
@@ -338,6 +349,18 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_local_cow => {
+                const index = frame.readByte();
+                const value = &frame.slots[index];
+                const obj = value.obj;
+
+                if (obj.ref_count > 0) {
+                    obj.ref_count -= 1;
+                    value.* = Value.makeObj(obj.deepCopy(self));
+                }
+
+                self.stack.push(value.*);
+            },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_fn_default => self.getDefaultValue(frame, ObjFunction),
             .get_method_default => {
@@ -362,6 +385,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
+            .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
             .import_call => {
                 const args_count = frame.readByte();
                 const module = self.getValueFromScope(frame).module;
