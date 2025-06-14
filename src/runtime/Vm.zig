@@ -39,6 +39,7 @@ interner: Interner,
 strings: Table,
 objects: ?*Obj,
 heap_vars: []Value,
+r1: *Value = undefined,
 
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
@@ -263,7 +264,16 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_assign => {
                 const index = self.stack.pop().int;
-                const array = self.stack.pop().obj.as(ObjArray);
+                const array = self.cow(self.stack.pop().obj).as(ObjArray);
+
+                const final = checkArrayIndex(array, index);
+                const value = self.stack.pop();
+                array.obj.as(ObjArray).values.items[final] = value;
+            },
+            .array_assign_reg => {
+                const index = self.stack.pop().int;
+                self.r1.obj = self.cow(self.r1.obj);
+                const array = self.r1.obj.as(ObjArray);
                 const final = checkArrayIndex(array, index);
                 const value = self.stack.pop();
                 array.obj.as(ObjArray).values.items[final] = value;
@@ -271,21 +281,33 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .array_assign_chain => {
                 const depth = frame.readByte();
                 var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+                var last: **ObjArray = &tmp;
 
                 for (0..depth - 1) |_| {
-                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                    tmp = tmp.values.items[idx].obj.as(ObjArray);
+                    const idx = checkArrayIndex(last.*, self.stack.pop().int);
+                    last = @constCast(&last.*.values.items[idx].obj);
                 }
 
-                // Cow check
-                const array = tmp.asObj();
-                if (array.ref_count > 0) {
-                    array.ref_count -= 1;
-                    tmp = array.deepCopy(self).as(ObjArray);
+                last.* = self.cow(last.*.asObj()).as(ObjArray);
+
+                const idx = checkArrayIndex(last.*, self.stack.pop().int);
+                last.*.values.items[idx] = self.stack.pop();
+            },
+            // TODO: make a common function with above. Only `tmp` differs
+            .array_assign_chain_reg => {
+                const depth = frame.readByte();
+                var tmp: *ObjArray = self.r1.obj.as(ObjArray);
+                var last: **ObjArray = &tmp;
+
+                for (0..depth - 1) |_| {
+                    const idx = checkArrayIndex(last.*, self.stack.pop().int);
+                    last = @constCast(&last.*.values.items[idx].obj);
                 }
 
-                const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                tmp.values.items[idx] = self.stack.pop();
+                last.* = self.cow(last.*.asObj()).as(ObjArray);
+
+                const idx = checkArrayIndex(last.*, self.stack.pop().int);
+                last.*.values.items[idx] = self.stack.pop();
             },
             .bound_method => {
                 const receiver, const method = self.getBoundMethod(frame);
@@ -342,6 +364,8 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const field = self.getField(frame);
                 self.stack.push(field.*);
             },
+            // TODO: implement
+            .get_field_chain_reg => self.r1 = self.getField(frame),
             .get_global => {
                 const idx = frame.readByte();
                 self.stack.push(self.module.globals[idx]);
@@ -549,6 +573,16 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .unload_module => self.module = self.module_chain.pop().?,
         }
     }
+}
+
+/// Checks clone on write
+fn cow(self: *Self, obj: *Obj) *Obj {
+    if (obj.ref_count > 0) {
+        obj.ref_count -= 1;
+        return obj.deepCopy(self);
+    }
+
+    return obj;
 }
 
 /// Read the two next bytes as `scope` then `index` then get value from according scope

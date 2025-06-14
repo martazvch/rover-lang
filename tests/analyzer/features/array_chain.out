@@ -133,7 +133,7 @@
         [Int 55]
         [Int 66]
     [Array assignment]
-        - variable
+        - array
         [Field access 2]
             [Array chain access]
                 - array

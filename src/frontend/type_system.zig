@@ -72,6 +72,12 @@ pub const Type = enum(TypeSize) {
     pub inline fn is(self: Self, kind: Kind) bool {
         return getKind(self) == kind;
     }
+
+    /// Checks if the type is a heap allocated object
+    pub inline fn isHeap(self: Self) bool {
+        const kind = self.getKind();
+        return kind == .@"struct" or kind == .array;
+    }
 };
 
 // 4 first bits (16 values) are for:

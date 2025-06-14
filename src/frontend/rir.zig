@@ -16,7 +16,6 @@ pub const Instruction = struct {
         bool: bool,
         call: Call,
         cast: Type,
-        // check_cow,
         discard,
         float: f64,
         fn_decl: FnDecl,
@@ -26,7 +25,6 @@ pub const Instruction = struct {
         @"if": If,
         // TODO: delete later
         imported: Imported,
-        incr_ref_count,
         int: i64,
         item_import: ItemImport,
         member: Member,
@@ -101,8 +99,7 @@ pub const Instruction = struct {
         /// When the assigne is a heap allocated object, we check if there are shallow copy
         /// of it before mutation. If so, check the reference count and perform a deep copy if
         /// it is referenced
-        check_cow: bool,
-        // incr_ref: bool,
+        cow: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {
@@ -112,8 +109,7 @@ pub const Instruction = struct {
         pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
-    // pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
-    pub const IdentifierId = struct { index: usize };
+    pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
     pub const If = struct {
         cast: Cast,
         has_else: bool,

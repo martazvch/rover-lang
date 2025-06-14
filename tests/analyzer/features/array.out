@@ -48,14 +48,14 @@
 
     [Int 4]
     [Array assignment]
-        - variable
+        - array
         [Variable index: 1, scope: local]
         - index
         [Int 2]
 
     [Int 2]
     [Array assignment]
-        - variable
+        - array
         [Variable index: 1, scope: local]
         - index
         [Fn call arity: 0, call_tag: function]
@@ -75,7 +75,7 @@
     [Unary minus]
         [Int 9]
     [Array assignment]
-        - variable
+        - array
         [Field access 0]
             [Variable index: 3, scope: local]
         - index

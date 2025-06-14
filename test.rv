@@ -39,9 +39,9 @@
 //     // Late assign
 //     print "Test 1"
 //     var arrRef: []int
-//     arrRef = arr // [1, 2, 3]
+//     arrRef = arr
 //
-//     print arrRef
+//     print arrRef // [1, 2, 3]
 //     arrRef[1] = 1234567
 //     print arrRef // [1, 1234567, 3]
 //     print arr // [1, 2, 3]
@@ -72,22 +72,58 @@
 //     print arr // [192837, 2, 3]
 // }
 
+// fn main() {
+//     var arr = [[1, 2, 3], [4, 5, 6]]
+//     print arr // [[1, 2, 3], [4, 5, 6]]
+//
+//     var arrRef: []int
+//     arrRef = arr[1]
+//     print arrRef // [4, 5, 6]
+//
+//     arrRef[1] = 1234
+//     print arr // [[1, 2, 3], [4, 5, 6]]
+//     print arrRef // [4, 1234, 6]
+//
+//     print "Test 2"
+//     var arrRef2 = arr[0]
+//     print arrRef2 // [1, 2, 3] 
+//     arr[0][2] = 666
+//     print arr // [[1, 2, 666], [4, 5, 6]]
+//     print arrRef2 // [1, 2, 3]
+// }
+
+struct Foo {data: []int, data2: [][]int}
 fn main() {
-    var arr = [[1, 2, 3], [4, 5, 6]]
-    print arr // [[1, 2, 3], [4, 5, 6]]
+    var foo = Foo{data=[1, 2], data2=[[1, 2, 3], [4, 5, 6]]}
+    // foo.data = [10, 20]
 
-    var arrRef: []int
-    arrRef = arr[1]
-    print arrRef // [4, 5, 6]
+    // print "Test 1"
+    // var ref = foo.data
+    // foo.data[0] = 9
+    // print ref // [10, 20]
+    // print foo.data // [9, 20]
 
-    arrRef[1] = 1234
-    print arr // [[1, 2, 3], [4, 5, 6]]
-    print arrRef // [4, 1234, 6]
-    
-    print "Test 2"
-    var arrRef2 = arr[0]
-    print arrRef2 // [1, 2, 3]
-    arr[0][2] = 666
-    print arr // [[1, 2, 666], [4, 5, 6]]
-    print arrRef2 // [1, 2, 3]
+    // print "Test 2"
+    // ref = foo.data
+    // print ref // [10, 20]
+    // ref[1] = 98
+    // print ref // [10, 98]
+    // print foo.data // [10, 20]
+
+    // print "Test 3" 
+    // print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    // var ref2 = foo.data2[1]
+    // print ref2 // [[1, 2, 3], [4, 5, 6]]
+    // ref2[1] = 56
+    // print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    // print ref2 // [4, 56, 6]
+
+    print "Test 4" 
+    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    var ref2 = foo.data2[1]
+    print ref2 // [[1, 2, 3], [4, 5, 6]]
+    foo.data2[1][2] = 56
+    print foo.data2 // [[1, 2, 3], [4, 5, 56]]
+    print ref2 // [4, 5, 6]
 }
+

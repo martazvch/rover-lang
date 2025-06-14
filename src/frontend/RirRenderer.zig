@@ -112,18 +112,14 @@ fn next(self: *Self) Instruction.Data {
 fn parseInstr(self: *Self) void {
     switch (self.next()) {
         .array => |*data| self.array(data),
-        .array_access => self.arrayAccess(),
-        .array_access_chain => |depth| self.arrayAccessChain(depth),
+        .array_access => self.arrayAccess(1, false),
+        .array_access_chain => |depth| self.arrayAccess(depth, false),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
-        // .check_cow => {
-        //     self.indent();
-        //     try self.tree.appendSlice("[Check cow]\n");
-        // },
         .discard => self.discard(),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
@@ -133,10 +129,8 @@ fn parseInstr(self: *Self) void {
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
-        .incr_ref_count => self.indentAndAppendSlice("[Incr ref count]"),
         .int => |data| self.intInstr(data),
         .item_import => |*data| self.itemImport(data),
-        // .mark_freeze => self.indentAndAppendSlice("[Mark freeze]"),
         .member => |*data| self.getMember(data),
         .module_import => |*data| self.moduleImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -181,31 +175,19 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     }
 }
 
-fn arrayAccess(self: *Self) void {
-    self.indentAndAppendSlice("[Array access]");
+fn arrayAccess(self: *Self, depth: usize, is_assign: bool) void {
+    if (is_assign)
+        self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]")
+    else
+        self.indentAndAppendSlice(if (depth > 1) "[Array chain access]" else "[Array access]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
     self.indentAndAppendSlice("- array");
     self.parseInstr();
+    self.indentAndAppendSlice(if (depth > 1) "- indicies" else "- index");
 
-    self.indentAndAppendSlice("- index");
-    self.parseInstr();
-}
-
-fn arrayAccessChain(self: *Self, depth: usize) void {
-    self.indentAndAppendSlice("[Array chain access]");
-    self.indent_level += 1;
-    defer self.indent_level -= 1;
-
-    self.indentAndAppendSlice("- array");
-    self.parseInstr();
-
-    self.indentAndAppendSlice("- indicies");
-
-    for (0..depth) |_| {
-        self.parseInstr();
-    }
+    for (0..depth) |_| self.parseInstr();
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) void {
@@ -217,7 +199,8 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     }
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAssignment(data.check_cow),
+        .array_access => return self.arrayAccess(1, true),
+        .array_access_chain => |depth| return self.arrayAccess(depth, true),
         .identifier => |*variable| variable,
         .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
         .member => |*member| return self.fieldAssignment(member),
@@ -228,21 +211,21 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
         variable_data.index, @tagName(variable_data.scope),
     });
 
-    if (data.check_cow) self.indentAndAppendSlice("[Check cow]");
+    if (data.cow) self.indentAndAppendSlice("[Cow]");
 }
 
-fn arrayAssignment(self: *Self, cehck_cow: bool) void {
-    self.indentAndAppendSlice("[Array assignment]");
+fn arrayAssignment(self: *Self, depth: usize) void {
+    self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
     // Array
     self.indentAndAppendSlice("- variable");
     self.parseInstr();
-    if (cehck_cow) self.indentAndAppendSlice("[Check cow]");
     // Index
-    self.indentAndAppendSlice("- index");
-    self.parseInstr();
+    self.indentAndAppendSlice(if (depth > 1) "- indicies" else "- index");
+
+    for (0..depth) |_| self.parseInstr();
 }
 
 fn fieldAssignment(self: *Self, data: *const Instruction.Member) void {

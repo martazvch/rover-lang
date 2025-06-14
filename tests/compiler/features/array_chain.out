@@ -51,16 +51,21 @@ OP_STRUCT_LIT index 3
 
 OP_GET_GLOBAL index 1, <structure Poly>
 OP_GET_LOCAL index 1
+OP_INCR_REF_COUNT
 OP_GET_LOCAL index 2
+OP_INCR_REF_COUNT
 OP_ARRAY index 2
 OP_GET_LOCAL index 3
+OP_INCR_REF_COUNT
 OP_GET_LOCAL index 4
+OP_INCR_REF_COUNT
 OP_ARRAY index 2
 OP_ARRAY index 2
 OP_STRUCT_LIT index 1
 
 OP_GET_GLOBAL index 2, <structure Object>
 OP_GET_LOCAL index 5
+OP_INCR_REF_COUNT
 OP_GET_STRUCT_DEFAULT index 1 on stack, default value index 0
 OP_STRUCT_LIT index 2
 

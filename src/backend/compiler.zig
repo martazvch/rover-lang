@@ -117,6 +117,7 @@ const Compiler = struct {
 
     const State = struct {
         cow: bool = false,
+        in_assign: bool = false,
     };
 
     const FnKind = enum {
@@ -282,7 +283,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => |*data| self.compileArrayInstr(.access, data.incr_ref, self.getStart()),
+            .array_access => |*data| self.arrayAccess(data.incr_ref, self.getStart()),
             .array_access_chain => |depth| self.compileArrayChain(.access, depth, self.getStart()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -301,10 +302,6 @@ const Compiler = struct {
             .imported => unreachable,
             .int => |data| self.intInstr(data),
             .item_import => |*data| self.itemImport(data),
-            .incr_ref_count => {
-                try self.compileInstr();
-                self.writeOp(.incr_ref_count, self.getStart());
-            },
             .member => |*data| self.getMember(data),
             .module_import => |*data| self.moduleImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -343,21 +340,36 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
-    fn compileArrayInstr(self: *Self, tag: enum { access, assign }, incr_ref: bool, start: usize) Error!void {
+    fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
         // Variable
         try self.compileInstr();
         // Index
         try self.compileInstr();
-
-        self.writeOp(
-            switch (tag) {
-                .access => .array_access,
-                .assign => .array_assign,
-            },
-            start,
-        );
+        self.writeOp(.array_access, start);
 
         if (incr_ref) self.writeOp(.incr_ref_count, start);
+    }
+
+    fn arrayAssign(self: *Self, start: usize) Error!void {
+        // Variable. If we just assign to an identifier like: `arr[0] = 4`, we leave `cow` to emit
+        // get_local_cow etc. Otherwise, we delete it because we don't want to trigger a cow on accessing the array.
+        // For example: foo.bar[0]
+        // Here, when compiling the array 'foo.bar', 'foo' would be compiled as get_local_cow because
+        // of compiler's state
+        // TODO: review or use std.meta.activeTag?
+        const data_at = self.at().*;
+        const is_ident = data_at == .identifier or data_at == .identifier_id;
+        if (!is_ident) self.state.cow = false;
+
+        try self.compileInstr();
+
+        // Index
+        try self.compileInstr();
+
+        // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
+        // the variable in a register as it is already cloned if needed on the stack
+        // For more complex array expressions, it will be in a register
+        self.writeOp(if (is_ident) .array_assign else .array_assign_reg, start);
     }
 
     fn compileArrayChain(self: *Self, tag: enum { access, assign }, depth: usize, start: usize) Error!void {
@@ -366,6 +378,12 @@ const Compiler = struct {
             try self.compileInstr();
         }
 
+        // See above in `arrayAssign`.
+        // TODO: make it common?
+        const data_at = self.at().*;
+        const is_ident = data_at == .identifier or data_at == .identifier_id;
+        if (!is_ident) self.state.cow = false;
+
         // Variable
         try self.compileInstr();
 
@@ -373,7 +391,7 @@ const Compiler = struct {
         self.writeOpAndByte(
             switch (tag) {
                 .access => .array_access_chain,
-                .assign => .array_assign_chain,
+                .assign => if (is_ident) .array_assign_chain else .array_assign_chain_reg,
             },
             @intCast(depth),
             start,
@@ -389,13 +407,18 @@ const Compiler = struct {
         // We cast the value on top of stack if needed
         if (data.cast) self.writeOp(.cast_to_float, start);
 
-        self.state.cow = data.check_cow;
-        defer self.state.cow = false;
+        // Used by `getVar` in case we fetch a simple identifier
+        self.state.cow = data.cow;
+        self.state.in_assign = true;
+        defer {
+            self.state.cow = false;
+            self.state.in_assign = false;
+        }
 
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
-            .array_access => |*array_data| return self.compileArrayInstr(.assign, array_data.incr_ref, start),
+            .array_access => return self.arrayAssign(start),
             .array_access_chain => |depth| return self.compileArrayChain(.assign, depth, start),
             .member => |*member| return self.fieldAssignment(member, start),
             else => unreachable,
@@ -670,15 +693,17 @@ const Compiler = struct {
             // We compile the call/array access first
             try self.compileInstr();
 
+            // Get field/bound method of first value on the stack
             self.writeOpAndByte(
                 if (data.kind == .field) .get_field else .bound_method,
                 @intCast(data.index),
                 self.getStart(),
             );
         } else {
+            // If we are in assignment, we save the field in a register so we keep its address in case of cow
             self.writeOpAndByte(
                 if (data.kind == .field)
-                    .get_field_chain
+                    if (self.state.in_assign) .get_field_chain_reg else .get_field_chain
                 else if (data.kind == .symbol)
                     .get_symbol
                 else if (data.kind == .method)
@@ -698,8 +723,10 @@ const Compiler = struct {
     }
 
     fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
+        const start = self.getStart();
         const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
-        self.emitGetVar(variable_data, self.getStart());
+        self.emitGetVar(variable_data, start);
+        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
     }
 
     fn identifierAbsolute(self: *Self, data: usize) Error!void {
