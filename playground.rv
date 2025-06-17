@@ -1,55 +1,107 @@
-var glob1 = 7.5
-var glob2 = 42.5
+// struct Data {
+//     arr: []int,
+//     scalar: int = 9,
+// }
+
+// struct Foo {
+//     data: []Data
+// }
+
+// struct Scalar { value: int }
+
+// fn main() {
+//     var data = Data{arr=[1, 2]}
+//     var arrData = [data]
+//     var foo = Foo{data=arrData}
+//     print foo.data[0].arr[0]
+    
+    // foo.data[0].arr[0] = 4
+    // foo.data[0].arr = [56, 78]
+    
+    // arrData[0].scalar = 233
+    // foo.data[0].scalar = 34
+
+    // var arr = [Scalar{value=9}]
+    // print arr[0].value
+    // arr[0].value = 789
+    // print arr[0].value
+// }
+
+// struct Point {
+//     x, y: int,
+//     past: [][]int,
+// }
+//
+// struct Poly {
+//     vertex: [][]Point
+// }
+//
+// struct Object {
+//     poly: Poly,
+//     name: str = "object",
+// }
+//
+// fn main() {
+//     var p1 = Point{ x = 1, y = 2, past = [[1, 2], [3, 4]]}
+//     var p2 = Point{ x = 5, y = 6, past = [[7, 8], [9, 10]]}
+//     var p3 = Point{ x = 11, y = 12, past = [[13, 14], [15, 16]]}
+//     var p4 = Point{ x = 17, y = 18, past = [[19, 20], [21, 22]]}
+//
+//     var poly = Poly{ vertex = [[p1, p2], [p3, p4]] }
+//     var obj = Object{ poly } 
+//
+//     print obj.poly.vertex[1][0]
+//     print obj.poly.vertex[1][0].x
+//     print obj.poly.vertex[1][0].past[0]
+//     print obj.poly.vertex[1][0].past[1][1]
+//
+//     // Don't change
+//     p3.past = [[11, 22], [33, 44]]
+//     print obj.poly.vertex[1][0].past[0]
+//
+//     obj.poly.vertex[1][0].past[0] = [55, 66]
+//     print obj.poly.vertex[1][0].past
+// }
+
+
+
+struct Point {
+    x, y: int
+}
+
+struct Data {
+    list: []float,
+}
+
+fn getIdx() -> int { 2 }
 
 fn main() {
-    // Last expression returned while discarding inbetween locals
-    var a: int = {
-        var space = 67
-        var other = "just chillin"
-        var nb = 7
-        var sneaky = 90
-        nb
-    }
+    // Index test
+    var arr: []int = [1, 2,]
 
-    print a // expect: 7
+    print arr[0]
+    print arr[1]
+    print arr[-1]
+    print arr[-2]
 
+    var pt1 = Point{x=1, y=2}
+    var pt2 = Point{x=3, y=4}
 
-    // Returning an outter local from a scope
-    var b = 56
+    // Object array test
+    var vertex = [pt1, pt2]
+    print vertex
+    print vertex[0]
+    print vertex[0].x
+    // Here, we test that we do a deep copy and not just passing reference
+    pt1.x = 9
+    print pt1.x
+    print vertex[0].x
 
-    var c: int = {
-        var space = 67
-        var other = "just chillin"
-        var nb = 7
-        var sneaky = 90
-        _ = nb
-        b
-    }
-
-    print c // expect: 56
-
-    // Void scope without assignment to see if stack is corrupt
-    {
-        var tmp = 67
-        var b = 87 - 6.
-        print b // expect: 81
-    }
-
-    // Returning a global
-    var scope = {
-        print "in scope" // expect: "in scope"
-        glob1
-    }
-
-    print scope // expect: 7.5
-
-    // Returning again a global
-    var scope2 = {
-        print "in scope2" // expect: "in scope2"
-        var inside = 45
-        print glob2 - 50 // expect: -7.5
-        inside
-    }
-
-    print scope2 // expect: 45
+    var data = Data{list=[1., 4., 567.43]}
+    print data.list
+    print data.list[getIdx()]
+    data.list[getIdx() - 1] = 65.
+    print data.list[1]
 }
+
+

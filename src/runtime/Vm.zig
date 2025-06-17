@@ -39,6 +39,7 @@ interner: Interner,
 strings: Table,
 objects: ?*Obj,
 heap_vars: []Value,
+// TODO: can only be object
 r1: *Value = undefined,
 
 const Self = @This();
@@ -245,14 +246,23 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                const array = self.stack.pop().obj.as(ObjArray);
+                // const array = self.stack.pop().obj.as(ObjArray);
+                const array = self.r1.obj.as(ObjArray);
                 const final = checkArrayIndex(array, index);
 
                 self.stack.push(array.values.items[final]);
             },
+            .array_access_reg => {
+                const index = self.stack.pop().int;
+                const array = self.r1.obj.as(ObjArray);
+                const final = checkArrayIndex(array, index);
+
+                self.r1 = &array.values.items[final];
+            },
             .array_access_chain => {
                 const depth = frame.readByte();
-                var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+                var tmp: *ObjArray = self.r1.obj.as(ObjArray);
 
                 for (0..depth - 1) |_| {
                     const idx = checkArrayIndex(tmp, self.stack.pop().int);
@@ -262,40 +272,39 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const idx = checkArrayIndex(tmp, self.stack.pop().int);
                 self.stack.push(tmp.values.items[idx]);
             },
-            .array_assign => {
-                const index = self.stack.pop().int;
-                const array = self.cow(self.stack.pop().obj).as(ObjArray);
-
-                const final = checkArrayIndex(array, index);
-                const value = self.stack.pop();
-                array.obj.as(ObjArray).values.items[final] = value;
-            },
-            .array_assign_reg => {
-                const index = self.stack.pop().int;
-                self.r1.obj = self.cow(self.r1.obj);
-                const array = self.r1.obj.as(ObjArray);
-                const final = checkArrayIndex(array, index);
-                const value = self.stack.pop();
-                array.obj.as(ObjArray).values.items[final] = value;
-            },
-            .array_assign_chain => {
+            .array_access_chain_reg => {
                 const depth = frame.readByte();
-                var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
-                var last: **ObjArray = &tmp;
+                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
+                var tmp: *ObjArray = self.r1.obj.as(ObjArray);
 
                 for (0..depth - 1) |_| {
-                    const idx = checkArrayIndex(last.*, self.stack.pop().int);
-                    last = @constCast(&last.*.values.items[idx].obj);
+                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                    tmp = tmp.values.items[idx].obj.as(ObjArray);
                 }
 
-                last.* = self.cow(last.*.asObj()).as(ObjArray);
-
-                const idx = checkArrayIndex(last.*, self.stack.pop().int);
-                last.*.values.items[idx] = self.stack.pop();
+                const idx = checkArrayIndex(tmp, self.stack.pop().int);
+                self.r1 = &tmp.values.items[idx];
             },
-            // TODO: make a common function with above. Only `tmp` differs
-            .array_assign_chain_reg => {
+            .array_assign => {
+                const index = self.stack.pop().int;
+                // const array = self.cow(self.stack.pop().obj).as(ObjArray);
+                const array = self.cow(self.r1.obj).as(ObjArray);
+
+                const final = checkArrayIndex(array, index);
+                const value = self.stack.pop();
+                array.obj.as(ObjArray).values.items[final] = value;
+            },
+            // .array_assign_reg => {
+            //     const index = self.stack.pop().int;
+            //     self.r1.obj = self.cow(self.r1.obj);
+            //     const array = self.r1.obj.as(ObjArray);
+            //     const final = checkArrayIndex(array, index);
+            //     const value = self.stack.pop();
+            //     array.obj.as(ObjArray).values.items[final] = value;
+            // },
+            .array_assign_chain => {
                 const depth = frame.readByte();
+                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
                 var tmp: *ObjArray = self.r1.obj.as(ObjArray);
                 var last: **ObjArray = &tmp;
 
@@ -309,6 +318,22 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const idx = checkArrayIndex(last.*, self.stack.pop().int);
                 last.*.values.items[idx] = self.stack.pop();
             },
+            // TODO: make a common function with above. Only `tmp` differs
+            // .array_assign_chain_reg => {
+            //     const depth = frame.readByte();
+            //     var tmp: *ObjArray = self.r1.obj.as(ObjArray);
+            //     var last: **ObjArray = &tmp;
+
+            //     for (0..depth - 1) |_| {
+            //         const idx = checkArrayIndex(last.*, self.stack.pop().int);
+            //         last = @constCast(&last.*.values.items[idx].obj);
+            //     }
+
+            //     last.* = self.cow(last.*.asObj()).as(ObjArray);
+
+            //     const idx = checkArrayIndex(last.*, self.stack.pop().int);
+            //     last.*.values.items[idx] = self.stack.pop();
+            // },
             .bound_method => {
                 const receiver, const method = self.getBoundMethod(frame);
                 const bound = ObjBoundMethod.create(self, receiver, method);
@@ -352,19 +377,27 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .field_assign => {
                 // Skips the 'get_field' or 'bound_method' code
                 // TODO: don't emit it so we don't have to skip it?
-                frame.ip += 1;
-                const field = self.getField(frame);
-                field.* = self.stack.pop();
+                // frame.ip += 1;
+                // const field = self.getField(frame);
+                // field.* = self.stack.pop();
+
+                const value = self.stack.pop();
+                self.r1.* = value;
             },
             .get_field => {
                 const field_idx = frame.readByte();
-                self.stack.push(self.stack.pop().obj.as(ObjInstance).fields[field_idx]);
+                // self.stack.push(self.stack.pop().obj.as(ObjInstance).fields[field_idx]);
+                self.stack.push(self.r1.obj.as(ObjInstance).fields[field_idx]);
+            },
+            .get_field_reg => {
+                const field_idx = frame.readByte();
+                // self.r1 = &self.stack.pop().obj.as(ObjInstance).fields[field_idx];
+                self.r1 = &self.r1.obj.as(ObjInstance).fields[field_idx];
             },
             .get_field_chain => {
                 const field = self.getField(frame);
                 self.stack.push(field.*);
             },
-            // TODO: implement
             .get_field_chain_reg => self.r1 = self.getField(frame),
             .get_global => {
                 const idx = frame.readByte();
@@ -373,6 +406,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
             .get_local_cow => {
                 const index = frame.readByte();
                 const value = &frame.slots[index];

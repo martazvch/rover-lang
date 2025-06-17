@@ -118,6 +118,8 @@ const Compiler = struct {
     const State = struct {
         cow: bool = false,
         in_assign: bool = false,
+        temp_value: bool = false,
+        end_chain: bool = false,
     };
 
     const FnKind = enum {
@@ -198,6 +200,7 @@ const Compiler = struct {
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
+        // TODO: more frequent paths should be first
         self.writeOpAndByte(
             if (variable.scope == .heap)
                 .get_heap
@@ -205,6 +208,8 @@ const Compiler = struct {
                 .get_global
             else if (self.state.cow)
                 .get_local_cow
+            else if (self.state.temp_value)
+                .get_local_reg
             else
                 .get_local,
             @intCast(variable.index),
@@ -340,18 +345,35 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
+    fn setTempValueGetPrev(self: *Self) bool {
+        const prev = self.state.temp_value;
+        self.state.temp_value = true;
+        return prev;
+    }
+
+    fn consumeEndChainState(self: *Self) bool {
+        defer self.state.end_chain = false;
+        return self.state.end_chain;
+    }
+
     fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
+        const prev = self.setTempValueGetPrev();
+        defer self.state.temp_value = prev;
+
         // Variable
         try self.compileInstr();
         // Index
         try self.compileInstr();
-        self.writeOp(.array_access, start);
+        self.writeOp(if (self.shouldReg()) .array_access_reg else .array_access, start);
 
         if (incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
     fn arrayAssign(self: *Self, start: usize) Error!void {
-        // Variable. If we just assign to an identifier like: `arr[0] = 4`, we leave `cow` to emit
+        // const prev = self.setTempValueGetPrev();
+        // defer self.state.temp_value = prev;
+
+        // If we just assign to an identifier like: `arr[0] = 4`, we leave `cow` to emit
         // get_local_cow etc. Otherwise, we delete it because we don't want to trigger a cow on accessing the array.
         // For example: foo.bar[0]
         // Here, when compiling the array 'foo.bar', 'foo' would be compiled as get_local_cow because
@@ -361,6 +383,7 @@ const Compiler = struct {
         const is_ident = data_at == .identifier or data_at == .identifier_id;
         if (!is_ident) self.state.cow = false;
 
+        // Variable
         try self.compileInstr();
 
         // Index
@@ -369,7 +392,9 @@ const Compiler = struct {
         // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
         // the variable in a register as it is already cloned if needed on the stack
         // For more complex array expressions, it will be in a register
-        self.writeOp(if (is_ident) .array_assign else .array_assign_reg, start);
+
+        // self.writeOp(if (is_ident) .array_assign else .array_assign_reg, start);
+        self.writeOp(.array_assign, start);
     }
 
     fn compileArrayChain(self: *Self, tag: enum { access, assign }, depth: usize, start: usize) Error!void {
@@ -390,8 +415,10 @@ const Compiler = struct {
         // TODO: protect the cast
         self.writeOpAndByte(
             switch (tag) {
-                .access => .array_access_chain,
-                .assign => if (is_ident) .array_assign_chain else .array_assign_chain_reg,
+                // .access => .array_access_chain,
+                .access => if (self.shouldReg()) .array_access_chain_reg else .array_access_chain,
+                // .assign => if (is_ident) .array_assign_chain else .array_assign_chain_reg,
+                .assign => .array_assign_chain,
             },
             @intCast(depth),
             start,
@@ -400,6 +427,7 @@ const Compiler = struct {
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
         const start = self.getStart();
+        self.state.end_chain = true;
 
         // Value
         try self.compileInstr();
@@ -426,6 +454,7 @@ const Compiler = struct {
 
         // BUG: Protect the cast, we can't have more than 256 variable to lookup
         // for now
+        // TODO: protect cow
         self.writeOpAndByte(
             if (variable_data.scope == .global)
                 .set_global
@@ -438,9 +467,12 @@ const Compiler = struct {
         );
     }
 
+    // TODO: just a 'reg_assign'?
     fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
-        self.writeOp(.field_assign, start);
+        // self.writeOp(.field_assign, start);
+        // try self.getMember(data);
         try self.getMember(data);
+        self.writeOp(.field_assign, start);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
@@ -669,6 +701,7 @@ const Compiler = struct {
         }
 
         for (0..data.body_len) |_| {
+            compiler.state.end_chain = true;
             try compiler.compileInstr();
         }
 
@@ -687,23 +720,57 @@ const Compiler = struct {
     // - If there's a method call or an array access in-between, we have to resolve it first,
     //   resulting in interacting with the top value of the stack after the call
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
+        // if (data.kind == .field) {
+        //     // We compile the call/array access first
+        //     try self.compileInstr();
+        //
+        //     // Get field/bound method of first value on the stack
+        //     // TODO: handle register?
+        //     self.writeOpAndByte(
+        //         if (self.consumeEndChainState()) .get_field else .get_field_reg,
+        //         @intCast(data.index),
+        //         self.getStart(),
+        //     );
+        // } else {
+        //     self.writeOpAndByte(
+        //         if (data.kind == .symbol)
+        //             .get_symbol
+        //         else if (data.kind == .method)
+        //             .bound_method
+        //         else
+        //             .get_static_method,
+        //         @intCast(data.index),
+        //         self.getStart(),
+        //     );
+        //
+        //     try self.compileInstr();
+        // }
+
         const member_data = self.getData();
 
         if (member_data == .call or member_data == .array_access or member_data == .array_access_chain) {
+            // As we compile member first, we preshot the value
+            const reg = self.shouldReg();
             // We compile the call/array access first
             try self.compileInstr();
 
             // Get field/bound method of first value on the stack
+            // TODO: handle register?
             self.writeOpAndByte(
-                if (data.kind == .field) .get_field else .bound_method,
+                if (data.kind == .field)
+                    // if (self.state.in_assign) .get_field_reg else .get_field
+                    if (reg) .get_field_reg else .get_field
+                else
+                    .bound_method,
                 @intCast(data.index),
                 self.getStart(),
             );
         } else {
-            // If we are in assignment, we save the field in a register so we keep its address in case of cow
             self.writeOpAndByte(
                 if (data.kind == .field)
-                    if (self.state.in_assign) .get_field_chain_reg else .get_field_chain
+                    // If we are in assignment, we save the field in a register so we keep its address in case of cow
+                    // if (self.state.in_assign) .get_field_chain_reg else .get_field_chain
+                    if (self.shouldReg()) .get_field_chain_reg else .get_field_chain
                 else if (data.kind == .symbol)
                     .get_symbol
                 else if (data.kind == .method)
@@ -716,6 +783,10 @@ const Compiler = struct {
 
             try self.compileInstr();
         }
+    }
+
+    fn shouldReg(self: *Self) bool {
+        return self.state.in_assign or !self.consumeEndChainState();
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
