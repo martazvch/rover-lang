@@ -128,7 +128,7 @@
 // }
 
 struct Foo {
-    arr: [][]int,
+    arr: []int,
 }
 
 fn getIdx() -> int {
@@ -136,24 +136,28 @@ fn getIdx() -> int {
 }
 
 fn main() {
-    var arr: [][]int = [[1, 2, 3,], [4, 5, 6]]
-    var arr2 = [[1, 2, 33,], [3, 4, 55,]]
-    var foo = Foo{arr=[[6, 7, getIdx()], [8, 9+1, 11]]}
+    var arr: []int = [1, 2, 3,]
+    var arr2 = [1, 2,]
+    var foo = Foo{arr=[6, 7, getIdx()]}
+
+    print arr
 
     // Access
-    print arr[1][2]
-    print arr[-2][-1]
+    print arr[2]
+    print arr[-2]
 
     // Element assignment
-    arr[-1][getIdx()] = 99
-    // assignment
-    arr = arr2
-
-    // Element assignment in struct
-    foo.arr[getIdx()] = [1]
-    foo.arr[getIdx()][1] = -9
-    // Access in struct
-    print foo.arr[getIdx()]
-    print foo.arr[getIdx()][1]
+    arr[getIdx()] = 99
+    print arr
+    // Assignment
+    // arr = arr2
+    // print arr
+    //
+    // print foo.arr
+    // // Element assignment in struct
+    // foo.arr[getIdx()] = -9
+    // // Access in struct
+    // print foo.arr
+    // print foo.arr[getIdx()]
 }
 

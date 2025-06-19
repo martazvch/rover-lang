@@ -34,7 +34,7 @@ OP_ARRAY_ACCESS
 OP_PRINT
 
 OP_CONSTANT index 9, value 99
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 1
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
 OP_ARRAY_ASSIGN
@@ -46,7 +46,7 @@ OP_SET_LOCAL index 1
 OP_CONSTANT index 10, value 9
 OP_NEGATE_INT
 OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_LOCAL index 3
+OP_GET_LOCAL_REG index 3
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
 OP_ARRAY_ASSIGN

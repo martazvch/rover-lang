@@ -229,7 +229,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             _ = try dis.disInstruction(instr_nb, self.stdout);
 
             switch (@as(OpCode, @enumFromInt(frame.ip[0]))) {
-                .field_assign => _ = try dis.disInstruction(instr_nb + 1, self.stdout),
                 .get_symbol => _ = try dis.disInstruction(instr_nb + 2, self.stdout),
                 else => {},
             }

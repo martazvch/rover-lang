@@ -1,0 +1,38 @@
+struct Foo {
+    arr: [][]int,
+}
+
+fn getIdx() -> int {
+    2
+}
+
+fn main() {
+    var arr: [][]int = [[1, 2, 3,], [4, 5, 6]]
+    var arr2 = [[1, 2, 33,], [3, 4, 55,]]
+    var foo = Foo{arr=[[6, 7, getIdx()], [8, 9+1, 11]]}
+
+    // Access
+    print arr
+    print arr[1]
+    print arr[1][2]
+    print arr[-2][-1]
+
+    // Element assignment
+    arr[-1][getIdx()] = 99
+    print arr
+    // assignment
+    arr = arr2
+    print arr
+
+    // Element assignment in struct
+    print foo.arr
+    print foo.arr[0]
+    foo.arr[getIdx() - 1] = [100, 200]
+    print foo.arr
+    foo.arr[1][1] = -9
+    print foo.arr
+
+    // Access in struct
+    print foo.arr[1]
+    print foo.arr[getIdx() - 1][1]
+}

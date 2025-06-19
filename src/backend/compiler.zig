@@ -396,6 +396,9 @@ const Compiler = struct {
     }
 
     fn arrayAssign(self: *Self, start: usize) Error!void {
+        const prev = self.setToRegAndGetPrevious();
+        defer self.state.to_reg = prev;
+
         // Variable
         try self.compileInstr();
 
@@ -415,6 +418,8 @@ const Compiler = struct {
         }
 
         // Variable
+        const prev = self.setToRegAndGetPrevious();
+        defer self.state.to_reg = prev;
         try self.compileInstr();
 
         // TODO: protect the cast
