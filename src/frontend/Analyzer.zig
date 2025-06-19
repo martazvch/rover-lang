@@ -88,16 +88,16 @@ const Variable = struct {
 const State = struct {
     /// In a context that allow partially returning a value
     allow_partial: bool = true,
+    /// Current function's type
+    fn_type: Type = .void,
     /// Indicates if we should increment reference count
     incr_ref: bool = false,
     /// In a function
     in_fn: bool = false,
-    /// Current function's type
-    fn_type: Type = .void,
-    /// Current structure's type
-    struct_type: Type = .void,
     /// Flag to tell if last statement returned from scope
     returns: bool = false,
+    /// Current structure's type
+    struct_type: Type = .void,
 };
 
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -915,13 +915,14 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
 
     const idx = self.reserveInstr();
     const arr = try self.analyzeExpr(expr.array);
-    const type_value = arr.getValue();
-    const child = self.type_manager.type_infos.items[type_value].array.child;
 
     if (!arr.is(.array)) return self.err(
         .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
         self.ast.getSpan(expr.array),
     );
+
+    const type_value = arr.getValue();
+    const child = self.type_manager.type_infos.items[type_value].array.child;
 
     try self.expectArrayIndex(expr.index);
     self.setInstr(idx, .{ .array_access = .{ .incr_ref = save_check_inr_ref and child.isHeap() } });
@@ -942,15 +943,18 @@ fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     }
 
     try self.expectArrayIndex(current.index);
+
+    const save_check_inr_ref = self.state.incr_ref;
+    self.state.incr_ref = false;
     const arr = try self.analyzeExpr(current.array);
-    // TODO: add incr_ref_count?
-    self.setInstr(idx, .{ .array_access_chain = depth });
 
     var final_type: Type = arr;
     for (0..depth) |_| {
         const type_value = final_type.getValue();
         final_type = self.type_manager.type_infos.items[type_value].array.child;
     }
+
+    self.setInstr(idx, .{ .array_access_chain = .{ .depth = depth, .incr_ref = save_check_inr_ref and final_type.isHeap() } });
 
     return final_type;
 }
@@ -1207,6 +1211,9 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const index = self.reserveInstr();
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
+    // We set it to false because we wan't to increment rhs of the field access, not the structure
+    const save_check_inr_ref = self.state.incr_ref;
+    self.state.incr_ref = false;
     const struct_type, const is_type = switch (expr.structure.*) {
         .literal => |*e| blk: {
             const assigne = try self.identifier(e.idx, false);
@@ -1215,6 +1222,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         else => .{ try self.analyzeExpr(expr.structure), false },
     };
 
+    self.state.incr_ref = save_check_inr_ref;
     const struct_value = struct_type.getValue();
 
     var found_field, const kind: Instruction.Member.Kind = switch (struct_type.getKind()) {

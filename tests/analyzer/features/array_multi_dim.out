@@ -1,0 +1,108 @@
+//-- array_multi_dim.rv --
+[Structure declaration Foo, index: 0, scope: global]
+
+[Fn declaration getIdx, index: 1, scope: global, return kind: implicit_value]
+    [Int 2]
+
+[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
+    [Variable declaration index: 1, scope: local]
+        [Array]
+            [Array]
+                [Int 1]
+                [Int 2]
+                [Int 3]
+            [Array]
+                [Int 4]
+                [Int 5]
+                [Int 6]
+    [Variable declaration index: 2, scope: local]
+        [Array]
+            [Array]
+                [Int 1]
+                [Int 2]
+                [Int 33]
+            [Array]
+                [Int 3]
+                [Int 4]
+                [Int 55]
+    [Variable declaration index: 3, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Array]
+                [Array]
+                    [Int 6]
+                    [Int 7]
+                    [Fn call arity: 0, call_tag: function]
+                        [Variable index: 1, scope: global]
+                [Array]
+                    [Int 8]
+                    [Binop type: add_int, cast: none]
+                        [Int 9]
+                        [Int 1]
+                    [Int 11]
+    [Print]
+        [Array chain access]
+            - indicies
+            [Int 2]
+            [Int 1]
+            - array
+            [Variable index: 1, scope: local]
+    [Print]
+        [Array chain access]
+            - indicies
+            [Unary minus]
+                [Int 1]
+            [Unary minus]
+                [Int 2]
+            - array
+            [Variable index: 1, scope: local]
+    [Int 99]
+    [Array chain assignment]
+        - indicies
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+        [Unary minus]
+            [Int 1]
+        - array
+        [Variable index: 1, scope: local]
+    [Variable index: 2, scope: local]
+    [Assignment index: 1, scope: local]
+    [Array]
+        [Int 1]
+    [Array assignment]
+        - array
+        [Field access 0]
+            [Variable index: 3, scope: local]
+        - index
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+    [Unary minus]
+        [Int 9]
+    [Array chain assignment]
+        - indicies
+        [Int 1]
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+        - array
+        [Field access 0]
+            [Variable index: 3, scope: local]
+    [Print]
+        [Array access]
+            - array
+            [Field access 0]
+                [Variable index: 3, scope: local]
+            - index
+            [Fn call arity: 0, call_tag: function]
+                [Variable index: 1, scope: global]
+    [Print]
+        [Array chain access]
+            - indicies
+            [Int 1]
+            [Fn call arity: 0, call_tag: function]
+                [Variable index: 1, scope: global]
+            - array
+            [Field access 0]
+                [Variable index: 3, scope: local]
+                

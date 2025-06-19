@@ -83,20 +83,20 @@
             [Variable index: 5, scope: local]
     [Print]
         [Array chain access]
-            - array
-            [Int 0]
             - indicies
+            [Int 0]
             [Int 1]
+            - array
             [Field access 0]
                 [Field access 0]
                     [Variable index: 6, scope: local]
     [Print]
         [Field access 0]
             [Array chain access]
-                - array
-                [Int 0]
                 - indicies
+                [Int 0]
                 [Int 1]
+                - array
                 [Field access 0]
                     [Field access 0]
                         [Variable index: 6, scope: local]
@@ -105,10 +105,10 @@
             - array
             [Field access 2]
                 [Array chain access]
-                    - array
-                    [Int 0]
                     - indicies
+                    [Int 0]
                     [Int 1]
+                    - array
                     [Field access 0]
                         [Field access 0]
                             [Variable index: 6, scope: local]
@@ -116,16 +116,16 @@
             [Int 0]
     [Print]
         [Array chain access]
-            - array
-            [Int 1]
             - indicies
             [Int 1]
+            [Int 1]
+            - array
             [Field access 2]
                 [Array chain access]
-                    - array
-                    [Int 0]
                     - indicies
+                    [Int 0]
                     [Int 1]
+                    - array
                     [Field access 0]
                         [Field access 0]
                             [Variable index: 6, scope: local]
@@ -136,10 +136,10 @@
         - array
         [Field access 2]
             [Array chain access]
-                - array
-                [Int 0]
                 - indicies
+                [Int 0]
                 [Int 1]
+                - array
                 [Field access 0]
                     [Field access 0]
                         [Variable index: 6, scope: local]

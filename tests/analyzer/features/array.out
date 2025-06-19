@@ -1,66 +1,17 @@
 //-- array.rv --
 [Structure declaration Foo, index: 0, scope: global]
-
 [Fn declaration getIdx, index: 1, scope: global, return kind: implicit_value]
     [Int 2]
-
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
         [Array]
             [Int 1]
             [Int 2]
             [Int 3]
-
-    [Print]
-        [Array access]
-            - array
-            [Variable index: 1, scope: local]
-            - index
-            [Int 0]
-
-    [Print]
-        [Array access]
-            - array
-            [Variable index: 1, scope: local]
-            - index
-            [Int 1]
-
-    [Print]
-        [Array access]
-            - array
-            [Variable index: 1, scope: local]
-            - index
-            [Unary minus]
-                [Int 1]
-
-    [Print]
-        [Array access]
-            - array
-            [Variable index: 1, scope: local]
-            - index
-            [Unary minus]
-                [Int 2]
-
     [Variable declaration index: 2, scope: local]
         [Array]
             [Int 1]
             [Int 2]
-
-    [Int 4]
-    [Array assignment]
-        - array
-        [Variable index: 1, scope: local]
-        - index
-        [Int 2]
-
-    [Int 2]
-    [Array assignment]
-        - array
-        [Variable index: 1, scope: local]
-        - index
-        [Fn call arity: 0, call_tag: function]
-            [Variable index: 1, scope: global]
-
     [Variable declaration index: 3, scope: local]
         [Structure literal]
             - structure
@@ -71,7 +22,28 @@
                 [Int 7]
                 [Fn call arity: 0, call_tag: function]
                     [Variable index: 1, scope: global]
-
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Int 1]
+    [Print]
+        [Array access]
+            - array
+            [Variable index: 1, scope: local]
+            - index
+            [Unary minus]
+                [Int 2]
+    [Int 99]
+    [Array assignment]
+        - array
+        [Variable index: 1, scope: local]
+        - index
+        [Fn call arity: 0, call_tag: function]
+            [Variable index: 1, scope: global]
+    [Variable index: 2, scope: local]
+    [Assignment index: 1, scope: local]
     [Unary minus]
         [Int 9]
     [Array assignment]
@@ -81,5 +53,11 @@
         - index
         [Fn call arity: 0, call_tag: function]
             [Variable index: 1, scope: global]
-
-
+    [Print]
+        [Array access]
+            - array
+            [Field access 0]
+                [Variable index: 3, scope: local]
+            - index
+            [Fn call arity: 0, call_tag: function]
+                [Variable index: 1, scope: global]

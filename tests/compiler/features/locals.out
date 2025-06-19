@@ -8,7 +8,6 @@ OP_CONSTANT index 4, value "assign sub"
 OP_SET_LOCAL index 3
 OP_POP
 OP_GET_LOCAL index 1
-OP_INCR_REF_COUNT
 OP_SET_LOCAL index 2
 OP_POP
 OP_POP

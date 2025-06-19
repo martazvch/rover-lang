@@ -22,12 +22,14 @@ OP_STRUCT_LIT index 1
 
 OP_GET_LOCAL index 1
 OP_INVOKE arity 0, method index 0
+OP_REG_PUSH
 OP_GET_FIELD index 0
 OP_PRINT
 
 OP_GET_GLOBAL index 2, <fn getVec>
 OP_CONSTANT index 1, value 5
 OP_CALL index 1
+OP_REG_PUSH
 OP_GET_FIELD index 0
 OP_PRINT
 

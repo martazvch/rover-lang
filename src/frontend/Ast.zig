@@ -233,7 +233,10 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         Expr => switch (node) {
             inline else => |*e| self.getSpan(e.*),
         },
-        Array => node.span,
+        Array => .{
+            .start = self.token_spans[node.span.start].start,
+            .end = self.token_spans[node.span.end].end,
+        },
         ArrayAccess => .{
             .start = self.getSpan(node.array).start,
             .end = self.token_spans[node.end].end,

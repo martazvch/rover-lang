@@ -39,8 +39,9 @@ interner: Interner,
 strings: Table,
 objects: ?*Obj,
 heap_vars: []Value,
-// TODO: can only be object
+// TODO: can only be object? No, in returns we put anything here
 r1: *Value = undefined,
+r2: Value = .null_,
 
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
@@ -83,6 +84,8 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.pipeline.init(self, config);
     self.stack.init();
     self.strings = .init(self.allocator);
+    // Init on first address to avoid nullable pointer (used only in print stack mode)
+    self.r1 = &self.stack.values[0];
 
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
@@ -198,7 +201,13 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
 
     while (true) {
         if (comptime options.print_stack) {
-            print("          ", .{});
+            if (self.r1 != &self.stack.values[0]) {
+                print("  R1: [", .{});
+                try self.r1.print(self.stdout);
+                print("]  |  ", .{});
+            } else {
+                print("          ", .{});
+            }
 
             var value = self.stack.values[0..].ptr;
 
@@ -246,7 +255,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                // const array = self.stack.pop().obj.as(ObjArray);
                 const array = self.r1.obj.as(ObjArray);
                 const final = checkArrayIndex(array, index);
 
@@ -261,7 +269,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_access_chain => {
                 const depth = frame.readByte();
-                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
                 var tmp: *ObjArray = self.r1.obj.as(ObjArray);
 
                 for (0..depth - 1) |_| {
@@ -274,7 +281,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_access_chain_reg => {
                 const depth = frame.readByte();
-                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
                 var tmp: *ObjArray = self.r1.obj.as(ObjArray);
 
                 for (0..depth - 1) |_| {
@@ -287,24 +293,14 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_assign => {
                 const index = self.stack.pop().int;
-                // const array = self.cow(self.stack.pop().obj).as(ObjArray);
                 const array = self.cow(self.r1.obj).as(ObjArray);
 
                 const final = checkArrayIndex(array, index);
                 const value = self.stack.pop();
                 array.obj.as(ObjArray).values.items[final] = value;
             },
-            // .array_assign_reg => {
-            //     const index = self.stack.pop().int;
-            //     self.r1.obj = self.cow(self.r1.obj);
-            //     const array = self.r1.obj.as(ObjArray);
-            //     const final = checkArrayIndex(array, index);
-            //     const value = self.stack.pop();
-            //     array.obj.as(ObjArray).values.items[final] = value;
-            // },
             .array_assign_chain => {
                 const depth = frame.readByte();
-                // var tmp: *ObjArray = self.stack.pop().obj.as(ObjArray);
                 var tmp: *ObjArray = self.r1.obj.as(ObjArray);
                 var last: **ObjArray = &tmp;
 
@@ -318,22 +314,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const idx = checkArrayIndex(last.*, self.stack.pop().int);
                 last.*.values.items[idx] = self.stack.pop();
             },
-            // TODO: make a common function with above. Only `tmp` differs
-            // .array_assign_chain_reg => {
-            //     const depth = frame.readByte();
-            //     var tmp: *ObjArray = self.r1.obj.as(ObjArray);
-            //     var last: **ObjArray = &tmp;
-
-            //     for (0..depth - 1) |_| {
-            //         const idx = checkArrayIndex(last.*, self.stack.pop().int);
-            //         last = @constCast(&last.*.values.items[idx].obj);
-            //     }
-
-            //     last.* = self.cow(last.*.asObj()).as(ObjArray);
-
-            //     const idx = checkArrayIndex(last.*, self.stack.pop().int);
-            //     last.*.values.items[idx] = self.stack.pop();
-            // },
             .bound_method => {
                 const receiver, const method = self.getBoundMethod(frame);
                 const bound = ObjBoundMethod.create(self, receiver, method);
@@ -373,25 +353,19 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
             .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
             .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(ObjString) == self.stack.pop().obj.as(ObjString))),
-            .false => self.stack.push(Value.false_),
-            .field_assign => {
-                // Skips the 'get_field' or 'bound_method' code
-                // TODO: don't emit it so we don't have to skip it?
-                // frame.ip += 1;
-                // const field = self.getField(frame);
-                // field.* = self.stack.pop();
-
-                const value = self.stack.pop();
-                self.r1.* = value;
+            .exit_repl => {
+                // Here, there is no value to pop for now, no implicit null is
+                // put on top of the stack
+                self.frame_stack.count -= 1;
+                break;
             },
+            .false => self.stack.push(Value.false_),
             .get_field => {
                 const field_idx = frame.readByte();
-                // self.stack.push(self.stack.pop().obj.as(ObjInstance).fields[field_idx]);
                 self.stack.push(self.r1.obj.as(ObjInstance).fields[field_idx]);
             },
             .get_field_reg => {
                 const field_idx = frame.readByte();
-                // self.r1 = &self.stack.pop().obj.as(ObjInstance).fields[field_idx];
                 self.r1 = &self.r1.obj.as(ObjInstance).fields[field_idx];
             },
             .get_field_chain => {
@@ -407,18 +381,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
             .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
-            .get_local_cow => {
-                const index = frame.readByte();
-                const value = &frame.slots[index];
-                const obj = value.obj;
-
-                if (obj.ref_count > 0) {
-                    obj.ref_count -= 1;
-                    value.* = Value.makeObj(obj.deepCopy(self));
-                }
-
-                self.stack.push(value.*);
-            },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_fn_default => self.getDefaultValue(frame, ObjFunction),
             .get_method_default => {
@@ -547,11 +509,13 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const module = &self.module.imports[index];
                 self.stack.push(.makeModule(module));
             },
-            .exit_repl => {
-                // Here, there is no value to pop for now, no implicit null is
-                // put on top of the stack
-                self.frame_stack.count -= 1;
-                break;
+            .reg_push => {
+                self.r2 = self.stack.pop();
+                self.r1 = &self.r2;
+            },
+            .reg_assign => {
+                const value = self.stack.pop();
+                self.r1.* = value;
             },
             .@"return" => {
                 const result = self.stack.pop();
@@ -567,12 +531,15 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
 
                 self.stack.top = frame.slots;
                 self.stack.push(result);
+
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .scope_return => {
                 const locals_count = frame.readByte();
                 const res = self.stack.pop();
                 self.stack.top -= locals_count;
+
+                // TODO: put in register too?
                 self.stack.push(res);
             },
             .set_global => {
@@ -609,6 +576,27 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
     }
 }
 
+fn returnFromCall(self: *Self, frame: **CallFrame) ?Value {
+    const result = self.stack.pop();
+    self.frame_stack.count -= 1;
+
+    // The last standing frame is the artificial one created when we run
+    // the global scope at the very beginning
+    // TODO: avoid logic at runtime, just emit a special OpCode for `main` return
+    if (self.frame_stack.count == 1) {
+        _ = self.stack.pop();
+        return null;
+    }
+
+    self.stack.top = frame.slots;
+    // self.stack.push(result);
+
+    // In case of chains with invoke like: poly.getPoint().x, the field/index access will use register
+    // self.r1 = &(self.stack.top - 1)[0];
+    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+    return result;
+}
+
 /// Checks clone on write
 fn cow(self: *Self, obj: *Obj) *Obj {
     if (obj.ref_count > 0) {
@@ -624,7 +612,8 @@ inline fn getValueFromScope(self: *Self, frame: *CallFrame) *Value {
     const scope: OpCode = @enumFromInt(frame.readByte());
 
     // Check before because get field reads a byte frome ip
-    if (scope == .get_field_chain) return self.getField(frame);
+    if (scope == .get_field_chain or scope == .get_field_chain_reg)
+        return self.getField(frame);
 
     const idx = frame.readByte();
 
@@ -643,7 +632,7 @@ fn getField(self: *Self, frame: *CallFrame) *Value {
     const instance = blk: {
         const op: OpCode = @enumFromInt(frame.readByte());
 
-        if (op == .get_field_chain)
+        if (op == .get_field_chain or op == .get_field_chain_reg)
             break :blk self.getField(frame);
 
         const idx = frame.readByte();

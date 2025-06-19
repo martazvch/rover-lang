@@ -116,10 +116,14 @@ const Compiler = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     const State = struct {
-        cow: bool = false,
+        /// In an assignment. Used to determine if the end of an access chain like:
+        /// 'foo.bar[0].baz' should be left in a register instead of the top of the stack
         in_assign: bool = false,
-        temp_value: bool = false,
-        end_chain: bool = false,
+        /// Used to know if we're the last part of a chain like: 'foo.bar[0].baz'. Being the last
+        /// part means that we push the result on top of stack
+        end_of_chain: bool = false,
+        /// Writes variable getters to the register
+        to_reg: bool = false,
     };
 
     const FnKind = enum {
@@ -135,7 +139,7 @@ const Compiler = struct {
         };
     }
 
-    inline fn at(self: *const Self) *const Instruction.Data {
+    fn at(self: *const Self) *const Instruction.Data {
         return &self.manager.instr_data[self.manager.instr_idx];
     }
 
@@ -145,19 +149,19 @@ const Compiler = struct {
         return self.manager.instr_data[self.manager.instr_idx];
     }
 
-    inline fn eof(self: *const Self) bool {
+    fn eof(self: *const Self) bool {
         return self.manager.instr_idx == self.manager.instr_data.len;
     }
 
-    inline fn getChunk(self: *Self) *Chunk {
+    fn getChunk(self: *Self) *Chunk {
         return &self.function.chunk;
     }
 
-    inline fn getData(self: *const Self) Instruction.Data {
+    fn getData(self: *const Self) Instruction.Data {
         return self.manager.instr_data[self.manager.instr_idx];
     }
 
-    inline fn getStart(self: *const Self) usize {
+    fn getStart(self: *const Self) usize {
         const idx = if (self.manager.instr_idx >= self.manager.instr_data.len)
             self.manager.instr_idx - 1
         else
@@ -165,13 +169,30 @@ const Compiler = struct {
         return self.manager.instr_offsets[idx];
     }
 
+    /// Set the state's flag `to_reg` to true and return previous value
+    fn setToRegAndGetPrevious(self: *Self) bool {
+        defer self.state.to_reg = true;
+        return self.state.to_reg;
+    }
+
+    fn consumeEndChainState(self: *Self) bool {
+        defer self.state.end_of_chain = false;
+        return self.state.end_of_chain;
+    }
+
+    /// Determines if the result of the Op code should be left in a register instead
+    /// of top of the stack. In an assignment, always true
+    fn shouldPutResultInReg(self: *Self) bool {
+        return self.state.in_assign or !self.consumeEndChainState();
+    }
+
     /// Writes an OpCode to the current chunk
-    inline fn writeOp(self: *Self, op: OpCode, offset: usize) void {
+    fn writeOp(self: *Self, op: OpCode, offset: usize) void {
         self.getChunk().writeOp(op, offset);
     }
 
     /// Writes a byte to the current chunk
-    inline fn writeByte(self: *Self, byte: u8, offset: usize) void {
+    fn writeByte(self: *Self, byte: u8, offset: usize) void {
         self.getChunk().writeByte(byte, offset);
     }
 
@@ -206,9 +227,7 @@ const Compiler = struct {
                 .get_heap
             else if (variable.scope == .global)
                 .get_global
-            else if (self.state.cow)
-                .get_local_cow
-            else if (self.state.temp_value)
+            else if (self.state.to_reg)
                 .get_local_reg
             else
                 .get_local,
@@ -261,7 +280,6 @@ const Compiler = struct {
         // TODO: Error handling
         if (jump_offset > std.math.maxInt(u16)) {
             @panic("loop body too large\n");
-            // return error.Err;
         }
 
         chunk.writeByte(@as(u8, @intCast(jump_offset >> 8)) & 0xff, offset);
@@ -289,7 +307,7 @@ const Compiler = struct {
         try switch (self.next()) {
             .array => |*data| self.array(data),
             .array_access => |*data| self.arrayAccess(data.incr_ref, self.getStart()),
-            .array_access_chain => |depth| self.compileArrayChain(.access, depth, self.getStart()),
+            .array_access_chain => |*data| self.arrayAccessChain(data, self.getStart()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
@@ -345,44 +363,39 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
-    fn setTempValueGetPrev(self: *Self) bool {
-        const prev = self.state.temp_value;
-        self.state.temp_value = true;
-        return prev;
-    }
-
-    fn consumeEndChainState(self: *Self) bool {
-        defer self.state.end_chain = false;
-        return self.state.end_chain;
-    }
-
     fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
-        const prev = self.setTempValueGetPrev();
-        defer self.state.temp_value = prev;
+        const prev = self.setToRegAndGetPrevious();
+        defer self.state.to_reg = prev;
+        const reg = self.shouldPutResultInReg();
 
         // Variable
         try self.compileInstr();
         // Index
         try self.compileInstr();
-        self.writeOp(if (self.shouldReg()) .array_access_reg else .array_access, start);
+        self.writeOp(if (reg) .array_access_reg else .array_access, start);
 
         if (incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
+    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
+        // Indicies
+        for (0..data.depth) |_| {
+            try self.compileInstr();
+        }
+
+        // Same as 'arrayAccess'
+        const prev = self.setToRegAndGetPrevious();
+        defer self.state.to_reg = prev;
+        const reg = self.shouldPutResultInReg();
+
+        // Variable
+        try self.compileInstr();
+
+        self.writeOpAndByte(if (reg) .array_access_chain_reg else .array_access_chain, @intCast(data.depth), start);
+        if (data.incr_ref) self.writeOp(.incr_ref_count, start);
+    }
+
     fn arrayAssign(self: *Self, start: usize) Error!void {
-        // const prev = self.setTempValueGetPrev();
-        // defer self.state.temp_value = prev;
-
-        // If we just assign to an identifier like: `arr[0] = 4`, we leave `cow` to emit
-        // get_local_cow etc. Otherwise, we delete it because we don't want to trigger a cow on accessing the array.
-        // For example: foo.bar[0]
-        // Here, when compiling the array 'foo.bar', 'foo' would be compiled as get_local_cow because
-        // of compiler's state
-        // TODO: review or use std.meta.activeTag?
-        const data_at = self.at().*;
-        const is_ident = data_at == .identifier or data_at == .identifier_id;
-        if (!is_ident) self.state.cow = false;
-
         // Variable
         try self.compileInstr();
 
@@ -392,42 +405,24 @@ const Compiler = struct {
         // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
         // the variable in a register as it is already cloned if needed on the stack
         // For more complex array expressions, it will be in a register
-
-        // self.writeOp(if (is_ident) .array_assign else .array_assign_reg, start);
         self.writeOp(.array_assign, start);
     }
 
-    fn compileArrayChain(self: *Self, tag: enum { access, assign }, depth: usize, start: usize) Error!void {
+    fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
         // Indicies
-        for (0..depth) |_| {
+        for (0..data.depth) |_| {
             try self.compileInstr();
         }
-
-        // See above in `arrayAssign`.
-        // TODO: make it common?
-        const data_at = self.at().*;
-        const is_ident = data_at == .identifier or data_at == .identifier_id;
-        if (!is_ident) self.state.cow = false;
 
         // Variable
         try self.compileInstr();
 
         // TODO: protect the cast
-        self.writeOpAndByte(
-            switch (tag) {
-                // .access => .array_access_chain,
-                .access => if (self.shouldReg()) .array_access_chain_reg else .array_access_chain,
-                // .assign => if (is_ident) .array_assign_chain else .array_assign_chain_reg,
-                .assign => .array_assign_chain,
-            },
-            @intCast(depth),
-            start,
-        );
+        self.writeOpAndByte(.array_assign_chain, @intCast(data.depth), start);
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
         const start = self.getStart();
-        self.state.end_chain = true;
 
         // Value
         try self.compileInstr();
@@ -436,18 +431,14 @@ const Compiler = struct {
         if (data.cast) self.writeOp(.cast_to_float, start);
 
         // Used by `getVar` in case we fetch a simple identifier
-        self.state.cow = data.cow;
         self.state.in_assign = true;
-        defer {
-            self.state.cow = false;
-            self.state.in_assign = false;
-        }
+        defer self.state.in_assign = false;
 
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
-            .array_access_chain => |depth| return self.compileArrayChain(.assign, depth, start),
+            .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
             .member => |*member| return self.fieldAssignment(member, start),
             else => unreachable,
         };
@@ -469,10 +460,8 @@ const Compiler = struct {
 
     // TODO: just a 'reg_assign'?
     fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
-        // self.writeOp(.field_assign, start);
-        // try self.getMember(data);
         try self.getMember(data);
-        self.writeOp(.field_assign, start);
+        self.writeOp(.reg_assign, start);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
@@ -481,9 +470,11 @@ const Compiler = struct {
         // Special handle for logicals
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
 
+        self.state.end_of_chain = true;
         try self.compileInstr();
         if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
+        self.state.end_of_chain = true;
         try self.compileInstr();
         if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
@@ -545,7 +536,10 @@ const Compiler = struct {
     fn block(self: *Self, data: *const Instruction.Block) Error!void {
         const start = self.getStart();
 
-        for (0..data.length) |_| try self.compileInstr();
+        for (0..data.length) |_| {
+            self.state.end_of_chain = true;
+            try self.compileInstr();
+        }
 
         if (data.is_expr) {
             self.writeOpAndByte(.scope_return, data.pop_count, start);
@@ -620,7 +614,6 @@ const Compiler = struct {
         // PERF: put the invoked function in a register so that we can refer to it when
         // emitting 'get_default_value' and then the 'invoke*' can refer to it too, avoiding
         // to emit data.arity + member_data.index
-
         switch (data.tag) {
             .invoke => {
                 self.writeOpAndByte(.invoke, data.arity, start);
@@ -648,6 +641,9 @@ const Compiler = struct {
                 .value => |data| {
                     const save = self.manager.instr_idx;
                     self.manager.instr_idx = data.value_instr;
+                    // To push to stack each arguments
+                    self.state.end_of_chain = true;
+
                     try self.compileInstr();
                     // Arguments may not be in the same order as the declaration, we could be
                     // resolving the first value during the last iteration
@@ -701,7 +697,7 @@ const Compiler = struct {
         }
 
         for (0..data.body_len) |_| {
-            compiler.state.end_chain = true;
+            compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
 
@@ -720,45 +716,21 @@ const Compiler = struct {
     // - If there's a method call or an array access in-between, we have to resolve it first,
     //   resulting in interacting with the top value of the stack after the call
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
-        // if (data.kind == .field) {
-        //     // We compile the call/array access first
-        //     try self.compileInstr();
-        //
-        //     // Get field/bound method of first value on the stack
-        //     // TODO: handle register?
-        //     self.writeOpAndByte(
-        //         if (self.consumeEndChainState()) .get_field else .get_field_reg,
-        //         @intCast(data.index),
-        //         self.getStart(),
-        //     );
-        // } else {
-        //     self.writeOpAndByte(
-        //         if (data.kind == .symbol)
-        //             .get_symbol
-        //         else if (data.kind == .method)
-        //             .bound_method
-        //         else
-        //             .get_static_method,
-        //         @intCast(data.index),
-        //         self.getStart(),
-        //     );
-        //
-        //     try self.compileInstr();
-        // }
-
         const member_data = self.getData();
 
         if (member_data == .call or member_data == .array_access or member_data == .array_access_chain) {
             // As we compile member first, we preshot the value
-            const reg = self.shouldReg();
+            const reg = self.shouldPutResultInReg();
             // We compile the call/array access first
             try self.compileInstr();
 
+            // If we're in a member access, the field access that occurs after the call will check
+            // the register, not the stack, so we pop the result from the stack
+            if (member_data == .call) self.writeOp(.reg_push, self.getStart());
+
             // Get field/bound method of first value on the stack
-            // TODO: handle register?
             self.writeOpAndByte(
                 if (data.kind == .field)
-                    // if (self.state.in_assign) .get_field_reg else .get_field
                     if (reg) .get_field_reg else .get_field
                 else
                     .bound_method,
@@ -769,8 +741,7 @@ const Compiler = struct {
             self.writeOpAndByte(
                 if (data.kind == .field)
                     // If we are in assignment, we save the field in a register so we keep its address in case of cow
-                    // if (self.state.in_assign) .get_field_chain_reg else .get_field_chain
-                    if (self.shouldReg()) .get_field_chain_reg else .get_field_chain
+                    if (self.shouldPutResultInReg()) .get_field_chain_reg else .get_field_chain
                 else if (data.kind == .symbol)
                     .get_symbol
                 else if (data.kind == .method)
@@ -783,10 +754,6 @@ const Compiler = struct {
 
             try self.compileInstr();
         }
-    }
-
-    fn shouldReg(self: *Self) bool {
-        return self.state.in_assign or !self.consumeEndChainState();
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {

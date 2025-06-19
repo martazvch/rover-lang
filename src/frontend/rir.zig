@@ -9,7 +9,7 @@ pub const Instruction = struct {
     pub const Data = union(enum) {
         array: Array,
         array_access: ArrayAccess,
-        array_access_chain: usize,
+        array_access_chain: ArrayAccessChain,
         assignment: Assignment,
         binop: Binop,
         block: Block,
@@ -93,6 +93,7 @@ pub const Instruction = struct {
         cast_until: usize,
     };
     pub const ArrayAccess = struct { incr_ref: bool };
+    pub const ArrayAccessChain = struct { depth: usize, incr_ref: bool };
     pub const Assignment = struct {
         /// Casts to float the value before assignment
         cast: bool,

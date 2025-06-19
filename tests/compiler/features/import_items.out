@@ -30,16 +30,19 @@ OP_GET_FIELD_CHAIN index 0 of next variable
 OP_GET_LOCAL index 0
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_FIELD_ASSIGN
-OP_GET_FIELD_CHAIN index 0 of next variable
+
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
 OP_GET_LOCAL index 0
+OP_REG_ASSIGN
+
 OP_GET_FIELD_CHAIN index 1 of next variable
 OP_GET_LOCAL index 0
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_FIELD_ASSIGN
-OP_GET_FIELD_CHAIN index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
 OP_GET_LOCAL index 0
+OP_REG_ASSIGN
+
 OP_NAKED_RETURN
 
 -- display --
@@ -58,25 +61,27 @@ OP_NAKED_RETURN
 
 -- moveCenter --
 OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
 OP_GET_LOCAL index 0
 OP_GET_FIELD_CHAIN index 0 of next variable
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_FIELD_ASSIGN
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
 OP_GET_LOCAL index 0
+OP_REG_ASSIGN
+
 OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
 OP_GET_LOCAL index 0
 OP_GET_FIELD_CHAIN index 1 of next variable
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_FIELD_ASSIGN
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
+OP_GET_FIELD_CHAIN_REG index 1 of next variable
 OP_GET_LOCAL index 0
+OP_REG_ASSIGN
+
 OP_GET_FIELD_CHAIN index 1 of next variable
 OP_GET_LOCAL index 0
 OP_RETURN

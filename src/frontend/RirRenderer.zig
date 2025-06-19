@@ -112,8 +112,8 @@ fn next(self: *Self) Instruction.Data {
 fn parseInstr(self: *Self) void {
     switch (self.next()) {
         .array => |*data| self.array(data),
-        .array_access => self.arrayAccess(1, false),
-        .array_access_chain => |depth| self.arrayAccess(depth, false),
+        .array_access => |*data| self.arrayAccess(1, data.incr_ref, false),
+        .array_access_chain => |*data| self.arrayAccess(data.depth, data.incr_ref, false),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
@@ -175,7 +175,7 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     }
 }
 
-fn arrayAccess(self: *Self, depth: usize, is_assign: bool) void {
+fn arrayAccess(self: *Self, depth: usize, incr_ref: bool, is_assign: bool) void {
     if (is_assign)
         self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]")
     else
@@ -183,11 +183,19 @@ fn arrayAccess(self: *Self, depth: usize, is_assign: bool) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    self.indentAndAppendSlice("- array");
-    self.parseInstr();
-    self.indentAndAppendSlice(if (depth > 1) "- indicies" else "- index");
+    if (incr_ref) self.indentAndAppendSlice("[Increment reference count]");
 
-    for (0..depth) |_| self.parseInstr();
+    if (depth > 1) {
+        self.indentAndAppendSlice("- indicies");
+        for (0..depth) |_| self.parseInstr();
+        self.indentAndAppendSlice("- array");
+        self.parseInstr();
+    } else {
+        self.indentAndAppendSlice("- array");
+        self.parseInstr();
+        self.indentAndAppendSlice("- index");
+        self.parseInstr();
+    }
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) void {
@@ -199,8 +207,8 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     }
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAccess(1, true),
-        .array_access_chain => |depth| return self.arrayAccess(depth, true),
+        .array_access => return self.arrayAccess(1, false, true),
+        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, true),
         .identifier => |*variable| variable,
         .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
         .member => |*member| return self.fieldAssignment(member),

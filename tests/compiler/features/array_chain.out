@@ -71,28 +71,28 @@ OP_STRUCT_LIT index 2
 
 OP_CONSTANT index 24, value 0
 OP_CONSTANT index 25, value 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 6
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_LOCAL_REG index 6
 OP_ARRAY_ACCESS_CHAIN index 2
 OP_PRINT
 
 OP_CONSTANT index 26, value 0
 OP_CONSTANT index 27, value 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 6
-OP_ARRAY_ACCESS_CHAIN index 2
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_LOCAL_REG index 6
+OP_ARRAY_ACCESS_CHAIN_REG index 2
 OP_GET_FIELD index 0
 OP_PRINT
 
 OP_CONSTANT index 28, value 0
 OP_CONSTANT index 29, value 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 6
-OP_ARRAY_ACCESS_CHAIN index 2
-OP_GET_FIELD index 2
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_LOCAL_REG index 6
+OP_ARRAY_ACCESS_CHAIN_REG index 2
+OP_GET_FIELD_REG index 2
 OP_CONSTANT index 30, value 0
 OP_ARRAY_ACCESS
 OP_PRINT
@@ -101,11 +101,11 @@ OP_CONSTANT index 31, value 1
 OP_CONSTANT index 32, value 1
 OP_CONSTANT index 33, value 0
 OP_CONSTANT index 34, value 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 6
-OP_ARRAY_ACCESS_CHAIN index 2
-OP_GET_FIELD index 2
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_LOCAL_REG index 6
+OP_ARRAY_ACCESS_CHAIN_REG index 2
+OP_GET_FIELD_REG index 2
 OP_ARRAY_ACCESS_CHAIN index 2
 OP_PRINT
 
@@ -114,11 +114,11 @@ OP_CONSTANT index 36, value 66
 OP_ARRAY index 2
 OP_CONSTANT index 37, value 0
 OP_CONSTANT index 38, value 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 6
-OP_ARRAY_ACCESS_CHAIN index 2
-OP_GET_FIELD index 2
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_FIELD_CHAIN_REG index 0 of next variable
+OP_GET_LOCAL_REG index 6
+OP_ARRAY_ACCESS_CHAIN_REG index 2
+OP_GET_FIELD_REG index 2
 OP_CONSTANT index 39, value 0
 OP_ARRAY_ASSIGN
 
