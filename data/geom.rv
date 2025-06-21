@@ -1,0 +1,30 @@
+struct Point {
+    x: int,
+    y: int,
+
+    fn move(self, amount: int) {
+        self.x = self.x + amount
+        self.y = self.y + amount
+    }
+
+    fn display(self) {
+        print self.x
+        print self.y
+    }
+}
+
+fn introduce() {
+    print "module for basic geometry"
+}
+
+struct Square {
+    side: float,
+    middle: Point,
+
+    fn moveCenter(self, pt: Point) -> Point {
+        self.middle.x = self.middle.x + pt.x
+        self.middle.y = self.middle.y + pt.y
+
+        self.middle
+    }
+}

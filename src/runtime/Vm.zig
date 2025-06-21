@@ -202,7 +202,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
     while (true) {
         if (comptime options.print_stack) {
             if (self.r1 != &self.stack.values[0]) {
-                print("  R1: [", .{});
+                print("    R1: [", .{});
                 try self.r1.print(self.stdout);
                 print("]  |  ", .{});
             } else {
@@ -248,8 +248,8 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array => {
                 const len = frame.readByte();
+                const array = ObjArray.create(self, (self.stack.top - len)[0..len]);
                 self.stack.top -= len;
-                const array = ObjArray.create(self, self.stack.top[0..len]);
                 self.stack.push(Value.makeObj(array.asObj()));
             },
             .array_access => {
@@ -314,7 +314,10 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 last.*.values.items[idx] = self.stack.pop();
             },
             .bound_method => {
-                const receiver, const method = self.getBoundMethod(frame);
+                // TODO: bound method obj could only keep an *Obj (because only struct have methods)
+                const method_idx = frame.readByte();
+                const receiver = self.r1.*;
+                const method = receiver.obj.as(ObjInstance).parent.methods[method_idx];
                 const bound = ObjBoundMethod.create(self, receiver, method);
                 self.stack.push(Value.makeObj(bound.asObj()));
             },
@@ -367,21 +370,25 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const field_idx = frame.readByte();
                 self.r1 = &self.r1.obj.as(ObjInstance).fields[field_idx];
             },
-            .get_field_chain => {
-                const field = self.getField(frame);
-                self.stack.push(field.*);
-            },
-            .get_field_chain_reg => self.r1 = self.getField(frame),
             .get_global => {
                 const idx = frame.readByte();
                 self.stack.push(self.module.globals[idx]);
             },
+            .get_global_reg => {
+                const idx = frame.readByte();
+                self.r1 = &self.module.globals[idx];
+            },
+            // TODO: see if same compiler bug as get_global
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
-            .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
+            .get_local_reg => {
+                self.r1 = &frame.slots[frame.readByte()];
+                self.r1.obj = self.cow(self.r1.obj);
+            },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_fn_default => self.getDefaultValue(frame, ObjFunction),
+            // TODO: use a dedicated register
             .get_method_default => {
                 const obj_idx = frame.readByte();
                 const method_idx = frame.readByte();
@@ -390,15 +397,14 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .get_static_method => {
                 const method_idx = frame.readByte();
-                const structure = self.getValueFromScope(frame).obj.as(ObjStruct);
+                const structure = self.r1.obj.as(ObjStruct);
                 const method = structure.methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
             },
             .get_struct_default => self.getDefaultValue(frame, ObjStruct),
             .get_symbol => {
                 const symbol_idx = frame.readByte();
-                const value = self.getValueFromScope(frame);
-                self.stack.push(value.module.globals[symbol_idx]);
+                self.stack.push(self.r1.module.globals[symbol_idx]);
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
@@ -407,7 +413,8 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
             .import_call => {
                 const args_count = frame.readByte();
-                const module = self.getValueFromScope(frame).module;
+                // TODO: put it in a reg?
+                const module = self.stack.pop().module;
                 self.updateModule(module);
                 const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
                 try self.call(&frame, callee, args_count);
@@ -427,7 +434,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             .invoke_import => {
                 const args_count = frame.readByte();
                 const symbol = frame.readByte();
-
                 const module = self.stack.peek(args_count).module;
                 self.updateModule(module);
                 const imported = self.stack.peek(args_count).module.globals[symbol];
@@ -512,9 +518,10 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 self.r2 = self.stack.pop();
                 self.r1 = &self.r2;
             },
-            .reg_assign => {
-                const value = self.stack.pop();
-                self.r1.* = value;
+            .reg_assign => self.r1.* = self.stack.pop(),
+            .reg_assign_cow => {
+                self.r1.obj = self.cow(self.r1.obj);
+                self.r1.* = self.stack.pop();
             },
             .@"return" => {
                 const result = self.stack.pop();
@@ -575,27 +582,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
     }
 }
 
-fn returnFromCall(self: *Self, frame: **CallFrame) ?Value {
-    const result = self.stack.pop();
-    self.frame_stack.count -= 1;
-
-    // The last standing frame is the artificial one created when we run
-    // the global scope at the very beginning
-    // TODO: avoid logic at runtime, just emit a special OpCode for `main` return
-    if (self.frame_stack.count == 1) {
-        _ = self.stack.pop();
-        return null;
-    }
-
-    self.stack.top = frame.slots;
-    // self.stack.push(result);
-
-    // In case of chains with invoke like: poly.getPoint().x, the field/index access will use register
-    // self.r1 = &(self.stack.top - 1)[0];
-    frame = &self.frame_stack.frames[self.frame_stack.count - 1];
-    return result;
-}
-
 /// Checks clone on write
 fn cow(self: *Self, obj: *Obj) *Obj {
     if (obj.ref_count > 0) {
@@ -609,52 +595,14 @@ fn cow(self: *Self, obj: *Obj) *Obj {
 /// Read the two next bytes as `scope` then `index` then get value from according scope
 inline fn getValueFromScope(self: *Self, frame: *CallFrame) *Value {
     const scope: OpCode = @enumFromInt(frame.readByte());
-
-    // Check before because get field reads a byte frome ip
-    if (scope == .get_field_chain or scope == .get_field_chain_reg)
-        return self.getField(frame);
-
     const idx = frame.readByte();
 
-    return if (scope == .get_local)
+    return if (scope == .get_local or scope == .get_local_reg)
         &frame.slots[idx]
     else if (scope == .get_global)
         &self.module.globals[idx]
     else
         &self.heap_vars[idx];
-}
-
-/// Allow to perform multiple field accesses without pushing/poping the stack
-fn getField(self: *Self, frame: *CallFrame) *Value {
-    const field_idx = frame.readByte();
-
-    const instance = blk: {
-        const op: OpCode = @enumFromInt(frame.readByte());
-
-        if (op == .get_field_chain or op == .get_field_chain_reg)
-            break :blk self.getField(frame);
-
-        const idx = frame.readByte();
-
-        break :blk if (op == .get_global)
-            &self.module.globals[idx]
-        else if (op == .get_heap)
-            &self.heap_vars[idx]
-        else
-            &frame.slots[idx];
-    };
-
-    return &instance.obj.as(ObjInstance).fields[field_idx];
-}
-
-fn getBoundMethod(self: *Self, frame: *CallFrame) struct { Value, *ObjFunction } {
-    const method_idx = frame.readByte();
-
-    const instance = self.getValueFromScope(frame);
-    const receiver = instance;
-    const method = instance.obj.as(ObjInstance).parent.methods[method_idx];
-
-    return .{ receiver.*, method };
 }
 
 fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver: Value, method: *ObjFunction) !void {
@@ -669,6 +617,10 @@ fn updateModule(self: *Self, module: *Module) void {
 
 /// Gets and pushes on the stack a default value. Should be used for types `ObjFunction` and `ObjStruct`
 fn getDefaultValue(self: *Self, frame: *CallFrame, T: type) void {
+    if (!@hasField(T, "default_values")) {
+        @compileError("Type " ++ @typeName(T) ++ " doesn't have field 'default_values'");
+    }
+
     const obj_idx = frame.readByte();
     const default_idx = frame.readByte();
     self.stack.push(self.stack.peekRef(obj_idx).obj.as(T).default_values[default_idx]);
@@ -682,10 +634,8 @@ fn strConcat(self: *Self) void {
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
 
-    // pop after alloc in case of GC trigger
-    _ = self.stack.pop();
-    _ = self.stack.pop();
-
+    // 'Pop' the two strings
+    self.stack.top -= 2;
     self.stack.push(Value.makeObj(ObjString.take(self, res).asObj()));
 }
 

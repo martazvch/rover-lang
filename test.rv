@@ -127,37 +127,63 @@
 //     print ref3 // [4, 5, 6]
 // }
 
-struct Foo {
-    arr: []int,
-}
+// struct Point {
+//     x, y: int,
+//     past: [][]int,
+// }
+//
+// struct Poly {
+//     vertex: [][]Point
+// }
+//
+// struct Object {
+//     poly: Poly,
+//     name: str = "object",
+// }
+//
+// fn main() {
+//     // var a = [[1, 2], [3, 4]]
+//     // var p1 = Point{ x = 1, y = 2, past = [[1, 2], [3, 4]]}
+//     // var p2 = Point{ x = 5, y = 6, past = [[7, 8], [9, 10]]}
+//     var p3 = Point{ x = 11, y = 12, past = [[13, 14], [15, 16]]}
+//     // var p4 = Point{ x = 17, y = 18, past = [[19, 20], [21, 22]]}
+//
+//     // var poly = Poly{ vertex = [[p1, p2], [p3, p4]] }
+//     var poly = Poly{ vertex = [[p3], [p3]] }
+//     var obj = Object{ poly } 
+//
+//     // print obj.poly.vertex[1][0]
+//     // print obj.poly.vertex[1][0].x
+//     // print obj.poly.vertex[1][0].past[0]
+//     // print obj.poly.vertex[1][0].past[1][1]
+//
+//     // Don't change
+//     p3.past = [[11, 22], [33, 44]]
+//     print obj.poly.vertex[1][0].past
+//     // print obj.poly.vertex[1][0].past[0]
+//     // print obj.poly.vertex[1][0].past[1]
+//
+//     // obj.poly.vertex[1][0].past[0] = [55, 66]
+//     // print obj.poly.vertex[1][0].past
+// }
 
-fn getIdx() -> int {
-    2
+struct Human {
+    age: int,
+    name: str,
+
+    fn speak(self) {
+        print self.name
+    }
+
+    fn getOld(self, amount: int) -> int {
+        self.age = self.age + amount
+        self.age
+    }
 }
 
 fn main() {
-    var arr: []int = [1, 2, 3,]
-    var arr2 = [1, 2,]
-    var foo = Foo{arr=[6, 7, getIdx()]}
-
-    print arr
-
-    // Access
-    print arr[2]
-    print arr[-2]
-
-    // Element assignment
-    arr[getIdx()] = 99
-    print arr
-    // Assignment
-    // arr = arr2
-    // print arr
-    //
-    // print foo.arr
-    // // Element assignment in struct
-    // foo.arr[getIdx()] = -9
-    // // Access in struct
-    // print foo.arr
-    // print foo.arr[getIdx()]
+    var human = Human{ age=5, name="Tom" }
+    var trash: int
+    human.speak()
+    _ = human.getOld(10)
 }
-

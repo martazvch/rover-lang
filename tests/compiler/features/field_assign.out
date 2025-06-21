@@ -3,8 +3,8 @@ OP_GET_GLOBAL index 0, <structure Person>
 OP_CONSTANT index 0, value "Tom"
 OP_STRUCT_LIT index 1
 OP_CONSTANT index 1, value "Martin"
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 1
+OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
 OP_NAKED_RETURN
 

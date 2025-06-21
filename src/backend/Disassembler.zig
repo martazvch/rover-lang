@@ -56,7 +56,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .array_assign_chain => self.indexInstruction("OP_ARRAY_ASSIGN_CHAIN", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
-        .bound_method => self.getMember("OP_BOUND_METHOD", true, offset, writer),
+        .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
         .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
@@ -73,24 +73,23 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
-        .get_field => self.getMember("OP_GET_FIELD", false, offset, writer),
-        .get_field_reg => self.getMember("OP_GET_FIELD_REG", false, offset, writer),
-        .get_field_chain => self.getMember("OP_GET_FIELD_CHAIN", true, offset, writer),
-        .get_field_chain_reg => self.getMember("OP_GET_FIELD_CHAIN_REG", true, offset, writer),
-        .get_global => self.getGlobal(offset, writer),
+        .get_field => self.getMember("OP_GET_FIELD", offset, writer),
+        .get_field_reg => self.getMember("OP_GET_FIELD_REG", offset, writer),
+        .get_global => self.getGlobal(false, offset, writer),
+        .get_global_reg => self.getGlobal(true, offset, writer),
         .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
         .get_local_reg => self.indexInstruction("OP_GET_LOCAL_REG", offset, writer),
         .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
         .get_fn_default => self.getDefaultValue("OP_GET_FN_DEFAULT", offset, writer),
         .get_method_default => self.getMethodDefaultValue(offset, writer),
-        .get_static_method => self.getMember("OP_GET_STATIC_METHOD", false, offset, writer),
+        .get_static_method => self.getMember("OP_GET_STATIC_METHOD", offset, writer),
         .get_struct_default => self.getDefaultValue("OP_GET_STRUCT_DEFAULT", offset, writer),
         .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
-        .import_call => self.importCall(offset, writer),
+        .import_call => self.indexInstruction("OP_IMPORT_CALL", offset, writer),
         .import_item => self.importItem(offset, writer),
         .invoke => self.invokeInstruction("OP_INVOKE", "method", offset, writer),
         .invoke_import => self.invokeInstruction("OP_INVOKE_IMPORT", "symbol", offset, writer),
@@ -119,6 +118,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .print => self.simpleInstruction("OP_PRINT", offset, writer),
         .push_module => self.indexInstruction("OP_PUSH_MODULE", offset, writer),
         .reg_assign => self.simpleInstruction("OP_REG_ASSIGN", offset, writer),
+        .reg_assign_cow => self.simpleInstruction("OP_REG_ASSIGN_COW", offset, writer),
         .reg_push => self.simpleInstruction("OP_REG_PUSH", offset, writer),
         .@"return" => self.simpleInstruction("OP_RETURN", offset, writer),
         .scope_return => self.indexInstruction("OP_SCOPE_RETURN", offset, writer),
@@ -158,13 +158,14 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     return offset + 2;
 }
 
-fn getGlobal(self: *const Self, offset: usize, writer: anytype) !usize {
+fn getGlobal(self: *const Self, reg: bool, offset: usize, writer: anytype) !usize {
     const index = self.chunk.code.items[offset + 1];
+    const text = if (reg) "OP_GET_GLOBAL_REG" else "OP_GET_GLOBAL";
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} index {}", .{ "OP_GET_GLOBAL", index });
+        try writer.print("{s} index {}", .{ text, index });
     } else {
-        try writer.print("{s:<24} index {:>4}", .{ "OP_GET_GLOBAL", index });
+        try writer.print("{s:<24} index {:>4}", .{ text, index });
     }
 
     if (self.globals[index].asObj()) |obj| {
@@ -232,19 +233,17 @@ fn for_instruction(
     return offset + 4;
 }
 
-fn getMember(self: *const Self, name: []const u8, of_next: bool, offset: usize, writer: anytype) !usize {
+fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     // Skips the struct_literal op
     var local_offset = offset + 1;
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} index {}{s}\n", .{ name, idx, if (of_next) " of next variable" else "" });
+        try writer.print("{s} index {}\n", .{ name, idx });
     } else {
-        try writer.print("{s:<24} index {:>4}{s}\n", .{ name, idx, if (of_next) " of next variable" else "" });
+        try writer.print("{s:<24} index {:>4}\n", .{ name, idx });
     }
-
-    if (of_next) local_offset = try self.disInstruction(local_offset, writer);
 
     return local_offset;
 }
@@ -294,19 +293,6 @@ fn invokeInstruction(self: *const Self, text: []const u8, obj_name: []const u8, 
     }
 
     return offset + 3;
-}
-
-fn importCall(self: *const Self, offset: usize, writer: anytype) !usize {
-    const arity = self.chunk.code.items[offset + 1];
-    const text = "OP_IMPORT_CALL";
-
-    if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, load following module:\n", .{ text, arity });
-    } else {
-        try writer.print("{s:<24} arity {:>4}, load following module:\n", .{ text, arity });
-    }
-
-    return offset + 2;
 }
 
 fn importItem(self: *const Self, offset: usize, writer: anytype) !usize {

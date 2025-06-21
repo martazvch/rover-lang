@@ -68,8 +68,8 @@ OP_SET_LOCAL index 1
 
 OP_CONSTANT index 24, value 1
 OP_ARRAY index 1
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
 OP_GET_LOCAL_REG index 3
+OP_GET_FIELD_REG index 0
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
 OP_ARRAY_ASSIGN
@@ -79,12 +79,12 @@ OP_NEGATE_INT
 OP_CONSTANT index 26, value 1
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
 OP_GET_LOCAL_REG index 3
+OP_GET_FIELD_REG index 0
 OP_ARRAY_ASSIGN_CHAIN index 2
 
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
 OP_GET_LOCAL_REG index 3
+OP_GET_FIELD_REG index 0
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
 OP_ARRAY_ACCESS
@@ -93,8 +93,8 @@ OP_PRINT
 OP_CONSTANT index 27, value 1
 OP_GET_GLOBAL index 1, <fn getIdx>
 OP_CALL index 0
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
 OP_GET_LOCAL_REG index 3
+OP_GET_FIELD_REG index 0
 OP_ARRAY_ACCESS_CHAIN index 2
 OP_PRINT
 

@@ -1,10 +1,10 @@
 //---- math ----
 
 -- len --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_ADD_INT
 OP_RETURN
 
@@ -26,31 +26,31 @@ OP_EXIT_REPL
 //---- geom ----
 
 -- move --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
 OP_GET_LOCAL index 1
 OP_ADD_INT
 
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
 
 OP_NAKED_RETURN
 
 -- display --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
 OP_PRINT
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_PRINT
 OP_NAKED_RETURN
 
@@ -60,30 +60,30 @@ OP_PRINT
 OP_NAKED_RETURN
 
 -- moveCenter --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 1
+OP_GET_FIELD index 0
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 1
+OP_GET_LOCAL_REG index 1
+OP_GET_FIELD index 1
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_RETURN
 
 -- global scope --

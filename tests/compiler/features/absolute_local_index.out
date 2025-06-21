@@ -2,8 +2,8 @@
 
 -- getPt --
 OP_GET_LOCAL_ABSOLUTE index 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
 OP_STRUCT_LIT index 1
 OP_RETURN
 

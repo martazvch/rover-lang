@@ -125,7 +125,8 @@ pub const ObjArray = struct {
 
         // TODO: with cow, no need to deep copy anymore?
         for (values) |val| {
-            obj.values.appendAssumeCapacity(val.deepCopy(vm));
+            // obj.values.appendAssumeCapacity(val.deepCopy(vm));
+            obj.values.appendAssumeCapacity(val);
         }
 
         if (options.log_gc) {

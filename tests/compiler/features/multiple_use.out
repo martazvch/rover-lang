@@ -1,10 +1,10 @@
 //---- math.rv ----
 
 -- len --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_ADD_INT
 OP_RETURN
 
@@ -26,30 +26,31 @@ OP_EXIT_REPL
 //---- geom.rv ----
 
 -- move --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_GET_LOCAL index 1
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
 
 OP_NAKED_RETURN
 
 -- display --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
 OP_PRINT
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_PRINT
 OP_NAKED_RETURN
 
@@ -59,30 +60,30 @@ OP_PRINT
 OP_NAKED_RETURN
 
 -- moveCenter --
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 1
+OP_GET_FIELD index 0
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 1
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 1
+OP_GET_LOCAL_REG index 1
+OP_GET_FIELD index 1
 OP_ADD_INT
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
 OP_RETURN
 
 -- global scope --
@@ -110,16 +111,16 @@ OP_EXIT_REPL
 //---- main.rv ----
 
 -- main --
+OP_GET_GLOBAL_REG index 1
 OP_GET_SYMBOL index 0
-OP_GET_GLOBAL index 1
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 90
 OP_STRUCT_LIT index 2
 
 OP_GET_LOCAL index 1
 OP_INVOKE arity 0, method index 1
+OP_GET_GLOBAL_REG index 1
 OP_GET_SYMBOL index 2
-OP_GET_GLOBAL index 1
 
 OP_CONSTANT index 2, value 10
 OP_CAST_TO_FLOAT
@@ -127,14 +128,14 @@ OP_GET_LOCAL index 1
 OP_INCR_REF_COUNT
 OP_STRUCT_LIT index 2
 
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 0
 OP_PRINT
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 1
 OP_PRINT
 
 OP_GET_GLOBAL index 0
@@ -142,21 +143,21 @@ OP_INVOKE_IMPORT arity 0, symbol index 1
 OP_UNLOAD_MODULE
 
 OP_GET_GLOBAL index 0
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 1
 OP_INVOKE_IMPORT arity 2, symbol index 2
 OP_UNLOAD_MODULE
 
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_LOCAL index 3
+OP_GET_LOCAL_REG index 3
+OP_GET_FIELD index 0
 OP_PRINT
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_LOCAL index 3
+OP_GET_LOCAL_REG index 3
+OP_GET_FIELD index 1
 OP_PRINT
 
 OP_PUSH_MODULE index 2
@@ -183,13 +184,13 @@ OP_INCR_REF_COUNT
 OP_INVOKE arity 1, method index 0
 OP_GET_LOCAL index 4
 OP_INVOKE arity 0, method index 1
-OP_GET_FIELD_CHAIN index 0 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 0
 OP_PRINT
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 1 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 1
+OP_GET_FIELD index 1
 OP_PRINT
 OP_NAKED_RETURN
 

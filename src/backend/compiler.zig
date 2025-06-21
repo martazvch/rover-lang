@@ -145,7 +145,6 @@ const Compiler = struct {
 
     fn next(self: *Self) Instruction.Data {
         defer self.manager.instr_idx += 1;
-
         return self.manager.instr_data[self.manager.instr_idx];
     }
 
@@ -226,7 +225,7 @@ const Compiler = struct {
             if (variable.scope == .heap)
                 .get_heap
             else if (variable.scope == .global)
-                .get_global
+                if (self.state.to_reg) .get_global_reg else .get_global
             else if (self.state.to_reg)
                 .get_local_reg
             else
@@ -370,10 +369,11 @@ const Compiler = struct {
 
         // Variable
         try self.compileInstr();
-        // Index
+        // Index, we want to leave them on the stack
+        self.state.to_reg = false;
         try self.compileInstr();
-        self.writeOp(if (reg) .array_access_reg else .array_access, start);
 
+        self.writeOp(if (reg) .array_access_reg else .array_access, start);
         if (incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
@@ -402,7 +402,8 @@ const Compiler = struct {
         // Variable
         try self.compileInstr();
 
-        // Index
+        // Index, we want to leave them on the stack
+        self.state.to_reg = false;
         try self.compileInstr();
 
         // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
@@ -444,7 +445,7 @@ const Compiler = struct {
             .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
             .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
-            .member => |*member| return self.fieldAssignment(member, start),
+            .member => |*member| return self.fieldAssignment(member, data.cow, start),
             else => unreachable,
         };
 
@@ -464,9 +465,9 @@ const Compiler = struct {
     }
 
     // TODO: just a 'reg_assign'?
-    fn fieldAssignment(self: *Self, data: *const Instruction.Member, start: usize) Error!void {
+    fn fieldAssignment(self: *Self, data: *const Instruction.Member, cow: bool, start: usize) Error!void {
         try self.getMember(data);
-        self.writeOp(.reg_assign, start);
+        self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
@@ -581,12 +582,22 @@ const Compiler = struct {
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         const start = self.getStart();
 
+        // Compiles the identifier. We want every thing on the stack
+        // TODO: see if there are no side effects if arguments are chained fields/array accesses
+        const prev = self.state.to_reg;
+        defer self.state.to_reg = prev;
+        self.state.to_reg = false;
+
         if (data.tag == .invoke or data.tag == .invoke_import or data.tag == .invoke_static)
             return self.invoke(data, start);
 
-        // Compiles the identifier
         try self.compileInstr();
         try self.compileArgs(data.arity, .get_fn_default, 0);
+
+        if (data.tag == .import) {
+            // Compiles the index + scope of the module to load it
+            try self.compileInstr();
+        }
 
         self.writeOpAndByte(
             switch (data.tag) {
@@ -599,10 +610,7 @@ const Compiler = struct {
             start,
         );
 
-        // For imports, we generate op code to load/unload the module
         if (data.tag == .import) {
-            // Compiles the index + scope of the module to load it
-            try self.compileInstr();
             // At the end of the call, we unload it
             self.writeOp(.unload_module, start);
         }
@@ -715,50 +723,33 @@ const Compiler = struct {
         return compiler.end();
     }
 
-    // getMember has two way of functionning:
-    // - If we're chaining fields accesslike a.b.c.d, we compile the Op code before
-    //   so that the Vm can resolve all of them without pushing/poping the stack
-    // - If there's a method call or an array access in-between, we have to resolve it first,
-    //   resulting in interacting with the top value of the stack after the call
     fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
+        const prev = self.setToRegAndGetPrevious();
+        defer self.state.to_reg = prev;
         const member_data = self.getData();
 
-        if (member_data == .call or member_data == .array_access or member_data == .array_access_chain) {
-            // As we compile member first, we preshot the value
-            const reg = self.shouldPutResultInReg();
-            // We compile the call/array access first
-            try self.compileInstr();
+        // As we compile member first, we preshot the value
+        const reg = self.shouldPutResultInReg();
+        // We compile the call/array access first
+        try self.compileInstr();
 
-            // If we're in a member access, the field access that occurs after the call will check
-            // the register, not the stack, so we pop the result from the stack
-            if (member_data == .call) self.writeOp(.reg_push, self.getStart());
+        // If we're in a member access, the field access that occurs after the call will check
+        // the register, not the stack, so we pop the result from the stack
+        if (member_data == .call) self.writeOp(.reg_push, self.getStart());
 
-            // Get field/bound method of first value on the stack
-            self.writeOpAndByte(
-                if (data.kind == .field)
-                    if (reg) .get_field_reg else .get_field
-                else
-                    .bound_method,
-                @intCast(data.index),
-                self.getStart(),
-            );
-        } else {
-            self.writeOpAndByte(
-                if (data.kind == .field)
-                    // If we are in assignment, we save the field in a register so we keep its address in case of cow
-                    if (self.shouldPutResultInReg()) .get_field_chain_reg else .get_field_chain
-                else if (data.kind == .symbol)
-                    .get_symbol
-                else if (data.kind == .method)
-                    .bound_method
-                else
-                    .get_static_method,
-                @intCast(data.index),
-                self.getStart(),
-            );
-
-            try self.compileInstr();
-        }
+        // Get field/bound method of first value on the stack
+        self.writeOpAndByte(
+            if (data.kind == .field)
+                if (reg) .get_field_reg else .get_field
+            else if (data.kind == .symbol)
+                .get_symbol
+            else if (data.kind == .method)
+                .bound_method
+            else
+                .get_static_method,
+            @intCast(data.index),
+            self.getStart(),
+        );
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {

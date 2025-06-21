@@ -11,9 +11,9 @@ OP_GET_LOCAL index 1
 OP_INCR_REF_COUNT
 OP_STRUCT_LIT index 3
 
-OP_GET_FIELD_CHAIN index 1 of next variable
-OP_GET_FIELD_CHAIN_REG index 2 of next variable
-OP_GET_LOCAL index 2
+OP_GET_LOCAL_REG index 2
+OP_GET_FIELD_REG index 2
+OP_GET_FIELD index 1
 OP_PRINT
 OP_NAKED_RETURN
 
