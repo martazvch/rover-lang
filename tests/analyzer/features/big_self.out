@@ -1,0 +1,30 @@
+// -- big_self.rv --
+[Structure declaration Foo, index: 0, scope: global]
+    - default values
+    [Int 0]
+    [Int 0]
+    [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+
+[Structure declaration Bar, index: 1, scope: global]
+    [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
+        [Structure literal]
+            - structure
+            [Variable index: 1, scope: global]
+            - args
+            [Array]
+                [Bool true]
+
+[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
+    [Structure declaration Baz, index: 1, scope: local]
+        - default values
+        [Bool true]
+        [Fn declaration init, index: 2, scope: local, return kind: implicit_value]
+            [Structure literal]
+                - structure
+                [Variable absolute index: 1]
+                - args
+                [Bool false]

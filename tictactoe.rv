@@ -1,0 +1,80 @@
+struct Cell {
+    played = false,
+    marker = 0,
+
+    fn mark(self, marker: int) {
+        if self.played do print "Already played cell"
+
+        self.played = true
+        self.marker = marker
+    }
+
+    fn checkValidity(self) {
+        if self.played and self.marker == 0 {
+            print "Invalid cell, marked as played but no marker"
+        }
+    }
+
+    fn toString(self) -> str {
+        self.checkValidity()
+        "[" + {
+            if self.played {if self.marker == 1 do "x" else "o"} else " "
+        } + "]"
+    }
+}
+
+struct Grid {
+    cells: [][]Cell,
+    dim: int,
+
+    fn init(dim=3) -> Self {
+        Self{
+            cells=[
+                [Cell{}, Cell{}, Cell{}],
+                [Cell{}, Cell{}, Cell{}],
+                [Cell{}, Cell{}, Cell{}],
+            ],
+            dim,
+        }
+    }
+
+    fn playAt(self, x, y: int, marker: int) {
+        if self.cells[x][y].played {
+            print "Already played in this cell"
+            return
+        }
+        
+        self.cells[x][y] = Cell{played=true, marker}
+    }
+
+    fn display(self) {
+        var i = 0
+        while i < self.dim {
+            var line = ""
+            var j = 0
+            
+            while j < self.dim {
+                line += self.cells[i][j].toString() + if j < 2 do " " else ""
+                j += 1
+            }
+
+            i += 1
+            print line
+        }
+    }
+}
+
+fn main() {
+    var grid = Grid.init()
+    // var grid = Grid{
+    //     cells=[
+    //         [Cell{}, Cell{}, Cell{}],
+    //         [Cell{}, Cell{}, Cell{}],
+    //         [Cell{}, Cell{}, Cell{}],
+    //     ],
+    //     dim=3,
+    // }
+    // grid.display()
+    // grid.playAt(1, 2, 2)
+    // grid.display()
+}

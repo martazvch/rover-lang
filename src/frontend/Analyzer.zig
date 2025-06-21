@@ -513,11 +513,13 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
 
-    self.big_self.typ = struct_type;
-    defer self.big_self.typ = .void;
-
     errdefer self.state.struct_type = .void;
     const struct_var = try self.declareVariable(name, struct_type, true, self.instructions.len, .decl, node.name);
+
+    // self.big_self.typ = struct_type;
+    self.big_self = if (struct_var.scope == .local) self.locals.items[struct_var.index] else self.globals.items[struct_var.index];
+    // Enough to enable checks on wether we are in a struct or not
+    defer self.big_self.typ = .void;
 
     const index = self.reserveInstr();
     // We add function's name for runtime access
