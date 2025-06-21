@@ -59,3 +59,7 @@
             - index
             [Fn call arity: 0, call_tag: function]
                 [Variable index: 1, scope: global]
+
+    // Infer
+    [Variable declaration index: 4, scope: local]
+        [Array]

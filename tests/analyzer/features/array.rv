@@ -22,4 +22,7 @@ fn main() {
     foo.arr[getIdx()] = -9
     // Access in struct
     print foo.arr[getIdx()]
+
+    // Infer value type
+    var emptyArr: []int = []
 }

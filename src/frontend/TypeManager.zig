@@ -92,6 +92,16 @@ pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     return Type.create(.array, .none, index);
 }
 
+pub fn getArrayChildType(self: *const Self, array: Type) Type {
+    var child = self.type_infos.items[array.getValue()].array.child;
+
+    while (child.is(.array)) {
+        child = self.type_infos.items[child.getValue()].array.child;
+    }
+
+    return child;
+}
+
 /// Checks if the type has already been declared
 pub fn isDeclared(self: *const Self, typ: usize) bool {
     return self.declared.get(typ) != null;

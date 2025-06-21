@@ -1,25 +1,4 @@
-struct Foo {
-    x, y = 0
-
-    fn init() -> Self {
-        Self{} 
-    }
-}
-
-struct Bar {
-    a: []bool
-
-    fn init() -> Self {
-        Self {a=[true]}
-    }
-}
-
 fn main() {
-    struct Baz {
-        flag = true
-        
-        fn init() -> Self {
-            Self {flag=false}
-        }
-    }
+    var arr: []int
+    arr = []
 }

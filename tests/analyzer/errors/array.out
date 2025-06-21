@@ -4,3 +4,5 @@ invalid_assign_type, []int, []bool
 non_array_indexing, str
 non_integer_index, bool
 non_integer_index, float
+void_array
+cant_infer_arary_type

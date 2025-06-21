@@ -9,4 +9,7 @@ fn main() {
     var array = [1.5, 6.8]
     array[true]
     array[1.0]
+
+    var voidArr: []void
+    var voidArrVoidVal = []
 }

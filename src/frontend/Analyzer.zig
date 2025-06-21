@@ -273,6 +273,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
+    // TODO: use checkType()?
     if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
         // One case in wich we can coerce; int -> float
         if (self.checkCast(assigne_type, value_type, false)) {
@@ -776,13 +777,32 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         self.state.allow_partial = false;
         self.state.incr_ref = true;
 
-        const value_type = try self.analyzeExpr(value);
+        var value_type = try self.analyzeExpr(value);
 
         self.state.incr_ref = false;
         self.state.allow_partial = last;
 
         // Void assignment check
         if (value_type == .void) return self.err(.void_assignment, self.ast.getSpan(value));
+
+        if (value_type.is(.array)) {
+            // TODO: put in a function and do: 'value_type = try self.inferArrayType(checked_type)'
+            // so we acn use it in assignment to
+
+            // Get item's type
+            const child = self.type_manager.getArrayChildType(value_type);
+
+            // Empty array like: []
+            if (child == .void) {
+                // Not declared and empty array like: var a = []
+                if (checked_type == .void) {
+                    return self.err(.cant_infer_arary_type, self.ast.getSpan(value));
+                } else {
+                    // Infer from declaration
+                    value_type = checked_type;
+                }
+            }
+        }
 
         // If no type declared, we infer the value type
         if (checked_type == .void) {
@@ -1854,6 +1874,11 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type) Error!Type {
     return if (typ) |t| return switch (t.*) {
         .array => |arr_type| {
             const child = try self.checkAndGetType(arr_type.child);
+
+            if (child == .void) {
+                return self.err(.void_array, self.ast.getSpan(arr_type.child));
+            }
+
             return self.type_manager.getOrCreateArray(child);
         },
         .fields => |fields| {

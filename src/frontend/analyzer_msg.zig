@@ -8,6 +8,7 @@ pub const AnalyzerMsg = union(enum) {
     already_imported_module: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
     big_self_outside_struct,
+    cant_infer_arary_type,
     dead_code,
     default_value_type_mismatch: struct {
         expect: []const u8,
@@ -68,6 +69,7 @@ pub const AnalyzerMsg = union(enum) {
     },
     unused_value,
     use_uninit_var: struct { name: []const u8 },
+    void_array,
     void_assignment,
     void_discard,
     void_param,
@@ -87,6 +89,7 @@ pub const AnalyzerMsg = union(enum) {
                 .{ e.found1, e.found2 },
             ),
             .big_self_outside_struct => writer.writeAll("can't use 'Self' outside a structure"),
+            .cant_infer_arary_type => writer.writeAll("can't infer array type with empty array and not declared type"),
             .dead_code => writer.print("unreachable code", .{}),
             .default_value_type_mismatch => |e| writer.print(
                 "{s}'s default value doesn't match {s}'s type, expect '{s}' but found '{s}'",
@@ -138,6 +141,7 @@ pub const AnalyzerMsg = union(enum) {
             .unpure_default => |e| writer.print("non-constant expressions are not allowed for {s}", .{e.kind}),
             .unused_value => writer.print("unused value", .{}),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
+            .void_array => writer.writeAll("can't declare an array of 'void' values"),
             .void_assignment => writer.print("assigned value is of type 'void'", .{}),
             .void_discard => writer.print("trying to discard a non value", .{}),
             .void_param => writer.print("function parameters can't be of 'void' type", .{}),
@@ -152,6 +156,7 @@ pub const AnalyzerMsg = union(enum) {
             .already_imported_module => writer.writeAll("this module"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
             .big_self_outside_struct => writer.writeAll("used outside a structure"),
+            .cant_infer_arary_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
@@ -189,6 +194,7 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_param => writer.writeAll("this parameter"),
             .unknown_struct_field => writer.writeAll("this name"),
             .unused_value => writer.writeAll("this expression produces a value"),
+            .void_array => writer.writeAll("declared here"),
             .void_assignment => writer.writeAll("this expression produces no value"),
             .void_discard => writer.writeAll("this expression produces no value"),
             .void_param => writer.writeAll("this parameter"),
@@ -206,6 +212,11 @@ pub const AnalyzerMsg = union(enum) {
             .already_imported_module => writer.writeAll("remove the import"),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
             .big_self_outside_struct => writer.writeAll("'Self' can only be used in structure to refer to the current structure's type"),
+            .cant_infer_arary_type => writer.writeAll(
+                \\can't extract any type information from an empty array '[]'. you must either declare a type in variable's
+                \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
+                \\Also, doing 'var arr: []int = []' is equivalent to 'var arr: []int'.
+            ),
             .default_value_type_mismatch => |e| writer.print(
                 "modify {s}'s default value to match '{s}' type or change {s}'s type",
                 .{ e.kind, e.expect, e.kind },
@@ -278,6 +289,7 @@ pub const AnalyzerMsg = union(enum) {
             .unpure_in_global => writer.writeAll("use a constant expression or initialize the value later in a local scope"),
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .unused_value => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
+            .void_array => writer.writeAll("use any other type to declare an array"),
             .void_assignment => writer.writeAll("consider returning a value from expression or remove assignment"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
