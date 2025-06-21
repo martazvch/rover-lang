@@ -67,8 +67,6 @@
             [Int 1]
         - array
         [Variable index: 1, scope: local]
-    [Variable index: 2, scope: local]
-    [Assignment index: 1, scope: local]
     [Array]
         [Int 1]
     [Array assignment]

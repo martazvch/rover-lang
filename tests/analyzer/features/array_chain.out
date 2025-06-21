@@ -71,16 +71,21 @@
             [Array]
                 [Array]
                     [Variable index: 1, scope: local]
+                    [Increment reference count]
                     [Variable index: 2, scope: local]
+                    [Increment reference count]
                 [Array]
                     [Variable index: 3, scope: local]
+                    [Increment reference count]
                     [Variable index: 4, scope: local]
+                    [Increment reference count]
     [Variable declaration index: 6, scope: local]
         [Structure literal]
             - structure
             [Variable index: 2, scope: global]
             - args
             [Variable index: 5, scope: local]
+            [Increment reference count]
     [Print]
         [Array chain access]
             - indicies

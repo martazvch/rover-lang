@@ -17,8 +17,6 @@ fn main() {
 
     // Element assignment
     arr[-1][getIdx()] = 99
-    // assignment
-    arr = arr2
 
     // Element assignment in struct
     foo.arr[getIdx()] = [1]

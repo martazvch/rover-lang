@@ -39,7 +39,8 @@ interner: Interner,
 strings: Table,
 objects: ?*Obj,
 heap_vars: []Value,
-// TODO: can only be object? No, in returns we put anything here
+// TODO: can only be object but must put *Module from Value to *Obj first
+// because used in 'get_symbol'
 r1: *Value = undefined,
 r2: Value = .null_,
 
@@ -191,10 +192,6 @@ fn checkArrayIndex(array: *const ObjArray, index: i64) usize {
     };
 }
 
-fn printArr(obj: *Obj) void {
-    std.debug.print("Obj {*}, values: {*}, {any}\n", .{ obj, obj.as(ObjArray), obj.as(ObjArray).values.items });
-}
-
 fn execute(self: *Self, entry_point: *ObjFunction) !void {
     var frame: *CallFrame = undefined;
     try self.call(&frame, entry_point, 0);
@@ -292,7 +289,8 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
             },
             .array_assign => {
                 const index = self.stack.pop().int;
-                const array = self.cow(self.r1.obj).as(ObjArray);
+                self.r1.obj = self.cow(self.r1.obj);
+                const array = self.r1.obj.as(ObjArray);
 
                 const final = checkArrayIndex(array, index);
                 const value = self.stack.pop();

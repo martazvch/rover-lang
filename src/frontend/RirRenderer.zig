@@ -121,6 +121,7 @@ fn parseInstr(self: *Self) void {
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
         .discard => self.discard(),
+        .field => |*data| self.getField(data),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
@@ -131,7 +132,6 @@ fn parseInstr(self: *Self) void {
         .imported => unreachable,
         .int => |data| self.intInstr(data),
         .item_import => |*data| self.itemImport(data),
-        .member => |*data| self.getMember(data),
         .module_import => |*data| self.moduleImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
@@ -211,7 +211,7 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
         .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, true),
         .identifier => |*variable| variable,
         .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
-        .member => |*member| return self.fieldAssignment(member),
+        .field => |*member| return self.fieldAssignment(member),
         else => unreachable,
     };
 
@@ -236,11 +236,11 @@ fn arrayAssignment(self: *Self, depth: usize) void {
     for (0..depth) |_| self.parseInstr();
 }
 
-fn fieldAssignment(self: *Self, data: *const Instruction.Member) void {
+fn fieldAssignment(self: *Self, data: *const Instruction.Field) void {
     self.indentAndAppendSlice("[Field assignment]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.getMember(data);
+    self.getField(data);
 }
 
 fn binop(self: *Self, data: *const Instruction.Binop) void {
@@ -322,11 +322,12 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
     }
 }
 
-fn getMember(self: *Self, data: *const Instruction.Member) void {
+fn getField(self: *Self, data: *const Instruction.Field) void {
     self.indentAndPrintSlice(
         "[{s} access {}]",
         .{ if (data.kind == .field) "Field" else "Method", data.index },
     );
+    if (data.incr_ref_count) self.indentAndAppendSlice("[Increment reference count]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
@@ -373,6 +374,7 @@ fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
     self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
         variable_data.index, @tagName(variable_data.scope),
     });
+    if (data.incr_ref_count) self.indentAndAppendSlice("[Increment reference count]");
 }
 
 fn identifierAbsolute(self: *Self, data: usize) void {

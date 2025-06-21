@@ -123,9 +123,7 @@ pub const ObjArray = struct {
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
 
-        // TODO: with cow, no need to deep copy anymore?
         for (values) |val| {
-            // obj.values.appendAssumeCapacity(val.deepCopy(vm));
             obj.values.appendAssumeCapacity(val);
         }
 

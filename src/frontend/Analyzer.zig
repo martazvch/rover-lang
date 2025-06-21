@@ -262,6 +262,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
+            // TODO: authorize parameters if they are references
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :blk .{ assigne.typ, false };
@@ -1214,6 +1215,8 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     // We set it to false because we wan't to increment rhs of the field access, not the structure
     const save_check_inr_ref = self.state.incr_ref;
     self.state.incr_ref = false;
+
+    // If the structure is only an identifier, it could be a type name
     const struct_type, const is_type = switch (expr.structure.*) {
         .literal => |*e| blk: {
             const assigne = try self.identifier(e.idx, false);
@@ -1225,7 +1228,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     self.state.incr_ref = save_check_inr_ref;
     const struct_value = struct_type.getValue();
 
-    var found_field, const kind: Instruction.Member.Kind = switch (struct_type.getKind()) {
+    var found_field, const kind: Instruction.Field.Kind = switch (struct_type.getKind()) {
         .@"struct" => blk: {
             const infos = self.type_manager.type_infos.items[struct_value].@"struct";
 
@@ -1269,7 +1272,14 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         ),
     };
 
-    self.setInstr(index, .{ .member = .{ .index = found_field.index, .kind = kind } });
+    self.setInstr(index, .{
+        .field = .{
+            .index = found_field.index,
+            .kind = kind,
+            // Here, '!is_type' protects: 'geom.Point {}' to be incremented, as we are in the rhs of an assignment
+            .incr_ref_count = self.state.incr_ref and found_field.type.isHeap() and !is_type,
+        },
+    });
 
     if (kind == .method)
         found_field.type.setExtra(.bound_method);

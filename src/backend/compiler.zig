@@ -315,6 +315,7 @@ const Compiler = struct {
             .cast => |data| self.cast(data),
             .default_value => unreachable,
             .discard => self.discard(),
+            .field => |*data| self.getField(data),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.fnDecl(data),
             .identifier => |*data| self.identifier(data),
@@ -324,7 +325,6 @@ const Compiler = struct {
             .imported => unreachable,
             .int => |data| self.intInstr(data),
             .item_import => |*data| self.itemImport(data),
-            .member => |*data| self.getMember(data),
             .module_import => |*data| self.moduleImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
@@ -445,7 +445,7 @@ const Compiler = struct {
             .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
             .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
-            .member => |*member| return self.fieldAssignment(member, data.cow, start),
+            .field => |*field| return self.fieldAssignment(field, data.cow, start),
             else => unreachable,
         };
 
@@ -465,8 +465,8 @@ const Compiler = struct {
     }
 
     // TODO: just a 'reg_assign'?
-    fn fieldAssignment(self: *Self, data: *const Instruction.Member, cow: bool, start: usize) Error!void {
-        try self.getMember(data);
+    fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool, start: usize) Error!void {
+        try self.getField(data);
         self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
     }
 
@@ -618,7 +618,7 @@ const Compiler = struct {
 
     fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
         // We do not compile the member as we invoke it (it does not go on the stack)
-        const member_data = self.getData().member;
+        const member_data = self.getData().field;
         self.manager.instr_idx += 1;
         // Compiles the receiver
         try self.compileInstr();
@@ -723,10 +723,11 @@ const Compiler = struct {
         return compiler.end();
     }
 
-    fn getMember(self: *Self, data: *const Instruction.Member) Error!void {
+    fn getField(self: *Self, data: *const Instruction.Field) Error!void {
         const prev = self.setToRegAndGetPrevious();
         defer self.state.to_reg = prev;
         const member_data = self.getData();
+        const start = self.getStart();
 
         // As we compile member first, we preshot the value
         const reg = self.shouldPutResultInReg();
@@ -735,7 +736,7 @@ const Compiler = struct {
 
         // If we're in a member access, the field access that occurs after the call will check
         // the register, not the stack, so we pop the result from the stack
-        if (member_data == .call) self.writeOp(.reg_push, self.getStart());
+        if (member_data == .call) self.writeOp(.reg_push, start);
 
         // Get field/bound method of first value on the stack
         self.writeOpAndByte(
@@ -748,8 +749,10 @@ const Compiler = struct {
             else
                 .get_static_method,
             @intCast(data.index),
-            self.getStart(),
+            start,
         );
+
+        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {

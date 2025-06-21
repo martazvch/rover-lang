@@ -42,8 +42,6 @@
         - index
         [Fn call arity: 0, call_tag: function]
             [Variable index: 1, scope: global]
-    [Variable index: 2, scope: local]
-    [Assignment index: 1, scope: local]
     [Unary minus]
         [Int 9]
     [Array assignment]

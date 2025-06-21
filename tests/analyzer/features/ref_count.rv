@@ -1,0 +1,42 @@
+struct Foo { x = 0 }
+struct Point {
+    x = 0,
+    foo: []Foo,
+}
+struct Poly {
+    p: Point,
+}
+
+fn incrFirstOnly(p: Point, x: int) {}
+
+fn main() {
+    var arr = [1]
+    // Here
+    var arr2 = arr
+
+    var p = Point{foo=[Foo{}]}
+    // Here
+    var poly = Poly{p}
+
+    // Only first arg should be incremented as 'x' is not heap allocated
+    incrFirstOnly(p, p.x)
+    // Ref count on poly.p, not poly
+    incrFirstOnly(poly.p, poly.p.x)
+
+    var multiArr = [[1], [2]]
+    // Here
+    var arrRef = multiArr[1]
+
+    var multiPointArr = [[Point{foo=[Foo{}]}], [Point{foo=[Foo{}]}]]
+    // Here, because we take reference to Point
+    var pRef = multiPointArr[1][0]
+
+    // Here
+    var fooRef = poly.p.foo
+    var fooSubRef = poly.p.foo[0]
+    // Not here
+    var x = poly.p.foo[0].x
+
+    // Here, through another reference counted
+    var fooRef2 = pRef.foo[0]
+}

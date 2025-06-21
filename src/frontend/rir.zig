@@ -17,6 +17,7 @@ pub const Instruction = struct {
         call: Call,
         cast: Type,
         discard,
+        field: Field,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
@@ -27,7 +28,6 @@ pub const Instruction = struct {
         imported: Imported,
         int: i64,
         item_import: ItemImport,
-        member: Member,
         module_import: ModuleImport,
         multiple_var_decl: usize,
         name: usize,
@@ -119,9 +119,10 @@ pub const Instruction = struct {
     };
     pub const Imported = struct { index: u64, variable: Variable };
     pub const ItemImport = struct { module_index: usize, field_index: usize, scope: Scope };
-    pub const Member = struct {
+    pub const Field = struct {
         index: usize,
         kind: Kind,
+        incr_ref_count: bool,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };

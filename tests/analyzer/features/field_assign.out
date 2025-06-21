@@ -15,6 +15,7 @@
             - args
             [String Tom]
             [Variable index: 1, scope: local]
+            [Increment reference count]
     [String Martin]
     [Field assignment]
         [Field access 0]
