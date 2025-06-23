@@ -66,15 +66,8 @@ struct Grid {
 
 fn main() {
     var grid = Grid.init()
-    // var grid = Grid{
-    //     cells=[
-    //         [Cell{}, Cell{}, Cell{}],
-    //         [Cell{}, Cell{}, Cell{}],
-    //         [Cell{}, Cell{}, Cell{}],
-    //     ],
-    //     dim=3,
-    // }
-    // grid.display()
-    // grid.playAt(1, 2, 2)
-    // grid.display()
+    
+    grid.display()
+    grid.playAt(1, 2, 2)
+    grid.display()
 }

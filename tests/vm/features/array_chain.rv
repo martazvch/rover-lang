@@ -13,6 +13,8 @@ struct Object {
 }
 
 fn main() {
+    var i = 1
+
     var p1 = Point{ x = 1, y = 2, past = [[1, 2], [3, 4]]}
     var p2 = Point{ x = 5, y = 6, past = [[7, 8], [9, 10]]}
     var p3 = Point{ x = 11, y = 12, past = [[13, 14], [15, 16]]}
@@ -23,8 +25,8 @@ fn main() {
 
     print obj.poly.vertex[1][0]
     print obj.poly.vertex[1][0].x
-    print obj.poly.vertex[1][0].past[0]
-    print obj.poly.vertex[1][0].past[1][1]
+    print obj.poly.vertex[i][0].past[0]
+    print obj.poly.vertex[1][0].past[i][1]
 
     // Don't change
     p3.past = [[11, 22], [33, 44]]

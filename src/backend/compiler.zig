@@ -169,8 +169,8 @@ const Compiler = struct {
     }
 
     /// Set the state's flag `to_reg` to true and return previous value
-    fn setToRegAndGetPrevious(self: *Self) bool {
-        defer self.state.to_reg = true;
+    fn setToRegAndGetPrevious(self: *Self, state: bool) bool {
+        defer self.state.to_reg = state;
         return self.state.to_reg;
     }
 
@@ -363,13 +363,13 @@ const Compiler = struct {
     }
 
     fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
-        const prev = self.setToRegAndGetPrevious();
+        const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
         const reg = self.shouldPutResultInReg();
 
         // Variable
         try self.compileInstr();
-        // Index, we want to leave them on the stack
+        // Index, we want to leave it on the stack
         self.state.to_reg = false;
         try self.compileInstr();
 
@@ -378,17 +378,19 @@ const Compiler = struct {
     }
 
     fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
+        // We want indecies to be on stack
+        const prev = self.setToRegAndGetPrevious(false);
+        defer self.state.to_reg = prev;
+
         // Indicies
         for (0..data.depth) |_| {
             try self.compileInstr();
         }
 
-        // Same as 'arrayAccess'
-        const prev = self.setToRegAndGetPrevious();
-        defer self.state.to_reg = prev;
+        // Variable
+        self.state.to_reg = true;
         const reg = self.shouldPutResultInReg();
 
-        // Variable
         try self.compileInstr();
 
         self.writeOpAndByte(if (reg) .array_access_chain_reg else .array_access_chain, @intCast(data.depth), start);
@@ -396,13 +398,13 @@ const Compiler = struct {
     }
 
     fn arrayAssign(self: *Self, start: usize) Error!void {
-        const prev = self.setToRegAndGetPrevious();
+        const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
 
         // Variable
         try self.compileInstr();
 
-        // Index, we want to leave them on the stack
+        // Index, we want to leave it on the stack
         self.state.to_reg = false;
         try self.compileInstr();
 
@@ -419,7 +421,7 @@ const Compiler = struct {
         }
 
         // Variable
-        const prev = self.setToRegAndGetPrevious();
+        const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
         try self.compileInstr();
 
@@ -620,6 +622,7 @@ const Compiler = struct {
         // We do not compile the member as we invoke it (it does not go on the stack)
         const member_data = self.getData().field;
         self.manager.instr_idx += 1;
+
         // Compiles the receiver
         try self.compileInstr();
         try self.compileArgs(data.arity, .get_method_default, member_data.index);
@@ -724,8 +727,9 @@ const Compiler = struct {
     }
 
     fn getField(self: *Self, data: *const Instruction.Field) Error!void {
-        const prev = self.setToRegAndGetPrevious();
+        const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
+
         const member_data = self.getData();
         const start = self.getStart();
 
