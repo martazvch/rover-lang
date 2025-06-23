@@ -25,7 +25,7 @@ OP_GET_LOCAL index 1
 OP_SCOPE_RETURN index 1
 
 OP_CONSTANT index 7, value 67
-OP_CONSTANT index 8, value "just chillin"
+OP_CONSTANT index 8, value just chillin
 OP_CONSTANT index 9, value 7
 OP_CONSTANT index 10, value 90
 OP_GET_LOCAL index 4

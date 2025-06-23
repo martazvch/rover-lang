@@ -93,7 +93,7 @@ pub fn print(self: *Obj, writer: anytype) PrintError!void {
         .func => self.as(ObjFunction).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
         .native_fn => writer.print("<native fn>", .{}),
-        .string => writer.print("\"{s}\"", .{self.as(ObjString).chars}),
+        .string => writer.print("{s}", .{self.as(ObjString).chars}),
         .@"struct" => writer.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
     };
 }
@@ -105,7 +105,7 @@ pub fn log(self: *Obj) void {
         .func => self.as(ObjFunction).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(ObjInstance).parent.name.chars}),
         .native_fn => std.debug.print("<native fn>", .{}),
-        .string => std.debug.print("\"{s}\"", .{self.as(ObjString).chars}),
+        .string => std.debug.print("{s}", .{self.as(ObjString).chars}),
         .@"struct" => std.debug.print("<structure {s}>", .{self.as(ObjStruct).name.chars}),
     }
 }

@@ -14,7 +14,7 @@ OP_POP
 OP_NULL
 OP_POP
 
-OP_CONSTANT index 2, value "foo"
+OP_CONSTANT index 2, value foo
 OP_POP
 
 OP_NAKED_RETURN

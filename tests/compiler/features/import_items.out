@@ -9,7 +9,7 @@ OP_ADD_INT
 OP_RETURN
 
 -- introduce --
-OP_CONSTANT index 0, value "This is a mathematical module"
+OP_CONSTANT index 0, value This is a mathematical module
 OP_PRINT
 OP_NAKED_RETURN
 
@@ -55,7 +55,7 @@ OP_PRINT
 OP_NAKED_RETURN
 
 -- introduce --
-OP_CONSTANT index 0, value "module for basic geometry"
+OP_CONSTANT index 0, value module for basic geometry
 OP_PRINT
 OP_NAKED_RETURN
 

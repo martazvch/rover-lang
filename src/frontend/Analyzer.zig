@@ -1490,8 +1490,30 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
             return .null;
         },
         .string => {
-            // Removes the quotes
-            const value = self.interner.intern(text[1 .. text.len - 1]);
+            const no_quotes = text[1 .. text.len - 1];
+            var final: ArrayListUnmanaged(u8) = .{};
+            var i: usize = 0;
+
+            while (i < no_quotes.len) : (i += 1) {
+                const c = no_quotes[i];
+
+                if (c == '\\') {
+                    i += 1;
+                    // TODO: Error
+                    if (i >= no_quotes.len) @panic("Escaping last quote");
+
+                    switch (no_quotes[i]) {
+                        'n' => final.append(self.allocator, '\n') catch oom(),
+                        't' => final.append(self.allocator, '\t') catch oom(),
+                        '"' => final.append(self.allocator, '"') catch oom(),
+                        'r' => final.append(self.allocator, '\r') catch oom(),
+                        '\\' => final.append(self.allocator, '\\') catch oom(),
+                        else => @panic("Unknown espace sequence"),
+                    }
+                } else final.append(self.allocator, c) catch oom();
+            }
+
+            const value = self.interner.intern(final.toOwnedSlice(self.allocator) catch oom());
             self.addInstr(.{ .string = value });
             return .str;
         },

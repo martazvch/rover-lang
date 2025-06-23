@@ -152,6 +152,7 @@ const State = enum {
     slash,
     start,
     string,
+    string_escape,
 };
 
 pub fn init(allocator: Allocator) Self {
@@ -291,6 +292,7 @@ pub fn next(self: *Self) Token {
                     continue :state .string;
                 },
                 '0' => {
+                    // TODO: protect
                     if (self.source[self.index + 1] == '.') {
                         self.index += 1;
                         continue :state .float;
@@ -495,6 +497,18 @@ pub fn next(self: *Self) Token {
                     }
                 },
                 '"' => self.index += 1,
+                '\\' => continue :state .string_escape,
+                else => continue :state .string,
+            }
+        },
+        .string_escape => {
+            self.index += 1;
+
+            switch (self.source[self.index]) {
+                '\\' => {
+                    self.index += 1;
+                    continue :state .string;
+                },
                 else => continue :state .string,
             }
         },
@@ -508,7 +522,7 @@ pub fn next(self: *Self) Token {
 //  Tests
 // ------------
 test "ident and strings" {
-    var lexer = Self.init(std.testing.allocator);
+    var lexer = Self.initstd.testing.allocator;
     defer lexer.deinit();
     lexer.lex("foo bar variable  truth");
 

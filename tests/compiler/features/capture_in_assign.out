@@ -1,5 +1,5 @@
 -- set --
-OP_CONSTANT index 0, value "updated"
+OP_CONSTANT index 0, value updated
 OP_SET_HEAP index 0
 OP_NAKED_RETURN
 
@@ -9,7 +9,7 @@ OP_PRINT
 OP_NAKED_RETURN
 
 -- set_vars --
-OP_CONSTANT index 0, value "init"
+OP_CONSTANT index 0, value init
 OP_DEFINE_HEAP_VAR index 0
 OP_NULL
 OP_CONSTANT index 1, value <fn set>

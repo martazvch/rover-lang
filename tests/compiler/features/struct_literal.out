@@ -5,12 +5,12 @@
 -- main --
 OP_GET_GLOBAL index 0, <structure Human>
 OP_CONSTANT index 0, value 5
-OP_CONSTANT index 1, value "Tom"
+OP_CONSTANT index 1, value Tom
 OP_STRUCT_LIT index 2
 
 OP_GET_GLOBAL index 0, <structure Human>
 OP_CONSTANT index 2, value 5
-OP_CONSTANT index 3, value "Tom"
+OP_CONSTANT index 3, value Tom
 OP_STRUCT_LIT index 2
 
 OP_SET_LOCAL index 1
@@ -18,11 +18,11 @@ OP_CONSTANT index 4, value 95
 
 OP_GET_GLOBAL index 0, <structure Human>
 OP_GET_LOCAL index 2
-OP_CONSTANT index 5, value "Tom"
+OP_CONSTANT index 5, value Tom
 OP_STRUCT_LIT index 2
 
 OP_SET_LOCAL index 1
-OP_CONSTANT index 6, value "Tom"
+OP_CONSTANT index 6, value Tom
 
 OP_GET_GLOBAL index 0, <structure Human>
 OP_CONSTANT index 7, value 6

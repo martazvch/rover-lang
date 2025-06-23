@@ -844,7 +844,6 @@ fn grouping(self: *Self) Error!*Expr {
 
     const save = self.in_group;
     self.in_group = true;
-    errdefer self.in_group = save;
     defer self.in_group = save;
 
     const expr = self.allocator.create(Expr) catch oom();

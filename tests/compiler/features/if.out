@@ -2,7 +2,7 @@
 OP_TRUE
 OP_JUMP_IF_FALSE 1 -> 11
 OP_POP
-OP_CONSTANT index 0, value "yes"
+OP_CONSTANT index 0, value yes
 OP_PRINT
 OP_JUMP 8 -> 12
 OP_POP
@@ -13,7 +13,7 @@ OP_POP
 OP_FALSE
 OP_JUMP_IF_FALSE 18 -> 28
 OP_POP
-OP_CONSTANT index 1, value "yes"
+OP_CONSTANT index 1, value yes
 OP_PRINT
 OP_JUMP 25 -> 29
 OP_POP
@@ -24,11 +24,11 @@ OP_POP
 OP_FALSE
 OP_JUMP_IF_FALSE 35 -> 45
 OP_POP
-OP_CONSTANT index 2, value "yes"
+OP_CONSTANT index 2, value yes
 OP_PRINT
 OP_JUMP 42 -> 49
 OP_POP
-OP_CONSTANT index 3, value "no"
+OP_CONSTANT index 3, value no
 OP_PRINT
 
 OP_TRUE

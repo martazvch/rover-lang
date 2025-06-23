@@ -11,8 +11,8 @@ OP_NEGATE_FLOAT
 OP_ADD_FLOAT
 OP_POP
 
-OP_CONSTANT index 4, value "foo"
-OP_CONSTANT index 5, value " bar"
+OP_CONSTANT index 4, value foo
+OP_CONSTANT index 5, value  bar
 OP_STRING_CONCAT
 OP_POP
 
@@ -42,11 +42,11 @@ OP_MULTIPLY_INT
 OP_POP
 
 OP_CONSTANT index 14, value 2
-OP_CONSTANT index 15, value "foo"
+OP_CONSTANT index 15, value foo
 OP_STRING_MUL_L
 OP_POP
 
-OP_CONSTANT index 16, value "foo"
+OP_CONSTANT index 16, value foo
 OP_CONSTANT index 17, value 4
 OP_STRING_MUL_R
 OP_POP

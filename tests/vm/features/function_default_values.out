@@ -1,94 +1,94 @@
 // Function
-"first"
+first
 1
 2
 24.5
 
-"second"
+second
 12
 12
 98.5
 
-"third"
+third
 8
 12
 98.5
 
-"fourth"
+fourth
 12
 12
 123.456
 
-"fifth"
+fifth
 80
 12
 12.34
 
-"sixth"
+sixth
 65
 54
 3.14
 
 
 // Static function
-"first"
+first
 1
 2
 24.5
 
-"second"
+second
 12
 12
 98.5
 
-"third"
+third
 8
 12
 98.5
 
-"fourth"
+fourth
 12
 12
 123.456
 
-"fifth"
+fifth
 80
 12
 12.34
 
-"sixth"
+sixth
 65
 54
 3.14
 
 
 // Method
-"first"
+first
 1
 2
 24.5
 
-"second"
+second
 12
 12
 98.5
 
-"third"
+third
 8
 12
 98.5
 
-"fourth"
+fourth
 12
 12
 123.456
 
-"fifth"
+fifth
 80
 12
 12.34
 
-"sixth"
+sixth
 65
 54
 3.14
