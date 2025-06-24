@@ -273,7 +273,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
-    const coherence = try self.performTypeCoherence(assigne_type, value_type, false, self.ast.getSpan(node.assigne));
+    const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.assigne));
 
     self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow } });
 }
@@ -773,7 +773,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         self.state.incr_ref = false;
         self.state.allow_partial = last;
 
-        const coherence = try self.performTypeCoherence(checked_type, value_type, true, self.ast.getSpan(value));
+        const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
         checked_type = coherence.type;
         data.cast = coherence.cast;
 
@@ -1366,13 +1366,13 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnIn
 
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(na.value);
-                cast = (try self.performTypeCoherence(param_info.type, value_type, false, self.ast.getSpan(na.value))).cast;
+                cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(na.value))).cast;
             },
             else => {
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(arg);
                 param_info = &infos.params.values()[i + offset];
-                cast = (try self.performTypeCoherence(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
+                cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
                 proto_values[i] = true;
             },
         }
@@ -1716,7 +1716,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
             (try self.identifier(fv.name, true)).typ;
 
         const span = if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name);
-        const cast = (try self.performTypeCoherence(f.type, typ, false, span)).cast;
+        const cast = (try self.performTypeCoercion(f.type, typ, false, span)).cast;
 
         self.instructions.items(.data)[start + f.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
     }
@@ -2103,7 +2103,7 @@ fn inferArrayType(self: *Self, decl: Type, value: Type, span: Span) Error!Type {
 const TypeCoherence = struct { type: Type = .void, cast: bool = false };
 
 /// Checks for `void` values, array inference and cast. The goal is to see if the two types are equivalent
-fn performTypeCoherence(self: *Self, decl: Type, value: Type, emit_cast: bool, span: Span) Error!TypeCoherence {
+fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, span: Span) Error!TypeCoherence {
     var cast = false;
     var local_decl = decl;
     var local_value = value;
