@@ -626,10 +626,14 @@ fn strConcat(self: *Self) void {
     const res = self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len) catch oom();
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
+    std.debug.print("Concat: {s}\n", .{res});
 
     // 'Pop' the two strings
     self.stack.top -= 2;
     self.stack.push(Value.makeObj(ObjString.take(self, res).asObj()));
+
+    // self.stack.peekRef(1).* = Value.makeObj(ObjString.take(self, res).asObj());
+    // self.stack.top -= 1;
 }
 
 fn strMul(self: *Self, str: *const ObjString, factor: i64) void {

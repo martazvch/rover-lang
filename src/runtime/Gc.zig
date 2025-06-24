@@ -6,6 +6,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const options = @import("options");
 
+const Table = @import("Table.zig");
 const Obj = @import("Obj.zig");
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
@@ -66,6 +67,7 @@ pub fn collect(self: *Self) Allocator.Error!void {
 
     try self.markRoots();
     try self.traceRef();
+    tableRemoveWhite(&self.vm.strings);
     self.sweep();
 
     self.next_gc = self.bytes_allocated * GROW_FACTOR;
@@ -91,6 +93,7 @@ fn markRoots(self: *Self) Allocator.Error!void {
     while (value != self.vm.stack.top) : (value += 1) {
         try self.markValue(&value[0]);
     }
+    try self.markArray(self.vm.heap_vars);
 
     try self.markModule(self.vm.module);
     for (self.vm.module_chain.items) |mod| {
@@ -153,6 +156,15 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             }
         },
         .native_fn, .string => {},
+    }
+}
+
+/// Removes weak references of strings in the hashmap
+fn tableRemoveWhite(table: *Table) void {
+    for (table.entries) |*entry| {
+        if (entry.key) |string| {
+            if (!string.asObj().is_marked) _ = table.delete(string);
+        }
     }
 }
 

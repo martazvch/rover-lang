@@ -98,6 +98,7 @@ pub fn findString(self: *const Self, str: []const u8, hash: u32) ?*ObjString {
         const entry = self.entries[index];
 
         if (entry.key) |k| {
+            std.debug.print("K: {s}\n", .{k.chars});
             if (k.chars.len == str.len and k.hash == hash and std.mem.eql(u8, k.chars, str)) {
                 return k;
             }
