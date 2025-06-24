@@ -1,4 +1,4 @@
-void_assignment
-void_assignment
+void_value
+void_value
 unused_value
-invalid_assign_type, int, float
+type_mismatch, int, float

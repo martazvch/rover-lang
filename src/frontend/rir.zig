@@ -137,8 +137,7 @@ pub const Instruction = struct {
         pub const Op = enum { minus, bang };
     };
     pub const VarDecl = struct { variable: Variable, has_value: bool = false, cast: bool = false };
-    // TODO: no need to pack here I think
-    pub const Variable = packed struct { index: u62, scope: Scope };
+    pub const Variable = struct { index: u64, scope: Scope };
 };
 
 comptime {

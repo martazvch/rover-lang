@@ -1,6 +1,6 @@
 array_elem_different_type, int, bool
-invalid_assign_type, [][]int, []int
-invalid_assign_type, []int, []bool
+type_mismatch, [][]int, []int
+type_mismatch, []int, []bool
 non_array_indexing, str
 non_integer_index, bool
 non_integer_index, float

@@ -75,13 +75,11 @@ pub const empty: Self = .{
 
 pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.allocator = allocator;
-    // TODO: pass self instead of calling link after
     // TODO: pass an ObjectPoolAlloc?
-    self.gc = .init(allocator);
+    self.gc = .init(self, allocator);
     self.gc_alloc = self.gc.allocator();
     self.stdout = std.io.getStdOut().writer();
     self.interner = .init(allocator);
-    self.gc.link(self);
     self.pipeline.init(self, config);
     self.stack.init();
     self.strings = .init(self.allocator);
@@ -329,8 +327,7 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const callee = self.stack.peekRef(args_count).obj.as(ObjFunction);
                 try self.call(&frame, callee, args_count);
             },
-            // TODO: Cast could only 'transmute' or bitcast the value on stack to change the union tag
-            .cast_to_float => self.stack.push(Value.makeFloat(@floatFromInt(self.stack.pop().int))),
+            .cast_to_float => self.stack.peekRef(0).* = Value.makeFloat(@floatFromInt(self.stack.peekRef(0).int)),
             .constant => self.stack.push(frame.readConstant()),
             .define_heap_var => {
                 const idx = frame.readByte();
@@ -542,8 +539,6 @@ fn execute(self: *Self, entry_point: *ObjFunction) !void {
                 const locals_count = frame.readByte();
                 const res = self.stack.pop();
                 self.stack.top -= locals_count;
-
-                // TODO: put in register too?
                 self.stack.push(res);
             },
             .set_global => {

@@ -1,4 +1,4 @@
 default_value_type_mismatch, int, float, param
-invalid_assign_type, int, float
+type_mismatch, int, float
 missing_function_param, c
 unknown_param, bad

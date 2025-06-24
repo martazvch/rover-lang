@@ -177,7 +177,6 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
         .symbols = self.analyzer.symbols,
         .function = function,
-        // TODO: use only one allocator?
         .globals = compiler.globals.toOwnedSlice(self.vm.allocator) catch oom(),
     };
 }

@@ -23,6 +23,12 @@ fn main() {
     // Access in struct
     print foo.arr[getIdx()]
 
+
     // Infer value type
     var emptyArr: []int = []
+
+    var lateEmptyArr: []int
+    lateEmptyArr = []
+
+    var ff = Foo{arr=[]}
 }

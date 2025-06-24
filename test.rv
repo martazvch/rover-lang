@@ -1,13 +1,5 @@
-struct Foo {
-    fn f(self, a: int) { print a }
-}
+fn foo(a: []int) {}
 
 fn main() {
-    var foo = Foo {}
-
-    fn f2(this: Foo, a: int) {
-        print 2 * a
-    }
-
-    foo.f = f2
+    foo([])
 }

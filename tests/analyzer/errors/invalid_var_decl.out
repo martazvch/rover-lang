@@ -1,7 +1,7 @@
-invalid_assign_type, int, float
-invalid_assign_type, float, str
-invalid_assign_type, bool, int
-invalid_assign_type, str, int
+type_mismatch, int, float
+type_mismatch, float, str
+type_mismatch, bool, int
+type_mismatch, str, int
 
 undeclared_type, floa
 undeclared_type, Int

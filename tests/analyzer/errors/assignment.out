@@ -1,4 +1,4 @@
 invalid_assign_target
 invalid_assign_target
 invalid_assign_target
-invalid_assign_type, int, float
+type_mismatch, int, float

@@ -63,3 +63,16 @@
     // Infer
     [Variable declaration index: 4, scope: local]
         [Array]
+
+    [Variable declaration index: 5, scope: local]
+        [Null]
+    [Array]
+    [Assignment index: 5, scope: local]
+
+    [Variable declaration index: 6, scope: local]
+        [Structure literal]
+            - structure
+            [Variable index: 0, scope: global]
+            - args
+            [Array]
+

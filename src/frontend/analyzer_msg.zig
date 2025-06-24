@@ -17,7 +17,7 @@ pub const AnalyzerMsg = union(enum) {
         kind: []const u8,
 
         pub fn new(expect: []const u8, found: []const u8, kind: enum { field, param }) @This() {
-            return @This(){ .expect = expect, .found = found, .kind = @tagName(kind) };
+            return .{ .expect = expect, .found = found, .kind = @tagName(kind) };
         }
     },
     dot_type_on_non_mod: struct { found: []const u8 },
@@ -28,12 +28,11 @@ pub const AnalyzerMsg = union(enum) {
     incompatible_fn_type: struct { expect: []const u8, found: []const u8 },
     invalid_arithmetic: struct { found: []const u8 },
     invalid_assign_target,
-    invalid_assign_type: struct { expect: []const u8, found: []const u8 },
     invalid_call_target,
     invalid_comparison: struct { found1: []const u8, found2: []const u8 },
     invalid_logical: struct { found: []const u8 },
     invalid_unary: struct { found: []const u8 },
-    implicit_cast: struct { side: []const u8, type_: []const u8 },
+    implicit_cast: struct { side: []const u8, type: []const u8 },
     missing_symbol_in_module: struct { symbol: []const u8, module: []const u8 },
     missing_else_clause: struct { if_type: []const u8 },
     missing_field_struct_literal: struct { name: []const u8 },
@@ -66,16 +65,16 @@ pub const AnalyzerMsg = union(enum) {
         kind: []const u8,
 
         pub fn new(kind: enum { field, param }) @This() {
-            return @This(){ .kind = @tagName(kind) };
+            return .{ .kind = @tagName(kind) };
         }
     },
     unused_value,
     use_uninit_var: struct { name: []const u8 },
     void_array,
-    void_assignment,
     void_discard,
     void_param,
     void_print,
+    void_value,
     too_many_fn_args: struct { expect: []const u8, found: []const u8 },
 
     const Self = @This();
@@ -100,20 +99,19 @@ pub const AnalyzerMsg = union(enum) {
             ),
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
             .duplicate_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
-            .float_equal => writer.print("floating-point values equality is unsafe", .{}),
-            .float_equal_cast => writer.print("unsafe floating-point values comparison", .{}),
+            .float_equal => writer.writeAll("floating-point values equality is unsafe"),
+            .float_equal_cast => writer.writeAll("unsafe floating-point values comparison"),
             .incompatible_fn_type => |e| writer.print("function declared as returning '{s}' type but found '{s}'", .{ e.expect, e.found }),
             .incompatible_if_type => |e| writer.print("'if' and 'else' have incompatible types, found '{s}'  and '{s}'", .{ e.found1, e.found2 }),
-            .invalid_arithmetic => writer.print("invalid arithmetic operation", .{}),
-            .invalid_assign_target => writer.print("invalid assignment target", .{}),
-            .invalid_assign_type => writer.print("variable declaration type mismatch", .{}),
+            .invalid_arithmetic => writer.writeAll("invalid arithmetic operation"),
+            .invalid_assign_target => writer.writeAll("invalid assignment target"),
             .invalid_call_target => writer.writeAll("invalid call target, can only call functions and methods"),
-            .invalid_comparison => writer.print("invalid comparison", .{}),
-            .invalid_logical => writer.print("logical operators must be used with booleans", .{}),
-            .invalid_unary => writer.print("invalid unary operation", .{}),
-            .implicit_cast => writer.print("implicit cast, expressions have different types", .{}),
+            .invalid_comparison => writer.writeAll("invalid comparison"),
+            .invalid_logical => writer.writeAll("logical operators must be used with booleans"),
+            .invalid_unary => writer.writeAll("invalid unary operation"),
+            .implicit_cast => writer.writeAll("implicit cast, expressions have different types"),
             .missing_symbol_in_module => |e| writer.print("no symbol named '{s}' in module '{s}'", .{ e.symbol, e.module }),
-            .missing_else_clause => writer.print("'if' may be missing in 'else' clause", .{}),
+            .missing_else_clause => writer.writeAll("'if' may be missing in 'else' clause"),
             .missing_field_struct_literal => |e| writer.print("missing field '{s}' in structure literal", .{e.name}),
             .missing_file_in_cwd => |e| writer.print("missing file '{s}' in module current directory", .{e.file}),
             .missing_file_in_module => |e| writer.print("missing file '{s}' in module '{s}'", .{ e.file, e.module }),
@@ -125,14 +123,14 @@ pub const AnalyzerMsg = union(enum) {
             .non_integer_index => |e| writer.print("non integer index, found '{s}'", .{e.found}),
             .non_struct_field_access => writer.writeAll("attempting to access a field on a non structure type"),
             .non_struct_struct_literal => writer.writeAll("structure literal syntax is for structure type "),
-            .non_void_while => writer.print("'while' statements can't return a value", .{}),
-            .no_main => writer.print("no main function found", .{}),
-            .return_outside_fn => writer.print("return outside of a function", .{}),
+            .non_void_while => writer.writeAll("'while' statements can't return a value"),
+            .no_main => writer.writeAll("no main function found"),
+            .return_outside_fn => writer.writeAll("return outside of a function"),
             .self_outside_struct => writer.writeAll("only structure's methods can refer to 'self'"),
             .struct_call_but_no_init => writer.writeAll("calling initializer but none have been declared in structure's definition"),
-            .too_many_locals => writer.print("too many local variables, maximum is 255", .{}),
+            .too_many_locals => writer.writeAll("too many local variables, maximum is 255"),
             .too_many_fn_args => |e| writer.print("expect maximum {s} function arguments but found {s}", .{ e.expect, e.found }),
-            .too_many_types => writer.print("too many types declared, maximum is 268435455", .{}),
+            .too_many_types => writer.writeAll("too many types declared, maximum is 268435455"),
             .type_mismatch => |e| writer.print("type mismatch, expect a '{s}' but found '{s}' ", .{ e.expect, e.found }),
             .undeclared_field_access => |e| writer.print("field '{s}' isn't part of structure's definition", .{e.name}),
             .undeclared_type => |e| writer.print("undeclared type '{s}'", .{e.found}),
@@ -141,15 +139,15 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_module => |e| writer.print("unknown module '{s}'", .{e.name}),
             .unknown_param => |e| writer.print("function doesn't have parameter '{s}'", .{e.name}),
             .unknown_struct_field => |e| writer.print("unknown structure's field '{s}'", .{e.name}),
-            .unpure_in_global => writer.print("non-constant expressions are not allowed in global scope", .{}),
+            .unpure_in_global => writer.writeAll("non-constant expressions are not allowed in global scope"),
             .unpure_default => |e| writer.print("non-constant expressions are not allowed for {s}", .{e.kind}),
-            .unused_value => writer.print("unused value", .{}),
+            .unused_value => writer.writeAll("unused value"),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
-            .void_assignment => writer.print("assigned value is of type 'void'", .{}),
-            .void_discard => writer.print("trying to discard a non value", .{}),
-            .void_param => writer.print("function parameters can't be of 'void' type", .{}),
+            .void_discard => writer.writeAll("trying to discard a non value"),
+            .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_print => writer.writeAll("try to print a 'void' value"),
+            .void_value => writer.writeAll("value is of type 'void'"),
         };
     }
 
@@ -175,7 +173,6 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => writer.writeAll("expressions have different types"),
             .invalid_logical => |e| writer.print("this expression resolves to a '{s}'", .{e.found}),
             .invalid_unary, .non_bool_cond => writer.writeAll("expression is not a boolean type"),
-            .invalid_assign_type => writer.writeAll("expression doesn't match variable's type"),
             .implicit_cast => writer.writeAll("this is implicitly casted"),
             .missing_symbol_in_module => writer.writeAll("this symbol is unknown"),
             .missing_else_clause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
@@ -201,10 +198,10 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_struct_field => writer.writeAll("this name"),
             .unused_value => writer.writeAll("this expression produces a value"),
             .void_array => writer.writeAll("declared here"),
-            .void_assignment => writer.writeAll("this expression produces no value"),
             .void_discard => writer.writeAll("this expression produces no value"),
             .void_param => writer.writeAll("this parameter"),
             .void_print => writer.writeAll("this expression is of type 'void'"),
+            .void_value => writer.writeAll("this expression produces no value"),
         };
     }
 
@@ -258,8 +255,7 @@ pub const AnalyzerMsg = union(enum) {
             ),
             .invalid_logical => writer.writeAll("modify the logic to operate on booleans"),
             .invalid_unary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
-            .invalid_assign_type => |e| writer.print("variable is declared of type '{s}' but expression is of type '{s}'", .{ e.expect, e.found }),
-            .implicit_cast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type_ }),
+            .implicit_cast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type }),
             .missing_symbol_in_module => writer.writeAll("refer to module's source code or documentation to ge the list of available symbols"),
             .missing_else_clause => writer.writeAll("add an 'else' block that evaluate to the expected type"),
             .missing_field_struct_literal => writer.writeAll(
@@ -285,7 +281,7 @@ pub const AnalyzerMsg = union(enum) {
             .too_many_locals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
             .too_many_fn_args => writer.writeAll("refer to the function's definition to correct the call"),
             .too_many_types => writer.writeAll("it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code"),
-            .type_mismatch => writer.writeAll("change the type to match expected one"),
+            .type_mismatch => writer.writeAll("refer to variable's definition to assign the correct type"),
             .undeclared_field_access => writer.writeAll("refer to structure's definition to see available fields or modify it"),
             .undeclared_type => writer.writeAll("consider declaring or importing the type before use"),
             .undeclared_var => writer.writeAll("consider declaring or importing the variable before use"),
@@ -298,30 +294,22 @@ pub const AnalyzerMsg = union(enum) {
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .unused_value => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
             .void_array => writer.writeAll("use any other type to declare an array"),
-            .void_assignment => writer.writeAll("consider returning a value from expression or remove assignment"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
+            .void_value => writer.writeAll("consider returning a value from expression"),
         };
     }
 
     pub fn invalidArithmetic(found: []const u8) Self {
-        return .{ .invalid_arithmetic = .{
-            .found = found,
-        } };
+        return .{ .invalid_arithmetic = .{ .found = found } };
     }
 
-    pub fn implicitCast(side: []const u8, type_: []const u8) Self {
-        return .{ .implicit_cast = .{
-            .side = side,
-            .type_ = type_,
-        } };
+    pub fn implicitCast(side: []const u8, typ: []const u8) Self {
+        return .{ .implicit_cast = .{ .side = side, .type = typ } };
     }
 
     pub fn invalidCmp(found1: []const u8, found2: []const u8) Self {
-        return .{ .invalid_comparison = .{
-            .found1 = found1,
-            .found2 = found2,
-        } };
+        return .{ .invalid_comparison = .{ .found1 = found1, .found2 = found2 } };
     }
 
     // TODO: No other way to take ownership of string??

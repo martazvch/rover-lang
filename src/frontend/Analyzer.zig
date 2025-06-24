@@ -81,7 +81,7 @@ const Variable = struct {
 
     /// Converts analyzer `Variable` representation to IR `Variable`
     pub fn toVar(self: *const Variable) Instruction.Variable {
-        return .{ .index = @intCast(self.index), .scope = self.scope() };
+        return .{ .index = self.index, .scope = self.scope() };
     }
 };
 
@@ -234,16 +234,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     self.state.allow_partial = false;
     defer self.state.allow_partial = last;
 
-    var cast = false;
+    // var cast = false;
     const index = self.reserveInstr();
 
     self.state.incr_ref = true;
-    const value_type = try self.analyzeExpr(node.value);
+    var value_type = try self.analyzeExpr(node.value);
     self.state.incr_ref = false;
-
-    if (value_type == .void) {
-        return self.err(.void_assignment, self.ast.getSpan(node.value));
-    }
 
     const assigne_type, const cow = switch (node.assigne.*) {
         .literal => |*e| b: {
@@ -277,21 +273,9 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
-    // TODO: use checkType()?
-    if (assigne_type != value_type and !self.checkEqualFnType(assigne_type, value_type)) {
-        // One case in wich we can coerce; int -> float
-        if (self.checkCast(assigne_type, value_type, false)) {
-            cast = true;
-        } else return self.err(
-            .{ .invalid_assign_type = .{
-                .expect = self.getTypeName(assigne_type),
-                .found = self.getTypeName(value_type),
-            } },
-            self.ast.getSpan(node.assigne),
-        );
-    }
+    const coherence = try self.performTypeCoherence(assigne_type, value_type, false, self.ast.getSpan(node.assigne));
 
-    self.setInstr(index, .{ .assignment = .{ .cast = cast, .cow = cow } });
+    self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow } });
 }
 
 fn discard(self: *Self, expr: *const Expr) !void {
@@ -536,7 +520,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
     var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{}, .default_value_fields = 0 };
 
-    infos.fields.ensureTotalCapacity(self.allocator, @intCast(node.fields.len)) catch oom();
+    infos.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
 
     for (node.fields, 0..) |*f, i| {
         var field_infos: StructInfo.MemberInfo = .{ .type = undefined, .index = i };
@@ -580,6 +564,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.type_manager.setInfo(type_idx, type_info);
     self.type_manager.addType(name, struct_type);
 
+    // TODO: protect cast
     infos.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
 
     for (node.functions, 0..) |*f, i| {
@@ -654,6 +639,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         const module, const cached = try self.importModule(node);
         const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(token));
+        // TODO: protect cast
         const module_type: Type = .create(.module, .none, @intCast(self.modules.count()));
 
         if (node.items) |items| {
@@ -776,6 +762,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
 
     if (node.value) |value| {
         data.has_value = true;
+        initialized = true;
 
         const last = self.state.allow_partial;
         self.state.allow_partial = false;
@@ -786,46 +773,9 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         self.state.incr_ref = false;
         self.state.allow_partial = last;
 
-        // Void assignment check
-        if (value_type == .void) return self.err(.void_assignment, self.ast.getSpan(value));
-
-        if (value_type.is(.array)) {
-            // TODO: put in a function and do: 'value_type = try self.inferArrayType(checked_type)'
-            // so we acn use it in assignment to
-
-            // Get item's type
-            const child = self.type_manager.getArrayChildType(value_type);
-
-            // Empty array like: []
-            if (child == .void) {
-                // Not declared and empty array like: var a = []
-                if (checked_type == .void) {
-                    return self.err(.cant_infer_arary_type, self.ast.getSpan(value));
-                } else {
-                    // Infer from declaration
-                    value_type = checked_type;
-                }
-            }
-        }
-
-        // If no type declared, we infer the value type
-        if (checked_type == .void) {
-            checked_type = value_type;
-            // Else, we check for coherence
-        } else if (!self.equalType(checked_type, value_type)) {
-            // One case in wich we can coerce, int -> float
-            if (self.checkCast(checked_type, value_type, true)) {
-                data.cast = true;
-            } else return self.err(
-                .{ .invalid_assign_type = .{
-                    .expect = self.getTypeName(checked_type),
-                    .found = self.getTypeName(value_type),
-                } },
-                self.ast.getSpan(value),
-            );
-        }
-
-        initialized = true;
+        const coherence = try self.performTypeCoherence(checked_type, value_type, true, self.ast.getSpan(value));
+        checked_type = coherence.type;
+        data.cast = coherence.cast;
 
         // If we assign a bound method that match the type (checked after), update type's infos
         const extra = value_type.getExtra();
@@ -1208,11 +1158,14 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 
     const count = self.endScope();
 
-    self.setInstr(index, .{ .block = .{
-        .length = expr.nodes.len,
-        .pop_count = @intCast(count),
-        .is_expr = if (final != .void) true else false,
-    } });
+    self.setInstr(index, .{
+        .block = .{
+            .length = expr.nodes.len,
+            // TODO: protect cast
+            .pop_count = @intCast(count),
+            .is_expr = if (final != .void) true else false,
+        },
+    });
 
     return final;
 }
@@ -1324,13 +1277,12 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         self.type_manager.type_infos.items[type_value].func
     else if (sft.field.is(.@"struct")) blk: {
         const struct_infos = self.type_manager.type_infos.items[type_value].@"struct";
-
-        if (struct_infos.functions.get(self.cached_names.init)) |init_fn| {
-            const type_idx = init_fn.type.getValue();
-            break :blk self.type_manager.type_infos.items[type_idx].func;
-        } else {
+        const init_fn = struct_infos.functions.get(self.cached_names.init) orelse {
             return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
-        }
+        };
+
+        const type_idx = init_fn.type.getValue();
+        break :blk self.type_manager.type_infos.items[type_idx].func;
     } else {
         return self.err(.invalid_call_target, self.ast.getSpan(expr));
     };
@@ -1359,6 +1311,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     }
 
     const arity = try self.fnArgsList(expr, &infos, extra == .bound_method);
+    // TODO: protect cast
     self.setInstr(index, .{ .call = .{ .arity = @intCast(arity), .tag = call_tag } });
 
     // To load the module's global before call. If it's an invoke_import, we know that the
@@ -1413,30 +1366,13 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnIn
 
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(na.value);
-
-                if (!self.equalType(value_type, param_info.type)) {
-                    if (self.checkCast(param_info.type, value_type, false)) {
-                        cast = true;
-                    } else return self.err(
-                        .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
-                        self.ast.getSpan(na.value),
-                    );
-                }
+                cast = (try self.performTypeCoherence(param_info.type, value_type, false, self.ast.getSpan(na.value))).cast;
             },
             else => {
                 value_instr = self.instructions.len;
                 const value_type = try self.analyzeExpr(arg);
                 param_info = &infos.params.values()[i + offset];
-
-                if (!self.equalType(value_type, param_info.type)) {
-                    if (self.checkCast(param_info.type, value_type, false)) {
-                        cast = true;
-                    } else return self.err(
-                        .{ .type_mismatch = .{ .expect = self.getTypeName(param_info.type), .found = self.getTypeName(value_type) } },
-                        self.ast.getSpan(arg),
-                    );
-                }
-
+                cast = (try self.performTypeCoherence(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
                 proto_values[i] = true;
             },
         }
@@ -1597,11 +1533,11 @@ fn makeVariableInstr(self: *Self, variable: *Variable) void {
         // an outer scope and if it's not a global declaration. Then, we use its index and the compiler
         // will emit a special code to get it at runtime from the beginning of the stack, not the callframe
         if (variable.kind == .decl and self.scope_depth > variable.depth and variable.depth > 0) {
-            self.addInstr(.{ .identifier_absolute = @intCast(variable.index) });
+            self.addInstr(.{ .identifier_absolute = variable.index });
         } else {
-            // TODO: document what it can be
+            // It's a declaration
             self.addInstr(.{ .identifier = .{
-                .index = @intCast(variable.index),
+                .index = variable.index,
                 .scope = if (variable.depth > 0) .local else .global,
             } });
         }
@@ -1617,8 +1553,7 @@ fn checkCapture(self: *Self, variable: *Variable) void {
     variable.captured = true;
     variable.index = self.heap_count;
     self.instructions.items(.data)[variable.decl].var_decl.variable.scope = .heap;
-    // TODO: protect the cast
-    self.instructions.items(.data)[variable.decl].var_decl.variable.index = @intCast(self.heap_count);
+    self.instructions.items(.data)[variable.decl].var_decl.variable.index = self.heap_count;
     self.heap_count += 1;
 }
 
@@ -1767,30 +1702,23 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
 
     for (expr.fields) |*fv| {
         const field_name = self.interner.intern(self.ast.toSource(fv.name));
-
-        if (infos.fields.get(field_name)) |f| {
-            const value_instr = self.instructions.len;
-            proto.putAssumeCapacity(field_name, true);
-
-            const typ = if (fv.value) |val|
-                try self.analyzeExpr(val)
-            else // Syntax: { x } instead of { x = x }
-                (try self.identifier(fv.name, true)).typ;
-
-            const cast = if (!self.equalType(typ, f.type)) b: {
-                if (self.checkCast(f.type, typ, false)) break :b true;
-
-                return self.err(
-                    .{ .type_mismatch = .{ .expect = self.getTypeName(f.type), .found = self.getTypeName(typ) } },
-                    if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name),
-                );
-            } else false;
-
-            self.instructions.items(.data)[start + f.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
-        } else return self.err(
+        const f = infos.fields.get(field_name) orelse return self.err(
             .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
             self.ast.getSpan(fv.name),
         );
+
+        const value_instr = self.instructions.len;
+        proto.putAssumeCapacity(field_name, true);
+
+        const typ = if (fv.value) |val|
+            try self.analyzeExpr(val)
+        else // Syntax: { x } instead of { x = x }
+            (try self.identifier(fv.name, true)).typ;
+
+        const span = if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name);
+        const cast = (try self.performTypeCoherence(f.type, typ, false, span)).cast;
+
+        self.instructions.items(.data)[start + f.index] = .{ .value = .{ .value_instr = value_instr, .cast = cast } };
     }
 
     if (arity != proto.count()) {
@@ -2006,7 +1934,7 @@ fn declareVariable(
         variable.index = index;
 
         self.globals.append(self.allocator, variable) catch oom();
-        return .{ .index = @intCast(index), .scope = .global };
+        return .{ .index = index, .scope = .global };
     } else {
         // Take function's frame into account
         const index = self.locals.items.len - self.local_offset;
@@ -2017,7 +1945,7 @@ fn declareVariable(
         }
 
         self.locals.append(self.allocator, variable) catch oom();
-        return .{ .index = @intCast(index), .scope = .local };
+        return .{ .index = index, .scope = .local };
     }
 }
 
@@ -2156,4 +2084,50 @@ fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     try writer.print(") -> {s}", .{self.getTypeName(decl.return_type)});
 
     return try res.toOwnedSlice(self.allocator);
+}
+
+/// try to infer array value type from variable's declared type
+fn inferArrayType(self: *Self, decl: Type, value: Type, span: Span) Error!Type {
+    // Get nested item's type from: [][][]int -> int
+    const child = self.type_manager.getArrayChildType(value);
+
+    // Empty array like: []
+    if (child == .void) {
+        // No type declared and empty array like: var a = [], else infer from declaration
+        return if (decl == .void) self.err(.cant_infer_arary_type, span) else decl;
+    }
+
+    return value;
+}
+
+const TypeCoherence = struct { type: Type = .void, cast: bool = false };
+
+/// Checks for `void` values, array inference and cast. The goal is to see if the two types are equivalent
+fn performTypeCoherence(self: *Self, decl: Type, value: Type, emit_cast: bool, span: Span) Error!TypeCoherence {
+    var cast = false;
+    var local_decl = decl;
+    var local_value = value;
+
+    if (value == .void) return self.err(.void_value, span);
+
+    if (value.is(.array)) {
+        local_value = try self.inferArrayType(decl, value, span);
+    }
+
+    if (local_decl == .void) {
+        local_decl = local_value;
+    } else if (!self.equalType(local_decl, local_value)) {
+        // One case in wich we can coerce, int -> float
+        if (self.checkCast(local_decl, local_value, emit_cast)) {
+            cast = true;
+        } else return self.err(
+            .{ .type_mismatch = .{
+                .expect = self.getTypeName(local_decl),
+                .found = self.getTypeName(local_value),
+            } },
+            span,
+        );
+    }
+
+    return .{ .type = local_decl, .cast = cast };
 }

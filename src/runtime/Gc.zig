@@ -30,9 +30,9 @@ tmp_roots: ArrayListUnmanaged(*Obj) = .{},
 const Self = @This();
 const GROW_FACTOR = 2;
 
-pub fn init(parent_allocator: Allocator) Self {
+pub fn init(vm: *Vm, parent_allocator: Allocator) Self {
     return .{
-        .vm = undefined,
+        .vm = vm,
         .parent_allocator = parent_allocator,
         .grays = std.ArrayList(*Obj).init(parent_allocator),
         .bytes_allocated = 0,
@@ -44,10 +44,6 @@ pub fn init(parent_allocator: Allocator) Self {
 pub fn deinit(self: *Self) void {
     self.grays.deinit();
     self.tmp_roots.deinit(self.vm.allocator);
-}
-
-pub fn link(self: *Self, vm: *Vm) void {
-    self.vm = vm;
 }
 
 /// Pushes a reference to an object that's being created, to allow marking it as root
@@ -222,7 +218,6 @@ pub fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize)
 
     self.bytes_allocated += len;
     if (self.active and (self.bytes_allocated > self.next_gc or options.stress_gc)) {
-        // TODO: error?
         self.collect() catch return null;
     }
 
