@@ -11,3 +11,4 @@ fn main() {
 
     foo.f = f2
 }
+

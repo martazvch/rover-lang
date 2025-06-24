@@ -246,7 +246,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     }
 
     const assigne_type, const cow = switch (node.assigne.*) {
-        .literal => |*e| blk: {
+        .literal => |*e| b: {
             if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             var assigne = try self.identifier(e.idx, false);
@@ -265,10 +265,14 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
             // TODO: authorize parameters if they are references
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
-            break :blk .{ assigne.typ, false };
+            break :b .{ assigne.typ, false };
         },
-        // TODO: check if field type is a field, not a method?
-        .field => |*e| .{ (try self.field(e)).field, false },
+        .field => |*e| b: {
+            const field_type = (try self.field(e)).field;
+            if (field_type.getKind() == .func) return self.err(.assign_to_method, self.ast.getSpan(e.field));
+
+            break :b .{ field_type, false };
+        },
         .array_access => |*e| .{ try self.arrayAccess(e), true },
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };

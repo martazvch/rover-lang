@@ -7,6 +7,7 @@ pub const AnalyzerMsg = union(enum) {
     already_declared_struct: struct { name: []const u8 },
     already_imported_module: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
+    assign_to_method,
     big_self_outside_struct,
     cant_infer_arary_type,
     dead_code,
@@ -89,6 +90,7 @@ pub const AnalyzerMsg = union(enum) {
                 "elements of an array must share the same type, found '{s}' and '{s}'",
                 .{ e.found1, e.found2 },
             ),
+            .assign_to_method => writer.writeAll("can't assign to structure's methods"),
             .big_self_outside_struct => writer.writeAll("can't use 'Self' outside a structure"),
             .cant_infer_arary_type => writer.writeAll("can't infer array type with empty array and not declared type"),
             .dead_code => writer.print("unreachable code", .{}),
@@ -157,6 +159,7 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared_struct => writer.writeAll("this type"),
             .already_imported_module => writer.writeAll("this module"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
+            .assign_to_method => writer.writeAll("this field is a method"),
             .big_self_outside_struct => writer.writeAll("used outside a structure"),
             .cant_infer_arary_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
@@ -214,6 +217,7 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared_struct => writer.writeAll("use another name"),
             .already_imported_module => writer.writeAll("remove the import"),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
+            .assign_to_method => writer.writeAll("for safety reasons, it is not allowed to modify structures' methods at runtime"),
             .big_self_outside_struct => writer.writeAll("'Self' can only be used in structure to refer to the current structure's type"),
             .cant_infer_arary_type => writer.writeAll(
                 \\can't extract any type information from an empty array '[]'. you must either declare a type in variable's
