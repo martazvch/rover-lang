@@ -1499,16 +1499,18 @@ fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
 
                 if (c == '\\') {
                     i += 1;
-                    // TODO: Error
-                    if (i >= no_quotes.len) @panic("Escaping last quote");
 
+                    // Safe access here because lexer checked if the string and termianted
                     switch (no_quotes[i]) {
                         'n' => final.append(self.allocator, '\n') catch oom(),
                         't' => final.append(self.allocator, '\t') catch oom(),
                         '"' => final.append(self.allocator, '"') catch oom(),
                         'r' => final.append(self.allocator, '\r') catch oom(),
                         '\\' => final.append(self.allocator, '\\') catch oom(),
-                        else => @panic("Unknown espace sequence"),
+                        else => return self.err(
+                            .{ .unknow_char_escape = .{ .found = no_quotes[i .. i + 1] } },
+                            self.ast.getSpan(expr),
+                        ),
                     }
                 } else final.append(self.allocator, c) catch oom();
             }

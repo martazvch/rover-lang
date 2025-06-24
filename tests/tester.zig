@@ -7,7 +7,7 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
-const Stage = enum { all, parser, analyzer, compiler, vm };
+const Stage = enum { all, parser, analyzer, compiler, vm, standalone };
 const Config = struct {
     stage: Stage = .all,
     show_diff: bool = false,
@@ -81,10 +81,8 @@ const Diagnostic = struct {
     pub fn display(self: Diagnostic, show_diff: bool, show_got: bool) void {
         print("  {s}\n", .{self.file_name});
 
-        if (show_diff)
-            print("{s}\n", .{self.diff});
-        if (show_got)
-            print("{s}\n", .{self.got});
+        if (show_diff) print("{s}\n", .{self.diff});
+        if (show_got) print("{s}\n", .{self.got});
     }
 
     pub fn deinit(self: *Diagnostic, allocator: Allocator) void {
@@ -117,8 +115,9 @@ const Tester = struct {
     }
 
     fn clearDiags(self: *Self) void {
-        for (self.diags.items) |*diag|
+        for (self.diags.items) |*diag| {
             diag.deinit(self.allocator);
+        }
 
         self.diags.clearRetainingCapacity();
     }
@@ -138,9 +137,18 @@ const Tester = struct {
 
                 try self.runStage(.compiler);
                 success = self.report(.compiler) and success;
+                self.clearDiags();
 
                 try self.runStage(.vm);
                 success = self.report(.vm) and success;
+                self.clearDiags();
+
+                try self.runStandalone();
+                success = self.report(.standalone) and success;
+            },
+            .standalone => {
+                try self.runStandalone();
+                success = self.report(.standalone) and success;
             },
             else => |s| {
                 try self.runStage(s);
@@ -166,6 +174,40 @@ const Tester = struct {
         return true;
     }
 
+    fn runStandalone(self: *Self) !void {
+        const path = try std.fs.path.join(self.allocator, &.{ "tests", "standalones" });
+        defer self.allocator.free(path);
+
+        var cwd = try std.fs.cwd().openDir(path, .{ .iterate = true });
+        defer cwd.close();
+
+        var walker = try cwd.walk(self.allocator);
+        defer walker.deinit();
+        var specific_tested = false;
+
+        while (try walker.next()) |entry| {
+            if (entry.kind != .directory) continue;
+
+            // If not a child of current directory
+            if (entry.dir.fd == cwd.fd) {
+                // If specific file asked
+                if (self.config.file) |f| {
+                    if (!std.mem.eql(u8, entry.basename, f)) {
+                        continue;
+                    }
+                    specific_tested = true;
+                }
+                cwd = try cwd.openDir(entry.path, .{});
+                self.testFile(&cwd, .standalone, "main.rv", "standalone") catch continue;
+                cwd = try cwd.openDir("..", .{});
+            }
+        }
+
+        if (self.config.file != null and !specific_tested) {
+            print("Failed to test specific standalone: '{s}'\n", .{self.config.file.?});
+        }
+    }
+
     fn runStage(self: *Self, stage: Stage) !void {
         const categories = switch (stage) {
             .analyzer => &[_][]const u8{ "errors", "features", "warnings" },
@@ -174,7 +216,7 @@ const Tester = struct {
         };
 
         for (categories) |category| {
-            const path = try std.fs.path.join(self.allocator, &[_][]const u8{ "tests", @tagName(stage), category });
+            const path = try std.fs.path.join(self.allocator, &.{ "tests", @tagName(stage), category });
             defer self.allocator.free(path);
 
             var cwd = try std.fs.cwd().openDir(path, .{ .iterate = true });
@@ -189,15 +231,13 @@ const Tester = struct {
                 if (std.mem.endsWith(u8, entry.basename, ".rv") and entry.dir.fd == cwd.fd) {
                     // If specific file asked
                     if (self.config.file) |f| {
-                        // std.debug.print("Basename: '{s}'\nFile: '{s}'\n", .{ entry.basename, f });
-                        // std.debug.print("Len basename: {}, len file: {}\n", .{ entry.basename.len, f.len });
                         // Check without extension
                         if (!std.mem.eql(u8, entry.basename[0 .. entry.basename.len - 3], f)) {
                             continue;
                         }
                         specific_tested = true;
                     }
-                    self.testFile(&cwd, stage, entry, category) catch continue;
+                    self.testFile(&cwd, stage, entry.basename, category) catch continue;
                 }
             }
 
@@ -207,20 +247,20 @@ const Tester = struct {
         }
     }
 
-    fn testFile(self: *Self, dir: *std.fs.Dir, stage: Stage, entry: std.fs.Dir.Walker.Entry, category: []const u8) !void {
-        var no_ext = std.mem.splitScalar(u8, entry.basename, '.');
+    fn testFile(self: *Self, dir: *std.fs.Dir, stage: Stage, file_name: []const u8, category: []const u8) !void {
+        var no_ext = std.mem.splitScalar(u8, file_name, '.');
         const name = no_ext.next().?;
         var output_file = try self.allocator.alloc(u8, name.len + 4);
         defer self.allocator.free(output_file);
         @memcpy(output_file[0..name.len], name);
         @memcpy(output_file[name.len..], ".out");
 
-        const argv = if (stage == .vm)
-            &[_][]const u8{ self.exe_path, entry.basename }
+        const argv = if (stage == .vm or stage == .standalone)
+            &[_][]const u8{ self.exe_path, file_name }
         else if (eql(u8, category, "warnings"))
-            &[_][]const u8{ self.exe_path, entry.basename, stage_to_opt(stage), "-s" }
+            &[_][]const u8{ self.exe_path, file_name, stage_to_opt(stage), "-s" }
         else
-            &[_][]const u8{ self.exe_path, entry.basename, stage_to_opt(stage) };
+            &[_][]const u8{ self.exe_path, file_name, stage_to_opt(stage) };
 
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const path = try std.os.getFdPath(dir.fd, &buf);
@@ -257,7 +297,7 @@ const Tester = struct {
         std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), std.mem.trimRight(u8, clean_expect, "\n"))) catch |e| {
             try self.diags.append(.{
                 .category = category,
-                .file_name = try self.allocator.dupe(u8, entry.basename),
+                .file_name = try self.allocator.dupe(u8, file_name),
                 .diff = try self.colorizedDiff(clean_expect, got),
                 .got = try self.allocator.dupe(u8, std.mem.trimRight(u8, got, "\n")),
             });

@@ -38,17 +38,21 @@ struct Grid {
         }
     }
 
-    fn playAt(self, x, y: int, marker: int) {
+    fn playAt(self, x, y: int, marker: int, method = false) {
         if self.cells[x][y].played {
             print "Already played in this cell"
             return
         }
         
-        self.cells[x][y] = Cell{played=true, marker}
+        if method {
+            self.cells[x][y].mark(marker)
+        } else self.cells[x][y] = Cell{played=true, marker}
     }
 
     fn display(self) {
+        var grid = "\n"
         var i = 0
+
         while i < self.dim {
             var line = ""
             var j = 0
@@ -59,8 +63,10 @@ struct Grid {
             }
 
             i += 1
-            print line
+            grid += line + if i < self.dim do "\n" else ""
         }
+        
+        print grid
     }
 }
 
@@ -69,5 +75,15 @@ fn main() {
     
     grid.display()
     grid.playAt(1, 2, 2)
+    grid.display()
+
+    grid.playAt(1, 2, 2)
+    grid.playAt(2, 0, 1)
+    grid.display()
+
+    grid.playAt(1, 0, 2, true)
+    grid.display()
+
+    grid.playAt(1, 1, 1, method=true)
     grid.display()
 }
