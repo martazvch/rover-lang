@@ -30,8 +30,13 @@ fn mul(val1: int, val2: int) -> int {
     val1 * val2
 }
 
+fn div(val1: int, val2: int) -> int {
+    val1 * val2
+}
+
 fn main() {
     var arr: []fn(int, int) -> int = [
-        mul
+        mul,
+        div,
     ]
 }

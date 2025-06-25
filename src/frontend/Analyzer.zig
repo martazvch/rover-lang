@@ -894,7 +894,7 @@ fn array(self: *Self, expr: *const Ast.Array) Error!Type {
     for (expr.values, 0..) |val, i| {
         var typ = try self.analyzeExpr(val);
 
-        if (value_type != typ and value_type != .void) {
+        if (value_type != .void and !self.isTypeEqual(value_type, typ)) {
             // Backtrack casts without emitting an instruction
             if (cast_until == 0 and self.checkCast(typ, value_type, false)) {
                 cast_until = i + 1;
