@@ -101,6 +101,8 @@ pub const Instruction = struct {
         /// of it before mutation. If so, check the reference count and perform a deep copy if
         /// it is referenced
         cow: bool,
+        // Value instruction index, used to jump right to it to compile it first
+        // value_instr: usize,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {

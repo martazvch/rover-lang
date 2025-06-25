@@ -168,6 +168,12 @@ const Compiler = struct {
         return self.manager.instr_offsets[idx];
     }
 
+    fn setInstrIndexGetPrev(self: *Self, index: usize) usize {
+        const variable_instr = self.manager.instr_idx;
+        self.manager.instr_idx = index;
+        return variable_instr;
+    }
+
     /// Set the state's flag `to_reg` to true and return previous value
     fn setToRegAndGetPrevious(self: *Self, state: bool) bool {
         defer self.state.to_reg = state;
@@ -433,7 +439,10 @@ const Compiler = struct {
         const start = self.getStart();
 
         // Value
+        // const variable_instr = self.setInstrIndexGetPrev(data.value_instr);
         try self.compileInstr();
+        // const end_instr = self.setInstrIndexGetPrev(variable_instr);
+        // defer self.manager.instr_idx = end_instr;
 
         // We cast the value on top of stack if needed
         if (data.cast) self.writeOp(.cast_to_float, start);
@@ -451,8 +460,7 @@ const Compiler = struct {
             else => unreachable,
         };
 
-        // BUG: Protect the cast, we can't have more than 256 variable to lookup
-        // for now
+        // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         // TODO: protect cow
         self.writeOpAndByte(
             if (variable_data.scope == .global)
@@ -466,7 +474,6 @@ const Compiler = struct {
         );
     }
 
-    // TODO: just a 'reg_assign'?
     fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool, start: usize) Error!void {
         try self.getField(data);
         self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
@@ -655,8 +662,9 @@ const Compiler = struct {
         for (0..arity) |i| {
             switch (self.next()) {
                 .value => |data| {
-                    const save = self.manager.instr_idx;
-                    self.manager.instr_idx = data.value_instr;
+                    const save = self.setInstrIndexGetPrev(data.value_instr);
+                    defer self.manager.instr_idx = save;
+
                     // To push to stack each arguments
                     self.state.end_of_chain = true;
 
@@ -664,7 +672,6 @@ const Compiler = struct {
                     // Arguments may not be in the same order as the declaration, we could be
                     // resolving the first value during the last iteration
                     last = @max(last, self.manager.instr_idx);
-                    self.manager.instr_idx = save;
 
                     if (data.cast) self.writeOp(.cast_to_float, start);
                 },

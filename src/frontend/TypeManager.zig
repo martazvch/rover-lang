@@ -92,14 +92,15 @@ pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     return Type.create(.array, .none, index);
 }
 
-pub fn getArrayChildType(self: *const Self, array: Type) Type {
+pub fn getArrayDimAndChildType(self: *const Self, array: Type) struct { usize, Type } {
+    var dim: usize = 1;
     var child = self.type_infos.items[array.getValue()].array.child;
 
-    while (child.is(.array)) {
+    while (child.is(.array)) : (dim += 1) {
         child = self.type_infos.items[child.getValue()].array.child;
     }
 
-    return child;
+    return .{ dim, child };
 }
 
 /// Checks if the type has already been declared

@@ -1,122 +1,37 @@
-// struct Foo {
-//     fn foo(self) {
-//         var i = 0
-//         var text = ""
+// struct Bar {
+//     arg = "hello"
 //
-//         while i < 2 {
-//             var tmp = ""
-//
-//             var j = 0
-//             while j < 2 {
-//                 tmp += "op" + if true do "  " else ""
-//                 j += 1
-//             }
-//
-//             i += 1
-//             text += tmp + "e"
-//         }
-//
-//         print text
+//     fn hello(self) -> str {
+//         self.arg
 //     }
 // }
 //
+// struct Foo {
+//     bound: fn(Bar) -> str,
+// }
+//
+// fn hello2(bar: Bar) -> str {
+//     bar.arg
+// }
+//
 // fn main() {
-//     var foo = Foo{}
-//     foo.foo()
+//     var bar = Bar{}
+//     var foo = Foo{bound=hello2}
+//     print foo.bound(bar)
+//
+//     foo.bound = hello2
+//     print foo.bound(bar)
+//
+//     foo.bound = bar.hello
+//     foo.bound()
 // }
 
-struct Cell {
-    played = false,
-    marker = 0,
-
-    fn mark(self, marker: int) {
-        if self.played do print "Already played cell"
-
-        self.played = true
-        self.marker = marker
-    }
-
-    fn checkValidity(self) {
-        if self.played and self.marker == 0 {
-            print "Invalid cell, marked as played but no marker"
-        }
-    }
-
-    fn toString(self) -> str {
-        self.checkValidity()
-        "[" + {
-            if self.marker == 1 {if self.marker == 1 do "x" else "o"} else " "
-        } + "]"
-    }
+fn mul(val1: int, val2: int) -> int {
+    val1 * val2
 }
-
-struct Grid {
-    cells: [][]Cell,
-    dim: int,
-
-    fn init(dim=3) -> Self {
-        Self{
-            cells=[
-                [Cell{}, Cell{}, Cell{}],
-                [Cell{}, Cell{}, Cell{}],
-                [Cell{}, Cell{}, Cell{}],
-            ],
-            dim,
-        }
-    }
-
-    fn playAt(self, x, y: int, marker: int, method = false) {
-        if self.cells[x][y].played {
-            print "Already played in this cell"
-            return
-        }
-
-        if method {
-            self.cells[x][y].mark(marker)
-        } else self.cells[x][y] = Cell{played=true, marker}
-    }
-
-    fn display(self) {
-        var grid = "\n"
-        var i = 0
-
-        while i < self.dim {
-            var line = ""
-            var j = 0
-
-            while j < self.dim {
-                line += self.cells[i][j].toString() + if j < 2 do " " else ""
-                j += 1
-            }
-
-            i += 1
-            grid += line + if i < self.dim do "\n" else ""
-        }
-
-        print grid
-    }
-}
-
-
 
 fn main() {
-    // var cell = Cell{}
-    // print cell.toString()
-    // print cell.toString()
-
-    var grid = Grid.init(2)
-    grid.display()
-    // grid.playAt(1, 2, 2)
-    // grid.display()
-    //
-    // grid.playAt(1, 2, 2)
-    // grid.playAt(2, 0, 1)
-    // grid.display()
-    //
-    // grid.playAt(1, 0, 2, true)
-    // grid.display()
-    //
-    // grid.playAt(1, 1, 1, method=true)
-    // grid.display()
+    var arr: []fn(int, int) -> int = [
+        mul
+    ]
 }
-

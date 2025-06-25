@@ -234,7 +234,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     self.state.allow_partial = false;
     defer self.state.allow_partial = last;
 
-    // var cast = false;
     const index = self.reserveInstr();
 
     self.state.incr_ref = true;
@@ -258,7 +257,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
                 assigne.typ.setExtra(.imported);
             }
 
-            // TODO: authorize parameters if they are references
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
             break :b .{ assigne.typ, false };
@@ -273,8 +271,54 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
+    // var assigne_type, const cow, const assigne_type_ptr = switch (node.assigne.*) {
+    //     .literal => |*e| b: {
+    //         if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+    //
+    //         var assigne = try self.identifier(e.idx, false);
+    //
+    //         if (!assigne.initialized) assigne.initialized = true;
+    //
+    //         // Protects against assigning to declarations or parameter for example
+    //         if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+    //
+    //         break :b .{ assigne.typ, false, &assigne.typ };
+    //     },
+    //     .field => |*e| b: {
+    //         const field_infos = try self.field(e);
+    //         const field_type = field_infos.field;
+    //
+    //         if (field_infos.kind != .field and field_type.getKind() == .func) {
+    //             return self.err(.assign_to_method, self.ast.getSpan(e.field));
+    //         }
+    //
+    //         break :b .{ field_type, false, if (field_infos.field_ptr) |ptr| ptr else null };
+    //     },
+    //     .array_access => |*e| .{ try self.arrayAccess(e), true, null },
+    //     else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
+    // };
+    //
+    // const value_instr = self.instructions.len;
+    // self.state.incr_ref = true;
+    // var value_type = try self.analyzeExpr(node.value);
+    // self.state.incr_ref = false;
+    //
+    // // If we fetched a variable, we add extra informations if needed
+    // if (assigne_type_ptr) |ptr| {
+    //     const extra = value_type.getExtra();
+    //
+    //     if (extra == .bound_method) {
+    //         ptr.setExtra(.bound_method);
+    //     } else if (extra == .imported) {
+    //         ptr.setExtra(.imported);
+    //     } else ptr.setExtra(.none);
+    //
+    //     assigne_type = ptr.*;
+    // }
+
     const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.assigne));
 
+    // self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow, .value_instr = value_instr } });
     self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow } });
 }
 
@@ -435,7 +479,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         }
     }
 
-    if (!body_err and body_type != return_type and !self.checkEqualFnType(body_type, return_type)) {
+    if (!body_err and body_type != return_type and !self.isFunctionTypeEqual(body_type, return_type)) {
         return self.err(
             .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(return_type),
@@ -1173,19 +1217,16 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 const StructAndFieldTypes = struct {
     structure: Type,
     is_type: bool,
+    // field_ptr: ?*Type,
     field: Type,
+    kind: Instruction.Field.Kind,
 
-    pub fn init(structure_type: Type, is_type: bool, field_type: Type) StructAndFieldTypes {
-        return .{ .structure = structure_type, .is_type = is_type, .field = field_type };
+    // pub fn init(structure_type: Type, is_type: bool, field_ptr: ?*Type, field_type: Type, kind: Instruction.Field.Kind) StructAndFieldTypes {
+    //     return .{ .structure = structure_type, .is_type = is_type, .field_ptr = field_ptr, .field = field_type, .kind = kind };
+    pub fn init(structure_type: Type, is_type: bool, field_type: Type, kind: Instruction.Field.Kind) StructAndFieldTypes {
+        return .{ .structure = structure_type, .is_type = is_type, .field = field_type, .kind = kind };
     }
 };
-
-fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
-    return switch (expr.*) {
-        .field => |*e| try self.field(e),
-        else => .init(.void, false, try self.analyzeExpr(expr)),
-    };
-}
 
 fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
     const index = self.reserveInstr();
@@ -1260,16 +1301,32 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         },
     });
 
-    if (kind == .method)
-        found_field.type.setExtra(.bound_method);
+    if (kind == .method) found_field.type.setExtra(.bound_method);
 
-    return .init(struct_type, is_type, found_field.type);
+    // return .init(struct_type, is_type, &found_field.type, found_field.type, kind);
+    return .init(struct_type, is_type, found_field.type, kind);
 }
+
+// fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
+//     return switch (expr.*) {
+//         .field => |*e| try self.field(e),
+//         else => .init(.void, false, &(try self.analyzeExpr(expr)), .field),
+//     };
+// }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
 
-    const sft = try self.getStructAndFieldTypes(expr.callee);
+    // const sft = try self.getStructAndFieldTypes(expr.callee);
+    const sft = switch (expr.callee.*) {
+        .field => |*e| try self.field(e),
+        // else => .init(.void, false, &(try self.analyzeExpr(expr)), .field),
+        else => b: {
+            const typ = try self.analyzeExpr(expr.callee);
+            // break :b StructAndFieldTypes.init(.void, false, null, typ, .field);
+            break :b StructAndFieldTypes.init(.void, false, typ, .field);
+        },
+    };
     const extra = sft.field.getExtra();
     const type_value = sft.field.getValue();
 
@@ -1301,7 +1358,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         if (sft.structure != .void) {
             call_tag = if (sft.is_type) .invoke_static else .invoke;
 
-            if (!sft.is_type and (infos.params.count() == 0 or !self.isEqualStruct(infos.params.values()[0].type, sft.structure))) {
+            if (!sft.is_type and (infos.params.count() == 0 or !self.isStructTypeEqual(infos.params.values()[0].type, sft.structure))) {
                 return self.err(
                     .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
                     self.ast.getSpan(expr.callee.field.field),
@@ -1656,7 +1713,7 @@ fn returnExpr(self: *Self, expr: *const Ast.Return) Error!Type {
     if (!self.state.in_fn) return self.err(.return_outside_fn, self.ast.getSpan(expr));
 
     // We do that here because we can insert a cast
-    if (!self.checkEqualFnType(self.state.fn_type, return_type)) {
+    if (!self.isFunctionTypeEqual(self.state.fn_type, return_type)) {
         if (self.checkCast(self.state.fn_type, return_type, true)) {
             data.cast = true;
             return_type = .float;
@@ -1996,7 +2053,7 @@ fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.
 /// where their infos are in the type manager, so they could be the same type
 /// but with different indices. This is due to anonymus function type (like return
 /// types in function definitions)
-fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
+fn isFunctionTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
     if (t1 == t2) return true;
     if (!t1.is(.func) or !t2.is(.func)) return false;
 
@@ -2019,7 +2076,7 @@ fn checkEqualFnType(self: *const Self, t1: Type, t2: Type) bool {
 }
 
 /// Checks if two structures are identical
-fn isEqualStruct(self: *const Self, s1: Type, s2: Type) bool {
+fn isStructTypeEqual(self: *const Self, s1: Type, s2: Type) bool {
     // Relies on the fact that we share the same type manager between all
     // sub-pipelines. It means that if the index in the type infos field is
     // the samen it's the same type
@@ -2039,8 +2096,18 @@ fn isEqualStruct(self: *const Self, s1: Type, s2: Type) bool {
     return final1 == final2;
 }
 
-fn equalType(self: *const Self, t1: Type, t2: Type) bool {
-    return t1 == t2 or self.isEqualStruct(t1, t2) or self.checkEqualFnType(t1, t2);
+/// Check if two arrays have same dimensions and child type
+fn isArrayTypeEqual(self: *const Self, arr1: Type, arr2: Type) bool {
+    if (!arr1.is(.array) or !arr2.is(.array)) return false;
+
+    const dim1, const child1 = self.type_manager.getArrayDimAndChildType(arr1);
+    const dim2, const child2 = self.type_manager.getArrayDimAndChildType(arr2);
+
+    return dim1 == dim2 and self.isTypeEqual(child1, child2);
+}
+
+fn isTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
+    return t1 == t2 or self.isStructTypeEqual(t1, t2) or self.isFunctionTypeEqual(t1, t2) or self.isArrayTypeEqual(t1, t2);
 }
 
 /// Helpers used for errors
@@ -2089,7 +2156,7 @@ fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
 /// try to infer array value type from variable's declared type
 fn inferArrayType(self: *Self, decl: Type, value: Type, span: Span) Error!Type {
     // Get nested item's type from: [][][]int -> int
-    const child = self.type_manager.getArrayChildType(value);
+    _, const child = self.type_manager.getArrayDimAndChildType(value);
 
     // Empty array like: []
     if (child == .void) {
@@ -2116,7 +2183,7 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
 
     if (local_decl == .void) {
         local_decl = local_value;
-    } else if (!self.equalType(local_decl, local_value)) {
+    } else if (!self.isTypeEqual(local_decl, local_value)) {
         // One case in wich we can coerce, int -> float
         if (self.checkCast(local_decl, local_value, emit_cast)) {
             cast = true;
