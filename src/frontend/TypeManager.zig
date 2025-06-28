@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const BA = @import("builtins_analyzer.zig");
 const BuiltinAnalyzer = BA.BuiltinAnalyzer;
@@ -10,11 +11,11 @@ const builtin_init = BA.init;
 const Interner = @import("../Interner.zig");
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
-const TypeInfo = TypeSys.TypeInfo;
 const oom = @import("../utils.zig").oom;
 
 allocator: Allocator,
 declared: AutoHashMapUnmanaged(usize, Type) = .{},
+instances: ArrayListUnmanaged(Instance) = .{},
 type_infos: ArrayListUnmanaged(TypeInfo) = .{},
 array_cache: AutoHashMapUnmanaged(Type, u32) = .{},
 natives: BuiltinAnalyzer = builtin_init(),
@@ -44,7 +45,7 @@ pub fn deinit(self: *Self) void {
 /// Adds information about a type. Requires the kind and extra info, the value (aka
 /// index in information array) is computed in the function.
 /// Returns the complete type
-pub fn reserveInfo(self: *Self) !TypeSys.Value {
+pub fn reserveInfo(self: *Self) Error!TypeSys.Value {
     const count = self.type_infos.items.len;
     self.type_infos.append(self.allocator, undefined) catch oom();
 
@@ -59,29 +60,44 @@ pub fn setInfo(self: *Self, index: usize, info: TypeInfo) void {
     self.type_infos.items[index] = info;
 }
 
+pub fn createInfo(self: *Self, info: TypeInfo) Error!void {
+    const index = try self.reserveInfo();
+    self.setInfo(index, info);
+}
+
 /// Adds a type linked associated with the name
 pub fn addType(self: *Self, name: usize, typ: Type) void {
     self.declared.put(self.allocator, name, typ) catch oom();
 }
 
-/// Declares a new type built with `kind` and `extra` parameters and add the informations
-pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) Self.Error!TypeSys.Type {
-    const count = self.type_infos.items.len;
-
-    if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
-
-    const typ: Type = .create(kind, extra, @intCast(count));
-    self.type_infos.append(self.allocator, info) catch oom();
-    self.addType(name, typ);
-
-    return typ;
+/// Get type informations of a function
+pub fn getFnTypeInfos(self: *const Self, index: usize) FnInfo {
+    return self.type_infos.items[index].func;
 }
+
+/// Get type informations of a structure
+// pub fn getStructTypeInfos(self: *const Self, index: usize) StructInfo {
+//     return self.type_infos.items[index].@"struct";
+// }
+
+/// Declares a new type built with `kind` and `extra` parameters and add the informations
+// pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) Self.Error!TypeSys.Type {
+//     const count = self.type_infos.items.len;
+//
+//     if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
+//
+//     const typ: Type = .create(kind, extra, @intCast(count));
+//     self.type_infos.append(self.allocator, info) catch oom();
+//     self.addType(name, typ);
+//
+//     return typ;
+// }
 
 /// If an array of `child` type as already been declared, return a type with the
 /// index as `Value`, otherwise create it
 pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     if (self.array_cache.get(child)) |cached_index| {
-        return Type.create(.array, .none, @intCast(cached_index));
+        return Type.create(.array, @intCast(cached_index), .none);
     }
 
     const index = try self.reserveInfo();
@@ -89,7 +105,7 @@ pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     self.setInfo(index, info);
     self.array_cache.put(self.allocator, child, index) catch oom();
 
-    return Type.create(.array, .none, index);
+    return Type.create(.array, index, .none);
 }
 
 pub fn getArrayDimAndChildType(self: *const Self, array: Type) struct { usize, Type } {
@@ -124,3 +140,142 @@ pub fn idx(self: *const Self, typ: Type) usize {
     }
     unreachable;
 }
+
+// Custom types
+pub const TypeInfo = union(enum) {
+    array: ArrayInfo,
+    func: FnInfo,
+    @"struct": StructInfo,
+
+    /// Sets the module reference if it has been imported
+    pub fn setModule(self: *TypeInfo, module_index: usize, type_index: usize) void {
+        switch (self.*) {
+            inline else => |*t| t.module = .{
+                .import_index = module_index,
+                .type_index = type_index,
+            },
+        }
+    }
+};
+
+pub const ArrayInfo = struct {
+    child: Type,
+    module: ?ModuleRef = null,
+};
+
+pub const FnInfo = struct {
+    params: AutoArrayHashMapUnmanaged(usize, ParamInfo),
+    return_type: Type,
+    tag: Tag = .function,
+    module: ?ModuleRef = null,
+    anonymus: bool = false,
+
+    pub const Tag = enum { builtin, function };
+
+    pub const ParamInfo = struct {
+        /// Order of declaration
+        index: usize,
+        /// Field's type
+        type: Type,
+        /// Has a default value
+        default: bool = false,
+    };
+
+    pub fn proto(self: *const FnInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
+        var res = AutoArrayHashMapUnmanaged(usize, bool){};
+        res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
+
+        var kv = self.params.iterator();
+        while (kv.next()) |entry| {
+            res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
+        }
+
+        return res;
+    }
+};
+
+pub const StructInfo = struct {
+    functions: AutoHashMapUnmanaged(usize, MemberInfo),
+    fields: AutoArrayHashMapUnmanaged(usize, MemberInfo),
+    default_value_fields: usize,
+    module: ?ModuleRef = null,
+
+    pub const MemberInfo = struct {
+        /// Order of declaration
+        index: usize,
+        /// Field's type
+        type: Type,
+        /// Has a default value
+        default: bool = false,
+    };
+
+    pub fn proto(self: *const StructInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
+        var res = AutoArrayHashMapUnmanaged(usize, bool){};
+        res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
+
+        var kv = self.fields.iterator();
+        while (kv.next()) |entry| {
+            if (!entry.value_ptr.default) {
+                res.putAssumeCapacity(entry.key_ptr.*, false);
+            }
+        }
+
+        return res;
+    }
+};
+
+pub const ModuleRef = struct {
+    /// Modules from which it has been imported
+    import_index: usize = 0,
+    /// Index in type manager
+    type_index: usize = 0,
+};
+
+pub const Instance = union(enum) {
+    fn_inst: FnInstance,
+    struct_inst: StructInstance,
+};
+
+// pub fn createFnInstanceType(self: *Self, decl: Type, call_conv: CallConv) Type {
+//     self.instances.append(self.allocator, .{ .fn_inst = .{
+//         .call_conv = call_conv,
+//         .decl_index = decl.getValue(),
+//     } }) catch oom();
+//
+//     // TODO: protect cast
+//     return Type.create(.function, @intCast(self.instances.items.len - 1), .none);
+// }
+
+// pub fn createStructInstanceType(self: *Self, decl: Type) Type {
+//     var fields: AutoArrayHashMapUnmanaged(usize, Type) = .{};
+//
+//     const struct_infos = self.type_infos.items[decl.getValue()].@"struct";
+//     fields.ensureTotalCapacity(self.allocator, struct_infos.fields.count()) catch oom();
+//     var iterator = struct_infos.fields.iterator();
+//
+//     while (iterator.next()) |field| {
+//         fields.putAssumeCapacity(field.key_ptr.*, field.value_ptr.type);
+//     }
+//
+//     self.instances.append(self.allocator, .{ .struct_inst = .{
+//         .decl_index = decl.getValue(),
+//         .fields = fields,
+//     } }) catch oom();
+//
+//     // TODO: protect cast
+//     return Type.create(.@"struct", @intCast(self.instances.items.len - 1), .none);
+// }
+
+pub const FnInstance = struct {
+    call_conv: CallConv,
+    decl_index: usize,
+};
+
+pub const CallConv = enum { bound, builtin, free_function, import, static };
+
+pub const StructInstance = struct {
+    decl_index: usize,
+    fields: AutoArrayHashMapUnmanaged(usize, Type),
+};
+
+pub const Symbols = AutoArrayHashMapUnmanaged(usize, StructInfo.MemberInfo);

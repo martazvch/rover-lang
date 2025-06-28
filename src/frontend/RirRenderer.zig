@@ -146,7 +146,8 @@ fn parseInstr(self: *Self) void {
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
         .default_value => unreachable,
-        .struct_literal => |data| self.structLiteral(data),
+        // .struct_literal => |data| self.structLiteral(data),
+        .struct_literal => |*data| self.structLiteral(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
@@ -281,8 +282,9 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}, call_tag: {s}]", .{
-        data.arity, @tagName(data.tag),
+    self.indentAndPrintSlice("[Fn call arity: {}, call_tag: {s}, invoke: {}]", .{
+        // data.arity, @tagName(data.tag),
+        data.arity, @tagName(data.call_conv), data.invoke,
     });
 
     self.indent_level += 1;
@@ -316,10 +318,11 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
         if (last > self.instr_idx) self.instr_idx = last;
     }
 
-    if (data.tag == .import) {
-        self.indentAndAppendSlice("- load module:");
-        self.parseInstr();
-    }
+    // if (data.tag == .import) {
+    // if (data.call_conv == .import) {
+    //     self.indentAndAppendSlice("- load module:");
+    //     self.parseInstr();
+    // }
 }
 
 fn getField(self: *Self, data: *const Instruction.Field) void {
@@ -465,7 +468,8 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
     }
 }
 
-fn structLiteral(self: *Self, field_count: usize) void {
+// fn structLiteral(self: *Self, field_count: usize) void {
+fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     self.indentAndAppendSlice("[Structure literal]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
@@ -473,18 +477,20 @@ fn structLiteral(self: *Self, field_count: usize) void {
     self.indentAndAppendSlice("- structure");
     self.parseInstr();
 
-    if (field_count > 0) {
+    // if (field_count > 0) {
+    if (data.fields_count > 0) {
         self.indentAndAppendSlice("- args");
         var last: usize = 0;
 
-        for (0..field_count) |_| {
+        // for (0..field_count) |_| {
+        for (0..data.fields_count) |_| {
             switch (self.next()) {
-                .value => |data| {
-                    if (data.cast) {
+                .value => |value_data| {
+                    if (value_data.cast) {
                         self.indentAndAppendSlice("[Cast next value to float]");
                     }
                     const save = self.instr_idx;
-                    self.instr_idx = data.value_instr;
+                    self.instr_idx = value_data.value_instr;
                     self.parseInstr();
                     last = @max(last, self.instr_idx);
 
@@ -497,6 +503,8 @@ fn structLiteral(self: *Self, field_count: usize) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
+
+    // TODO: manage data.import
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

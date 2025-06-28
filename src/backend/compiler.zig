@@ -16,6 +16,7 @@ const ObjString = @import("../runtime/Obj.zig").ObjString;
 const ObjFunction = @import("../runtime/Obj.zig").ObjFunction;
 const ObjNativeFn = @import("../runtime/Obj.zig").ObjNativeFn;
 const ObjStruct = @import("../runtime/Obj.zig").ObjStruct;
+const ObjModule = @import("../runtime/Obj.zig").ObjModule;
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
@@ -339,7 +340,8 @@ const Compiler = struct {
             .@"return" => |*data| self.returnInstr(data),
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
-            .struct_literal => |data| self.structLiteral(data),
+            // .struct_literal => |data| self.structLiteral(data),
+            .struct_literal => |*data| self.structLiteral(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .value => unreachable,
@@ -597,29 +599,34 @@ const Compiler = struct {
         defer self.state.to_reg = prev;
         self.state.to_reg = false;
 
-        if (data.tag == .invoke or data.tag == .invoke_import or data.tag == .invoke_static)
+        // if (data.tag == .invoke or data.tag == .invoke_import or data.tag == .invoke_static)
+        if (data.invoke)
             return self.invoke(data, start);
 
         try self.compileInstr();
         try self.compileArgs(data.arity, .get_fn_default, 0);
 
-        if (data.tag == .import) {
-            // Compiles the index + scope of the module to load it
-            try self.compileInstr();
-        }
+        // if (data.tag == .import) {
+        // if (data.call_conv == .import) {
+        //     // Compiles the index + scope of the module to load it
+        //     try self.compileInstr();
+        // }
 
         self.writeOpAndByte(
-            switch (data.tag) {
-                .function => .call,
-                .builtin => .native_fn_call,
-                .import => .import_call,
-                else => .bound_method_call,
+            // switch (data.tag) {
+            switch (data.call_conv) {
+                // .function => .call,
+                .free_function => .call,
+                .builtin => .call_native,
+                .import => .call_import,
+                else => .call_bound_method,
             },
             data.arity,
             start,
         );
 
-        if (data.tag == .import) {
+        // if (data.tag == .import) {
+        if (data.call_conv == .import) {
             // At the end of the call, we unload it
             self.writeOp(.unload_module, start);
         }
@@ -637,17 +644,22 @@ const Compiler = struct {
         // PERF: put the invoked function in a register so that we can refer to it when
         // emitting 'get_default_value' and then the 'invoke*' can refer to it too, avoiding
         // to emit data.arity + member_data.index
-        switch (data.tag) {
-            .invoke => {
+
+        // switch (data.tag) {
+        switch (data.call_conv) {
+            // .invoke => {
+            .bound => {
                 self.writeOpAndByte(.invoke, data.arity, start);
                 self.writeByte(@intCast(member_data.index), start);
             },
-            .invoke_import => {
+            // .invoke_import => {
+            .import => {
                 self.writeOpAndByte(.invoke_import, data.arity, start);
                 self.writeByte(@intCast(member_data.index), start);
                 self.writeOp(.unload_module, start);
             },
-            .invoke_static => {
+            // .invoke_static => {
+            .static => {
                 self.writeOpAndByte(.invoke_static, data.arity, start);
                 self.writeByte(@intCast(member_data.index), start);
             },
@@ -742,7 +754,7 @@ const Compiler = struct {
 
         // As we compile member first, we preshot the value
         const reg = self.shouldPutResultInReg();
-        // We compile the call/array access first
+        // We compile the identifier/call/array access first
         try self.compileInstr();
 
         // If we're in a member access, the field access that occurs after the call will check
@@ -754,7 +766,7 @@ const Compiler = struct {
             if (data.kind == .field)
                 if (reg) .get_field_reg else .get_field
             else if (data.kind == .symbol)
-                .get_symbol
+                .bound_import
             else if (data.kind == .method)
                 .bound_method
             else
@@ -828,10 +840,10 @@ const Compiler = struct {
 
     fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
         if (data.scope == .global) {
-            self.addGlobal(.makeModule(&self.manager.modules[data.index]));
+            // self.addGlobal(Value.makeModule(&self.manager.modules[data.index]));
+            self.addGlobal(Value.makeObj(ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
         } else {
-            const start = self.getStart();
-            self.writeOpAndByte(.push_module, @intCast(data.index), start);
+            self.writeOpAndByte(.push_module, @intCast(data.index), self.getStart());
         }
     }
 
@@ -923,12 +935,14 @@ const Compiler = struct {
         }
     }
 
-    fn structLiteral(self: *Self, field_count: usize) Error!void {
+    // fn structLiteral(self: *Self, field_count: usize) Error!void {
+    fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
         const start = self.getStart();
         // Compile structure
         try self.compileInstr();
-        try self.compileArgs(field_count, .get_struct_default, 0);
-        self.writeOpAndByte(.struct_literal, @intCast(field_count), start);
+        // try self.compileArgs(field_count, .get_struct_default, 0);
+        try self.compileArgs(data.fields_count, .get_struct_default, 0);
+        self.writeOpAndByte(if (data.imported) .struct_literal_import else .struct_literal, @intCast(data.fields_count), start);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

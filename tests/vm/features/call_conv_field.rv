@@ -1,0 +1,38 @@
+// All assignment should resolve to the same type and calling convention
+// should be transmitted
+
+use data.math 
+
+struct Foo {
+    function: fn() -> int
+}
+
+struct Bar {
+    value = 0
+
+    fn static() -> int { 3 }
+
+    fn method(self) -> int {
+        self.value
+    }
+}
+
+fn copy() -> int {
+    5
+}
+
+fn main() {
+    var bar = Bar{}
+
+    var foo = Foo{function=copy}
+    print foo.function()
+
+    foo.function = Bar.static
+    print foo.function()
+
+    foo.function = bar.method
+    print foo.function()
+
+    foo.function = math.getInt
+    print foo.function()
+}

@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 
 const Obj = @import("Obj.zig");
-const Module = @import("../Pipeline.zig").Module;
 const Vm = @import("Vm.zig");
 
 pub const Value = union(enum) {
@@ -12,7 +11,6 @@ pub const Value = union(enum) {
     int: i64,
     null,
     obj: *Obj,
-    module: *Module,
 
     const Self = @This();
     pub const true_: Self = .{ .bool = true };
@@ -29,10 +27,6 @@ pub const Value = union(enum) {
 
     pub fn makeInt(value: i64) Self {
         return .{ .int = value };
-    }
-
-    pub fn makeModule(module: *Module) Self {
-        return .{ .module = module };
     }
 
     pub fn makeObj(object: *Obj) Self {
@@ -54,8 +48,6 @@ pub const Value = union(enum) {
     pub fn deepCopy(self: Self, vm: *Vm) Self {
         return switch (self) {
             .bool, .float, .int, .null => self,
-            // TODO: see if protected in Analyzer
-            .module => unreachable,
             .obj => |obj| Self.makeObj(obj.deepCopy(vm)),
         };
     }
@@ -67,7 +59,6 @@ pub const Value = union(enum) {
             .int => |v| writer.print("{}", .{v}),
             .null => writer.print("null", .{}),
             .obj => |v| v.print(writer),
-            .module => |v| writer.print("<module {s}>", .{v.name}),
         };
     }
 };

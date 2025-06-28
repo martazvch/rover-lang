@@ -1,0 +1,44 @@
+// All assignment should resolve to the same type and calling convention
+// should be transmitted
+
+use data.math 
+
+struct Foo {
+    value = 8
+
+    fn static() -> int { 3 }
+
+    fn method(self) -> int {
+        self.value
+    }
+
+    fn importFuncFromMethod(self) -> fn() -> int {
+        math.getInt
+    }
+}
+
+fn copy() -> int {
+    5
+}
+
+fn main() {
+    var foo = Foo{}
+
+    var bound = Foo.static
+    print bound()
+
+    bound = copy
+    print bound()
+
+    bound = foo.method
+    print bound()
+
+    bound = math.getInt
+    print bound()
+
+    // Call conv survives a layer
+    bound = foo.importFuncFromMethod
+    print bound()
+    var func = bound()
+    print func()
+}

@@ -4,7 +4,7 @@ struct Person {
         print a
     }
 
-    fn getSpeak(self) -> fn(Person, int) -> void {
+    fn getSpeak(self) -> fn(int) -> void {
         return self.speak
     }
 }

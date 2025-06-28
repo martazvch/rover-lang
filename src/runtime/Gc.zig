@@ -16,6 +16,7 @@ const ObjFunction = Obj.ObjFunction;
 const ObjStruct = Obj.ObjStruct;
 const ObjInstance = Obj.ObjInstance;
 const ObjBoundMethod = Obj.ObjBoundMethod;
+const ObjBoundImport = Obj.ObjBoundImport;
 const Module = @import("../Pipeline.zig").Module;
 
 const oom = @import("../utils.zig").oom;
@@ -95,6 +96,7 @@ fn markRoots(self: *Self) Allocator.Error!void {
     }
     try self.markArray(self.vm.heap_vars);
 
+    // TODO: see if we can do other manner
     try self.markModule(self.vm.module);
     for (self.vm.module_chain.items) |mod| {
         try self.markModule(mod);
@@ -130,6 +132,11 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             const array = obj.as(ObjArray);
             try self.markArray(array.values.items);
         },
+        .bound_import => {
+            const bound = obj.as(ObjBoundImport);
+            try self.markModule(bound.module.module);
+            try self.markObject(bound.import);
+        },
         .bound_method => {
             const bound = obj.as(ObjBoundMethod);
             try self.markValue(&bound.receiver);
@@ -155,7 +162,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
                 try self.markObject(m.asObj());
             }
         },
-        .native_fn, .string => {},
+        .module, .native_fn, .string => {},
     }
 }
 

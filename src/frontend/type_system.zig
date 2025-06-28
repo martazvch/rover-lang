@@ -1,7 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
-const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const oom = @import("../utils.zig").oom;
 
@@ -37,7 +35,7 @@ pub const Type = enum(TypeSize) {
     }
 
     /// Creates a type from kind and value information
-    pub inline fn create(kind: Kind, extra: Extra, value: Value) Self {
+    pub inline fn create(kind: Kind, value: Value, extra: Extra) Self {
         return @enumFromInt(extra.toIdx() << 28 | 0 << 24 | kind.toIdx() << 20 | value);
     }
 
@@ -63,6 +61,10 @@ pub const Type = enum(TypeSize) {
         self.* = @enumFromInt(erased | extra.toIdx() << 28);
     }
 
+    pub inline fn copyExtra(self: *Self, other: Type) void {
+        self.setExtra(other.getExtra());
+    }
+
     /// Extract the value bits associated to a type
     pub inline fn getValue(self: Self) Value {
         return @as(Value, @intCast(self.toIdx() & VAL_MASK));
@@ -83,7 +85,8 @@ pub const Type = enum(TypeSize) {
 // 4 first bits (16 values) are for:
 pub const Kind = enum(u4) {
     none,
-    func,
+    function,
+    method,
     array,
     tuple,
     @"enum",
@@ -99,14 +102,6 @@ pub const Kind = enum(u4) {
 
     pub inline fn fromIdx(index: TypeSize) Kind {
         return @enumFromInt(index);
-    }
-
-    /// Renders Kind as a string
-    pub fn toStr(kind: Kind) []const u8 {
-        return switch (kind) {
-            .func => "function",
-            else => |k| @tagName(k),
-        };
     }
 };
 
@@ -134,97 +129,6 @@ pub const Extra = enum(u4) {
         return @enumFromInt(index);
     }
 };
-
-// Custom types
-pub const TypeInfo = union(enum) {
-    array: ArrayInfo,
-    func: FnInfo,
-    @"struct": StructInfo,
-
-    /// Sets the module reference if it has been imported
-    pub fn setModule(self: *TypeInfo, module_index: usize, type_index: usize) void {
-        switch (self.*) {
-            inline else => |*t| t.module = .{
-                .import_index = module_index,
-                .type_index = type_index,
-            },
-        }
-    }
-};
-
-pub const ArrayInfo = struct {
-    child: Type,
-    module: ?ModuleRef = null,
-};
-
-pub const FnInfo = struct {
-    params: AutoArrayHashMapUnmanaged(usize, ParamInfo),
-    return_type: Type,
-    tag: Tag = .function,
-    module: ?ModuleRef = null,
-
-    pub const Tag = enum { builtin, function };
-
-    pub const ParamInfo = struct {
-        /// Order of declaration
-        index: usize,
-        /// Field's type
-        type: Type,
-        /// Has a default value
-        default: bool = false,
-    };
-
-    pub fn proto(self: *const FnInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-        var res = AutoArrayHashMapUnmanaged(usize, bool){};
-        res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
-
-        var kv = self.params.iterator();
-        while (kv.next()) |entry| {
-            res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
-        }
-
-        return res;
-    }
-};
-
-pub const StructInfo = struct {
-    functions: AutoHashMapUnmanaged(usize, MemberInfo),
-    fields: AutoArrayHashMapUnmanaged(usize, MemberInfo),
-    default_value_fields: usize,
-    module: ?ModuleRef = null,
-
-    pub const MemberInfo = struct {
-        /// Order of declaration
-        index: usize,
-        /// Field's type
-        type: Type,
-        /// Has a default value
-        default: bool = false,
-    };
-
-    pub fn proto(self: *const StructInfo, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-        var res = AutoArrayHashMapUnmanaged(usize, bool){};
-        res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
-
-        var kv = self.fields.iterator();
-        while (kv.next()) |entry| {
-            if (!entry.value_ptr.default) {
-                res.putAssumeCapacity(entry.key_ptr.*, false);
-            }
-        }
-
-        return res;
-    }
-};
-
-pub const ModuleRef = struct {
-    /// Modules from which it has been imported
-    import_index: usize = 0,
-    /// Index in type manager
-    type_index: usize = 0,
-};
-
-pub const Symbols = AutoArrayHashMapUnmanaged(usize, StructInfo.MemberInfo);
 
 test "types" {
     const expect = @import("std").testing.expect;

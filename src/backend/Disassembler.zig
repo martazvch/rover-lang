@@ -56,9 +56,12 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .array_assign_chain => self.indexInstruction("OP_ARRAY_ASSIGN_CHAIN", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
+        .bound_import => self.getMember("OP_BOUND_IMPORT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
-        .bound_method_call => self.indexInstruction("OP_BOUND_METHOD_CALL", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
+        .call_bound_method => self.indexInstruction("OP_CALL_BOUND_METHOD", offset, writer),
+        .call_import => self.indexInstruction("OP_CALL_IMPORT", offset, writer),
+        .call_native => self.indexInstruction("OP_CALL_NATIVE", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
         .constant => self.constantInstruction("OP_CONSTANT", offset, writer),
         .define_heap_var => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
@@ -85,11 +88,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .get_method_default => self.getMethodDefaultValue(offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", offset, writer),
         .get_struct_default => self.getDefaultValue("OP_GET_STRUCT_DEFAULT", offset, writer),
-        .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
-        .import_call => self.indexInstruction("OP_IMPORT_CALL", offset, writer),
         .import_item => self.importItem(offset, writer),
         .invoke => self.invokeInstruction("OP_INVOKE", "method", offset, writer),
         .invoke_import => self.invokeInstruction("OP_INVOKE_IMPORT", "symbol", offset, writer),
@@ -105,7 +106,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .mul_float => self.simpleInstruction("OP_MULTIPLY_FLOAT", offset, writer),
         .mul_int => self.simpleInstruction("OP_MULTIPLY_INT", offset, writer),
         .naked_return => self.simpleInstruction("OP_NAKED_RETURN", offset, writer),
-        .native_fn_call => self.indexInstruction("OP_NATIVE_CALL", offset, writer),
         .ne_bool => self.simpleInstruction("OP_DIFFERENT_BOOL", offset, writer),
         .ne_float => self.simpleInstruction("OP_DIFFERENT_FLOAT", offset, writer),
         .ne_int => self.simpleInstruction("OP_DIFFERENT_INT", offset, writer),
@@ -129,6 +129,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .str_mul_l => self.simpleInstruction("OP_STRING_MUL_L", offset, writer),
         .str_mul_r => self.simpleInstruction("OP_STRING_MUL_R", offset, writer),
         .struct_literal => self.indexInstruction("OP_STRUCT_LIT", offset, writer),
+        .struct_literal_import => self.indexInstruction("OP_STRUCT_LIT_IMPORT", offset, writer),
         .sub_float => self.simpleInstruction("OP_SUBTRACT_FLOAT", offset, writer),
         .sub_int => self.simpleInstruction("OP_SUBTRACT_INT", offset, writer),
         .true => self.simpleInstruction("OP_TRUE", offset, writer),
@@ -234,7 +235,7 @@ fn for_instruction(
 }
 
 fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
-    // Skips the struct_literal op
+    // Skips the structure op
     var local_offset = offset + 1;
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;

@@ -18,12 +18,12 @@ const ReturnKind = rir.ReturnKind;
 const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
 const TypeManager = @import("TypeManager.zig");
+const TypeInfo = TypeManager.TypeInfo;
+const FnInfo = TypeManager.FnInfo;
+const StructInfo = TypeManager.StructInfo;
+const ArrayInfo = TypeManager.ArrayInfo;
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
-const TypeInfo = TypeSys.TypeInfo;
-const FnInfo = TypeSys.FnInfo;
-const StructInfo = TypeSys.StructInfo;
-const ArrayInfo = TypeSys.ArrayInfo;
 
 ast: *const Ast,
 pipeline: *Pipeline,
@@ -43,7 +43,7 @@ local_offset: usize,
 heap_count: usize,
 main: ?usize,
 state: State,
-symbols: TypeSys.Symbols,
+symbols: TypeManager.Symbols,
 modules: AutoArrayHashMapUnmanaged(usize, Pipeline.Module),
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 big_self: Variable,
@@ -237,37 +237,34 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     const index = self.reserveInstr();
 
     self.state.incr_ref = true;
-    var value_type = try self.analyzeExpr(node.value);
+    const value_type = try self.analyzeExpr(node.value);
     self.state.incr_ref = false;
 
     const assigne_type, const cow = switch (node.assigne.*) {
         .literal => |*e| b: {
             if (e.tag != .identifier) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
-            var assigne = try self.identifier(e.idx, false);
+            const assigne = try self.identifier(e.idx, false);
 
             if (!assigne.initialized) assigne.initialized = true;
-
-            // If we assign a bound method that match the type (checked after), update type's infos
-            const extra = value_type.getExtra();
-
-            if (extra == .bound_method) {
-                assigne.typ.setExtra(.bound_method);
-            } else if (extra == .imported) {
-                assigne.typ.setExtra(.imported);
-            }
-
             if (assigne.kind != .variable) return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
 
-            break :b .{ assigne.typ, false };
+            break :b .{ &assigne.typ, false };
         },
         .field => |*e| b: {
-            const field_type = (try self.field(e)).field;
-            if (field_type.getKind() == .func) return self.err(.assign_to_method, self.ast.getSpan(e.field));
+            // const field_type = (try self.field(e)).field;
+            // if (field_type.getKind() == .func) return self.err(.assign_to_method, self.ast.getSpan(e.field));
+
+            const field_infos = try self.field(e);
+            const field_type = &field_infos.field;
+
+            if (field_infos.kind == .method) {
+                return self.err(.assign_to_method, self.ast.getSpan(e.field));
+            }
 
             break :b .{ field_type, false };
         },
-        .array_access => |*e| .{ try self.arrayAccess(e), true },
+        .array_access => |*e| .{ &(try self.arrayAccess(e)), true },
         else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
 
@@ -316,7 +313,14 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     //     assigne_type = ptr.*;
     // }
 
-    const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.assigne));
+    // BUG: temporary to make it work
+    errdefer @constCast(assigne_type).* = value_type;
+    const coherence = try self.performTypeCoercion(assigne_type.*, value_type, false, self.ast.getSpan(node.value));
+
+    // Here, we copy it in case it's a function for example to update `Value` in Type to get correct function infos
+    // BUG: do it clean
+    // @constCast(assigne_type).* = sft.field;
+    @constCast(assigne_type).* = coherence.type;
 
     // self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow, .value_instr = value_instr } });
     self.setInstr(index, .{ .assignment = .{ .cast = coherence.cast, .cow = cow } });
@@ -359,7 +363,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     // We declare before body for recursion
     const type_idx = try self.type_manager.reserveInfo();
-    const fn_type: Type = .create(.func, .none, type_idx);
+    const fn_type = Type.create(.function, type_idx, .none);
     const fn_var = try self.declareVariable(name_idx, fn_type, true, self.instructions.len, .decl, node.name);
     self.addInstr(.{ .var_decl = .{ .variable = fn_var } });
 
@@ -434,6 +438,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         params_type.putAssumeCapacity(param_idx, .{ .index = i, .type = param_type, .default = default });
     }
 
+    // Declare before body to allow recursion
     const return_type = try self.checkAndGetType(node.return_type);
     self.state.fn_type = return_type;
     self.type_manager.setInfo(type_idx, .{ .func = .{ .params = params_type, .return_type = return_type } });
@@ -492,9 +497,12 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         );
     }
 
-    if (body_type.getExtra() == .bound_method) {
-        self.type_manager.type_infos.items[type_idx].func.return_type.setExtra(.bound_method);
-    }
+    // TODO: add some calling convention?
+    // if (body_type.getExtra() == .bound_method) {
+    //     self.type_manager.type_infos.items[type_idx].func.return_type.setExtra(.bound_method);
+    // }
+
+    self.type_manager.type_infos.items[type_idx].func.return_type.copyExtra(body_type);
 
     // We strip unused instructions for them not to be compiled
     if (deadcode_start > 0)
@@ -541,7 +549,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
 
     // We forward declare for self referencing
     const type_idx = try self.type_manager.reserveInfo();
-    const struct_type: Type = .create(.@"struct", .none, type_idx);
+    const struct_type = Type.create(.@"struct", type_idx, .none);
 
     self.state.struct_type = struct_type;
     defer self.state.struct_type = .void;
@@ -562,7 +570,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     self.scope_depth += 1;
     errdefer _ = self.endScope();
 
-    var infos: TypeSys.StructInfo = .{ .functions = .{}, .fields = .{}, .default_value_fields = 0 };
+    var infos: StructInfo = .{ .functions = .{}, .fields = .{}, .default_value_fields = 0 };
 
     infos.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
 
@@ -683,8 +691,6 @@ fn use(self: *Self, node: *const Ast.Use) !void {
         const module, const cached = try self.importModule(node);
         const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
         const module_name = self.interner.intern(self.ast.toSource(token));
-        // TODO: protect cast
-        const module_type: Type = .create(.module, .none, @intCast(self.modules.count()));
 
         if (node.items) |items| {
             const module_index = if (!cached) b: {
@@ -694,30 +700,36 @@ fn use(self: *Self, node: *const Ast.Use) !void {
 
             for (items) |item| {
                 const item_name = self.interner.intern(self.ast.toSource(item.item));
-                const symbol = module.symbols.get(item_name) orelse return self.err(
+                var symbol = module.symbols.get(item_name) orelse return self.err(
                     .{ .missing_symbol_in_module = .{
                         .module = self.ast.toSource(node.names[node.names.len - 1]),
                         .symbol = self.ast.toSource(item.item),
                     } },
                     self.ast.getSpan(item.item),
                 );
-                const value = symbol.type.getValue();
 
-                var new_infos = self.type_manager.type_infos.items[value];
-                new_infos.setModule(self.modules.count(), value);
-                const kind: TypeSys.Kind = switch (new_infos) {
-                    .@"struct" => .@"struct",
-                    .func => .func,
-                    else => @panic("Not supported yet"),
-                };
+                // TODO: error
+                if (symbol.type.getKind() != .@"struct" and symbol.type.getKind() != .function) {
+                    @panic("Not supported yet");
+                }
 
-                const index = try self.type_manager.reserveInfo();
-                self.type_manager.setInfo(index, new_infos);
-                const typ = Type.create(kind, .imported, index);
+                const symbol_value = symbol.type.getValue();
+                const symbol_infos = self.type_manager.type_infos.items[symbol_value];
+
+                if (symbol_infos == .func) {
+                    symbol.type.setExtra(.imported);
+                }
+
+                // const typ = switch (symbol_infos) {
+                //     .@"struct" => symbol.type,
+                //     .func => self.type_manager.createFnInstanceType(symbol.type, .import),
+                //     else => unreachable,
+                // };
 
                 const item_token = if (item.alias) |alias| alias else item.item;
                 const alias_name = self.interner.intern(self.ast.toSource(item_token));
-                const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, .decl, item_token);
+                // const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, .decl, item_token);
+                const variable = try self.declareVariable(alias_name, symbol.type, true, self.instructions.len, .decl, item_token);
 
                 self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
             }
@@ -727,6 +739,8 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 self.ast.getSpan(node.names[node.names.len - 1]),
             );
 
+            // TODO: protect cast
+            const module_type = Type.create(.module, @intCast(self.modules.count()), .none);
             const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .decl, token);
             self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
             self.modules.put(self.allocator, module_name, module) catch oom();
@@ -811,24 +825,13 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         const last = self.state.allow_partial;
         self.state.allow_partial = false;
         self.state.incr_ref = true;
-
-        var value_type = try self.analyzeExpr(value);
-
+        const value_type = try self.analyzeExpr(value);
         self.state.incr_ref = false;
         self.state.allow_partial = last;
 
         const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
         checked_type = coherence.type;
         data.cast = coherence.cast;
-
-        // If we assign a bound method that match the type (checked after), update type's infos
-        const extra = value_type.getExtra();
-
-        if (extra == .bound_method) {
-            checked_type.setExtra(.bound_method);
-        } else if (extra == .imported) {
-            checked_type.setExtra(.imported);
-        }
     }
 
     data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
@@ -1217,12 +1220,9 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
 const StructAndFieldTypes = struct {
     structure: Type,
     is_type: bool,
-    // field_ptr: ?*Type,
     field: Type,
     kind: Instruction.Field.Kind,
 
-    // pub fn init(structure_type: Type, is_type: bool, field_ptr: ?*Type, field_type: Type, kind: Instruction.Field.Kind) StructAndFieldTypes {
-    //     return .{ .structure = structure_type, .is_type = is_type, .field_ptr = field_ptr, .field = field_type, .kind = kind };
     pub fn init(structure_type: Type, is_type: bool, field_type: Type, kind: Instruction.Field.Kind) StructAndFieldTypes {
         return .{ .structure = structure_type, .is_type = is_type, .field = field_type, .kind = kind };
     }
@@ -1277,11 +1277,11 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 
             var new_infos = infos.*;
             new_infos.setModule(struct_value, value);
-            const kind: TypeSys.Kind = if (new_infos == .func) .func else .@"struct";
+            const kind: TypeSys.Kind = if (new_infos == .func) .function else .@"struct";
 
             const new_idx = try self.type_manager.reserveInfo();
             self.type_manager.setInfo(new_idx, new_infos);
-            const new_type = Type.create(kind, .imported, new_idx);
+            const new_type = Type.create(kind, new_idx, .imported);
             symbol.type = new_type;
 
             break :blk .{ symbol, .symbol };
@@ -1303,87 +1303,68 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
 
     if (kind == .method) found_field.type.setExtra(.bound_method);
 
-    // return .init(struct_type, is_type, &found_field.type, found_field.type, kind);
     return .init(struct_type, is_type, found_field.type, kind);
 }
 
-// fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
-//     return switch (expr.*) {
-//         .field => |*e| try self.field(e),
-//         else => .init(.void, false, &(try self.analyzeExpr(expr)), .field),
-//     };
-// }
-
-fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
-    const index = self.reserveInstr();
-
-    // const sft = try self.getStructAndFieldTypes(expr.callee);
-    const sft = switch (expr.callee.*) {
+fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTypes {
+    return switch (expr.*) {
         .field => |*e| try self.field(e),
-        // else => .init(.void, false, &(try self.analyzeExpr(expr)), .field),
         else => b: {
-            const typ = try self.analyzeExpr(expr.callee);
-            // break :b StructAndFieldTypes.init(.void, false, null, typ, .field);
+            const typ = try self.analyzeExpr(expr);
             break :b StructAndFieldTypes.init(.void, false, typ, .field);
         },
     };
-    const extra = sft.field.getExtra();
+}
+
+fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
+    const index = self.reserveInstr();
+    const sft = try self.getStructAndFieldTypes(expr.callee);
     const type_value = sft.field.getValue();
 
-    const infos = if (sft.field.is(.func))
-        self.type_manager.type_infos.items[type_value].func
-    else if (sft.field.is(.@"struct")) blk: {
-        const struct_infos = self.type_manager.type_infos.items[type_value].@"struct";
-        const init_fn = struct_infos.functions.get(self.cached_names.init) orelse {
-            return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
-        };
-
-        const type_idx = init_fn.type.getValue();
-        break :blk self.type_manager.type_infos.items[type_idx].func;
-    } else {
-        return self.err(.invalid_call_target, self.ast.getSpan(expr));
+    const infos, const call_conv: TypeManager.CallConv = switch (sft.field.getKind()) {
+        .function => if (sft.structure == .void) b: {
+            break :b .{
+                self.type_manager.getFnTypeInfos(type_value),
+                switch (sft.field.getExtra()) {
+                    .bound_method => .bound,
+                    .imported => .import,
+                    else => .free_function,
+                },
+            };
+        } else if (sft.kind == .field) b: {
+            std.debug.print("A FIELD\n", .{});
+            const infos = self.type_manager.instances.items[type_value].fn_inst;
+            break :b .{ self.type_manager.getFnTypeInfos(infos.decl_index), infos.call_conv };
+        } else .{
+            self.type_manager.getFnTypeInfos(type_value),
+            switch (sft.kind) {
+                .method => .bound,
+                .static_method => .static,
+                .symbol => .import,
+                // TODO: really?
+                else => unreachable,
+            },
+        },
+        else => return self.err(.invalid_call_target, self.ast.getSpan(expr)),
     };
 
-    var call_tag: Instruction.Call.CallTag = switch (infos.tag) {
-        .builtin => .builtin,
-        .function => .function,
-    };
-
-    // Not just a call to an already bounded method. Two cases here:
-    // 1: var bounded = p.method(); bounded()  --> here instance_type is void
-    // 2: p.method()                           --> here instance_type isn't
-    if (extra == .imported) {
-        call_tag = if (sft.structure.getKind() == .module) .invoke_import else .import;
-    } else if (extra == .bound_method) {
-        if (sft.structure != .void) {
-            call_tag = if (sft.is_type) .invoke_static else .invoke;
-
-            if (!sft.is_type and (infos.params.count() == 0 or !self.isStructTypeEqual(infos.params.values()[0].type, sft.structure))) {
-                return self.err(
-                    .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
-                    self.ast.getSpan(expr.callee.field.field),
-                );
-            }
-        } else call_tag = .bound;
-    }
-
-    const arity = try self.fnArgsList(expr, &infos, extra == .bound_method);
+    const arity = try self.fnArgsList(expr, &infos, call_conv == .bound);
     // TODO: protect cast
-    self.setInstr(index, .{ .call = .{ .arity = @intCast(arity), .tag = call_tag } });
-
-    // To load the module's global before call. If it's an invoke_import, we know that the
-    // module is already just behind
-    if (call_tag == .import) {
-        // TODO: make declaration_id instead of full variable instruction?
-        self.addInstr(.{ .identifier = self.imports.items[infos.module.?.import_index] });
-    }
+    self.setInstr(index, .{ .call = .{ .arity = @intCast(arity), .call_conv = call_conv, .invoke = sft.structure != .void } });
 
     return infos.return_type;
 }
 
-fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const TypeSys.FnInfo, is_bound: bool) Error!usize {
-    // Take 'self' into account
-    const offset = @intFromBool(is_bound);
+fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_bound: bool) Error!usize {
+    // If it's a bound method, 'self' is implictly inside the function so we skip it unless it's an anonymus
+    // function. For example:
+    // struct Foo {
+    //      fn m1(self) -> int { 5 }
+    //      fn m2(self) -> fn() -> int { self.m1 }
+    // }
+    // Here `m2` returns a bounded method but `Foo` if not part of `m2` return's type as it in bounded
+    // So when we have a bounded method which type is manually specified, we don't skip `self`, it doesn't exist
+    const offset = @intFromBool(is_bound and !infos.anonymus);
     const param_count = infos.params.count() - offset;
 
     if (callee.args.len > param_count) return self.err(
@@ -1790,7 +1771,11 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
         return error.Err;
     }
 
-    self.setInstr(index, .{ .struct_literal = infos.fields.count() });
+    // TODO: implement an invoke strategy
+    self.setInstr(index, .{ .struct_literal = .{
+        .fields_count = infos.fields.count(),
+        .imported = struct_type.getExtra() == .imported,
+    } });
 
     return struct_type;
 }
@@ -1959,10 +1944,11 @@ fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
         .func = .{
             .params = params_type,
             .return_type = try self.checkAndGetType(fn_type.return_type),
+            .anonymus = true,
         },
     });
 
-    return .create(.func, .none, type_idx);
+    return .create(.function, type_idx, .none);
 }
 
 /// Declares a variable either in globals or in locals based on current scope depth
@@ -2055,7 +2041,7 @@ fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.
 /// types in function definitions)
 fn isFunctionTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
     if (t1 == t2) return true;
-    if (!t1.is(.func) or !t2.is(.func)) return false;
+    if (!t1.is(.function) or !t2.is(.function)) return false;
 
     const v1 = t1.getValue();
     const v2 = t2.getValue();
@@ -2064,8 +2050,11 @@ fn isFunctionTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
     const infos1 = self.type_manager.type_infos.items[v1].func;
     const infos2 = self.type_manager.type_infos.items[v2].func;
 
-    if (infos1.params.count() == infos2.params.count() and infos1.return_type == infos2.return_type) {
-        for (infos1.params.values(), infos2.params.values()) |p1, p2| {
+    const params1 = infos1.params.values()[if (t1.getExtra() == .bound_method) 1 else 0..];
+    const params2 = infos2.params.values()[if (t2.getExtra() == .bound_method) 1 else 0..];
+
+    if (params1.len == params2.len and infos1.return_type == infos2.return_type) {
+        for (params1, params2) |p1, p2| {
             if (p1.type != p2.type) return false;
         }
 
@@ -2112,7 +2101,7 @@ fn isTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
 
 /// Helpers used for errors
 fn getTypeName(self: *const Self, typ: Type) []const u8 {
-    if (typ.is(.func)) {
+    if (typ.is(.function)) {
         return self.getFnTypeName(typ) catch oom();
     } else if (typ.is(.array)) {
         return self.getArrayTypeName(typ) catch oom();
@@ -2137,12 +2126,13 @@ fn getArrayTypeName(self: *const Self, typ: Type) ![]const u8 {
 fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     const value = typ.getValue();
     const decl = self.type_manager.type_infos.items[value].func;
+    const offset = @intFromBool(typ.getExtra() == .bound_method and !decl.anonymus);
 
     var res: std.ArrayListUnmanaged(u8) = .{};
     var writer = res.writer(self.allocator);
     try writer.writeAll("fn(");
 
-    for (decl.params.values(), 0..) |p, i| {
+    for (decl.params.values()[offset..], 0..) |p, i| {
         try writer.print("{s}{s}", .{
             self.getTypeName(p.type),
             if (i < decl.params.count() - 1) ", " else "",
@@ -2196,5 +2186,8 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
         );
     }
 
-    return .{ .type = local_decl, .cast = cast };
+    // For function, we get all information from value type: index, call conv
+    const final = if (local_decl.is(.function)) local_value else local_decl;
+
+    return .{ .type = final, .cast = cast };
 }

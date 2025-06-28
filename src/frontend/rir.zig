@@ -1,3 +1,5 @@
+const CallConv = @import("TypeManager.zig").CallConv;
+
 pub const Scope = enum(u2) { builtin, global, heap, local };
 pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
@@ -37,7 +39,8 @@ pub const Instruction = struct {
         string: usize,
         struct_decl: StructDecl,
         default_value: usize,
-        struct_literal: usize,
+        // struct_literal: usize,
+        struct_literal: StructLiteral,
         unary: Unary,
         use: u64,
         value: Value,
@@ -107,9 +110,11 @@ pub const Instruction = struct {
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {
         arity: u8,
-        tag: CallTag = .function,
+        // tag: CallTag = .function,
+        call_conv: CallConv,
+        invoke: bool = false,
 
-        pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
+        // pub const CallTag = enum { bound, builtin, function, import, invoke, invoke_import, invoke_static };
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
@@ -131,6 +136,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
+    pub const StructLiteral = struct { fields_count: usize, imported: bool };
     pub const Value = struct { value_instr: usize, cast: bool = false };
     pub const Unary = struct {
         op: Op,

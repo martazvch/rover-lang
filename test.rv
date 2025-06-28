@@ -1,3 +1,58 @@
+// All assignment should resolve to the same type and calling convention
+// should be transmitted
+
+use data.math 
+
+struct Foo {
+    fn importFuncFromMethod(self) -> fn() -> int {
+        math.getInt
+    }
+}
+
+fn main() {
+    var foo = Foo{}
+
+    var bound = foo.importFuncFromMethod
+    print bound()
+    var func = bound()
+    print func()
+}
+
+// struct Foo {
+//     function: fn() -> int
+// }
+//
+// struct Bar {
+//     value = 0
+//
+//     fn static() -> int { 3 }
+//
+//     fn method(self) -> int {
+//         self.value
+//     }
+// }
+//
+// fn copy() -> int {
+//     5
+// }
+//
+// fn main() {
+//     var bar = Bar{}
+//
+//     var foo = Foo{function=copy}
+//     print foo.function()
+//
+//     foo.function = Bar.static
+//     print foo.function()
+//
+//     foo.function = bar.method
+//     print foo.function()
+//
+//     foo.function = math.getInt
+//     print foo.function()
+// }
+
+
 // struct Bar {
 //     arg = "hello"
 //
@@ -19,24 +74,50 @@
 //     var foo = Foo{bound=hello2}
 //     print foo.bound(bar)
 //
+//
+//     // --- Error 1 ---
+//     // No error here cause we assigned a free function
 //     foo.bound = hello2
 //     print foo.bound(bar)
 //
 //     foo.bound = bar.hello
+//     // Error: missing argument. Did not understand we went from free-function to bound
 //     foo.bound()
 // }
+//
 
-fn mul(val1: int, val2: int) -> int {
-    val1 * val2
-}
 
-fn div(val1: int, val2: int) -> int {
-    val1 * val2
-}
+// TEST 2
+// struct Foo {
+//     value = 8
+//
+//     fn static() -> int { 3 }
+//
+//     fn method(self) -> int {
+//         self.value
+//     }
+// }
+//
+// fn copy() -> int {
+//     5
+// }
+//
+// fn main() {
+//     var foo = Foo{}
+//
+//     var bound = Foo.static
+//     print bound()
+//
+//     bound = copy
+//     print bound()
+//
+//     bound = foo.method
+//     // var bound = foo.method
+//     print bound()
+// }
 
-fn main() {
-    var arr: []fn(int, int) -> int = [
-        mul,
-        div,
-    ]
-}
+// TODO: tests with field calls
+//foo.tmp()
+// foo.tmp = static
+//foo.tmp()
+//...

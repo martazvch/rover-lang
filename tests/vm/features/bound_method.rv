@@ -22,9 +22,9 @@ fn main() {
     // Mess up with stack
     var a = 5
 
-    var method1: fn(Person) -> void 
+    var method1: fn() -> void 
     method1 = p.speak
-    var method2: fn(Person) -> void = p.speak
+    var method2: fn() -> void = p.speak
     var method3 = p.speak
 
     method1()
