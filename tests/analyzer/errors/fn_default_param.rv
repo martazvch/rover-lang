@@ -4,7 +4,7 @@ fn bar(a = 4.) {
     var b: int = a
 }
 
-fn default(c: str, a, b = 7, d, e: bool=false) { }
+fn default(c: str, a, b = 7, d, e: bool=false) {}
 
 
 fn main() {

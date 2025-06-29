@@ -1,0 +1,57 @@
+use data.def_val
+
+fn function(noval: str, arg1, arg2: int = 12, arg3 = 98.5) {
+    print noval
+    print arg1
+    print arg2
+    print arg3
+}
+
+struct Foo {
+    fn staticFn(noval: str, arg1, arg2: int = 111, arg3 = 56.5) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+
+    fn method(self, noval: str, arg1, arg2: int = 2, arg3 = 8.5) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+}
+
+fn main() {
+    function("first", 1, 2, 24.5)
+    function("second")
+    function("third", 8)
+    function("fourth", arg3=123.456)
+    function("fifth", arg3=12.34, arg1=80)
+    function("sixth", arg2=54, arg1=65, arg3=3.14)
+
+    Foo.staticFn("first", 1, 2, 24.5)
+    Foo.staticFn("second")
+    Foo.staticFn("third", 8)
+    Foo.staticFn("fourth", arg3=123.456)
+    Foo.staticFn("fifth", arg3=12.34, arg1=80)
+    Foo.staticFn("sixth", arg2=54, arg1=65, arg3=3.14)
+
+    var foo = Foo{}
+    
+    foo.method("first", 1, 2, 24.5)
+    foo.method("second")
+    foo.method("third", 8)
+    foo.method("fourth", arg3=123.456)
+    foo.method("fifth", arg3=12.34, arg1=80)
+    foo.method("sixth", arg2=54, arg1=65, arg3=3.14)
+
+    var imported = def_val.Def{}
+    def_val.Def.staticFn("imported static")
+    def_val.Def.staticFn("imported static", c=true, b=90)
+
+    imported.method("imported method")
+    imported.method("imported method", d=false, b=180)
+}
+

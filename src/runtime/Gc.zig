@@ -139,7 +139,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         },
         .bound_method => {
             const bound = obj.as(ObjBoundMethod);
-            try self.markValue(&bound.receiver);
+            try self.markObject(bound.receiver);
             try self.markObject(bound.method.asObj());
         },
         .func => {

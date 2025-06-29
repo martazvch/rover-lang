@@ -281,8 +281,11 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}, call_conv: {s}{s}]", .{
-        data.arity, @tagName(data.call_conv), if (data.invoke) ", invoke" else "",
+    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}, call_conv: {s}{s}]", .{
+        data.arity,
+        data.default_count,
+        @tagName(data.call_conv),
+        if (data.invoke) ", invoke" else "",
     });
 
     self.indent_level += 1;
@@ -462,8 +465,8 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     self.indentAndPrintSlice(
-        "[Structure literal{s}]",
-        .{if (data.imported) ", imported" else ""},
+        "[Structure literal, defaults: {}{s}]",
+        .{ data.default_count, if (data.imported) ", imported" else "" },
     );
     self.indent_level += 1;
     defer self.indent_level -= 1;

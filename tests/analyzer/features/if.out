@@ -117,5 +117,5 @@
                 [Int 1]
         [Int 2]
     [Discard]
-        [Fn call arity: 0, call_conv: free_function]
+        [Fn call arity: 0, defaults: 0, call_conv: free_function]
             [Variable index: 4, scope: local]

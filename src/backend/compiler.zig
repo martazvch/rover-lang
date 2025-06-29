@@ -599,33 +599,22 @@ const Compiler = struct {
         defer self.state.to_reg = prev;
         self.state.to_reg = false;
 
-        // if (data.tag == .invoke or data.tag == .invoke_import or data.tag == .invoke_static)
         if (data.invoke)
             return self.invoke(data, start);
 
+        const load_op: OpCode, const call_op: OpCode = switch (data.call_conv) {
+            .free_function => .{ .load_fn_def, .call },
+            .builtin => .{ .load_fn_def, .call_native },
+            .import => .{ .load_fn_import_def, .call_import },
+            else => .{ .load_fn_bound_def, .call_bound_method },
+        };
+
         try self.compileInstr();
-        try self.compileArgs(data.arity, .get_fn_default, 0);
+        if (data.default_count > 0) self.writeOp(load_op, start);
+        try self.compileArgs(data.arity);
 
-        // if (data.tag == .import) {
-        // if (data.call_conv == .import) {
-        //     // Compiles the index + scope of the module to load it
-        //     try self.compileInstr();
-        // }
+        self.writeOpAndByte(call_op, data.arity, start);
 
-        self.writeOpAndByte(
-            // switch (data.tag) {
-            switch (data.call_conv) {
-                // .function => .call,
-                .free_function => .call,
-                .builtin => .call_native,
-                .import => .call_import,
-                else => .call_bound_method,
-            },
-            data.arity,
-            start,
-        );
-
-        // if (data.tag == .import) {
         if (data.call_conv == .import) {
             // At the end of the call, we unload it
             self.writeOp(.unload_module, start);
@@ -637,41 +626,29 @@ const Compiler = struct {
         const member_data = self.getData().field;
         self.manager.instr_idx += 1;
 
+        const load_op: OpCode, const call_op: OpCode = switch (data.call_conv) {
+            .bound => .{ .load_invoke_def, .invoke },
+            .import => .{ .load_invoke_import_def, .invoke_import },
+            .static => .{ .load_invoke_static_def, .invoke_static },
+            else => unreachable,
+        };
+
         // Compiles the receiver
         try self.compileInstr();
-        try self.compileArgs(data.arity, .get_method_default, member_data.index);
+        if (data.default_count > 0) self.writeOpAndByte(load_op, @intCast(member_data.index), start);
+        try self.compileArgs(data.arity);
 
-        // PERF: put the invoked function in a register so that we can refer to it when
-        // emitting 'get_default_value' and then the 'invoke*' can refer to it too, avoiding
-        // to emit data.arity + member_data.index
+        self.writeOpAndByte(call_op, data.arity, start);
+        self.writeByte(@intCast(member_data.index), start);
 
-        // switch (data.tag) {
-        switch (data.call_conv) {
-            // .invoke => {
-            .bound => {
-                self.writeOpAndByte(.invoke, data.arity, start);
-                self.writeByte(@intCast(member_data.index), start);
-            },
-            // .invoke_import => {
-            .import => {
-                self.writeOpAndByte(.invoke_import, data.arity, start);
-                self.writeByte(@intCast(member_data.index), start);
-                self.writeOp(.unload_module, start);
-            },
-            // .invoke_static => {
-            .static => {
-                self.writeOpAndByte(.invoke_static, data.arity, start);
-                self.writeByte(@intCast(member_data.index), start);
-            },
-            else => unreachable,
-        }
+        if (data.call_conv == .import) self.writeOp(.unload_module, start);
     }
 
-    fn compileArgs(self: *Self, arity: usize, default_op: OpCode, method_idx: usize) Error!void {
+    fn compileArgs(self: *Self, arity: usize) Error!void {
         const start = self.getStart();
         var last: usize = 0;
 
-        for (0..arity) |i| {
+        for (0..arity) |_| {
             switch (self.next()) {
                 .value => |data| {
                     const save = self.setInstrIndexGetPrev(data.value_instr);
@@ -687,15 +664,7 @@ const Compiler = struct {
 
                     if (data.cast) self.writeOp(.cast_to_float, start);
                 },
-                // TODO: optimize this? like put the current accessed function/method in a register something
-                // like this to avoid all those op codes and ip read at runtime
-                .default_value => |idx| {
-                    self.writeOpAndByte(default_op, @intCast(i), start);
-                    // If we want a default of an invoked method, we have to access the method's defaults
-                    // of the instance on the stack, so we need to know which method we're gonna call
-                    if (default_op == .get_method_default) self.writeByte(@intCast(method_idx), start);
-                    self.writeByte(@intCast(idx), start);
-                },
+                .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), start),
                 else => unreachable,
             }
         }
@@ -840,7 +809,6 @@ const Compiler = struct {
 
     fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
         if (data.scope == .global) {
-            // self.addGlobal(Value.makeModule(&self.manager.modules[data.index]));
             self.addGlobal(Value.makeObj(ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
         } else {
             self.writeOpAndByte(.push_module, @intCast(data.index), self.getStart());
@@ -935,13 +903,12 @@ const Compiler = struct {
         }
     }
 
-    // fn structLiteral(self: *Self, field_count: usize) Error!void {
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
         const start = self.getStart();
         // Compile structure
         try self.compileInstr();
-        // try self.compileArgs(field_count, .get_struct_default, 0);
-        try self.compileArgs(data.fields_count, .get_struct_default, 0);
+        if (data.default_count > 0) self.writeOp(.load_struct_def, start);
+        try self.compileArgs(data.fields_count);
         self.writeOpAndByte(if (data.imported) .struct_literal_import else .struct_literal, @intCast(data.fields_count), start);
     }
 

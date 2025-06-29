@@ -12,11 +12,14 @@ OP_RETURN
 
 -- main --
 OP_GET_GLOBAL index 0, <structure Vec2>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
-OP_GET_STRUCT_DEFAULT index 1 on stack, default value index 1
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
+OP_GET_DEFAULT index 1
 OP_STRUCT_LIT index 2
+
 OP_GET_LOCAL index 1
-OP_GET_METHOD_DEFAULT index 0 on stack, method index 1, default value index 0
+OP_LOAD_INVOKE_DEF index 1
+OP_GET_DEFAULT index 0
 OP_INVOKE arity 1, method index 1
 OP_PRINT
 OP_NAKED_RETURN

@@ -1356,11 +1356,12 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
         );
     }
 
-    const arity = try self.fnArgsList(expr, &infos, call_conv == .bound);
+    const arity, const default_count = try self.fnArgsList(expr, &infos, call_conv == .bound);
 
     // TODO: protect cast
     self.setInstr(index, .{ .call = .{
         .arity = @intCast(arity),
+        .default_count = @intCast(default_count),
         .call_conv = call_conv,
         .invoke = sft.structure != .void,
     } });
@@ -1368,7 +1369,7 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     return infos.return_type;
 }
 
-fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_bound: bool) Error!usize {
+fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_bound: bool) Error!struct { usize, usize } {
 
     // If it's a bound method, 'self' is implictly inside the function so we skip it unless it's an anonymus
     // function. For example:
@@ -1444,7 +1445,7 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_b
         ) catch {};
     };
 
-    return if (has_err) error.Err else param_count;
+    return if (has_err) error.Err else .{ param_count, default_count };
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal) Error!Type {
@@ -1786,8 +1787,10 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     }
 
     // TODO: implement an invoke strategy
+    // TODO: protect cast
     self.setInstr(index, .{ .struct_literal = .{
-        .fields_count = infos.fields.count(),
+        .fields_count = @intCast(infos.fields.count()),
+        .default_count = @intCast(default_count),
         .imported = struct_type.getCallConv() == .imported,
     } });
 

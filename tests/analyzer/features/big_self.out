@@ -4,14 +4,14 @@
     [Int 0]
     [Int 0]
     [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
-        [Structure literal]
+        [Structure literal, defaults: 2]
             - structure
             [Variable index: 0, scope: global]
             - args
 
 [Structure declaration Bar, index: 1, scope: global]
     [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 1, scope: global]
             - args
@@ -23,7 +23,7 @@
         - default values
         [Bool true]
         [Fn declaration init, index: 2, scope: local, return kind: implicit_value]
-            [Structure literal]
+            [Structure literal, defaults: 1]
                 - structure
                 [Variable absolute index: 1]
                 - args

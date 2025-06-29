@@ -14,3 +14,8 @@ fn introduce() {
 fn getVecFromPos(x: int, y: int) -> Vec2 {
     Vec2{ x, y }
 }
+
+fn getInt() -> int { 12 }
+
+fn getIntDef(a = 5) -> int { 12 }
+

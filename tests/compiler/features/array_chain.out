@@ -65,9 +65,10 @@ OP_ARRAY index 2
 OP_STRUCT_LIT index 1
 
 OP_GET_GLOBAL index 2, <structure Object>
+OP_LOAD_STRUCT_DEF
 OP_GET_LOCAL index 6
 OP_INCR_REF_COUNT
-OP_GET_STRUCT_DEFAULT index 1 on stack, default value index 0
+OP_GET_DEFAULT index 0
 OP_STRUCT_LIT index 2
 
 OP_CONSTANT index 25, value 0

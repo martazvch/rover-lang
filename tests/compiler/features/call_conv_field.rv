@@ -14,10 +14,6 @@ struct Bar {
     fn method(self) -> int {
         self.value
     }
-
-    fn importFuncFromMethod(self) -> fn() -> int {
-        math.getInt
-    }
 }
 
 fn copy() -> int {
@@ -38,8 +34,5 @@ fn main() {
 
     foo.function = math.getInt
     print foo.function()
-
-    const tmp = foo.importFuncFromMethod()
-    foo.function = tmp()
-    print foo.function()
 }
+

@@ -58,7 +58,7 @@
             [Variable index: 1, scope: local]
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, imported]
+        [Structure literal, defaults: 0, imported]
             - structure
             [Method access 0]
                 [Variable index: 0, scope: global]

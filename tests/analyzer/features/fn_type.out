@@ -18,7 +18,7 @@
         [Variable index: 2, scope: local]
 
 [Fn declaration factory3, index: 3, scope: global, return kind: implicit_value]
-    [Fn call arity: 0, call_conv: free_function]
+    [Fn call arity: 0, defaults: 0, call_conv: free_function]
         [Variable index: 1, scope: local]
 
 [Fn declaration main, index: 4, scope: global, return kind: implicit_void]

@@ -10,7 +10,7 @@
     [Print]
         [String This is a mathematical module]
 [Fn declaration getVecFromPos, index: 2, scope: global, return kind: implicit_value]
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -76,14 +76,14 @@
 
 [Fn declaration main, index: 3, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
             [Int 3]
             [Int 9]
     [Variable declaration index: 2, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 1, scope: global]
             - args
@@ -92,7 +92,7 @@
     [Block pop count: 2, is_expr: false]
         [Import field 0 of module 0 to scope local]
         [Variable declaration index: 4, scope: local]
-            [Structure literal]
+            [Structure literal, defaults: 0]
                 - structure
                 [Variable index: 3, scope: local]
                 - args

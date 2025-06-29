@@ -4,7 +4,7 @@
     [Print]
         [String This is a mathematical module]
 [Fn declaration getVecFromPos, index: 2, scope: global, return kind: implicit_value]
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args

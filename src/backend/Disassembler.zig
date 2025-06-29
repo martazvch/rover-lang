@@ -76,6 +76,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
+        .get_default => self.indexInstruction("OP_GET_DEFAULT", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", offset, writer),
         .get_field_reg => self.getMember("OP_GET_FIELD_REG", offset, writer),
         .get_global => self.getGlobal(false, offset, writer),
@@ -84,10 +85,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
         .get_local_reg => self.indexInstruction("OP_GET_LOCAL_REG", offset, writer),
         .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
-        .get_fn_default => self.getDefaultValue("OP_GET_FN_DEFAULT", offset, writer),
-        .get_method_default => self.getMethodDefaultValue(offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", offset, writer),
-        .get_struct_default => self.getDefaultValue("OP_GET_STRUCT_DEFAULT", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
@@ -98,11 +96,18 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
         .jump_if_false => self.jumpInstruction("OP_JUMP_IF_FALSE", 1, offset, writer),
         .jump_if_true => self.jumpInstruction("OP_JUMP_IF_TRUE", 1, offset, writer),
-        .lt_float => self.simpleInstruction("OP_LESS_FLOAT", offset, writer),
-        .lt_int => self.simpleInstruction("OP_LESS_INT", offset, writer),
         .le_float => self.simpleInstruction("OP_LESS_EQUAL_FLOAT", offset, writer),
         .le_int => self.simpleInstruction("OP_LESS_EQUAL_INT", offset, writer),
+        .load_fn_def => self.simpleInstruction("OP_LOAD_FN_DEF", offset, writer),
+        .load_fn_bound_def => self.simpleInstruction("OP_LOAD_FN_BOUND_DEF", offset, writer),
+        .load_fn_import_def => self.simpleInstruction("OP_LOAD_FN_IMPORT_DEF", offset, writer),
+        .load_invoke_def => self.indexInstruction("OP_LOAD_INVOKE_DEF", offset, writer),
+        .load_invoke_import_def => self.indexInstruction("OP_LOAD_INVOKE_IMPORT_DEF", offset, writer),
+        .load_invoke_static_def => self.indexInstruction("OP_LOAD_INVOKE_STATIC_DEF", offset, writer),
+        .load_struct_def => self.simpleInstruction("OP_LOAD_STRUCT_DEF", offset, writer),
         .loop => self.jumpInstruction("OP_LOOP", -1, offset, writer),
+        .lt_float => self.simpleInstruction("OP_LESS_FLOAT", offset, writer),
+        .lt_int => self.simpleInstruction("OP_LESS_INT", offset, writer),
         .mul_float => self.simpleInstruction("OP_MULTIPLY_FLOAT", offset, writer),
         .mul_int => self.simpleInstruction("OP_MULTIPLY_INT", offset, writer),
         .naked_return => self.simpleInstruction("OP_NAKED_RETURN", offset, writer),
@@ -247,40 +252,6 @@ fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype
     }
 
     return local_offset;
-}
-
-fn getDefaultValue(self: *const Self, text: []const u8, offset: usize, writer: anytype) !usize {
-    const struct_idx = self.chunk.code.items[offset + 1];
-    const default_idx = self.chunk.code.items[offset + 2];
-
-    if (self.render_mode == .Test) {
-        try writer.print("{s} index {} on stack, default value index {}\n", .{ text, struct_idx, default_idx });
-    } else {
-        try writer.print("{s:<24} index {:>4} on stack, default value index {:>4}\n", .{ text, struct_idx, default_idx });
-    }
-
-    return offset + 3;
-}
-
-fn getMethodDefaultValue(self: *const Self, offset: usize, writer: anytype) !usize {
-    const struct_idx = self.chunk.code.items[offset + 1];
-    const method_idx = self.chunk.code.items[offset + 2];
-    const default_idx = self.chunk.code.items[offset + 3];
-    const text = "OP_GET_METHOD_DEFAULT";
-
-    if (self.render_mode == .Test) {
-        try writer.print(
-            "{s} index {} on stack, method index {}, default value index {}\n",
-            .{ text, struct_idx, method_idx, default_idx },
-        );
-    } else {
-        try writer.print(
-            "{s:<24} index {:>4} on stack, method index {}, default value index {:>4}\n",
-            .{ text, struct_idx, method_idx, default_idx },
-        );
-    }
-
-    return offset + 4;
 }
 
 fn invokeInstruction(self: *const Self, text: []const u8, obj_name: []const u8, offset: usize, writer: anytype) !usize {

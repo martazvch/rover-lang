@@ -11,13 +11,15 @@ OP_GET_LOCAL index 1
 OP_INCR_REF_COUNT
 
 OP_GET_GLOBAL index 1, <structure Point>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_GET_GLOBAL index 0, <structure Foo>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_STRUCT_LIT index 1
-
 OP_ARRAY index 1
 OP_STRUCT_LIT index 2
+
 OP_GET_GLOBAL index 2, <structure Poly>
 OP_GET_LOCAL index 3
 OP_INCR_REF_COUNT
@@ -49,18 +51,22 @@ OP_ARRAY_ACCESS
 OP_INCR_REF_COUNT
 
 OP_GET_GLOBAL index 1, <structure Point>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_GET_GLOBAL index 0, <structure Foo>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_STRUCT_LIT index 1
 OP_ARRAY index 1
 OP_STRUCT_LIT index 2
 OP_ARRAY index 1
 
 OP_GET_GLOBAL index 1, <structure Point>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_GET_GLOBAL index 0, <structure Foo>
-OP_GET_STRUCT_DEFAULT index 0 on stack, default value index 0
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
 OP_STRUCT_LIT index 1
 OP_ARRAY index 1
 OP_STRUCT_LIT index 2

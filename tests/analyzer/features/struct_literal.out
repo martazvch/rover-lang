@@ -3,14 +3,14 @@
     [Int 42]
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
             [Int 5]
             [String Tom]
 
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -21,7 +21,7 @@
     [Variable declaration index: 2, scope: local]
         [Int 95]
 
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -32,7 +32,7 @@
     [Variable declaration index: 3, scope: local]
         [String Tom]
 
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -40,7 +40,7 @@
         [Variable index: 3, scope: local]
     [Assignment index: 1, scope: local]
 
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -48,7 +48,7 @@
         [Variable index: 3, scope: local]
     [Assignment index: 1, scope: local]
 
-    [Structure literal]
+    [Structure literal, defaults: 0]
         - structure
         [Variable index: 0, scope: global]
         - args
@@ -58,7 +58,7 @@
 
     [Structure declaration Local, index: 4, scope: local]
     [Variable declaration index: 5, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 4, scope: local]
             - args

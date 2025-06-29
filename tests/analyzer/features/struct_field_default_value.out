@@ -7,7 +7,7 @@
 
 [Fn declaration main, index: 1, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 3]
             - structure
             [Variable index: 0, scope: global]
             - args
@@ -17,7 +17,7 @@
             [Int 2]
             [Bool true]
 
-    [Structure literal]
+    [Structure literal, defaults: 3]
         - structure
         [Variable index: 0, scope: global]
         - args

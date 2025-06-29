@@ -2,21 +2,21 @@
 [Fn declaration mul, index: 1, scope: global, return kind: implicit_void]
 
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
-    [Fn call arity: 1, call_conv: free_function]
+    [Fn call arity: 1, defaults: 0, call_conv: free_function]
         [Variable index: 0, scope: global]
         - args:
         [Int 2]
 
     // local
     [Fn declaration sub, index: 1, scope: local, return kind: implicit_void]
-    [Fn call arity: 1, call_conv: free_function]
+    [Fn call arity: 1, defaults: 0, call_conv: free_function]
         [Variable index: 1, scope: local]
         - args:
         [Int 2]
 
     // Arg cast
     [Fn declaration div, index: 2, scope: local, return kind: implicit_void]
-    [Fn call arity: 5, call_conv: free_function]
+    [Fn call arity: 5, defaults: 0, call_conv: free_function]
         [Variable index: 2, scope: local]
         - args:
         [Cast next value to float]
@@ -26,7 +26,7 @@
         [Int 45]
         [Float 67]
         [String yup]
-    [Fn call arity: 5, call_conv: free_function]
+    [Fn call arity: 5, defaults: 0, call_conv: free_function]
         [Variable index: 1, scope: global]
         - args:
         [Int 2]

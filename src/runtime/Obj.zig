@@ -402,12 +402,12 @@ pub const ObjInstance = struct {
 
 pub const ObjBoundMethod = struct {
     obj: Obj,
-    receiver: Value,
+    receiver: *Obj,
     method: *ObjFunction,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, receiver: Value, method: *ObjFunction) *Self {
+    pub fn create(vm: *Vm, receiver: *Obj, method: *ObjFunction) *Self {
         const obj = Obj.allocate(vm, Self, .bound_method);
 
         obj.receiver = receiver;
@@ -433,12 +433,10 @@ pub const ObjBoundMethod = struct {
 pub const ObjBoundImport = struct {
     obj: Obj,
     module: *ObjModule,
-    // method: *ObjFunction,
     import: *Obj,
 
     const Self = @This();
 
-    // pub fn create(vm: *Vm, module: *ObjModule, method: *ObjFunction) *Self {
     pub fn create(vm: *Vm, module: *ObjModule, import: *Obj) *Self {
         const obj = Obj.allocate(vm, Self, .bound_import);
 

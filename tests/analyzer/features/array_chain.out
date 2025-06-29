@@ -8,7 +8,7 @@
 
 [Fn declaration main, index: 3, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
@@ -22,7 +22,7 @@
                     [Int 3]
                     [Int 4]
     [Variable declaration index: 2, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
@@ -36,7 +36,7 @@
                     [Int 9]
                     [Int 10]
     [Variable declaration index: 3, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
@@ -50,7 +50,7 @@
                     [Int 15]
                     [Int 16]
     [Variable declaration index: 4, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 0, scope: global]
             - args
@@ -64,7 +64,7 @@
                     [Int 21]
                     [Int 22]
     [Variable declaration index: 5, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 0]
             - structure
             [Variable index: 1, scope: global]
             - args
@@ -80,7 +80,7 @@
                     [Variable index: 4, scope: local]
                     [Increment reference count]
     [Variable declaration index: 6, scope: local]
-        [Structure literal]
+        [Structure literal, defaults: 1]
             - structure
             [Variable index: 2, scope: global]
             - args

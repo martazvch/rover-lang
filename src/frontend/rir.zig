@@ -109,6 +109,7 @@ pub const Instruction = struct {
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct {
         arity: u8,
+        default_count: u8,
         call_conv: CallConv,
         invoke: bool = false,
     };
@@ -132,7 +133,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { fields_count: usize, imported: bool };
+    pub const StructLiteral = struct { fields_count: u8, default_count: u8, imported: bool };
     pub const Value = struct { value_instr: usize, cast: bool = false };
     pub const Unary = struct {
         op: Op,

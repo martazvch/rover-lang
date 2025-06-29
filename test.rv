@@ -1,27 +1,13 @@
-struct Vec1 {
-    x: int
+fn foo(a: int = 5.) {}
 
-    fn new(x: int) -> Vec1 {
-        Vec1 { x }
-    }
+fn bar(a = 4.) {
+    var b: int = a
 }
 
+fn default(c: str, a, b = 7, d, e: bool=false) {}
+
+
 fn main() {
-    struct Point { x: int }
-
-    struct Vec2 {
-        x: int, y: int,
-
-        fn new(x: int, y: int) -> Vec2 {
-            Vec2 { x, y }
-        }
-    }
-
-    var v = Vec1.new(5)
-    var new = Vec1.new
-    v = new(65)
-
-    var v2 = Vec2.new(12, 99)
-    var new2 = Vec2.new
-    v2 = new2(56, 78)
+    default(a=8, e=true)
+    default("blob", bad=6)
 }
