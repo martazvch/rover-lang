@@ -37,8 +37,8 @@ fn main() {
     print bound()
 
     // Call conv survives a layer
-    bound = foo.importFuncFromMethod
+    var tmp = foo.importFuncFromMethod
+    print tmp()
+    bound = tmp()
     print bound()
-    var func = bound()
-    print func()
 }

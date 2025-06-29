@@ -17,7 +17,7 @@
                 [Variable index: 1, scope: local]
                 [Variable index: 2, scope: local]
     [Variable declaration index: 3, scope: local]
-        [Fn call arity: 1, call_tag: function]
+        [Fn call arity: 1, call_conv: static, invoke]
             [Method access 0]
                 [Variable index: 0, scope: global]
             - args:
@@ -25,13 +25,13 @@
     [Variable declaration index: 4, scope: local]
         [Method access 0]
             [Variable index: 0, scope: global]
-    [Fn call arity: 1, call_tag: function]
+    [Fn call arity: 1, call_conv: free_function]
         [Variable index: 4, scope: local]
         - args:
         [Int 65]
     [Assignment index: 3, scope: local]
     [Variable declaration index: 5, scope: local]
-        [Fn call arity: 2, call_tag: function]
+        [Fn call arity: 2, call_conv: static, invoke]
             [Method access 0]
                 [Variable index: 2, scope: local]
             - args:
@@ -40,7 +40,7 @@
     [Variable declaration index: 6, scope: local]
         [Method access 0]
             [Variable index: 2, scope: local]
-    [Fn call arity: 2, call_tag: function]
+    [Fn call arity: 2, call_conv: free_function]
         [Variable index: 6, scope: local]
         - args:
         [Int 56]

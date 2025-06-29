@@ -23,11 +23,11 @@
             [String Tom]
     [Variable declaration index: 2, scope: local]
         [Null]
-    [Fn call arity: 0, call_tag: invoke]
+    [Fn call arity: 0, call_conv: bound, invoke]
         [Method access 0]
             [Variable index: 1, scope: local]
     [Discard]
-        [Fn call arity: 1, call_tag: invoke]
+        [Fn call arity: 1, call_conv: bound, invoke]
             [Method access 1]
                 [Variable index: 1, scope: local]
             - args:

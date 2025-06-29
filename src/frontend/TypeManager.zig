@@ -76,9 +76,9 @@ pub fn getFnTypeInfos(self: *const Self, index: usize) FnInfo {
 }
 
 /// Get type informations of a structure
-// pub fn getStructTypeInfos(self: *const Self, index: usize) StructInfo {
-//     return self.type_infos.items[index].@"struct";
-// }
+pub fn getStructTypeInfos(self: *const Self, index: usize) StructInfo {
+    return self.type_infos.items[index].@"struct";
+}
 
 /// Declares a new type built with `kind` and `extra` parameters and add the informations
 // pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) Self.Error!TypeSys.Type {
@@ -166,11 +166,8 @@ pub const ArrayInfo = struct {
 pub const FnInfo = struct {
     params: AutoArrayHashMapUnmanaged(usize, ParamInfo),
     return_type: Type,
-    tag: Tag = .function,
-    module: ?ModuleRef = null,
     anonymus: bool = false,
-
-    pub const Tag = enum { builtin, function };
+    module: ?ModuleRef = null,
 
     pub const ParamInfo = struct {
         /// Order of declaration

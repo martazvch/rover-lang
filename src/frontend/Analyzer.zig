@@ -302,13 +302,13 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     //
     // // If we fetched a variable, we add extra informations if needed
     // if (assigne_type_ptr) |ptr| {
-    //     const extra = value_type.getExtra();
+    //     const extra = value_type.getCallConv();
     //
     //     if (extra == .bound_method) {
-    //         ptr.setExtra(.bound_method);
+    //         ptr.setCallConv(.bound_method);
     //     } else if (extra == .imported) {
-    //         ptr.setExtra(.imported);
-    //     } else ptr.setExtra(.none);
+    //         ptr.setCallConv(.imported);
+    //     } else ptr.setCallConv(.none);
     //
     //     assigne_type = ptr.*;
     // }
@@ -497,12 +497,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
         );
     }
 
-    // TODO: add some calling convention?
-    // if (body_type.getExtra() == .bound_method) {
-    //     self.type_manager.type_infos.items[type_idx].func.return_type.setExtra(.bound_method);
-    // }
-
-    self.type_manager.type_infos.items[type_idx].func.return_type.copyExtra(body_type);
+    self.type_manager.type_infos.items[type_idx].func.return_type.copyCallConv(body_type);
 
     // We strip unused instructions for them not to be compiled
     if (deadcode_start > 0)
@@ -717,7 +712,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 const symbol_infos = self.type_manager.type_infos.items[symbol_value];
 
                 if (symbol_infos == .func) {
-                    symbol.type.setExtra(.imported);
+                    symbol.type.setCallConv(.imported);
                 }
 
                 // const typ = switch (symbol_infos) {
@@ -1301,7 +1296,7 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         },
     });
 
-    if (kind == .method) found_field.type.setExtra(.bound_method);
+    if (kind == .method) found_field.type.setCallConv(.bound_method);
 
     return .init(struct_type, is_type, found_field.type, kind);
 }
@@ -1311,7 +1306,8 @@ fn getStructAndFieldTypes(self: *Self, expr: *const Expr) Error!StructAndFieldTy
         .field => |*e| try self.field(e),
         else => b: {
             const typ = try self.analyzeExpr(expr);
-            break :b StructAndFieldTypes.init(.void, false, typ, .field);
+            // static_method to treat it as a normal function
+            break :b StructAndFieldTypes.init(.void, false, typ, .static_method);
         },
     };
 }
@@ -1322,40 +1318,58 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const type_value = sft.field.getValue();
 
     const infos, const call_conv: TypeManager.CallConv = switch (sft.field.getKind()) {
-        .function => if (sft.structure == .void) b: {
-            break :b .{
-                self.type_manager.getFnTypeInfos(type_value),
-                switch (sft.field.getExtra()) {
-                    .bound_method => .bound,
-                    .imported => .import,
-                    else => .free_function,
-                },
-            };
-        } else if (sft.kind == .field) b: {
-            std.debug.print("A FIELD\n", .{});
-            const infos = self.type_manager.instances.items[type_value].fn_inst;
-            break :b .{ self.type_manager.getFnTypeInfos(infos.decl_index), infos.call_conv };
-        } else .{
+        .function => if (sft.kind != .field) .{
             self.type_manager.getFnTypeInfos(type_value),
-            switch (sft.kind) {
+            if (sft.structure == .void) switch (sft.field.getCallConv()) {
+                .bound_method => .bound,
+                .imported => .import,
+                else => .free_function,
+            } else switch (sft.kind) {
                 .method => .bound,
                 .static_method => .static,
                 .symbol => .import,
-                // TODO: really?
                 else => unreachable,
             },
+        } else b: {
+            // It's a structure field that we are calling
+            const infos = self.type_manager.instances.items[type_value].fn_inst;
+            break :b .{ self.type_manager.getFnTypeInfos(infos.decl_index), infos.call_conv };
+        },
+        .@"struct" => b: {
+            const struct_infos = self.type_manager.getStructTypeInfos(type_value);
+            const init_fn = struct_infos.functions.get(self.cached_names.init) orelse {
+                return self.err(.struct_call_but_no_init, self.ast.getSpan(expr));
+            };
+
+            const type_idx = init_fn.type.getValue();
+            break :b .{ self.type_manager.getFnTypeInfos(type_idx), .free_function };
         },
         else => return self.err(.invalid_call_target, self.ast.getSpan(expr)),
     };
 
+    const params = infos.params.values();
+
+    if (sft.kind == .method and (params.len == 0 or !self.isStructTypeEqual(params[0].type, sft.structure))) {
+        return self.err(
+            .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
+            self.ast.getSpan(expr.callee.field.field),
+        );
+    }
+
     const arity = try self.fnArgsList(expr, &infos, call_conv == .bound);
+
     // TODO: protect cast
-    self.setInstr(index, .{ .call = .{ .arity = @intCast(arity), .call_conv = call_conv, .invoke = sft.structure != .void } });
+    self.setInstr(index, .{ .call = .{
+        .arity = @intCast(arity),
+        .call_conv = call_conv,
+        .invoke = sft.structure != .void,
+    } });
 
     return infos.return_type;
 }
 
 fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_bound: bool) Error!usize {
+
     // If it's a bound method, 'self' is implictly inside the function so we skip it unless it's an anonymus
     // function. For example:
     // struct Foo {
@@ -1774,7 +1788,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral) !Type {
     // TODO: implement an invoke strategy
     self.setInstr(index, .{ .struct_literal = .{
         .fields_count = infos.fields.count(),
-        .imported = struct_type.getExtra() == .imported,
+        .imported = struct_type.getCallConv() == .imported,
     } });
 
     return struct_type;
@@ -2050,8 +2064,8 @@ fn isFunctionTypeEqual(self: *const Self, t1: Type, t2: Type) bool {
     const infos1 = self.type_manager.type_infos.items[v1].func;
     const infos2 = self.type_manager.type_infos.items[v2].func;
 
-    const params1 = infos1.params.values()[if (t1.getExtra() == .bound_method) 1 else 0..];
-    const params2 = infos2.params.values()[if (t2.getExtra() == .bound_method) 1 else 0..];
+    const params1 = infos1.params.values()[if (t1.getCallConv() == .bound_method) 1 else 0..];
+    const params2 = infos2.params.values()[if (t2.getCallConv() == .bound_method) 1 else 0..];
 
     if (params1.len == params2.len and infos1.return_type == infos2.return_type) {
         for (params1, params2) |p1, p2| {
@@ -2126,7 +2140,7 @@ fn getArrayTypeName(self: *const Self, typ: Type) ![]const u8 {
 fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     const value = typ.getValue();
     const decl = self.type_manager.type_infos.items[value].func;
-    const offset = @intFromBool(typ.getExtra() == .bound_method and !decl.anonymus);
+    const offset = @intFromBool(typ.getCallConv() == .bound_method and !decl.anonymus);
 
     var res: std.ArrayListUnmanaged(u8) = .{};
     var writer = res.writer(self.allocator);

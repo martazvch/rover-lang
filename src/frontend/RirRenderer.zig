@@ -146,7 +146,6 @@ fn parseInstr(self: *Self) void {
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
         .default_value => unreachable,
-        // .struct_literal => |data| self.structLiteral(data),
         .struct_literal => |*data| self.structLiteral(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
@@ -282,9 +281,8 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}, call_tag: {s}, invoke: {}]", .{
-        // data.arity, @tagName(data.tag),
-        data.arity, @tagName(data.call_conv), data.invoke,
+    self.indentAndPrintSlice("[Fn call arity: {}, call_conv: {s}{s}]", .{
+        data.arity, @tagName(data.call_conv), if (data.invoke) ", invoke" else "",
     });
 
     self.indent_level += 1;
@@ -317,12 +315,6 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
-
-    // if (data.tag == .import) {
-    // if (data.call_conv == .import) {
-    //     self.indentAndAppendSlice("- load module:");
-    //     self.parseInstr();
-    // }
 }
 
 fn getField(self: *Self, data: *const Instruction.Field) void {
@@ -468,9 +460,11 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
     }
 }
 
-// fn structLiteral(self: *Self, field_count: usize) void {
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
-    self.indentAndAppendSlice("[Structure literal]");
+    self.indentAndPrintSlice(
+        "[Structure literal{s}]",
+        .{if (data.imported) ", imported" else ""},
+    );
     self.indent_level += 1;
     defer self.indent_level -= 1;
     // Variable containing type
@@ -503,8 +497,6 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
-
-    // TODO: manage data.import
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

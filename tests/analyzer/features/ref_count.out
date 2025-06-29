@@ -37,14 +37,14 @@
             [Variable index: 3, scope: local]
             [Increment reference count]
 
-    [Fn call arity: 2, call_tag: function]
+    [Fn call arity: 2, call_conv: free_function]
         [Variable index: 3, scope: global]
         - args:
         [Variable index: 3, scope: local]
         [Field access 0]
             [Variable index: 3, scope: local]
 
-    [Fn call arity: 2, call_tag: function]
+    [Fn call arity: 2, call_conv: free_function]
         [Variable index: 3, scope: global]
         - args:
         [Field access 0]
