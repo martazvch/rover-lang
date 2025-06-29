@@ -1,21 +1,27 @@
-struct Human {
-    age: int,
-    name: str,
+struct Vec1 {
+    x: int
 
-    fn speak(self) {
-        print self.name
-    }
-
-    fn getOld(self, amount: int) -> int {
-        self.age = self.age + amount
-        self.age
+    fn new(x: int) -> Vec1 {
+        Vec1 { x }
     }
 }
 
 fn main() {
-    var human = Human{ age=5, name="Tom" }
-    var trash: int
-    human.speak()
-    _ = human.getOld(10)
-}
+    struct Point { x: int }
 
+    struct Vec2 {
+        x: int, y: int,
+
+        fn new(x: int, y: int) -> Vec2 {
+            Vec2 { x, y }
+        }
+    }
+
+    var v = Vec1.new(5)
+    var new = Vec1.new
+    v = new(65)
+
+    var v2 = Vec2.new(12, 99)
+    var new2 = Vec2.new
+    v2 = new2(56, 78)
+}
