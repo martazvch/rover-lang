@@ -1,13 +1,24 @@
-fn foo(a: int = 5.) {}
 
-fn bar(a = 4.) {
-    var b: int = a
+struct Foo {
+    value = 9
+
+    fn method(self) {
+        print self.value
+    }
 }
 
-fn default(c: str, a, b = 7, d, e: bool=false) {}
-
+fn freeFn() {
+    print "ouiuiiii"
+}
 
 fn main() {
-    default(a=8, e=true)
-    default("blob", bad=6)
+    freeFn()
+
+    var foo = Foo{}
+    var bound = foo.method
+    bound()
+
+    foo.method()
 }
+
+

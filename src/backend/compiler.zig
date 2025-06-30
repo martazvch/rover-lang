@@ -12,10 +12,10 @@ const Instruction = Rir.Instruction;
 const Symbols = @import("../frontend/type_system.zig").Symbols;
 const Module = @import("../Pipeline.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
-const ObjString = @import("../runtime/Obj.zig").ObjString;
-const ObjFunction = @import("../runtime/Obj.zig").ObjFunction;
-const ObjNativeFn = @import("../runtime/Obj.zig").ObjNativeFn;
-const ObjStruct = @import("../runtime/Obj.zig").ObjStruct;
+const String = @import("../runtime/Obj.zig").String;
+const Function = @import("../runtime/Obj.zig").Function;
+const NativeFunction = @import("../runtime/Obj.zig").NativeFunction;
+const Structure = @import("../runtime/Obj.zig").Structure;
 const ObjModule = @import("../runtime/Obj.zig").ObjModule;
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
@@ -77,7 +77,7 @@ pub const CompilationManager = struct {
         self.errs.deinit();
     }
 
-    pub fn compile(self: *Self, symbols_count: usize) !*ObjFunction {
+    pub fn compile(self: *Self, symbols_count: usize) !*Function {
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
             try stdout.print("//---- {s} ----\n\n", .{self.file_name});
@@ -108,7 +108,7 @@ pub const CompilationManager = struct {
 
 const Compiler = struct {
     manager: *CompilationManager,
-    function: *ObjFunction,
+    function: *Function,
     state: State = .{},
 
     const Self = @This();
@@ -136,7 +136,7 @@ const Compiler = struct {
     pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize) Self {
         return .{
             .manager = manager,
-            .function = ObjFunction.create(manager.vm, ObjString.copy(manager.vm, name), default_count),
+            .function = Function.create(manager.vm, String.copy(manager.vm, name), default_count),
         };
     }
 
@@ -292,7 +292,7 @@ const Compiler = struct {
         chunk.writeByte(@intCast(jump_offset & 0xff), offset);
     }
 
-    pub fn end(self: *Self) Error!*ObjFunction {
+    pub fn end(self: *Self) Error!*Function {
         if (self.manager.render_mode != .none) {
             var dis = Disassembler.init(
                 self.manager.vm.allocator,
@@ -602,18 +602,16 @@ const Compiler = struct {
         if (data.invoke)
             return self.invoke(data, start);
 
-        const load_op: OpCode, const call_op: OpCode = switch (data.call_conv) {
-            .free_function => .{ .load_fn_def, .call },
-            .builtin => .{ .load_fn_def, .call_native },
-            .import => .{ .load_fn_import_def, .call_import },
-            else => .{ .load_fn_bound_def, .call_bound_method },
-        };
-
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOp(load_op, start);
+        if (data.default_count > 0) self.writeOp(.load_fn_default, start);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(call_op, data.arity, start);
+        self.writeOpAndByte(switch (data.call_conv) {
+            .free_function => .call,
+            .builtin => .call_native,
+            .import => .call_import,
+            else => .call_bound_method,
+        }, data.arity, start);
 
         if (data.call_conv == .import) {
             // At the end of the call, we unload it
@@ -626,19 +624,17 @@ const Compiler = struct {
         const member_data = self.getData().field;
         self.manager.instr_idx += 1;
 
-        const load_op: OpCode, const call_op: OpCode = switch (data.call_conv) {
-            .bound => .{ .load_invoke_def, .invoke },
-            .import => .{ .load_invoke_import_def, .invoke_import },
-            .static => .{ .load_invoke_static_def, .invoke_static },
-            else => unreachable,
-        };
-
         // Compiles the receiver
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOpAndByte(load_op, @intCast(member_data.index), start);
+        if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(call_op, data.arity, start);
+        self.writeOpAndByte(switch (data.call_conv) {
+            .bound => .invoke,
+            .import => .invoke_import,
+            .static => .invoke_static,
+            else => unreachable,
+        }, data.arity, start);
         self.writeByte(@intCast(member_data.index), start);
 
         if (data.call_conv == .import) self.writeOp(.unload_module, start);
@@ -693,7 +689,7 @@ const Compiler = struct {
         }
     }
 
-    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*ObjFunction {
+    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Function {
         var compiler = Compiler.init(self.manager, name, data.default_params);
 
         for (0..data.default_params) |i| {
@@ -844,7 +840,7 @@ const Compiler = struct {
 
     fn stringInstr(self: *Self, index: usize) Error!void {
         try self.emitConstant(
-            Value.makeObj(ObjString.copy(
+            Value.makeObj(String.copy(
                 self.manager.vm,
                 self.manager.vm.interner.getKey(index).?,
             ).asObj()),
@@ -857,9 +853,9 @@ const Compiler = struct {
         const name = self.next().name;
         const struct_var = self.next().var_decl;
 
-        var structure = ObjStruct.create(
+        var structure = Structure.create(
             self.manager.vm,
-            ObjString.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+            String.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
             data.fields_count,
             data.default_fields,
             &.{},
@@ -879,7 +875,7 @@ const Compiler = struct {
             structure.default_values[i] = try self.compileDefaultValue();
         }
 
-        var funcs: ArrayListUnmanaged(*ObjFunction) = .{};
+        var funcs: ArrayListUnmanaged(*Function) = .{};
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
 
         for (0..data.func_count) |_| {
@@ -934,7 +930,7 @@ const Compiler = struct {
             const imported = self.next().imported;
 
             try self.emitConstant(
-                Value.makeObj(ObjNativeFn.create(
+                Value.makeObj(NativeFunction.create(
                     self.manager.vm,
                     self.manager.natives[imported.index],
                 ).asObj()),

@@ -6,20 +6,18 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const options = @import("options");
 
-const Table = @import("Table.zig");
+const Module = @import("../Pipeline.zig").Module;
+const oom = @import("../utils.zig").oom;
 const Obj = @import("Obj.zig");
+const Array = Obj.Array;
+const Function = Obj.Function;
+const Structure = Obj.Structure;
+const Instance = Obj.Instance;
+const BoundMethod = Obj.BoundMethod;
+const BoundImport = Obj.BoundImport;
+const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
-
-const ObjArray = Obj.ObjArray;
-const ObjFunction = Obj.ObjFunction;
-const ObjStruct = Obj.ObjStruct;
-const ObjInstance = Obj.ObjInstance;
-const ObjBoundMethod = Obj.ObjBoundMethod;
-const ObjBoundImport = Obj.ObjBoundImport;
-const Module = @import("../Pipeline.zig").Module;
-
-const oom = @import("../utils.zig").oom;
 
 vm: *Vm,
 parent_allocator: Allocator,
@@ -129,33 +127,33 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
 
     switch (obj.kind) {
         .array => {
-            const array = obj.as(ObjArray);
+            const array = obj.as(Array);
             try self.markArray(array.values.items);
         },
         .bound_import => {
-            const bound = obj.as(ObjBoundImport);
+            const bound = obj.as(BoundImport);
             try self.markModule(bound.module.module);
             try self.markObject(bound.import);
         },
         .bound_method => {
-            const bound = obj.as(ObjBoundMethod);
+            const bound = obj.as(BoundMethod);
             try self.markObject(bound.receiver);
             try self.markObject(bound.method.asObj());
         },
-        .func => {
-            const function = obj.as(ObjFunction);
+        .function => {
+            const function = obj.as(Function);
             if (function.name) |name| {
                 try self.markObject(name.asObj());
             }
             try self.markArray(&function.chunk.constants);
         },
         .instance => {
-            const instance = obj.as(ObjInstance);
+            const instance = obj.as(Instance);
             try self.markObject(instance.parent.asObj());
             try self.markArray(instance.fields);
         },
-        .@"struct" => {
-            const structure = obj.as(ObjStruct);
+        .structure => {
+            const structure = obj.as(Structure);
             try self.markObject(structure.name.asObj());
             try self.markArray(structure.default_values);
             for (structure.methods) |m| {

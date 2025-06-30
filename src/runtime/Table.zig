@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const ObjString = @import("Obj.zig").ObjString;
-const Value = @import("values.zig").Value;
 const oom = @import("../utils.zig").oom;
+const String = @import("Obj.zig").String;
+const Value = @import("values.zig").Value;
 
 count: usize,
 entries: []Entry,
@@ -11,7 +11,7 @@ allocator: Allocator,
 
 const Self = @This();
 pub const Entry = struct {
-    key: ?*ObjString,
+    key: ?*String,
     value: Value,
 };
 
@@ -28,7 +28,7 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Returns if the inserted key is new
-pub fn set(self: *Self, key: *ObjString, value: Value) bool {
+pub fn set(self: *Self, key: *String, value: Value) bool {
     // Encodes a 75%
     if (4 * (self.count + 1) > 3 * self.entries.len) {
         self.adjustCapacity();
@@ -46,7 +46,7 @@ pub fn set(self: *Self, key: *ObjString, value: Value) bool {
     return is_new;
 }
 
-pub fn get(self: *const Self, key: *const ObjString) ?Value {
+pub fn get(self: *const Self, key: *const String) ?Value {
     if (self.count == 0) return null;
 
     const entry = Self.findEntry(self.entries, key);
@@ -57,7 +57,7 @@ pub fn get(self: *const Self, key: *const ObjString) ?Value {
 
 /// Returns true if it was deleted
 // We don't decrement self.count to take into account for grow
-pub fn delete(self: *Self, key: *const ObjString) bool {
+pub fn delete(self: *Self, key: *const String) bool {
     if (self.count == 0) return false;
 
     const entry = Self.findEntry(self.entries, key);
@@ -69,7 +69,7 @@ pub fn delete(self: *Self, key: *const ObjString) bool {
     return true;
 }
 
-fn findEntry(entries: []Entry, key: *const ObjString) *Entry {
+fn findEntry(entries: []Entry, key: *const String) *Entry {
     var index = key.hash & (entries.len - 1);
     var tombstone: ?*Entry = null;
 
@@ -89,7 +89,7 @@ fn findEntry(entries: []Entry, key: *const ObjString) *Entry {
     }
 }
 
-pub fn findString(self: *const Self, str: []const u8, hash: u32) ?*ObjString {
+pub fn findString(self: *const Self, str: []const u8, hash: u32) ?*String {
     if (self.count == 0) return null;
 
     var index = hash & (self.entries.len - 1);
@@ -158,7 +158,7 @@ test "set" {
     const str = try vm.allocator.alloc(u8, 4);
     @memcpy(str, "mars");
 
-    const key = try ObjString.take(&vm, str);
+    const key = try String.take(&vm, str);
     const val = Value.makeInt(42);
 
     try std.testing.expect(table.set(key, val));
@@ -181,7 +181,7 @@ test "grow" {
     for (0..9) |i| {
         const str = try vm.allocator.alloc(u8, i);
         @memset(str, 'a');
-        const key = try ObjString.take(&vm, str);
+        const key = try String.take(&vm, str);
         // We check that each new entry is unique
         try std.testing.expect(table.set(key, val));
     }
@@ -204,20 +204,20 @@ test "get" {
     const str = try vm.allocator.alloc(u8, 4);
     @memcpy(str, "mars");
 
-    const key = try ObjString.take(&vm, str);
+    const key = try String.take(&vm, str);
     const val = Value.makeInt(42);
     _ = table.set(key, val);
 
     var entry = table.get(key);
     try std.testing.expectEqual(entry.?.Int, 42);
 
-    var save_key: *ObjString = undefined;
+    var save_key: *String = undefined;
 
     // After grow
     for (0..9) |i| {
         const str1 = try vm.allocator.alloc(u8, i);
         @memset(str1, 'a');
-        const key1 = try ObjString.take(&vm, str1);
+        const key1 = try String.take(&vm, str1);
         const val1 = Value.makeInt(@intCast(i));
         _ = table.set(key1, val1);
         save_key = key1;
@@ -245,7 +245,7 @@ test "delete" {
     const str = try vm.allocator.alloc(u8, 4);
     @memcpy(str, "mars");
 
-    const key = try ObjString.take(&vm, str);
+    const key = try String.take(&vm, str);
     const val = Value.makeInt(42);
     _ = table.set(key, val);
 
