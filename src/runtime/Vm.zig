@@ -617,6 +617,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
 }
 
 /// Checks clone on write
+/// TODO: move this to Obj
 fn cow(self: *Self, obj: *Obj) *Obj {
     if (obj.ref_count > 0) {
         obj.ref_count -= 1;
@@ -624,19 +625,6 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     }
 
     return obj;
-}
-
-/// Read the two next bytes as `scope` then `index` then get value from according scope
-inline fn getValueFromScope(self: *Self, frame: *CallFrame) *Value {
-    const scope: OpCode = @enumFromInt(frame.readByte());
-    const idx = frame.readByte();
-
-    return if (scope == .get_local or scope == .get_local_reg)
-        &frame.slots[idx]
-    else if (scope == .get_global)
-        &self.module.globals[idx]
-    else
-        &self.heap_vars[idx];
 }
 
 fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize) Error!void {
@@ -654,25 +642,9 @@ fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize) E
     frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 }
 
-// fn callBoundMethod(self: *Self, frame: **CallFrame, args_count: usize, receiver: Value, method: *Function) !void {
-//     self.stack.peekRef(args_count).* = receiver;
-//     try self.call(frame, method, args_count);
-// }
-
 pub fn updateModule(self: *Self, module: *Module) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
     self.module = module;
-}
-
-/// Gets and pushes on the stack a default value. Should be used for types `Function` and `Structure`
-fn getDefaultValue(self: *Self, frame: *CallFrame, T: type) void {
-    if (!@hasField(T, "default_values")) {
-        @compileError("Type " ++ @typeName(T) ++ " doesn't have field 'default_values'");
-    }
-
-    const obj_idx = frame.readByte();
-    const default_idx = frame.readByte();
-    self.stack.push(self.stack.peekRef(obj_idx).obj.as(T).default_values[default_idx]);
 }
 
 fn strConcat(self: *Self) void {
@@ -682,10 +654,6 @@ fn strConcat(self: *Self) void {
     const res = self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len) catch oom();
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
-
-    // 'Pop' the two strings
-    // self.stack.top -= 2;
-    // self.stack.push(Value.makeObj(String.take(self, res).asObj()));
 
     self.stack.peekRef(1).* = Value.makeObj(String.take(self, res).asObj());
     self.stack.top -= 1;
@@ -699,11 +667,8 @@ fn strMul(self: *Self, str: *const String, factor: i64) void {
         @memcpy(res[i * str.chars.len .. (i + 1) * str.chars.len], str.chars);
     }
 
-    // pop after alloc in case of GC trigger
-    _ = self.stack.pop();
-    _ = self.stack.pop();
-
-    self.stack.push(Value.makeObj(String.take(self, res).asObj()));
+    self.stack.peekRef(1).* = Value.makeObj(String.take(self, res).asObj());
+    self.stack.top -= 1;
 }
 
 // PERF: bench avec BoundedArray
