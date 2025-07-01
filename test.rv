@@ -1,24 +1,51 @@
+use data.math
+use data.math{introduce, Vec2}
+
+struct Bar {
+    value = 14
+    fn staticFn(a: int) { print a }
+    fn method(self, a: int) { print self.value + a }
+}
 
 struct Foo {
-    value = 9
-
-    fn method(self) {
-        print self.value
-    }
+    value = 9,
+    bar: Bar,
+    fn staticFn(a: int) { print a }
+    fn method(self, a: int) { print self.value + a }
 }
 
-fn freeFn() {
-    print "ouiuiiii"
-}
+fn freeFn() { print "ouiuiiii" }
 
 fn main() {
+    // Free func
     freeFn()
+    // Import
+    introduce()
 
-    var foo = Foo{}
+    // Bounded
+    var bar = Bar{}
+    var foo = Foo{bar}
     var bound = foo.method
-    bound()
+    bound(10)
 
-    foo.method()
+    // Bound static
+    var bound1 = Foo.staticFn
+    bound1(2)
+
+    // Bound import
+    var bound2 = math.introduce
+    bound2()
+
+    // Multilevel bound static
+    var bound3 = foo.bar.staticFn
+    bound3(65)
+
+    // Multilevel bound method
+    var bound4 = foo.bar.method
+    bound4(20)
+
+    // Multilevel bound static import
+    var bound5 = math.Vec2.staticFn // TODO: place Vec2 in reg instead of bound import?
+    bound5(68)
 }
-
 

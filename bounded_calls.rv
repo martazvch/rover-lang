@@ -1,0 +1,23 @@
+use data.math
+use data.math{Vec2}
+
+struct Foo {
+    value = 9
+
+    fn staticFn(a: int) { print a }
+
+    fn method(self) { print self.value }
+}
+
+fn main() {
+    // Bound method
+    var foo = Foo{}
+    foo.method()
+
+    // Bound static
+    Foo.staticFn(2)
+
+    // Boundimport
+    math.introduce()
+}
+

@@ -1,5 +1,3 @@
-const CallConv = @import("TypeManager.zig").CallConv;
-
 pub const Scope = enum(u2) { builtin, global, heap, local };
 pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
@@ -110,8 +108,11 @@ pub const Instruction = struct {
     pub const Call = struct {
         arity: u8,
         default_count: u8,
-        call_conv: CallConv,
+        // call_conv: CallConv,
         invoke: bool = false,
+        import: bool = false,
+
+        // pub const CallConv = enum { bound, builtin, free_function, import, static };
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
@@ -122,7 +123,11 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { then, @"else", none };
     };
     pub const Imported = struct { index: u64, variable: Variable };
-    pub const ItemImport = struct { module_index: usize, field_index: usize, scope: Scope };
+    pub const ItemImport = struct {
+        module_index: usize,
+        field_index: usize,
+        scope: Scope,
+    };
     pub const Field = struct {
         index: usize,
         kind: Kind,

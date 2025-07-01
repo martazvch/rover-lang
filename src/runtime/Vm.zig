@@ -588,6 +588,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.stack.peekRef(arity).* = Value.makeObj(instance.asObj());
                 self.stack.top -= arity;
             },
+            // Group code with above?
             .struct_literal_import => {
                 const arity = frame.readByte();
                 var instance = Instance.create(

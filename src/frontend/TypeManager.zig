@@ -15,7 +15,7 @@ const oom = @import("../utils.zig").oom;
 
 allocator: Allocator,
 declared: AutoHashMapUnmanaged(usize, Type) = .{},
-instances: ArrayListUnmanaged(Instance) = .{},
+// instances: ArrayListUnmanaged(Instance) = .{},
 type_infos: ArrayListUnmanaged(TypeInfo) = .{},
 array_cache: AutoHashMapUnmanaged(Type, u32) = .{},
 natives: BuiltinAnalyzer = builtin_init(),
@@ -166,8 +166,10 @@ pub const ArrayInfo = struct {
 pub const FnInfo = struct {
     params: AutoArrayHashMapUnmanaged(usize, ParamInfo),
     return_type: Type,
-    anonymus: bool = false,
+    kind: Kind,
     module: ?ModuleRef = null,
+
+    pub const Kind = enum { function, method, anonymus };
 
     pub const ParamInfo = struct {
         /// Order of declaration
@@ -228,11 +230,11 @@ pub const ModuleRef = struct {
     type_index: usize = 0,
 };
 
-pub const Instance = union(enum) {
-    fn_inst: FnInstance,
-    struct_inst: StructInstance,
-};
-
+// pub const Instance = union(enum) {
+//     fn_inst: FnInstance,
+//     struct_inst: StructInstance,
+// };
+//
 // pub fn createFnInstanceType(self: *Self, decl: Type, call_conv: CallConv) Type {
 //     self.instances.append(self.allocator, .{ .fn_inst = .{
 //         .call_conv = call_conv,
@@ -263,16 +265,14 @@ pub const Instance = union(enum) {
 //     return Type.create(.@"struct", @intCast(self.instances.items.len - 1), .none);
 // }
 
-pub const FnInstance = struct {
-    call_conv: CallConv,
-    decl_index: usize,
-};
-
-pub const CallConv = enum { bound, builtin, free_function, import, static };
-
-pub const StructInstance = struct {
-    decl_index: usize,
-    fields: AutoArrayHashMapUnmanaged(usize, Type),
-};
+// pub const FnInstance = struct {
+//     call_conv: CallConv,
+//     decl_index: usize,
+// };
+//
+// pub const StructInstance = struct {
+//     decl_index: usize,
+//     fields: AutoArrayHashMapUnmanaged(usize, Type),
+// };
 
 pub const Symbols = AutoArrayHashMapUnmanaged(usize, StructInfo.MemberInfo);

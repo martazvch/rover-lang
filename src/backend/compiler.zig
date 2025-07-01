@@ -12,11 +12,7 @@ const Instruction = Rir.Instruction;
 const Symbols = @import("../frontend/type_system.zig").Symbols;
 const Module = @import("../Pipeline.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
-const String = @import("../runtime/Obj.zig").String;
-const Function = @import("../runtime/Obj.zig").Function;
-const NativeFunction = @import("../runtime/Obj.zig").NativeFunction;
-const Structure = @import("../runtime/Obj.zig").Structure;
-const ObjModule = @import("../runtime/Obj.zig").ObjModule;
+const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
 const NativeFn = @import("../std/meta.zig").NativeFn;
@@ -77,7 +73,7 @@ pub const CompilationManager = struct {
         self.errs.deinit();
     }
 
-    pub fn compile(self: *Self, symbols_count: usize) !*Function {
+    pub fn compile(self: *Self, symbols_count: usize) !*Obj.Function {
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
             try stdout.print("//---- {s} ----\n\n", .{self.file_name});
@@ -108,7 +104,7 @@ pub const CompilationManager = struct {
 
 const Compiler = struct {
     manager: *CompilationManager,
-    function: *Function,
+    function: *Obj.Function,
     state: State = .{},
 
     const Self = @This();
@@ -136,7 +132,7 @@ const Compiler = struct {
     pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize) Self {
         return .{
             .manager = manager,
-            .function = Function.create(manager.vm, String.copy(manager.vm, name), default_count),
+            .function = Obj.Function.create(manager.vm, Obj.String.copy(manager.vm, name), default_count),
         };
     }
 
@@ -292,7 +288,7 @@ const Compiler = struct {
         chunk.writeByte(@intCast(jump_offset & 0xff), offset);
     }
 
-    pub fn end(self: *Self) Error!*Function {
+    pub fn end(self: *Self) Error!*Obj.Function {
         if (self.manager.render_mode != .none) {
             var dis = Disassembler.init(
                 self.manager.vm.allocator,
@@ -606,14 +602,16 @@ const Compiler = struct {
         if (data.default_count > 0) self.writeOp(.load_fn_default, start);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(switch (data.call_conv) {
-            .free_function => .call,
-            .builtin => .call_native,
-            .import => .call_import,
-            else => .call_bound_method,
-        }, data.arity, start);
+        self.writeOpAndByte(.call, data.arity, start);
+        // self.writeOpAndByte(switch (data.call_conv) {
+        //     .free_function => .call,
+        //     .builtin => .call_native,
+        //     .import => .call_import,
+        //     else => .call_bound_method,
+        // }, data.arity, start);
 
-        if (data.call_conv == .import) {
+        // if (data.call_conv == .import) {
+        if (data.import) {
             // At the end of the call, we unload it
             self.writeOp(.unload_module, start);
         }
@@ -629,15 +627,17 @@ const Compiler = struct {
         if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(switch (data.call_conv) {
-            .bound => .invoke,
-            .import => .invoke_import,
-            .static => .invoke_static,
-            else => unreachable,
-        }, data.arity, start);
+        self.writeOpAndByte(.invoke, data.arity, start);
+        // self.writeOpAndByte(switch (data.call_conv) {
+        //     .bound => .invoke,
+        //     .import => .invoke_import,
+        //     .static => .invoke_static,
+        //     else => unreachable,
+        // }, data.arity, start);
         self.writeByte(@intCast(member_data.index), start);
 
-        if (data.call_conv == .import) self.writeOp(.unload_module, start);
+        // if (data.call_conv == .import) self.writeOp(.unload_module, start);
+        if (data.import) self.writeOp(.unload_module, start);
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
@@ -689,7 +689,7 @@ const Compiler = struct {
         }
     }
 
-    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Function {
+    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
         var compiler = Compiler.init(self.manager, name, data.default_params);
 
         for (0..data.default_params) |i| {
@@ -793,9 +793,18 @@ const Compiler = struct {
     }
 
     fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
-        if (data.scope == .global)
-            self.addGlobal(self.manager.modules[data.module_index].globals[data.field_index])
-        else {
+        if (data.scope == .global) {
+            const module_ref = &self.manager.modules[data.module_index];
+            const module = Obj.ObjModule.create(self.manager.vm, module_ref);
+            const value = Value.makeObj(Obj.BoundImport.create(
+                self.manager.vm,
+                module,
+                module_ref.globals[data.field_index].obj,
+            ).asObj());
+
+            self.addGlobal(value);
+            // self.addGlobal(self.manager.modules[data.module_index].globals[data.field_index]);
+        } else {
             const start = self.getStart();
             // TODO: protect cast
             self.writeOpAndByte(.import_item, @intCast(data.module_index), start);
@@ -805,7 +814,7 @@ const Compiler = struct {
 
     fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
         if (data.scope == .global) {
-            self.addGlobal(Value.makeObj(ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
+            self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
         } else {
             self.writeOpAndByte(.push_module, @intCast(data.index), self.getStart());
         }
@@ -840,7 +849,7 @@ const Compiler = struct {
 
     fn stringInstr(self: *Self, index: usize) Error!void {
         try self.emitConstant(
-            Value.makeObj(String.copy(
+            Value.makeObj(Obj.String.copy(
                 self.manager.vm,
                 self.manager.vm.interner.getKey(index).?,
             ).asObj()),
@@ -853,9 +862,9 @@ const Compiler = struct {
         const name = self.next().name;
         const struct_var = self.next().var_decl;
 
-        var structure = Structure.create(
+        var structure = Obj.Structure.create(
             self.manager.vm,
-            String.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+            Obj.String.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
             data.fields_count,
             data.default_fields,
             &.{},
@@ -875,7 +884,7 @@ const Compiler = struct {
             structure.default_values[i] = try self.compileDefaultValue();
         }
 
-        var funcs: ArrayListUnmanaged(*Function) = .{};
+        var funcs: ArrayListUnmanaged(*Obj.Function) = .{};
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
 
         for (0..data.func_count) |_| {
@@ -930,7 +939,7 @@ const Compiler = struct {
             const imported = self.next().imported;
 
             try self.emitConstant(
-                Value.makeObj(NativeFunction.create(
+                Value.makeObj(Obj.NativeFunction.create(
                     self.manager.vm,
                     self.manager.natives[imported.index],
                 ).asObj()),

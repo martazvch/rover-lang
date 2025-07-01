@@ -382,6 +382,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // We reserve slot 0 for potential 'self'
     _ = try self.declareVariable(self.cached_names.empty, self.state.struct_type, true, self.instructions.len, .param, 0);
 
+    var is_method = false;
     var default_params: usize = 0;
     var params_type: AutoArrayHashMapUnmanaged(usize, FnInfo.ParamInfo) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
@@ -401,6 +402,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
                 return self.err(.self_outside_struct, self.ast.getSpan(p.name));
             }
 
+            is_method = true;
             self.locals.items[self.locals.items.len - 1].name = self.cached_names.self;
             break :blk .{ self.state.struct_type, true };
         } else blk: {
@@ -441,7 +443,11 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // Declare before body to allow recursion
     const return_type = try self.checkAndGetType(node.return_type);
     self.state.fn_type = return_type;
-    self.type_manager.setInfo(type_idx, .{ .func = .{ .params = params_type, .return_type = return_type } });
+    self.type_manager.setInfo(type_idx, .{ .func = .{
+        .params = params_type,
+        .return_type = return_type,
+        .kind = if (is_method) .method else .function,
+    } });
 
     // ------
     //  Body
@@ -708,12 +714,7 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                     @panic("Not supported yet");
                 }
 
-                const symbol_value = symbol.type.getValue();
-                const symbol_infos = self.type_manager.type_infos.items[symbol_value];
-
-                if (symbol_infos == .func) {
-                    symbol.type.setCallConv(.imported);
-                }
+                symbol.type.setCallConv(.imported);
 
                 // const typ = switch (symbol_infos) {
                 //     .@"struct" => symbol.type,
@@ -726,7 +727,11 @@ fn use(self: *Self, node: *const Ast.Use) !void {
                 // const variable = try self.declareVariable(alias_name, typ, true, self.instructions.len, .decl, item_token);
                 const variable = try self.declareVariable(alias_name, symbol.type, true, self.instructions.len, .decl, item_token);
 
-                self.addInstr(.{ .item_import = .{ .module_index = module_index, .field_index = symbol.index, .scope = variable.scope } });
+                self.addInstr(.{ .item_import = .{
+                    .module_index = module_index,
+                    .field_index = symbol.index,
+                    .scope = variable.scope,
+                } });
             }
         } else {
             if (cached) return self.err(
@@ -1317,24 +1322,28 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const sft = try self.getStructAndFieldTypes(expr.callee);
     const type_value = sft.field.getValue();
 
-    const infos, const call_conv: TypeManager.CallConv = switch (sft.field.getKind()) {
-        .function => if (sft.kind != .field) .{
-            self.type_manager.getFnTypeInfos(type_value),
-            if (sft.structure == .void) switch (sft.field.getCallConv()) {
-                .bound_method => .bound,
-                .imported => .import,
-                else => .free_function,
-            } else switch (sft.kind) {
-                .method => .bound,
-                .static_method => .static,
-                .symbol => .import,
-                else => unreachable,
-            },
-        } else b: {
-            // It's a structure field that we are calling
-            const infos = self.type_manager.instances.items[type_value].fn_inst;
-            break :b .{ self.type_manager.getFnTypeInfos(infos.decl_index), infos.call_conv };
-        },
+    // const infos, const call_conv: Instruction.Call.CallConv = switch (sft.field.getKind()) {
+    // .function => if (sft.kind != .field) .{
+    //     self.type_manager.getFnTypeInfos(type_value),
+    //     if (sft.structure == .void) switch (sft.field.getCallConv()) {
+    //         .bound_method => .bound,
+    //         .imported => .import,
+    //         else => .free_function,
+    //     } else switch (sft.kind) {
+    //         .method => .bound,
+    //         .static_method => .static,
+    //         .symbol => .import,
+    //         else => unreachable,
+    //     },
+    // } else b: {
+    //     // It's a structure field that we are calling
+    //     // const infos = self.type_manager.instances.items[type_value].fn_inst;
+    //     const infos = self.type_manager.getFnTypeInfos(type_value);
+    //     // break :b .{ self.type_manager.getFnTypeInfos(infos.decl_index), infos.call_conv };
+    //     break :b .{ infos, .free_function };
+    // },
+    const infos = switch (sft.field.getKind()) {
+        .function => self.type_manager.getFnTypeInfos(type_value),
         .@"struct" => b: {
             const struct_infos = self.type_manager.getStructTypeInfos(type_value);
             const init_fn = struct_infos.functions.get(self.cached_names.init) orelse {
@@ -1342,29 +1351,33 @@ fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
             };
 
             const type_idx = init_fn.type.getValue();
-            break :b .{ self.type_manager.getFnTypeInfos(type_idx), .free_function };
+            break :b self.type_manager.getFnTypeInfos(type_idx);
         },
         else => return self.err(.invalid_call_target, self.ast.getSpan(expr)),
     };
 
-    const params = infos.params.values();
+    // const params = infos.params.values();
 
-    if (sft.kind == .method and (params.len == 0 or !self.isStructTypeEqual(params[0].type, sft.structure))) {
+    // if (sft.kind == .method and (params.len == 0 or !self.isStructTypeEqual(params[0].type, sft.structure))) {
+    if (sft.structure != .void and infos.kind != .method) {
         return self.err(
             .{ .missing_self_method_call = .{ .name = self.ast.toSource(expr.callee.field.field) } },
             self.ast.getSpan(expr.callee.field.field),
         );
     }
 
-    const arity, const default_count = try self.fnArgsList(expr, &infos, call_conv == .bound);
+    const arity, const default_count = try self.fnArgsList(expr, &infos, infos.kind == .method);
 
     // TODO: protect cast
-    self.setInstr(index, .{ .call = .{
-        .arity = @intCast(arity),
-        .default_count = @intCast(default_count),
-        .call_conv = call_conv,
-        .invoke = sft.structure != .void,
-    } });
+    self.setInstr(index, .{
+        .call = .{
+            .arity = @intCast(arity),
+            .default_count = @intCast(default_count),
+            // .call_conv = call_conv,
+            .invoke = sft.structure != .void,
+            .import = sft.field.getCallConv() == .imported,
+        },
+    });
 
     return infos.return_type;
 }
@@ -1379,7 +1392,7 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, infos: *const FnInfo, is_b
     // }
     // Here `m2` returns a bounded method but `Foo` if not part of `m2` return's type as it in bounded
     // So when we have a bounded method which type is manually specified, we don't skip `self`, it doesn't exist
-    const offset = @intFromBool(is_bound and !infos.anonymus);
+    const offset = @intFromBool(is_bound and infos.kind != .anonymus);
     const param_count = infos.params.count() - offset;
 
     if (callee.args.len > param_count) return self.err(
@@ -1961,7 +1974,7 @@ fn createAnonymousFnType(self: *Self, fn_type: *const Ast.Type.Fn) Error!Type {
         .func = .{
             .params = params_type,
             .return_type = try self.checkAndGetType(fn_type.return_type),
-            .anonymus = true,
+            .kind = .anonymus,
         },
     });
 
@@ -2143,7 +2156,7 @@ fn getArrayTypeName(self: *const Self, typ: Type) ![]const u8 {
 fn getFnTypeName(self: *const Self, typ: Type) ![]const u8 {
     const value = typ.getValue();
     const decl = self.type_manager.type_infos.items[value].func;
-    const offset = @intFromBool(typ.getCallConv() == .bound_method and !decl.anonymus);
+    const offset = @intFromBool(typ.getCallConv() == .bound_method and decl.kind != .anonymus);
 
     var res: std.ArrayListUnmanaged(u8) = .{};
     var writer = res.writer(self.allocator);

@@ -5,6 +5,10 @@ struct Vec2 {
     fn len(self) -> int {
         self.x + self.y
     }
+
+    fn staticFn(a: int) {
+        print a
+    }
 }
 
 fn introduce() {
