@@ -3,9 +3,9 @@ const Allocator = std.mem.Allocator;
 
 const oom = @import("../utils.zig").oom;
 
-//   0000    0     0     0    0   0000  0000000000 0000000000
-//   |--|    |     |     |    |   |--|  |-------------------|
-// CallConv  Save  Save  Ref  Nul  Kind          Value
+//   0000    0     0      0      0   0000  0000000000 0000000000
+//   |--|    |     |      |      |   |--|  |-------------------|
+//   Save   Save  Save  Import  Nul  Kind          Value
 
 // Types are 32 bits long
 const TypeSize = u32;
@@ -20,8 +20,7 @@ pub const Type = enum(TypeSize) {
     _,
 
     const Self = @This();
-    const CALLCONV_MASK: TypeSize = 0xf0000000;
-    const REF_MASK: TypeSize = 0x02000000;
+    const IMPORT_MASK: TypeSize = 0x02000000;
     const NUL_MASK: TypeSize = 0x01000000;
     const KIND_MASK: TypeSize = 0x00f00000;
     const VAL_MASK: TypeSize = 0x000fffff;
@@ -35,8 +34,8 @@ pub const Type = enum(TypeSize) {
     }
 
     /// Creates a type from kind and value information
-    pub inline fn create(kind: Kind, value: Value, extra: CallConv) Self {
-        return @enumFromInt(extra.toIdx() << 28 | 0 << 24 | kind.toIdx() << 20 | value);
+    pub inline fn create(kind: Kind, value: Value, imported: bool) Self {
+        return @enumFromInt(@as(u32, @intFromBool(imported)) << 25 | 0 << 24 | kind.toIdx() << 20 | value);
     }
 
     /// Get a type kind, discarding calling convention and value information bits
@@ -51,18 +50,18 @@ pub const Type = enum(TypeSize) {
     }
 
     /// Get calling convention information bits about a type
-    pub inline fn getCallConv(self: Self) CallConv {
-        return @enumFromInt(self.toIdx() >> 28);
+    pub inline fn getImported(self: Self) bool {
+        return (self.toIdx() & IMPORT_MASK) >> 25 == 1;
     }
 
     /// Set calling convention on a type
-    pub inline fn setCallConv(self: *Self, extra: CallConv) void {
-        const erased = self.toIdx() & ~CALLCONV_MASK;
-        self.* = @enumFromInt(erased | extra.toIdx() << 28);
+    pub inline fn setImported(self: *Self, value: bool) void {
+        const erased = self.toIdx() & ~IMPORT_MASK;
+        self.* = @enumFromInt(erased | (@as(u32, @intFromBool(value)) << 25));
     }
 
-    pub inline fn copyCallConv(self: *Self, other: Type) void {
-        self.setCallConv(other.getCallConv());
+    pub inline fn copyImported(self: *Self, other: Type) void {
+        self.setImported(other.getImported());
     }
 
     /// Extract the value bits associated to a type
@@ -108,8 +107,8 @@ pub const Kind = enum(u4) {
 // 20 other allow 1048575 different types
 pub const Value = u20;
 
-// 1 bit for reference or not
 // 1 bit for nullable or not
+// 1 bit for imported or not
 // 1 bit of reserve
 // 1 bit of reserve
 

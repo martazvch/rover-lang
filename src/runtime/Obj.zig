@@ -128,12 +128,30 @@ pub fn initCall(self: *Obj, vm: *Vm, arity: usize) *Function {
 
 pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
-        .bound_import => self.as(BoundImport).import.as(Function).default_values,
+        .bound_import => self.as(BoundImport).import.as(Structure).methods[index].default_values,
         .bound_method => self.as(BoundMethod).method.default_values,
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
         .module => self.as(ObjModule).module.globals[index].obj.as(Function).default_values,
         .structure => self.as(Structure).methods[index].default_values,
+        else => unreachable,
+    };
+}
+
+pub fn invoke(self: *Obj, vm: *Vm, index: usize) *Function {
+    return switch (self.kind) {
+        .bound_import => b: {
+            const bound = self.as(BoundImport);
+            vm.updateModule(bound.module.module);
+            break :b bound.import.as(Structure).methods[index];
+        },
+        .instance => self.as(Instance).parent.methods[index],
+        .module => b: {
+            const module = self.as(ObjModule).module;
+            vm.updateModule(module);
+            break :b module.globals[index].obj.as(Function);
+        },
+        .structure => self.as(Structure).methods[index],
         else => unreachable,
     };
 }

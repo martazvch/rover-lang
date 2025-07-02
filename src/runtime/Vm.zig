@@ -48,6 +48,8 @@ r1: *Value = undefined,
 r2: Value = .null_,
 /// Holds default variables of current call
 r3: []Value = undefined,
+/// Empty for printing
+r4: Value = .null_,
 
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
@@ -151,8 +153,8 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
     self.module = &self.start_module;
     self.gc.active = true;
 
-    // Init on first address to avoid nullable pointer (used only in print stack mode)
-    self.r1 = self.r1;
+    // Init on dummy address to avoid nullable pointer (used only in print stack mode)
+    self.r1 = &self.r4;
     try self.execute(self.module.function);
 }
 
@@ -202,7 +204,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
 
     while (true) {
         if (comptime options.print_stack) {
-            if (self.r1 != self.r1) {
+            if (self.r1 != &self.r4) {
                 print("    R1: [", .{});
                 try self.r1.print(self.stdout);
                 print("]  |  ", .{});
@@ -403,6 +405,8 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 break;
             },
             .false => self.stack.push(Value.false_),
+            .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
+            .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
@@ -435,41 +439,51 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 const method = structure.methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
             },
+            .get_symbol_reg => {
+                const symbol_idx = frame.readByte();
+                self.r1 = &self.r1.obj.as(ObjModule).module.globals[symbol_idx];
+            },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
-            .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
-            .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
             .import_item => {
                 const module_idx = frame.readByte();
                 const field_idx = frame.readByte();
                 self.stack.push(self.module.imports[module_idx].globals[field_idx]);
             },
-            // TODO: use init from Callable
-            .invoke => {
-                const args_count = frame.readByte();
-                const method_idx = frame.readByte();
-                const receiver = self.stack.peek(args_count);
-                const method = receiver.obj.as(Instance).parent.methods[method_idx];
 
-                self.stack.peekRef(args_count).* = receiver;
-                try self.call(&frame, method, args_count);
-            },
-            .invoke_import => {
-                const args_count = frame.readByte();
-                const symbol_idx = frame.readByte();
-                const module = self.stack.peek(args_count).obj.as(ObjModule).module;
-                self.updateModule(module);
-                const imported = module.globals[symbol_idx];
-                try self.call(&frame, imported.obj.as(Function), args_count);
-            },
-            .invoke_static => {
+            .invoke, .invoke_import, .invoke_static => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
-                const structure = self.stack.peekRef(args_count).obj.as(Structure);
-                const function = structure.methods[method_idx];
-                try self.call(&frame, function, args_count);
+                const callee = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+                try self.call(&frame, callee, args_count);
             },
+
+            // .invoke => {
+            //     const args_count = frame.readByte();
+            //     const method_idx = frame.readByte();
+            //     const receiver = self.stack.peek(args_count);
+            //     const method = receiver.obj.as(Instance).parent.methods[method_idx];
+            //
+            //     self.stack.peekRef(args_count).* = receiver;
+            //     try self.call(&frame, method, args_count);
+            // },
+            // .invoke_import => {
+            //     const args_count = frame.readByte();
+            //     const symbol_idx = frame.readByte();
+            //     const module = self.stack.peek(args_count).obj.as(ObjModule).module;
+            //     self.updateModule(module);
+            //     const imported = module.globals[symbol_idx];
+            //     try self.call(&frame, imported.obj.as(Function), args_count);
+            // },
+            // .invoke_static => {
+            //     const args_count = frame.readByte();
+            //     const method_idx = frame.readByte();
+            //     const structure = self.stack.peekRef(args_count).obj.as(Structure);
+            //     const function = structure.methods[method_idx];
+            //     try self.call(&frame, function, args_count);
+            // },
+
             .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
@@ -486,6 +500,11 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .lt_int => self.stack.push(Value.makeBool(self.stack.pop().int > self.stack.pop().int)),
             .le_float => self.stack.push(Value.makeBool(self.stack.pop().float >= self.stack.pop().float)),
             .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
+
+            .load_fn_default => self.stack.peekRef(0).obj.loadDefaultValues(self, 0),
+            .load_invoke_default => self.stack.peekRef(0).obj.loadDefaultValues(self, frame.readByte()),
+            .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Structure).default_values,
+
             .loop => {
                 const jump = frame.readShort();
                 frame.ip -= jump;
@@ -540,10 +559,6 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.r1.obj = self.cow(self.r1.obj);
                 self.r1.* = self.stack.pop();
             },
-
-            .load_fn_default => self.stack.peekRef(0).obj.loadDefaultValues(self, 0),
-            .load_invoke_default => self.stack.peekRef(0).obj.loadDefaultValues(self, frame.readByte()),
-            .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Structure).default_values,
 
             .@"return" => {
                 const result = self.stack.pop();

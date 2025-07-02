@@ -1,0 +1,102 @@
+use data.default_val
+
+fn function(noval: str, arg1, arg2: int = 12, arg3 = 98.5) {
+    print noval
+    print arg1
+    print arg2
+    print arg3
+}
+
+struct Bar {
+    fn staticFn(noval: str, arg1, arg2 = true, arg3 = 5) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+
+    fn method(self, noval: str, arg1, arg2 = false, arg3 = 88.55) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+}
+
+struct Foo {
+    bar: Bar,
+
+    fn staticFn(noval: str, arg1, arg2: int = 111, arg3 = 56.5) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+
+    fn method(self, noval: str, arg1, arg2: int = 2, arg3 = 8.5) {
+        print noval
+        print arg1
+        print arg2
+        print arg3
+    }
+}
+
+fn main() {
+    // Free function
+    function("first", 1, 2, 24.5)
+    function("second")
+    function("third", 8)
+    function("fourth", arg3=123.456)
+    function("fifth", arg3=12.34, arg1=80)
+    function("sixth", arg2=54, arg1=65, arg3=3.14)
+    function(arg2=11, arg3=1.1, arg1=111, noval="seventh")
+
+    // Static
+    Foo.staticFn("first", 10, 20, 245)
+    Foo.staticFn("second")
+    Foo.staticFn("third", 80)
+    Foo.staticFn("fourth", arg3=1234.56)
+    Foo.staticFn("fifth", arg3=123.4, arg1=800)
+    Foo.staticFn("sixth", arg2=540, arg1=650, arg3=31.4)
+    Foo.staticFn(arg2=110, arg3=10.1, arg1=1110, noval="seventh")
+
+    // Method
+    var bar = Bar{}
+    var foo = Foo{bar}
+    
+    foo.method("first", -1, -2, -24.5)
+    foo.method("second")
+    foo.method("third", -8)
+    foo.method("fourth", arg3=-123.456)
+    foo.method("fifth", arg3=-12.34, arg1=-80)
+    foo.method("sixth", arg2=-54, arg1=-65, arg3=-3.14)
+    foo.method(arg2=-11, arg3=-1.1, arg1=-111, noval="seventh")
+
+    // Multi level static
+    // foo.bar.staticFn("first", true, false, 98)
+    // foo.bar.staticFn("second")
+    // foo.bar.staticFn("third", false)
+    // foo.bar.staticFn("fourth", arg3=-287)
+    // foo.bar.staticFn("fifth", arg3=3, arg1=false)
+    // foo.bar.staticFn("sixth", arg2=false, arg1=true, arg3=654)
+    // foo.bar.staticFn(arg2=false, arg3=-36, arg1=false, noval="seventh")
+
+    // Multi level method
+    foo.bar.method("first", true, false, -98.2)
+    foo.bar.method("second")
+    foo.bar.method("third", true)
+    foo.bar.method("fourth", arg3=-27.3)
+    foo.bar.method("fifth", arg3=30.4, arg1=true)
+    foo.bar.method("sixth", arg2=false, arg1=true, arg3=6540.6)
+    foo.bar.method(arg2=true, arg3=-360.9, arg1=false, noval="seventh")
+
+    // Static on import
+    default_val.Def.staticFn("imported static")
+    default_val.Def.staticFn("imported static", c=true, b=90)
+
+    // Method on import
+    var imported = default_val.Def{}
+    imported.method("imported method")
+    imported.method("imported method", d=false, b=180)
+}
+

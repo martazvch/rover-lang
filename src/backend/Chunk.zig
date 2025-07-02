@@ -91,6 +91,7 @@ pub const OpCode = enum(u8) {
     get_local_reg,
     get_local_absolute,
     get_static_method,
+    get_symbol_reg,
     gt_float,
     gt_int,
     incr_ref_count,

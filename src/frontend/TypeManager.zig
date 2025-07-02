@@ -15,7 +15,6 @@ const oom = @import("../utils.zig").oom;
 
 allocator: Allocator,
 declared: AutoHashMapUnmanaged(usize, Type) = .{},
-// instances: ArrayListUnmanaged(Instance) = .{},
 type_infos: ArrayListUnmanaged(TypeInfo) = .{},
 array_cache: AutoHashMapUnmanaged(Type, u32) = .{},
 natives: BuiltinAnalyzer = builtin_init(),
@@ -80,24 +79,11 @@ pub fn getStructTypeInfos(self: *const Self, index: usize) StructInfo {
     return self.type_infos.items[index].@"struct";
 }
 
-/// Declares a new type built with `kind` and `extra` parameters and add the informations
-// pub fn declare(self: *Self, name: usize, kind: TypeSys.Kind, extra: TypeSys.Extra, info: TypeInfo) Self.Error!TypeSys.Type {
-//     const count = self.type_infos.items.len;
-//
-//     if (count == std.math.maxInt(TypeSys.Value)) return error.too_many_types;
-//
-//     const typ: Type = .create(kind, extra, @intCast(count));
-//     self.type_infos.append(self.allocator, info) catch oom();
-//     self.addType(name, typ);
-//
-//     return typ;
-// }
-
 /// If an array of `child` type as already been declared, return a type with the
 /// index as `Value`, otherwise create it
 pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     if (self.array_cache.get(child)) |cached_index| {
-        return Type.create(.array, @intCast(cached_index), .none);
+        return Type.create(.array, @intCast(cached_index), false);
     }
 
     const index = try self.reserveInfo();
@@ -105,7 +91,7 @@ pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     self.setInfo(index, info);
     self.array_cache.put(self.allocator, child, index) catch oom();
 
-    return Type.create(.array, index, .none);
+    return Type.create(.array, index, false);
 }
 
 pub fn getArrayDimAndChildType(self: *const Self, array: Type) struct { usize, Type } {
@@ -229,50 +215,5 @@ pub const ModuleRef = struct {
     /// Index in type manager
     type_index: usize = 0,
 };
-
-// pub const Instance = union(enum) {
-//     fn_inst: FnInstance,
-//     struct_inst: StructInstance,
-// };
-//
-// pub fn createFnInstanceType(self: *Self, decl: Type, call_conv: CallConv) Type {
-//     self.instances.append(self.allocator, .{ .fn_inst = .{
-//         .call_conv = call_conv,
-//         .decl_index = decl.getValue(),
-//     } }) catch oom();
-//
-//     // TODO: protect cast
-//     return Type.create(.function, @intCast(self.instances.items.len - 1), .none);
-// }
-
-// pub fn createStructInstanceType(self: *Self, decl: Type) Type {
-//     var fields: AutoArrayHashMapUnmanaged(usize, Type) = .{};
-//
-//     const struct_infos = self.type_infos.items[decl.getValue()].@"struct";
-//     fields.ensureTotalCapacity(self.allocator, struct_infos.fields.count()) catch oom();
-//     var iterator = struct_infos.fields.iterator();
-//
-//     while (iterator.next()) |field| {
-//         fields.putAssumeCapacity(field.key_ptr.*, field.value_ptr.type);
-//     }
-//
-//     self.instances.append(self.allocator, .{ .struct_inst = .{
-//         .decl_index = decl.getValue(),
-//         .fields = fields,
-//     } }) catch oom();
-//
-//     // TODO: protect cast
-//     return Type.create(.@"struct", @intCast(self.instances.items.len - 1), .none);
-// }
-
-// pub const FnInstance = struct {
-//     call_conv: CallConv,
-//     decl_index: usize,
-// };
-//
-// pub const StructInstance = struct {
-//     decl_index: usize,
-//     fields: AutoArrayHashMapUnmanaged(usize, Type),
-// };
 
 pub const Symbols = AutoArrayHashMapUnmanaged(usize, StructInfo.MemberInfo);

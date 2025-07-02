@@ -113,9 +113,8 @@ const Compiler = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     const State = struct {
-        /// In an assignment. Used to determine if the end of an access chain like:
-        /// 'foo.bar[0].baz' should be left in a register instead of the top of the stack
-        in_assign: bool = false,
+        /// Compiling an assignee. We always leave the result of an op code in a register in this case
+        is_assignee: bool = false,
         /// Used to know if we're the last part of a chain like: 'foo.bar[0].baz'. Being the last
         /// part means that we push the result on top of stack
         end_of_chain: bool = false,
@@ -183,9 +182,9 @@ const Compiler = struct {
     }
 
     /// Determines if the result of the Op code should be left in a register instead
-    /// of top of the stack. In an assignment, always true
+    /// of top of the stack. Always true if compiling an assignee
     fn shouldPutResultInReg(self: *Self) bool {
-        return self.state.in_assign or !self.consumeEndChainState();
+        return self.state.is_assignee or !self.consumeEndChainState();
     }
 
     /// Writes an OpCode to the current chunk
@@ -318,7 +317,7 @@ const Compiler = struct {
             .cast => |data| self.cast(data),
             .default_value => unreachable,
             .discard => self.discard(),
-            .field => |*data| self.getField(data),
+            .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.fnDecl(data),
             .identifier => |*data| self.identifier(data),
@@ -446,15 +445,15 @@ const Compiler = struct {
         if (data.cast) self.writeOp(.cast_to_float, start);
 
         // Used by `getVar` in case we fetch a simple identifier
-        self.state.in_assign = true;
-        defer self.state.in_assign = false;
+        self.state.is_assignee = true;
+        defer self.state.is_assignee = false;
 
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
             .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
-            .field => |*field| return self.fieldAssignment(field, data.cow, start),
+            .field => |*field_data| return self.fieldAssignment(field_data, data.cow, start),
             else => unreachable,
         };
 
@@ -473,7 +472,7 @@ const Compiler = struct {
     }
 
     fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool, start: usize) Error!void {
-        try self.getField(data);
+        try self.field(data);
         self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
     }
 
@@ -580,6 +579,39 @@ const Compiler = struct {
     fn discard(self: *Self) Error!void {
         try self.compileInstr();
         self.writeOp(.pop, 0);
+    }
+
+    fn field(self: *Self, data: *const Instruction.Field) Error!void {
+        const prev = self.setToRegAndGetPrevious(true);
+        defer self.state.to_reg = prev;
+
+        const member_data = self.getData();
+        const start = self.getStart();
+
+        // As we compile member first, we preshot the value
+        const reg = self.shouldPutResultInReg();
+        // We compile the identifier/call/array access first
+        try self.compileInstr();
+
+        // If we're in a member access, the field access that occurs after the call will check
+        // the register, not the stack, so we pop the result from the stack
+        if (member_data == .call) self.writeOp(.reg_push, start);
+
+        // Get field/bound method of first value on the stack
+        self.writeOpAndByte(
+            if (data.kind == .field)
+                if (reg) .get_field_reg else .get_field
+            else if (data.kind == .symbol)
+                if (reg) .get_symbol_reg else .bound_import
+            else if (data.kind == .method)
+                .bound_method
+            else
+                .get_static_method,
+            @intCast(data.index),
+            start,
+        );
+
+        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
     }
 
     fn floatInstr(self: *Self, value: f64) Error!void {
@@ -708,39 +740,6 @@ const Compiler = struct {
         }
 
         return compiler.end();
-    }
-
-    fn getField(self: *Self, data: *const Instruction.Field) Error!void {
-        const prev = self.setToRegAndGetPrevious(true);
-        defer self.state.to_reg = prev;
-
-        const member_data = self.getData();
-        const start = self.getStart();
-
-        // As we compile member first, we preshot the value
-        const reg = self.shouldPutResultInReg();
-        // We compile the identifier/call/array access first
-        try self.compileInstr();
-
-        // If we're in a member access, the field access that occurs after the call will check
-        // the register, not the stack, so we pop the result from the stack
-        if (member_data == .call) self.writeOp(.reg_push, start);
-
-        // Get field/bound method of first value on the stack
-        self.writeOpAndByte(
-            if (data.kind == .field)
-                if (reg) .get_field_reg else .get_field
-            else if (data.kind == .symbol)
-                .bound_import
-            else if (data.kind == .method)
-                .bound_method
-            else
-                .get_static_method,
-            @intCast(data.index),
-            start,
-        );
-
-        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
