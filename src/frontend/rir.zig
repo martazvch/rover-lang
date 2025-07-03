@@ -108,11 +108,7 @@ pub const Instruction = struct {
     pub const Call = struct {
         arity: u8,
         default_count: u8,
-        // call_conv: CallConv,
         invoke: bool = false,
-        import: bool = false,
-
-        // pub const CallConv = enum { bound, builtin, free_function, import, static };
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
@@ -138,7 +134,7 @@ pub const Instruction = struct {
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { fields_count: u8, default_count: u8, imported: bool };
+    pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
     pub const Value = struct { value_instr: usize, cast: bool = false };
     pub const Unary = struct {
         op: Op,

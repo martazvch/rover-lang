@@ -59,8 +59,6 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .bound_import => self.getMember("OP_BOUND_IMPORT", offset, writer),
         .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
-        .call_bound_method => self.indexInstruction("OP_CALL_BOUND_METHOD", offset, writer),
-        .call_import => self.indexInstruction("OP_CALL_IMPORT", offset, writer),
         .call_native => self.indexInstruction("OP_CALL_NATIVE", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
         .constant => self.constantInstruction("OP_CONSTANT", offset, writer),
@@ -90,10 +88,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
-        .import_item => self.importItem(offset, writer),
-        .invoke => self.invokeInstruction("OP_INVOKE", "method", offset, writer),
-        .invoke_import => self.invokeInstruction("OP_INVOKE_IMPORT", "symbol", offset, writer),
-        .invoke_static => self.invokeInstruction("OP_INVOKE_STATIC", "method", offset, writer),
+        .invoke => self.invokeInstruction("OP_INVOKE", offset, writer),
         .jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
         .jump_if_false => self.jumpInstruction("OP_JUMP_IF_FALSE", 1, offset, writer),
         .jump_if_true => self.jumpInstruction("OP_JUMP_IF_TRUE", 1, offset, writer),
@@ -131,11 +126,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .str_mul_l => self.simpleInstruction("OP_STRING_MUL_L", offset, writer),
         .str_mul_r => self.simpleInstruction("OP_STRING_MUL_R", offset, writer),
         .struct_literal => self.indexInstruction("OP_STRUCT_LIT", offset, writer),
-        .struct_literal_import => self.indexInstruction("OP_STRUCT_LIT_IMPORT", offset, writer),
         .sub_float => self.simpleInstruction("OP_SUBTRACT_FLOAT", offset, writer),
         .sub_int => self.simpleInstruction("OP_SUBTRACT_INT", offset, writer),
         .true => self.simpleInstruction("OP_TRUE", offset, writer),
-        .unload_module => self.simpleInstruction("OP_UNLOAD_MODULE", offset, writer),
     };
 }
 
@@ -251,14 +244,14 @@ fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype
     return local_offset;
 }
 
-fn invokeInstruction(self: *const Self, text: []const u8, obj_name: []const u8, offset: usize, writer: anytype) !usize {
+fn invokeInstruction(self: *const Self, text: []const u8, offset: usize, writer: anytype) !usize {
     const arity = self.chunk.code.items[offset + 1];
     const obj_idx = self.chunk.code.items[offset + 2];
 
     if (self.render_mode == .Test) {
-        try writer.print("{s} arity {}, {s} index {}\n", .{ text, arity, obj_name, obj_idx });
+        try writer.print("{s} arity {}, method index {}\n", .{ text, arity, obj_idx });
     } else {
-        try writer.print("{s:<24} arity {:>4}, {s} index {:>4}\n", .{ text, arity, obj_name, obj_idx });
+        try writer.print("{s:<24} arity {:>4}, method index {:>4}\n", .{ text, arity, obj_idx });
     }
 
     return offset + 3;

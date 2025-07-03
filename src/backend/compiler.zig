@@ -122,11 +122,7 @@ const Compiler = struct {
         to_reg: bool = false,
     };
 
-    const FnKind = enum {
-        global,
-        @"fn",
-        method,
-    };
+    const FnKind = enum { global, @"fn", method };
 
     pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize) Self {
         return .{
@@ -335,7 +331,6 @@ const Compiler = struct {
             .@"return" => |*data| self.returnInstr(data),
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
-            // .struct_literal => |data| self.structLiteral(data),
             .struct_literal => |*data| self.structLiteral(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
@@ -436,10 +431,7 @@ const Compiler = struct {
         const start = self.getStart();
 
         // Value
-        // const variable_instr = self.setInstrIndexGetPrev(data.value_instr);
         try self.compileInstr();
-        // const end_instr = self.setInstrIndexGetPrev(variable_instr);
-        // defer self.manager.instr_idx = end_instr;
 
         // We cast the value on top of stack if needed
         if (data.cast) self.writeOp(.cast_to_float, start);
@@ -627,26 +619,15 @@ const Compiler = struct {
         defer self.state.to_reg = prev;
         self.state.to_reg = false;
 
-        if (data.invoke)
+        if (data.invoke) {
             return self.invoke(data, start);
+        }
 
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_fn_default, start);
         try self.compileArgs(data.arity);
 
         self.writeOpAndByte(.call, data.arity, start);
-        // self.writeOpAndByte(switch (data.call_conv) {
-        //     .free_function => .call,
-        //     .builtin => .call_native,
-        //     .import => .call_import,
-        //     else => .call_bound_method,
-        // }, data.arity, start);
-
-        // if (data.call_conv == .import) {
-        if (data.import) {
-            // At the end of the call, we unload it
-            self.writeOp(.unload_module, start);
-        }
     }
 
     fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
@@ -660,16 +641,7 @@ const Compiler = struct {
         try self.compileArgs(data.arity);
 
         self.writeOpAndByte(.invoke, data.arity, start);
-        // self.writeOpAndByte(switch (data.call_conv) {
-        //     .bound => .invoke,
-        //     .import => .invoke_import,
-        //     .static => .invoke_static,
-        //     else => unreachable,
-        // }, data.arity, start);
         self.writeByte(@intCast(member_data.index), start);
-
-        // if (data.call_conv == .import) self.writeOp(.unload_module, start);
-        if (data.import) self.writeOp(.unload_module, start);
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
@@ -792,22 +764,18 @@ const Compiler = struct {
     }
 
     fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
-        if (data.scope == .global) {
-            const module_ref = &self.manager.modules[data.module_index];
-            const module = Obj.ObjModule.create(self.manager.vm, module_ref);
-            const value = Value.makeObj(Obj.BoundImport.create(
-                self.manager.vm,
-                module,
-                module_ref.globals[data.field_index].obj,
-            ).asObj());
+        const module_ref = &self.manager.modules[data.module_index];
+        const module = Obj.ObjModule.create(self.manager.vm, module_ref);
+        const value = Value.makeObj(Obj.BoundImport.create(
+            self.manager.vm,
+            module,
+            module_ref.globals[data.field_index].obj,
+        ).asObj());
 
+        if (data.scope == .global) {
             self.addGlobal(value);
-            // self.addGlobal(self.manager.modules[data.module_index].globals[data.field_index]);
         } else {
-            const start = self.getStart();
-            // TODO: protect cast
-            self.writeOpAndByte(.import_item, @intCast(data.module_index), start);
-            self.writeByte(@intCast(data.field_index), start);
+            try self.emitConstant(value, self.getStart());
         }
     }
 
@@ -913,7 +881,7 @@ const Compiler = struct {
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_struct_def, start);
         try self.compileArgs(data.fields_count);
-        self.writeOpAndByte(if (data.imported) .struct_literal_import else .struct_literal, @intCast(data.fields_count), start);
+        self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), start);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

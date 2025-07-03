@@ -117,11 +117,11 @@ pub fn log(self: *Obj) void {
     }
 }
 
-pub fn initCall(self: *Obj, vm: *Vm, arity: usize) *Function {
+pub fn initCall(self: *Obj, vm: *Vm, arity: usize) struct { *Function, bool } {
     return switch (self.kind) {
-        .bound_import => self.as(BoundImport).initCall(vm, arity),
-        .bound_method => self.as(BoundMethod).initCall(vm, arity),
-        .function => self.as(Function),
+        .bound_import => .{ self.as(BoundImport).initCall(vm, arity), true },
+        .bound_method => .{ self.as(BoundMethod).initCall(vm, arity), false },
+        .function => .{ self.as(Function), false },
         else => unreachable,
     };
 }
@@ -138,20 +138,28 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     };
 }
 
-pub fn invoke(self: *Obj, vm: *Vm, index: usize) *Function {
+pub fn invoke(self: *Obj, vm: *Vm, index: usize) struct { *Function, bool } {
     return switch (self.kind) {
         .bound_import => b: {
             const bound = self.as(BoundImport);
             vm.updateModule(bound.module.module);
-            break :b bound.import.as(Structure).methods[index];
+            break :b .{ bound.import.as(Structure).methods[index], true };
         },
-        .instance => self.as(Instance).parent.methods[index],
+        .instance => .{ self.as(Instance).parent.methods[index], false },
         .module => b: {
             const module = self.as(ObjModule).module;
             vm.updateModule(module);
-            break :b module.globals[index].obj.as(Function);
+            break :b .{ module.globals[index].obj.as(Function), true };
         },
-        .structure => self.as(Structure).methods[index],
+        .structure => .{ self.as(Structure).methods[index], false },
+        else => unreachable,
+    };
+}
+
+pub fn structLiteral(self: *Obj, vm: *Vm) *Instance {
+    return switch (self.kind) {
+        .structure => Instance.create(vm, self.as(Structure)),
+        .bound_import => Instance.create(vm, self.as(BoundImport).import.as(Structure)),
         else => unreachable,
     };
 }

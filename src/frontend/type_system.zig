@@ -3,9 +3,9 @@ const Allocator = std.mem.Allocator;
 
 const oom = @import("../utils.zig").oom;
 
-//   0000    0     0      0      0   0000  0000000000 0000000000
-//   |--|    |     |      |      |   |--|  |-------------------|
-//   Save   Save  Save  Import  Nul  Kind          Value
+// 0000 0000  0000  0000000000 0000000000
+// |-------|  |--|  |-------------------|
+//    Save    Kind          Value
 
 // Types are 32 bits long
 const TypeSize = u32;
@@ -20,8 +20,6 @@ pub const Type = enum(TypeSize) {
     _,
 
     const Self = @This();
-    const IMPORT_MASK: TypeSize = 0x02000000;
-    const NUL_MASK: TypeSize = 0x01000000;
     const KIND_MASK: TypeSize = 0x00f00000;
     const VAL_MASK: TypeSize = 0x000fffff;
 
@@ -47,21 +45,6 @@ pub const Type = enum(TypeSize) {
     pub inline fn setKind(self: *Self, kind: Kind) void {
         const erased = self.toIdx() & ~KIND_MASK;
         self.* = @enumFromInt(erased | (kind.toIdx() << 20));
-    }
-
-    /// Get calling convention information bits about a type
-    pub inline fn getImported(self: Self) bool {
-        return (self.toIdx() & IMPORT_MASK) >> 25 == 1;
-    }
-
-    /// Set calling convention on a type
-    pub inline fn setImported(self: *Self, value: bool) void {
-        const erased = self.toIdx() & ~IMPORT_MASK;
-        self.* = @enumFromInt(erased | (@as(u32, @intFromBool(value)) << 25));
-    }
-
-    pub inline fn copyImported(self: *Self, other: Type) void {
-        self.setImported(other.getImported());
     }
 
     /// Extract the value bits associated to a type
@@ -108,26 +91,9 @@ pub const Kind = enum(u4) {
 pub const Value = u20;
 
 // 1 bit for nullable or not
-// 1 bit for imported or not
 // 1 bit of reserve
 // 1 bit of reserve
-
-// 4 next bits are for calling convention info
-pub const CallConv = enum(u4) {
-    none,
-    builtin,
-    bound_method,
-    imported,
-    _,
-
-    pub inline fn toIdx(self: CallConv) TypeSize {
-        return @as(TypeSize, @intFromEnum(self));
-    }
-
-    pub inline fn fromIdx(index: TypeSize) CallConv {
-        return @enumFromInt(index);
-    }
-};
+// 1 bit of reserve
 
 test "types" {
     const expect = @import("std").testing.expect;

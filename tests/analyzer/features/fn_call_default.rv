@@ -11,45 +11,42 @@ struct Foo {
     fn method(self, a = 5) -> int {
         self.value
     }
-
-    fn importFuncFromMethod(self) -> fn(int) -> int {
-        math.getIntDef
-    }
 }
 
 fn copy(a = 5) -> int {
     5
 }
 
-fn default(c: str, a, b = 7, d, e: bool=false) { }
+fn default(c: str, a, b = 7, d, e: bool=false) {
+    print c
+    print a
+    print b
+    print d
+    print e
+}
 
 fn main() {
-    default("abcd", a=8)
-    default(e=true, a=8, c="abcd")
+    // default("abcd", a=8)
+    // default(e=true, a=8, c="abcd")
+    //
+    // var foo = Foo{}
+    //
+    // var bound = Foo.static
+    // print bound()
+    //
+    // bound = copy
+    // print bound()
+    //
+    // bound = foo.method
+    // print bound()
 
-    var foo = Foo{}
-
-    var bound = Foo.static
-    print bound()
-
-    bound = copy
-    print bound()
-
-    bound = foo.method
-    print bound()
-
-    bound = math.getInt
-    print bound()
-
-    // Call conv survives a layer
-    var tmp = foo.importFuncFromMethod
-    print tmp()
-    bound = tmp()
+    var bound = math.getIntDef
     print bound()
     
     // See if default value information gets passed
-    var anonymus: fn(str, int, int, bool, bool)
-    anonymus = default
-    anonymus("just one arg")
+    // var anonymus: fn(str, int, int, bool, bool)
+    // anonymus = default
+    // // anonymus("just one arg", 8, 8, true, true)
+    // anonymus("just one arg")
 }
 

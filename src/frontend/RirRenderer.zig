@@ -281,14 +281,8 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    // self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}, call_conv: {s}{s}]", .{
-    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}, invoke: {}{s}]", .{
-        data.arity,
-        data.default_count,
-        // @tagName(data.call_conv),
-        // if (data.invoke) ", invoke" else "",
-        data.invoke,
-        if (data.import) ", import" else "",
+    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}, invoke: {}]", .{
+        data.arity, data.default_count, data.invoke,
     });
 
     self.indent_level += 1;
@@ -467,22 +461,17 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
 }
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
-    self.indentAndPrintSlice(
-        "[Structure literal, defaults: {}{s}]",
-        .{ data.default_count, if (data.imported) ", imported" else "" },
-    );
+    self.indentAndPrintSlice("[Structure literal, defaults: {}]", .{data.default_count});
     self.indent_level += 1;
     defer self.indent_level -= 1;
     // Variable containing type
     self.indentAndAppendSlice("- structure");
     self.parseInstr();
 
-    // if (field_count > 0) {
     if (data.fields_count > 0) {
         self.indentAndAppendSlice("- args");
         var last: usize = 0;
 
-        // for (0..field_count) |_| {
         for (0..data.fields_count) |_| {
             switch (self.next()) {
                 .value => |value_data| {

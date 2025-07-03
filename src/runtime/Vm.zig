@@ -200,7 +200,7 @@ fn checkArrayIndex(array: *const Array, index: i64) usize {
 
 fn execute(self: *Self, entry_point: *Function) !void {
     var frame: *CallFrame = undefined;
-    try self.call(&frame, entry_point, 0);
+    try self.call(&frame, entry_point, 0, false);
 
     while (true) {
         if (comptime options.print_stack) {
@@ -328,44 +328,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 );
                 self.stack.push(Value.makeObj(bound.asObj()));
             },
-            // .call => {
-            //     const args_count = frame.readByte();
-            //     // const callee = self.stack.peekRef(args_count).obj.as(Function);
-            //     // const callable = self.stack.peekRef(args_count).obj.callable();
-            //     const callable = self.stack.peekRef(args_count).obj.initCall(self, args_count);
-            //     const function = callable.initCall(self, args_count);
-            //     try self.call(&frame, function, args_count);
-            // },
-            // .call_bound_method => {
-            //     // const args_count = frame.readByte();
-            //     // const bound = self.stack.peekRef(args_count).obj.as(BoundMethod);
-            //     // try self.callBoundMethod(&frame, args_count, Value.makeObj(bound.receiver), bound.method);
-            //
-            //     const args_count = frame.readByte();
-            //     // const callee = self.stack.peekRef(args_count).obj.as(Function);
-            //     // const callable = self.stack.peekRef(args_count).obj.callable();
-            //     const callable = self.stack.peekRef(args_count).obj.initCall(self, args_count);
-            //     const function = callable.initCall(self, args_count);
-            //     try self.call(&frame, function, args_count);
-            // },
-            // .call_import => {
-            //     // const args_count = frame.readByte();
-            //     // const bound = self.stack.peekRef(args_count).obj.as(BoundImport);
-            //     // const function = bound.import.as(Function);
-            //     // self.updateModule(bound.module.module);
-            //     // try self.call(&frame, function, args_count);
-            //
-            //     const args_count = frame.readByte();
-            //     // const callee = self.stack.peekRef(args_count).obj.as(Function);
-            //     // const callable = self.stack.peekRef(args_count).obj.callable();
-            //     const callable = self.stack.peekRef(args_count).obj.initCall(self, args_count);
-            //     const function = callable.initCall(self, args_count);
-            //     try self.call(&frame, function, args_count);
-            // },
-            .call, .call_bound_method, .call_import => {
+            .call => {
                 const args_count = frame.readByte();
-                const function = self.stack.peekRef(args_count).obj.initCall(self, args_count);
-                try self.call(&frame, function, args_count);
+                const function, const imported = self.stack.peekRef(args_count).obj.initCall(self, args_count);
+                try self.call(&frame, function, args_count, imported);
             },
             .call_native => {
                 const args_count = frame.readByte();
@@ -446,44 +412,12 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
-            .import_item => {
-                const module_idx = frame.readByte();
-                const field_idx = frame.readByte();
-                self.stack.push(self.module.imports[module_idx].globals[field_idx]);
-            },
-
-            .invoke, .invoke_import, .invoke_static => {
+            .invoke => {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
-                const callee = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
-                try self.call(&frame, callee, args_count);
+                const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+                try self.call(&frame, callee, args_count, imported);
             },
-
-            // .invoke => {
-            //     const args_count = frame.readByte();
-            //     const method_idx = frame.readByte();
-            //     const receiver = self.stack.peek(args_count);
-            //     const method = receiver.obj.as(Instance).parent.methods[method_idx];
-            //
-            //     self.stack.peekRef(args_count).* = receiver;
-            //     try self.call(&frame, method, args_count);
-            // },
-            // .invoke_import => {
-            //     const args_count = frame.readByte();
-            //     const symbol_idx = frame.readByte();
-            //     const module = self.stack.peek(args_count).obj.as(ObjModule).module;
-            //     self.updateModule(module);
-            //     const imported = module.globals[symbol_idx];
-            //     try self.call(&frame, imported.obj.as(Function), args_count);
-            // },
-            // .invoke_static => {
-            //     const args_count = frame.readByte();
-            //     const method_idx = frame.readByte();
-            //     const structure = self.stack.peekRef(args_count).obj.as(Structure);
-            //     const function = structure.methods[method_idx];
-            //     try self.call(&frame, function, args_count);
-            // },
-
             .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
@@ -520,6 +454,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .naked_return => {
                 self.frame_stack.count -= 1;
 
+                if (frame.imported) {
+                    self.module = self.module_chain.pop().?;
+                }
+
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
                 // TODO: avoid logic at runtime, just emit a special OpCode for `main` naked return
@@ -544,7 +482,6 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 try self.stack.pop().print(self.stdout);
                 _ = try self.stdout.write("\n");
             },
-            // TODO: obsolete
             .push_module => {
                 const index = frame.readByte();
                 const module = &self.module.imports[index];
@@ -559,10 +496,13 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.r1.obj = self.cow(self.r1.obj);
                 self.r1.* = self.stack.pop();
             },
-
             .@"return" => {
                 const result = self.stack.pop();
                 self.frame_stack.count -= 1;
+
+                if (frame.imported) {
+                    self.module = self.module_chain.pop().?;
+                }
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
@@ -594,22 +534,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(String), self.stack.peekRef(0).int),
             .struct_literal => {
                 const arity = frame.readByte();
-                var instance = Instance.create(self, self.stack.peekRef(arity).obj.as(Structure));
-
-                for (0..arity) |i| {
-                    instance.fields[i] = self.stack.peek(arity - i - 1);
-                }
-
-                self.stack.peekRef(arity).* = Value.makeObj(instance.asObj());
-                self.stack.top -= arity;
-            },
-            // Group code with above?
-            .struct_literal_import => {
-                const arity = frame.readByte();
-                var instance = Instance.create(
-                    self,
-                    self.stack.peekRef(arity).obj.as(BoundImport).import.as(Structure),
-                );
+                var instance = self.stack.peekRef(arity).obj.structLiteral(self);
 
                 for (0..arity) |i| {
                     instance.fields[i] = self.stack.peek(arity - i - 1);
@@ -627,7 +552,6 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.stack.peekRef(0).int -= rhs;
             },
             .true => self.stack.push(Value.true_),
-            .unload_module => self.module = self.module_chain.pop().?,
         }
     }
 }
@@ -643,7 +567,7 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     return obj;
 }
 
-fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize) Error!void {
+fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize, imported: bool) Error!void {
     if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
         return error.StackOverflow;
     }
@@ -654,6 +578,7 @@ fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize) E
     new_frame.ip = callee.chunk.code.items.ptr;
     // -1 for the function itself
     new_frame.slots = self.stack.top - args_count - 1;
+    new_frame.imported = imported;
 
     frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 }
@@ -722,6 +647,7 @@ const CallFrame = struct {
     function: *Function,
     ip: [*]u8,
     slots: [*]Value,
+    imported: bool,
 
     pub fn readByte(self: *CallFrame) u8 {
         defer self.ip += 1;

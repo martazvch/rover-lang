@@ -1,10 +1,54 @@
-struct Foo {
-    fn meth(self, a: int) {
+// All assignment should resolve to the same type and calling convention
+// should be transmitted
 
+use data.math
+
+struct Foo {
+    value = 8
+
+    fn static(a = 5) -> int { 3 }
+
+    fn method(self, a = 5) -> int {
+        self.value
+    }
+
+    fn importFuncFromMethod(self) -> fn(int) -> int {
+        math.getIntDef
     }
 }
 
+fn copy(a = 5) -> int {
+    5
+}
+
+fn default(c: str, a, b = 7, d, e: bool=false) { }
+
 fn main() {
+    default("abcd", a=8)
+    default(e=true, a=8, c="abcd")
+
     var foo = Foo{}
-    foo.meth()
+
+    var bound = Foo.static
+    print bound()
+
+    bound = copy
+    print bound()
+
+    bound = foo.method
+    print bound()
+
+    bound = math.getInt
+    print bound()
+
+    // Call conv survives a layer
+    var tmp = foo.importFuncFromMethod
+    print tmp()
+    bound = tmp()
+    print bound()
+    
+    // See if default value information gets passed
+    var anonymus: fn(str, int, int, bool, bool)
+    anonymus = default
+    anonymus("just one arg")
 }

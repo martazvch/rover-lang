@@ -20,9 +20,7 @@ struct Bar {
     }
 }
 
-fn copy() -> int {
-    5
-}
+fn copy() -> int { 5 }
 
 fn main() {
     var bar = Bar{}
@@ -39,7 +37,7 @@ fn main() {
     foo.function = math.getInt
     print foo.function()
 
-    const tmp = foo.importFuncFromMethod()
+    var tmp = bar.importFuncFromMethod
     foo.function = tmp()
     print foo.function()
 }

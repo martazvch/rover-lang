@@ -1,0 +1,37 @@
+use data.math 
+
+struct Foo {
+    function: fn(bool) -> int
+}
+
+struct Bar {
+    value = 10
+
+    fn static(b: bool) -> int { 3 }
+
+    fn method(self, b: bool) -> int {
+        self.value
+    }
+
+    fn importFuncFromMethod(self) -> fn(bool) -> int {
+        math.getInt2
+    }
+}
+
+fn copy(b: bool) -> int { 5 }
+
+fn argsCallConv(arg1: fn(bool)->int, arg2: fn(bool)->int, arg3: fn(bool)->int) {
+    print arg1(true)
+    print arg2(false)
+    print arg3(true)
+}
+
+fn main() {
+    var bar = Bar{}
+    var foo = Foo{function=copy}
+
+    argsCallConv(copy, math.getInt2, foo.function)
+    argsCallConv(Bar.static, bar.method, bar.importFuncFromMethod())
+}
+
+
