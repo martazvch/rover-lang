@@ -1,4 +1,4 @@
-use data.math{Vec2}
+use data.math{Vec2, introduce}
 use data.geom{ Point, Square }
 
 fn main() {
@@ -9,5 +9,7 @@ fn main() {
         use data.math{Vec2 as Pipou,}
         var v = Pipou{ x = 55, y = 333 }
     }
+
+    introduce()
 }
 

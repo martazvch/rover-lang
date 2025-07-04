@@ -1,7 +1,0 @@
-fn main() {
-    {
-        use data.math
-    }
-
-    math.introduce()
-}

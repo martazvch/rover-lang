@@ -1,4 +1,4 @@
-use data.math{Vec2}
+use data.math{Vec2, introduce}
 use data.geom{ Point, Square }
 
 fn main() {
@@ -16,5 +16,7 @@ fn main() {
         print v.x
         print v.y
     }
+
+    introduce()
 }
 

@@ -1,9 +1,7 @@
 //-- array_multi_dim.rv --
 [Structure declaration Foo, index: 0, scope: global]
-
 [Fn declaration getIdx, index: 1, scope: global, return kind: implicit_value]
     [Int 2]
-
 [Fn declaration main, index: 2, scope: global, return kind: implicit_void]
     [Variable declaration index: 1, scope: local]
         [Array]
@@ -34,7 +32,7 @@
                 [Array]
                     [Int 6]
                     [Int 7]
-                    [Fn call arity: 0, defaults: 0, call_conv: free_function]
+                    [Fn call arity: 0, defaults: 0, invoke: false]
                         [Variable index: 1, scope: global]
                 [Array]
                     [Int 8]
@@ -61,7 +59,7 @@
     [Int 99]
     [Array chain assignment]
         - indicies
-        [Fn call arity: 0, defaults: 0, call_conv: free_function]
+        [Fn call arity: 0, defaults: 0, invoke: false]
             [Variable index: 1, scope: global]
         [Unary minus]
             [Int 1]
@@ -74,14 +72,14 @@
         [Field access 0]
             [Variable index: 3, scope: local]
         - index
-        [Fn call arity: 0, defaults: 0, call_conv: free_function]
+        [Fn call arity: 0, defaults: 0, invoke: false]
             [Variable index: 1, scope: global]
     [Unary minus]
         [Int 9]
     [Array chain assignment]
         - indicies
         [Int 1]
-        [Fn call arity: 0, defaults: 0, call_conv: free_function]
+        [Fn call arity: 0, defaults: 0, invoke: false]
             [Variable index: 1, scope: global]
         - array
         [Field access 0]
@@ -92,15 +90,14 @@
             [Field access 0]
                 [Variable index: 3, scope: local]
             - index
-            [Fn call arity: 0, defaults: 0, call_conv: free_function]
+            [Fn call arity: 0, defaults: 0, invoke: false]
                 [Variable index: 1, scope: global]
     [Print]
         [Array chain access]
             - indicies
             [Int 1]
-            [Fn call arity: 0, defaults: 0, call_conv: free_function]
+            [Fn call arity: 0, defaults: 0, invoke: false]
                 [Variable index: 1, scope: global]
             - array
             [Field access 0]
                 [Variable index: 3, scope: local]
-                

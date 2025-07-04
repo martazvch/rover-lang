@@ -4,14 +4,14 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
+const Interner = @import("../Interner.zig");
+const oom = @import("../utils.zig").oom;
 const BA = @import("builtins_analyzer.zig");
 const BuiltinAnalyzer = BA.BuiltinAnalyzer;
 const FnDeclaration = BA.FnDeclaration;
 const builtin_init = BA.init;
-const Interner = @import("../Interner.zig");
 const TypeSys = @import("type_system.zig");
 const Type = TypeSys.Type;
-const oom = @import("../utils.zig").oom;
 
 allocator: Allocator,
 declared: AutoHashMapUnmanaged(usize, Type) = .{},
@@ -79,11 +79,25 @@ pub fn getStructTypeInfos(self: *const Self, index: usize) StructInfo {
     return self.type_infos.items[index].@"struct";
 }
 
+/// If type is a function, returns the same type but without any default values and without self
+/// Used when assigning a function to a variable, we an't keep reference to default values and
+/// if it's a method, it's transformed into a bounded method, so no `self` anymore
+pub fn createBoundedFnType(self: *Self, allocator: Allocator, typ: Type) !Type {
+    if (!typ.is(.function)) return typ;
+
+    const infos = self.getFnTypeInfos(typ.getValue());
+    const new_infos = infos.toBounded(allocator);
+    const index = try self.reserveInfo();
+    self.setInfo(index, .{ .func = new_infos });
+
+    return Type.create(.function, index);
+}
+
 /// If an array of `child` type as already been declared, return a type with the
 /// index as `Value`, otherwise create it
 pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     if (self.array_cache.get(child)) |cached_index| {
-        return Type.create(.array, @intCast(cached_index), false);
+        return Type.create(.array, @intCast(cached_index));
     }
 
     const index = try self.reserveInfo();
@@ -91,7 +105,7 @@ pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
     self.setInfo(index, info);
     self.array_cache.put(self.allocator, child, index) catch oom();
 
-    return Type.create(.array, index, false);
+    return Type.create(.array, index);
 }
 
 pub fn getArrayDimAndChildType(self: *const Self, array: Type) struct { usize, Type } {
@@ -176,6 +190,25 @@ pub const FnInfo = struct {
         }
 
         return res;
+    }
+
+    pub fn toBounded(self: *const FnInfo, allocator: Allocator) FnInfo {
+        const method_offset = @intFromBool(self.kind == .method);
+        var params = AutoArrayHashMapUnmanaged(usize, ParamInfo){};
+        params.ensureTotalCapacity(allocator, self.params.count() - method_offset) catch oom();
+
+        for (self.params.keys()[method_offset..], self.params.values()[method_offset..]) |k, v| {
+            var p = v;
+            p.default = false;
+            params.putAssumeCapacity(k, p);
+        }
+
+        return .{
+            .params = params,
+            .return_type = self.return_type,
+            .kind = .function,
+            .module = self.module,
+        };
     }
 };
 

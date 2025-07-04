@@ -24,10 +24,14 @@ OP_RETURN
 OP_CONSTANT index 0, value 12
 OP_RETURN
 
+-- getIntDef --
+OP_CONSTANT index 0, value 12
+OP_RETURN
+
 -- global scope --
 OP_EXIT_REPL
 
-//---- call_conv_variable.rv ----
+//---- test.rv ----
 
 -- static --
 OP_CONSTANT index 0, value 3
@@ -66,26 +70,24 @@ OP_GET_LOCAL_REG index 1
 OP_BOUND_METHOD index 1
 OP_SET_LOCAL index 2
 OP_GET_LOCAL index 2
-OP_CALL_BOUND_METHOD index 0
+OP_CALL index 0
 OP_PRINT
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 3
 OP_SET_LOCAL index 2
 OP_GET_LOCAL index 2
-OP_CALL_IMPORT index 0
-OP_UNLOAD_MODULE
+OP_CALL index 0
 OP_PRINT
 OP_GET_LOCAL_REG index 1
 OP_BOUND_METHOD index 2
 OP_GET_LOCAL index 3
-OP_CALL_BOUND_METHOD index 0
+OP_CALL index 0
 OP_PRINT
 OP_GET_LOCAL index 3
-OP_CALL_BOUND_METHOD index 0
+OP_CALL index 0
 OP_SET_LOCAL index 2
 OP_GET_LOCAL index 2
-OP_CALL_IMPORT index 0
-OP_UNLOAD_MODULE
+OP_CALL index 0
 OP_PRINT
 OP_NAKED_RETURN
 

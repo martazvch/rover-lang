@@ -1,29 +1,76 @@
-//---- test.rv ----
+//---- math ----
 
--- default --
+-- len --
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 1
+OP_ADD_INT
+OP_RETURN
+
+-- introduce --
+OP_CONSTANT index 0, value This is a mathematical module
+OP_PRINT
 OP_NAKED_RETURN
 
--- main --
-OP_GET_GLOBAL index 0, <fn default>
-OP_LOAD_FN_DEF
-OP_CONSTANT index 0, value abcd
-OP_CONSTANT index 1, value 8
-OP_GET_DEFAULT index 1
-OP_GET_DEFAULT index 2
-OP_GET_DEFAULT index 3
-OP_CALL index 5
+-- getVecFromPos --
+OP_GET_GLOBAL index 0, <structure Vec2>
+OP_GET_LOCAL index 1
+OP_GET_LOCAL index 2
+OP_STRUCT_LIT index 2
+OP_RETURN
 
-OP_GET_GLOBAL index 0, <fn default>
+-- getInt --
+OP_CONSTANT index 0, value 12
+OP_RETURN
+
+-- getIntDef --
+OP_CONSTANT index 0, value 12
+OP_RETURN
+
+-- global scope --
+OP_EXIT_REPL
+
+//---- test.rv ----
+
+-- static --
+OP_CONSTANT index 0, value 3
+OP_RETURN
+
+-- method --
+OP_GET_LOCAL_REG index 0
+OP_GET_FIELD index 0
+OP_RETURN
+
+-- copy --
+OP_CONSTANT index 0, value 5
+OP_RETURN
+
+-- main --
+OP_GET_GLOBAL index 1, <structure Foo>
+OP_LOAD_STRUCT_DEF
+OP_GET_DEFAULT index 0
+OP_STRUCT_LIT index 1
+OP_GET_GLOBAL index 1, <structure Foo>
+OP_LOAD_INVOKE_DEF index 0
+OP_GET_DEFAULT index 0
+OP_INVOKE arity 1, method index 0
+OP_PRINT
+OP_GET_GLOBAL index 2, <fn copy>
 OP_LOAD_FN_DEF
-OP_CONSTANT index 2, value abcd
-OP_CONSTANT index 3, value 8
-OP_GET_DEFAULT index 1
-OP_GET_DEFAULT index 2
-OP_TRUE
-OP_CALL index 5
+OP_GET_DEFAULT index 0
+OP_CALL index 1
+OP_PRINT
+OP_GET_LOCAL index 1
+OP_LOAD_INVOKE_DEF index 1
+OP_GET_DEFAULT index 0
+OP_INVOKE arity 1, method index 1
+OP_PRINT
+OP_GET_GLOBAL index 0, <module math>
+OP_INVOKE arity 0, method index 3
+OP_PRINT
 OP_NAKED_RETURN
 
 -- global scope --
-OP_GET_GLOBAL index 1, <fn main>
+OP_GET_GLOBAL index 3, <fn main>
 OP_CALL index 0
-

@@ -5,39 +5,22 @@ use data.math
 struct Foo {
     value = 8
 
-    fn static(a = 5) -> int { 3 }
+    fn static(a = "def") -> int { 3 }
 
-    fn method(self, a = 5) -> int {
+    fn method(self, a = "meth") -> int {
         self.value
-    }
-
-    fn importFuncFromMethod(self) -> fn(int) -> int {
-        math.getIntDef
     }
 }
 
-fn copy(a = 8) -> int {
+fn copy(a = "cp") -> int {
     5
 }
 
 fn main() {
     var foo = Foo{}
 
-    var bound = Foo.static
-    print bound()
-
-    bound = copy
-    print bound()
-
-    bound = foo.method
-    print bound()
-
-    bound = math.getInt
-    print bound()
-
-    // Call conv survives a layer
-    var tmp = foo.importFuncFromMethod
-    print tmp()
-    bound = tmp()
-    print bound()
+    print Foo.static()
+    print copy()
+    print foo.method()
+    print math.getInt()
 }

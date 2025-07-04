@@ -72,15 +72,6 @@ fn main() {
     foo.method("sixth", arg2=-54, arg1=-65, arg3=-3.14)
     foo.method(arg2=-11, arg3=-1.1, arg1=-111, noval="seventh")
 
-    // Multi level static
-    // foo.bar.staticFn("first", true, false, 98)
-    // foo.bar.staticFn("second")
-    // foo.bar.staticFn("third", false)
-    // foo.bar.staticFn("fourth", arg3=-287)
-    // foo.bar.staticFn("fifth", arg3=3, arg1=false)
-    // foo.bar.staticFn("sixth", arg2=false, arg1=true, arg3=654)
-    // foo.bar.staticFn(arg2=false, arg3=-36, arg1=false, noval="seventh")
-
     // Multi level method
     foo.bar.method("first", true, false, -98.2)
     foo.bar.method("second")

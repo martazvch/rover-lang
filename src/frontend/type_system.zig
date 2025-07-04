@@ -32,8 +32,8 @@ pub const Type = enum(TypeSize) {
     }
 
     /// Creates a type from kind and value information
-    pub inline fn create(kind: Kind, value: Value, imported: bool) Self {
-        return @enumFromInt(@as(u32, @intFromBool(imported)) << 25 | 0 << 24 | kind.toIdx() << 20 | value);
+    pub inline fn create(kind: Kind, value: Value) Self {
+        return @enumFromInt(0 << 24 | kind.toIdx() << 20 | value);
     }
 
     /// Get a type kind, discarding calling convention and value information bits

@@ -1,3 +1,11 @@
 fn main() {
     value = 1
+
+    {
+        {
+            struct Foo {}
+        }
+
+        var foo = Foo{}
+    }
 }

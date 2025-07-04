@@ -1,4 +1,4 @@
-//-- math.rv --
+//-- math --
 [Structure declaration Vec2, index: 0, scope: global]
     [Fn declaration len, index: 0, scope: local, return kind: implicit_value]
         [Binop type: add_int, cast: none]
@@ -16,15 +16,22 @@
         - args
         [Variable index: 1, scope: local]
         [Variable index: 2, scope: local]
+[Fn declaration getInt, index: 3, scope: global, return kind: implicit_value]
+    [Int 12]
+[Fn declaration getIntDef, index: 4, scope: global, return kind: implicit_value]
+    - default params
+    [Int 9]
+    - body
+    [Variable index: 1, scope: local]
 
-//-- main.rv --
+//-- test.rv --
 [Import module 0, scope global]
 [Fn declaration main, index: 1, scope: global, return kind: implicit_void]
-    [Fn call arity: 0, defaults: 0, call_conv: import, invoke]
+    [Fn call arity: 0, defaults: 0, invoke: true]
         [Method access 1]
             [Variable index: 0, scope: global]
     [Variable declaration index: 1, scope: local]
-        [Fn call arity: 2, defaults: 0, call_conv: import, invoke]
+        [Fn call arity: 2, defaults: 0, invoke: true]
             [Method access 2]
                 [Variable index: 0, scope: global]
             - args:
@@ -33,13 +40,13 @@
     [Variable declaration index: 2, scope: local]
         [Method access 1]
             [Variable index: 0, scope: global]
-    [Fn call arity: 0, defaults: 0, call_conv: import]
+    [Fn call arity: 0, defaults: 0, invoke: false]
         [Variable index: 2, scope: local]
     [Variable declaration index: 3, scope: local]
         [Method access 2]
             [Variable index: 0, scope: global]
     [Variable declaration index: 4, scope: local]
-        [Fn call arity: 2, defaults: 0, call_conv: import]
+        [Fn call arity: 2, defaults: 0, invoke: false]
             [Variable index: 3, scope: local]
             - args:
             [Int 6]

@@ -1,4 +1,4 @@
-//---- math.rv ----
+//---- math ----
 
 -- len --
 OP_GET_LOCAL_REG index 0
@@ -31,43 +31,28 @@ OP_RETURN
 -- global scope --
 OP_EXIT_REPL
 
-//---- main.rv ----
+//---- test.rv ----
 
 -- main --
 OP_GET_GLOBAL index 0, <module math>
-OP_INVOKE_IMPORT arity 0, symbol index 1
-OP_UNLOAD_MODULE
-
+OP_INVOKE arity 0, method index 1
 OP_GET_GLOBAL index 0, <module math>
 OP_CONSTANT index 0, value 1
 OP_CONSTANT index 1, value 2
-OP_INVOKE_IMPORT arity 2, symbol index 2
-OP_UNLOAD_MODULE
-
-// Please
+OP_INVOKE arity 2, method index 2
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 1
-
-// Please call
 OP_GET_LOCAL index 2
-OP_CALL_IMPORT index 0
-OP_UNLOAD_MODULE
-
-// Please2
+OP_CALL index 0
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 2
-
-// Please2 call
 OP_GET_LOCAL index 3
 OP_CONSTANT index 2, value 6
 OP_CONSTANT index 3, value 89
-OP_CALL_IMPORT index 2
-OP_UNLOAD_MODULE
-
+OP_CALL index 2
 OP_GET_LOCAL_REG index 4
 OP_GET_FIELD index 1
 OP_PRINT
-
 OP_NAKED_RETURN
 
 -- global scope --

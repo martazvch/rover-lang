@@ -17,36 +17,20 @@ fn copy(a = 5) -> int {
     5
 }
 
-fn default(c: str, a, b = 7, d, e: bool=false) {
-    print c
-    print a
-    print b
-    print d
-    print e
-}
+fn default(c: str, a, b = 7, d, e: bool=false) { }
 
 fn main() {
-    // default("abcd", a=8)
-    // default(e=true, a=8, c="abcd")
-    //
-    // var foo = Foo{}
-    //
-    // var bound = Foo.static
-    // print bound()
-    //
-    // bound = copy
-    // print bound()
-    //
-    // bound = foo.method
-    // print bound()
+    default("abcd", a=8)
+    default(e=true, a=8, c="abcd")
 
-    var bound = math.getIntDef
-    print bound()
-    
-    // See if default value information gets passed
-    // var anonymus: fn(str, int, int, bool, bool)
-    // anonymus = default
-    // // anonymus("just one arg", 8, 8, true, true)
-    // anonymus("just one arg")
+    var foo = Foo{}
+
+    print Foo.static()
+
+    print copy()
+
+    print foo.method()
+
+    print math.getIntDef()
 }
 

@@ -16,33 +16,26 @@ OP_RETURN
 -- main --
 OP_CONSTANT index 0, value <structure Point>
 OP_CONSTANT index 1, value <structure Vec2>
-
 OP_GET_GLOBAL index 0, <structure Vec1>
 OP_CONSTANT index 2, value 5
-OP_INVOKE_STATIC arity 1, method index 0
-
+OP_INVOKE arity 1, method index 0
 OP_GET_GLOBAL_REG index 0, <structure Vec1>
 OP_GET_STATIC_METHOD index 0
-
 OP_GET_LOCAL index 4
 OP_CONSTANT index 3, value 65
 OP_CALL index 1
 OP_SET_LOCAL index 3
-
 OP_GET_LOCAL index 2
 OP_CONSTANT index 4, value 12
 OP_CONSTANT index 5, value 99
-OP_INVOKE_STATIC arity 2, method index 0
-
+OP_INVOKE arity 2, method index 0
 OP_GET_LOCAL_REG index 2
 OP_GET_STATIC_METHOD index 0
-
 OP_GET_LOCAL index 6
 OP_CONSTANT index 6, value 56
 OP_CONSTANT index 7, value 78
 OP_CALL index 2
 OP_SET_LOCAL index 5
-
 OP_NAKED_RETURN
 
 -- global scope --

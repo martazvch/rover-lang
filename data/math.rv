@@ -5,10 +5,6 @@ struct Vec2 {
     fn len(self) -> int {
         self.x + self.y
     }
-
-    fn staticFn(a: int) {
-        print a
-    }
 }
 
 fn introduce() {
@@ -20,4 +16,7 @@ fn getVecFromPos(x: int, y: int) -> Vec2 {
 }
 
 fn getInt() -> int { 12 }
-fn getInt2(b: bool) -> int { 12 }
+
+fn getIntDef(a = 5) -> int { 12 }
+
+

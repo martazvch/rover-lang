@@ -40,6 +40,7 @@ pub const AnalyzerMsg = union(enum) {
     missing_file_in_module: struct { file: []const u8, module: []const u8 },
     missing_function_param: struct { name: []const u8 },
     missing_self_method_call: struct { name: []const u8 },
+    named_arg_in_bounded,
     non_array_indexing: struct { found: []const u8 },
     non_bool_cond: struct { what: []const u8, found: []const u8 },
     non_integer_index: struct { found: []const u8 },
@@ -76,6 +77,7 @@ pub const AnalyzerMsg = union(enum) {
     void_print,
     void_value,
     too_many_fn_args: struct { expect: []const u8, found: []const u8 },
+    wrong_fn_args_count: struct { expect: []const u8, found: []const u8 },
 
     const Self = @This();
 
@@ -117,6 +119,7 @@ pub const AnalyzerMsg = union(enum) {
             .missing_file_in_module => |e| writer.print("missing file '{s}' in module '{s}'", .{ e.file, e.module }),
             .missing_function_param => |e| writer.print("missing argument '{s}'", .{e.name}),
             .missing_self_method_call => |e| writer.print("method '{s}' is missing 'self' parameter", .{e.name}),
+            .named_arg_in_bounded => writer.writeAll("named argument are not allowed with bounded functions"),
             // TODO: when there will be traits and index trait, change description
             .non_array_indexing => |e| writer.print("can only index arrays, found '{s}'", .{e.found}),
             .non_bool_cond => |e| writer.print("non boolean condition, found type '{s}'", .{e.found}),
@@ -129,7 +132,7 @@ pub const AnalyzerMsg = union(enum) {
             .self_outside_struct => writer.writeAll("only structure's methods can refer to 'self'"),
             .struct_call_but_no_init => writer.writeAll("calling initializer but none have been declared in structure's definition"),
             .too_many_locals => writer.writeAll("too many local variables, maximum is 255"),
-            .too_many_fn_args => |e| writer.print("expect maximum {s} function arguments but found {s}", .{ e.expect, e.found }),
+            .too_many_fn_args => |e| writer.print("expect maximum {s} arguments but found {s}", .{ e.expect, e.found }),
             .too_many_types => writer.writeAll("too many types declared, maximum is 268435455"),
             .type_mismatch => |e| writer.print("type mismatch, expect a '{s}' but found '{s}' ", .{ e.expect, e.found }),
             .undeclared_field_access => |e| writer.print("field '{s}' isn't part of structure's definition", .{e.name}),
@@ -148,6 +151,7 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_print => writer.writeAll("try to print a 'void' value"),
             .void_value => writer.writeAll("value is of type 'void'"),
+            .wrong_fn_args_count => |e| writer.print("wrong argument count, expect {s} but found {s}", .{ e.expect, e.found }),
         };
     }
 
@@ -180,6 +184,7 @@ pub const AnalyzerMsg = union(enum) {
             .missing_file_in_cwd, .missing_file_in_module => writer.writeAll("this file wasn't found"),
             .missing_function_param => writer.writeAll("this call"),
             .missing_self_method_call => writer.writeAll("this method"),
+            .named_arg_in_bounded => writer.writeAll("this named argument"),
             .non_array_indexing => writer.writeAll("this is not an index"),
             .non_integer_index => writer.writeAll("this is not an integer"),
             .non_struct_field_access => |e| writer.print("expect a structure but found '{s}'", .{e.found}),
@@ -202,6 +207,7 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("this parameter"),
             .void_print => writer.writeAll("this expression is of type 'void'"),
             .void_value => writer.writeAll("this expression produces no value"),
+            .wrong_fn_args_count => writer.writeAll("this call is invalid"),
         };
     }
 
@@ -264,6 +270,10 @@ pub const AnalyzerMsg = union(enum) {
             .missing_file_in_cwd, .missing_file_in_module => writer.writeAll("check if file is in the module or if there is a typo"),
             .missing_function_param => writer.writeAll("all non-default-value parameters must be given a value"),
             .missing_self_method_call => writer.writeAll("methods can be invoked on instances only if it defines 'self' as first parameter"),
+            .named_arg_in_bounded => writer.writeAll(
+                \\when bouding a function/method to a variable, you loose default values informations as the bounded function 
+                \\could depend on runtime logic.
+            ),
             .non_array_indexing => writer.writeAll("refer to variable's definition"),
             // TODO: when there will be Range, modify
             .non_integer_index => writer.writeAll("can only use integer values to index arrays"),
@@ -297,6 +307,7 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
+            .wrong_fn_args_count => writer.writeAll("refer to function's definition to see expected arguments"),
         };
     }
 
@@ -323,6 +334,22 @@ pub const AnalyzerMsg = union(enum) {
         writer1.print("{}", .{found}) catch oom();
 
         const tmp: AnalyzerMsg = .{ .too_many_fn_args = .{
+            .expect = list.toOwnedSlice() catch oom(),
+            .found = list1.toOwnedSlice() catch oom(),
+        } };
+
+        return tmp;
+    }
+    pub fn wrongFnArgsCount(expect: usize, found: usize) Self {
+        var list = std.ArrayList(u8).init(std.heap.page_allocator);
+        const writer = list.writer();
+        writer.print("{}", .{expect}) catch oom();
+
+        var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
+        const writer1 = list1.writer();
+        writer1.print("{}", .{found}) catch oom();
+
+        const tmp: AnalyzerMsg = .{ .wrong_fn_args_count = .{
             .expect = list.toOwnedSlice() catch oom(),
             .found = list1.toOwnedSlice() catch oom(),
         } };
