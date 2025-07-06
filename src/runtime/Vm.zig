@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const options = @import("options");
 
+const Repl = @import("Repl.zig");
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
@@ -27,6 +28,7 @@ const Value = @import("values.zig").Value;
 
 pipeline: Pipeline,
 gc: Gc,
+repl: Repl,
 start_module: Module,
 module: *Module,
 module_chain: std.ArrayListUnmanaged(*Module),
@@ -66,6 +68,7 @@ pub const empty: Self = .{
     .pipeline = .empty,
     .gc = undefined,
     .gc_alloc = undefined,
+    .repl = undefined,
     .module = undefined,
     .start_module = undefined,
     .module_chain = .{},
@@ -96,18 +99,21 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     // but the count is coherent of what is expected below, for example
     // for function call we exit if the frame stack count == 1. In REPL
     // it would be always true
-    if (config.embedded) self.frame_stack.count += 1;
+    if (config.embedded) {
+        self.frame_stack.count += 1;
+        self.repl = .init();
+    }
 }
 
 pub fn deinit(self: *Self) void {
     self.allocator.free(self.heap_vars);
-    self.start_module.deinit(self.allocator);
     self.module_chain.deinit(self.allocator);
     self.interner.deinit();
     self.gc.deinit();
     self.strings.deinit();
     self.freeObjects();
     self.pipeline.deinit();
+    if (self.pipeline.config.embedded) self.repl.deinit(self.allocator);
 }
 
 fn freeObjects(self: *Self) void {
@@ -158,29 +164,19 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
     try self.execute(self.module.function);
 }
 
-// TODO: put outside of VM, in another module
 pub fn runRepl(self: *Self) !void {
-    const stdin = std.io.getStdIn().reader();
-
-    // Keep all prompts because all of the pipeline uses []const u8 wich point
-    // to the user input. Needed for errors and interner
-    var prompts = std.ArrayList([]const u8).init(self.allocator);
-    defer prompts.deinit();
-
-    var input = std.ArrayList(u8).init(self.allocator);
-
-    _ = try self.stdout.write("\t\tRover language REPL\n");
+    try self.repl.logInfos();
 
     while (true) {
-        _ = try self.stdout.write("\n> ");
-        try stdin.streamUntilDelimiter(input.writer(), '\n', null);
-
-        try input.append('\n');
-        try input.append(0);
-        const len = input.items.len - 1;
-        try prompts.append(try input.toOwnedSlice());
-
-        try self.run("stdin", prompts.items[prompts.items.len - 1][0..len :0]);
+        const prompt = self.repl.getPrompt(self.allocator) catch |e| switch (e) {
+            error.Empty => continue,
+            error.EndOfFile => break,
+            else => {
+                std.debug.print("REPL error: {s}\n", .{@errorName(e)});
+                return;
+            },
+        };
+        try self.run("stdin", prompt);
     }
 }
 

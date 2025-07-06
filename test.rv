@@ -1,10 +1,8 @@
-struct Point {
-  x = 0
-
-  fn getX(self) -> int {self.x}
+struct Foo {
+    a: int
 }
 
 fn main() {
-    var pt = Point{}
-    pt.getX() = 3 // Here, it's not a reference to x field
+    var foo = Foo{a=98}
+    print foo.a
 }

@@ -152,7 +152,7 @@ pub const ParserMsg = union(enum) {
             ),
             .expect_arrow_before_fn_type => writer.print("add an arrow '->' between function's arguments list and type", .{}),
             .expect_brace_before_fn_body, .expect_brace_before_struct_body => writer.print("add an opening brace '{{'", .{}),
-            .expect_brace_after_struct_body => writer.writeAll("add an closing brace '}}'"),
+            .expect_brace_after_struct_body => writer.writeAll("add an closing brace '}'"),
             .expect_brace_after_struct_lit => writer.writeAll("add an openning brace '{{'"),
             .expect_brace_or_do => writer.print("add an opening brace '{{' or 'do' keyword before statement", .{}),
             .expect_colon_before_type => writer.print("add ':' bofre type name", .{}),

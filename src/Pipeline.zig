@@ -32,6 +32,7 @@ type_manager: TypeManager,
 instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
+globals: std.ArrayListUnmanaged(Value) = .{},
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -60,6 +61,7 @@ pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
 
 pub fn deinit(self: *Self) void {
     self.arena.deinit();
+    self.globals.deinit(self.vm.allocator);
 }
 
 // TODO: clean unused
@@ -69,14 +71,6 @@ pub const Module = struct {
     symbols: Symbols,
     function: *Function,
     globals: []Value,
-
-    pub fn deinit(self: *Module, allocator: Allocator) void {
-        for (self.imports) |*mod| {
-            mod.deinit(allocator);
-        }
-
-        allocator.free(self.globals);
-    }
 };
 
 /// Runs the pipeline
@@ -114,11 +108,6 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Analyzer
     self.analyzer.analyze(&ast);
     defer self.analyzer.reinit();
-    errdefer {
-        for (self.analyzer.modules.values()) |*mod| {
-            mod.deinit(self.vm.allocator);
-        }
-    }
 
     // We don't keep errors/warnings from a prompt to another
     defer self.analyzer.errs.clearRetainingCapacity();
@@ -153,6 +142,8 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     }
 
+    self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
+
     // Compiler
     var compiler = CompilationManager.init(
         file_name,
@@ -164,10 +155,12 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
+        &self.globals,
     );
     defer compiler.deinit();
+
     self.instr_count = self.analyzer.instructions.len;
-    const function = try compiler.compile(self.analyzer.symbols.count());
+    const function = try compiler.compile();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
     return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
@@ -177,7 +170,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
         .symbols = self.analyzer.symbols,
         .function = function,
-        .globals = compiler.globals.toOwnedSlice(self.vm.allocator) catch oom(),
+        .globals = self.globals.items,
     };
 }
 

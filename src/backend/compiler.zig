@@ -36,7 +36,7 @@ pub const CompilationManager = struct {
     main_index: ?u8 = null,
     repl: bool,
     heap_count: usize = 0,
-    globals: ArrayListUnmanaged(Value) = .{},
+    globals: *ArrayListUnmanaged(Value),
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -52,6 +52,7 @@ pub const CompilationManager = struct {
         render_mode: Disassembler.RenderMode,
         main: usize,
         repl: bool,
+        globals: *ArrayListUnmanaged(Value),
     ) Self {
         return .{
             .file_name = file_name,
@@ -66,6 +67,7 @@ pub const CompilationManager = struct {
             .render_mode = render_mode,
             .main = main,
             .repl = repl,
+            .globals = globals,
         };
     }
 
@@ -73,16 +75,18 @@ pub const CompilationManager = struct {
         self.errs.deinit();
     }
 
-    pub fn compile(self: *Self, symbols_count: usize) !*Obj.Function {
+    pub fn compile(self: *Self) !*Obj.Function {
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
             try stdout.print("//---- {s} ----\n\n", .{self.file_name});
         }
 
         self.compiler = Compiler.init(self, "global scope", 0);
-        self.globals.ensureTotalCapacity(self.vm.allocator, symbols_count) catch oom();
 
         while (self.instr_idx < self.instr_data.len) {
+            // As we don't compile a function, we set this flag here in REPL mode
+            if (self.repl) self.compiler.state.end_of_chain = true;
+
             try self.compiler.compileInstr();
         }
 
@@ -970,7 +974,9 @@ const Compiler = struct {
                 self.function.chunk.constant_count -= 1;
                 var val = self.function.chunk.constants[self.function.chunk.constant_count];
 
-                if (self.manager.instr_data[self.manager.instr_idx] == .cast) {
+                if (self.manager.instr_idx < self.manager.instr_data.len and
+                    self.manager.instr_data[self.manager.instr_idx] == .cast)
+                {
                     self.manager.instr_idx += 1;
                     val = Value.makeFloat(@floatFromInt(val.int));
                 }
