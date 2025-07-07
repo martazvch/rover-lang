@@ -148,17 +148,17 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Adds a new instruction and add it's `start` field and returns its index.
-inline fn addInstr(self: *Self, data: Instruction.Data) void {
+fn addInstr(self: *Self, data: Instruction.Data) void {
     self.instructions.append(self.allocator, .{ .data = data }) catch oom();
 }
 
 /// Reserves an empty slot and returns its index
-inline fn reserveInstr(self: *Self) usize {
+fn reserveInstr(self: *Self) usize {
     return self.instructions.addOne(self.allocator) catch oom();
 }
 
 /// Sets the instruction at the given idnex
-inline fn setInstr(self: *Self, index: usize, data: Instruction.Data) void {
+fn setInstr(self: *Self, index: usize, data: Instruction.Data) void {
     self.instructions.set(index, .{ .data = data });
 }
 
@@ -807,11 +807,17 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         const last = self.state.allow_partial;
         self.state.allow_partial = false;
         self.state.incr_ref = true;
-        const value_type = try self.analyzeExpr(value);
+
+        const sft = try self.getStructAndFieldOrLiteralInfos(value, false);
+
+        if (sft.is_type and sft.field.is(.@"struct")) {
+            return self.err(.assign_type, self.ast.getSpan(value));
+        }
+
         self.state.incr_ref = false;
         self.state.allow_partial = last;
 
-        const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
+        const coherence = try self.performTypeCoercion(checked_type, sft.field, true, self.ast.getSpan(value));
         checked_type = coherence.type;
         data.cast = coherence.cast;
     }
@@ -1292,29 +1298,31 @@ const StructAndFieldTypes = struct {
     }
 };
 
-fn getStructAndFieldTypes(self: *Self, expr: *const Expr) (Error || error{InvalidLiteral})!StructAndFieldTypes {
-    return switch (expr.*) {
-        .field => |*e| try self.field(e),
+/// This function resolves structure field access or literal with additional data
+fn getStructAndFieldOrLiteralInfos(self: *Self, expr: *const Expr, only_ident: bool) Error!StructAndFieldTypes {
+    switch (expr.*) {
+        .field => |*e| return self.field(e),
         .literal => |*e| b: {
-            if (e.tag != .identifier) return error.InvalidLiteral;
+            if (e.tag != .identifier) {
+                if (only_ident) {
+                    return self.err(.invalid_call_target, self.ast.getSpan(expr));
+                } else break :b;
+            }
 
             const variable = try self.resolveIdentifier(e.idx, false);
             self.makeVariableInstr(variable);
-            break :b StructAndFieldTypes.init(.void, variable.kind == .decl, variable.typ, .static_method);
+            return StructAndFieldTypes.init(.void, variable.kind == .decl, variable.typ, .static_method);
         },
-        else => b: {
-            const typ = try self.analyzeExpr(expr);
-            break :b StructAndFieldTypes.init(.void, false, typ, .static_method);
-        },
-    };
+        else => {},
+    }
+
+    const typ = try self.analyzeExpr(expr);
+    return StructAndFieldTypes.init(.void, false, typ, .static_method);
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
-    const sft = self.getStructAndFieldTypes(expr.callee) catch |e| switch (e) {
-        error.InvalidLiteral => return self.err(.invalid_call_target, self.ast.getSpan(expr)),
-        else => |narrowed| return narrowed,
-    };
+    const sft = try self.getStructAndFieldOrLiteralInfos(expr.callee, true);
     const type_value = sft.field.getValue();
 
     const infos = switch (sft.field.getKind()) {

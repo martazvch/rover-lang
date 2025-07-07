@@ -1,0 +1,8 @@
+use data.math
+
+struct Foo {}
+
+fn main() {
+    var foo = Foo
+    var point = math.Vec2
+}
