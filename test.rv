@@ -60,3 +60,69 @@ fn main() {
 // - In RHS, trigger a cow only if there is an invoke in the chain, otherwise it's only access
 // - Simple assignment triggers ow if variable is a heap object, for locals and globals
 //      - What happens if the variable isn't init? The cow looks for r1.obj
+
+
+fn main() {
+    // Here anonymus union
+    fn add(self, other: Vec2 | int) {
+        // 'when' to pattern math on types and '::' to extrat the value
+        when other {
+            Vec2 :: v => todo!(),
+            int :: i => todo!(),
+        }
+    }
+
+    // Enums can't have pyaload but can have methods
+    enum Expr {
+        binop,
+        block,
+    }
+
+    fn check(expr: Expr) {
+        // 'match' to match on a regular value
+        match expr {
+            binop => todo!(),
+            _ => todo!()
+        }
+    }
+
+    // Can define unions like this, tag: Type
+    union Geom {
+        vec: Vec2,
+        scalar: int
+    }
+
+    fn add(self, other: Geom) {
+        // 'when' to pattern match on tagged unions type + extract value
+        when other {
+            Vec2 :: v => todo!(),
+            int :: i => todo!(),
+        }
+
+        // 'match' to pattern match on tag value + extraction
+        match other {
+            vec :: v => todo!(),
+            _ => unreachable,
+        }
+    }
+
+    union Nested {
+        geom: Geom,
+        other, // equivalent to void
+    }
+
+    fn nedted(other: Nested) {
+        // Here we use 'when' so we can interact with types and nested types. If analyzer
+        // recognized that we match on a union inside a union, allow a syntaxe to match nested
+        // levels
+        when other {
+            Geom:Vec2 :: v => ,
+            Geom:int :: i => ,
+        }
+
+        match other {
+            geom :: g => , // here we match on tag so we cannot interact with types and nested
+            // types
+        }
+    }
+}

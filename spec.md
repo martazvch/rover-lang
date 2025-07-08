@@ -156,6 +156,9 @@ Language should support list comprehension because it's too powerfull
 
 ### Union type
 
+> [!Note]
+> cf. bottom of spec
+
 Union can be defined in two ways and can be aliased. Error union follows the same rule but
 separate the types from the error with `!` like:
 
@@ -735,3 +738,110 @@ That means that we generate two binaries, one is the interpreter without those d
 and the other contains those, meaning that it will check them unconditionaly
 
 
+# Unions rewrite
+```rust
+fn main() {
+    // Here anonymus union
+    fn add(self, other: Vec2 | int) {
+        // 'when' to pattern math on types and '::' to extrat the value
+        when other {
+            Vec2 :: v => todo!(),
+            int :: i => todo!(),
+        }
+    }
+
+    // Enums can't have pyaload but can have methods
+    enum Expr {
+        binop,
+        block,
+    }
+
+    fn check(expr: Expr) {
+        // 'match' to match on a regular value
+        match expr {
+            binop => todo!(),
+            _ => todo!()
+        }
+    }
+
+    // Can define unions like this, tag: Type
+    union Geom {
+        vec: Vec2,
+        scalar: int
+    }
+
+    fn add(self, other: Geom) {
+        // 'when' to pattern match on tagged unions type + extract value
+        when other {
+            Vec2 :: v => todo!(),
+            int :: i => todo!(),
+        }
+
+        // 'match' to pattern match on tag value + extraction
+        match other {
+            vec :: v => todo!(),
+            _ => unreachable,
+        }
+    }
+
+    union Nested {
+        geom: Geom,
+        other, // equivalent to void
+    }
+
+    fn nested(other: Nested) {
+        // Here we use 'when' so we can interact with types and nested types. If analyzer
+        // recognized that we match on a union inside a union, allow a syntaxe to match nested
+        // levels
+        when other {
+            Geom:Vec2 :: v => ,
+            Geom:int :: i => ,
+        }
+
+        match other {
+            geom :: g => , // here we match on tag so we cannot interact with types and nested
+            // types
+        }
+    }
+}
+```
+
+# Cow rules
+
+Rules
+- Each invoke triggers a cow
+     - If this is an instance
+     - Latter, check if function mutates the instance and emit only when needed
+- In assignment, trigger a cow for every thing as it could be referenced and modifying
+  the end of field chain modify all references to upper level in chain
+     - Cow for last element of chain is not necessary if it's not a heap object
+- In RHS, trigger a cow only if there is an invoke in the chain, otherwise it's only access
+- Simple assignment triggers cow if variable is a heap object, for locals and globals
+     - What happens if the variable isn't init? The cow looks for r1.obj
+
+```rust
+//                No cow, only access
+//                GET_FIELD_REG, GET_FIELD
+//                     |
+foo.bar.baz   =   toto.titi.tata
+//   |
+// GET_FIELD_REG_COW, ASSIGN_REG_COW
+// Cow each step because it could be ref count
+
+//                No cow, only access
+//                     |
+foo.bar.baz   =   toto.titi[1].tata
+//   |
+// Cow each step because it could be ref count
+
+//                Cow the index call
+//                     |
+foo.bar.baz   =   toto.titi[toto.getIdx()].tata
+//   |
+// Cow each step because it could be ref count
+
+//  No cow
+//    |
+foo = bar
+// cow lhs -> SET_LOCAL_COW
+```
