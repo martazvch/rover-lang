@@ -322,7 +322,12 @@ fn getField(self: *Self, data: *const Instruction.Field) void {
         "[{s} access {}]",
         .{ if (data.kind == .field) "Field" else "Method", data.index },
     );
-    if (data.incr_ref_count) self.indentAndAppendSlice("[Increment reference count]");
+
+    if (data.rc_action == .increment)
+        self.indentAndAppendSlice("[Increment reference count]")
+    else if (data.rc_action == .cow)
+        self.indentAndAppendSlice("[Cow]");
+
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
@@ -369,7 +374,11 @@ fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
     self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
         variable_data.index, @tagName(variable_data.scope),
     });
-    if (data.incr_ref_count) self.indentAndAppendSlice("[Increment reference count]");
+
+    if (data.rc_action == .increment)
+        self.indentAndAppendSlice("[Increment reference count]")
+    else if (data.rc_action == .cow)
+        self.indentAndAppendSlice("[Cow]");
 }
 
 fn identifierAbsolute(self: *Self, data: usize) void {

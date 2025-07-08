@@ -91,13 +91,20 @@ const State = struct {
     /// Current function's type
     fn_type: Type = .void,
     /// Indicates if we should increment reference count
-    incr_ref: bool = false,
+    side: Side = .none,
     /// In a function
     in_fn: bool = false,
     /// Flag to tell if last statement returned from scope
     returns: bool = false,
     /// Current structure's type
     struct_type: Type = .void,
+
+    pub const Side = enum { lhs, rhs, none };
+
+    pub fn setSideGetPRev(self: *State, value: Side) Side {
+        defer self.side = value;
+        return self.side;
+    }
 };
 
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
@@ -232,13 +239,16 @@ fn analyzeNode(self: *Self, node: *const Node) Error!Type {
 fn assignment(self: *Self, node: *const Ast.Assignment) !void {
     const last = self.state.allow_partial;
     self.state.allow_partial = false;
-    defer self.state.allow_partial = last;
+    defer {
+        self.state.allow_partial = last;
+        self.state.side = .none;
+    }
 
     const index = self.reserveInstr();
 
-    self.state.incr_ref = true;
+    self.state.side = .rhs;
     const value_type = try self.analyzeExpr(node.value);
-    self.state.incr_ref = false;
+    self.state.side = .lhs;
 
     const assigne_type, const cow = switch (node.assigne.*) {
         .literal => |*e| b: {
@@ -252,7 +262,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment) !void {
             break :b .{ assigne.typ, false };
         },
         .field => |*e| b: {
-            var field_infos = try self.field(e);
+            var field_infos = try self.field(e, true);
             const field_type = &field_infos.field;
 
             if (field_infos.kind == .method) {
@@ -377,6 +387,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     var default_params: usize = 0;
     var params_type: AutoArrayHashMapUnmanaged(usize, FnInfo.ParamInfo) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
+
+    errdefer self.type_manager.setInfo(type_idx, .{ .func = .{ .params = params_type, .kind = .function, .return_type = .void } });
 
     for (node.params, 0..) |*p, i| {
         const decl = self.instructions.len;
@@ -805,17 +817,18 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl) !void {
         initialized = true;
 
         const last = self.state.allow_partial;
+        self.state.side = .rhs;
         self.state.allow_partial = false;
-        self.state.incr_ref = true;
+        defer {
+            self.state.side = .none;
+            self.state.allow_partial = last;
+        }
 
         const sft = try self.getStructAndFieldOrLiteralInfos(value, false);
 
         if (sft.is_type and sft.field.is(.@"struct")) {
             return self.err(.assign_type, self.ast.getSpan(value));
         }
-
-        self.state.incr_ref = false;
-        self.state.allow_partial = last;
 
         const coherence = try self.performTypeCoercion(checked_type, sft.field, true, self.ast.getSpan(value));
         checked_type = coherence.type;
@@ -864,7 +877,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
         .array_access => |*e| self.arrayAccess(e),
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
-        .field => |*e| (try self.field(e)).field,
+        .field => |*e| (try self.field(e, true)).field,
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),
         .@"if" => |*e| self.ifExpr(e),
@@ -922,11 +935,10 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     //
     // Here, we don't want to increment the reference of 'arr' when resolving the identifier,
     // we want to increment the nested array's reference count
-    const save_check_inr_ref = self.state.incr_ref;
-    self.state.incr_ref = false;
-
+    const save_side = self.state.setSideGetPRev(.none);
     const idx = self.reserveInstr();
     const arr = try self.analyzeExpr(expr.array);
+    self.state.side = save_side;
 
     if (!arr.is(.array)) return self.err(
         .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
@@ -937,7 +949,7 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     const child = self.type_manager.type_infos.items[type_value].array.child;
 
     try self.expectArrayIndex(expr.index);
-    self.setInstr(idx, .{ .array_access = .{ .incr_ref = save_check_inr_ref and child.isHeap() } });
+    self.setInstr(idx, .{ .array_access = .{ .incr_ref = self.getRcAction(child) == .increment } });
 
     return child;
 }
@@ -956,9 +968,9 @@ fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
 
     try self.expectArrayIndex(current.index);
 
-    const save_check_inr_ref = self.state.incr_ref;
-    self.state.incr_ref = false;
+    const save_side = self.state.setSideGetPRev(.none);
     const arr = try self.analyzeExpr(current.array);
+    self.state.side = save_side;
 
     var final_type: Type = arr;
     for (0..depth) |_| {
@@ -966,7 +978,7 @@ fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
         final_type = self.type_manager.type_infos.items[type_value].array.child;
     }
 
-    self.setInstr(idx, .{ .array_access_chain = .{ .depth = depth, .incr_ref = save_check_inr_ref and final_type.isHeap() } });
+    self.setInstr(idx, .{ .array_access_chain = .{ .depth = depth, .incr_ref = self.getRcAction(final_type) == .increment } });
 
     return final_type;
 }
@@ -1205,32 +1217,30 @@ fn block(self: *Self, expr: *const Ast.Block) Error!Type {
     return final;
 }
 
-fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
+fn field(self: *Self, expr: *const Ast.Field, first: bool) Error!StructAndFieldTypes {
     const index = self.reserveInstr();
     const field_name = self.interner.intern(self.ast.toSource(expr.field));
 
-    // We set it to false because we wan't to increment rhs of the field access, not the structure
-    const save_check_inr_ref = self.state.incr_ref;
-    self.state.incr_ref = false;
+    // Only the last part of the chain has to be incremented when in rhs
+    const save_side = if (first and self.state.side == .rhs) self.state.setSideGetPRev(.none) else null;
 
     // If the structure is only an identifier, it could be a type name
-    // const struct_type, const is_type, const is_import = switch (expr.structure.*) {
     const struct_type, const is_type = switch (expr.structure.*) {
         .literal => |*e| b: {
             const assigne = try self.identifier(e.idx, false);
             break :b .{ assigne.typ, assigne.kind == .decl };
         },
         .field => |*e| b: {
-            const sft = try self.field(e);
+            const sft = try self.field(e, false);
             break :b .{ sft.field, sft.is_type };
         },
         else => .{ try self.analyzeExpr(expr.structure), false },
     };
 
-    self.state.incr_ref = save_check_inr_ref;
+    if (save_side) |side| self.state.side = side;
     const struct_value = struct_type.getValue();
 
-    var found_field, const kind: Instruction.Field.Kind = switch (struct_type.getKind()) {
+    const found_field, const kind: Instruction.Field.Kind = switch (struct_type.getKind()) {
         .@"struct" => blk: {
             const infos = self.type_manager.type_infos.items[struct_value].@"struct";
 
@@ -1278,8 +1288,9 @@ fn field(self: *Self, expr: *const Ast.Field) Error!StructAndFieldTypes {
         .field = .{
             .index = found_field.index,
             .kind = kind,
-            // Here, '!is_type' protects: 'geom.Point {}' to be incremented, as we are in the rhs of an assignment
-            .incr_ref_count = self.state.incr_ref and found_field.type.isHeap() and !is_type,
+            // Here, '!is_type' protects: 'geom.Point {}' to be incremented
+            // .rc_action = if (!is_type and kind == .field) self.getRcAction(found_field.type) else .none,
+            .rc_action = if (kind == .field) self.getRcAction(found_field.type) else .none,
         },
     });
 
@@ -1301,7 +1312,7 @@ const StructAndFieldTypes = struct {
 /// This function resolves structure field access or literal with additional data
 fn getStructAndFieldOrLiteralInfos(self: *Self, expr: *const Expr, only_ident: bool) Error!StructAndFieldTypes {
     switch (expr.*) {
-        .field => |*e| return self.field(e),
+        .field => |*e| return self.field(e, true),
         .literal => |*e| b: {
             if (e.tag != .identifier) {
                 if (only_ident) {
@@ -1588,7 +1599,7 @@ fn makeVariableInstr(self: *Self, variable: *Variable) void {
         self.checkCapture(variable);
         self.addInstr(.{ .identifier_id = .{
             .index = variable.decl,
-            .incr_ref_count = self.state.incr_ref and variable.typ.isHeap(),
+            .rc_action = self.getRcAction(variable.typ),
         } });
     } else {
         // In local scopes, we want sometimes to refer to local declarations like:
@@ -2222,4 +2233,14 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
     }
 
     return .{ .type = local_decl, .cast = cast };
+}
+
+fn getRcAction(self: *const Self, typ: Type) rir.RcAction {
+    if (!typ.isHeap()) return .none;
+
+    return switch (self.state.side) {
+        .lhs => .cow,
+        .rhs => .increment,
+        .none => .none,
+    };
 }

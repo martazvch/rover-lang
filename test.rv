@@ -9,120 +9,53 @@ struct Point {
     }
 }
 
-fn main() {
-    var pt = Point{x=2, y=6}
-    var pts = [pt]
+struct Poly {
+    pt: Point,
 
-    print "----------------------"
-    pt.display()
-    pts[0].display()
-    print "----------------------\n"
-    
-    pt.x = 99
-    pt.display()
-    pts[0].display()
-
-    //                No cow, only access
-    //                GET_FIELD_REG, GET_FIELD
-    //                     |
-    foo.bar.baz   =   toto.titi.tata
-    //   |
-    // GET_FIELD_REG_COW, ASSIGN_REG_COW
-    // Cow each step because it could be ref count
-
-    //                No cow, only access
-    //                     |
-    foo.bar.baz   =   toto.titi[1].tata
-    //   |
-    // Cow each step because it could be ref count
-
-    //                Cow the index call
-    //                     |
-    foo.bar.baz   =   toto.titi[toto.getIdx()].tata
-    //   |
-    // Cow each step because it could be ref count
-
-    //  No cow
-    //    |
-    foo = bar
-    // cow lhs -> SET_LOCAL_COW
-    
-    
+    fn clone(self) -> Self {
+        // self
+        Poly{pt=Point{x=1, y=2}}
+    }
 }
 
+struct Structure {
+    poly: Poly,
+    polys: []Poly,
+}
 
-// Rules
-// - Each invoke triggers a cow
-//      - Latter, check if function mutates the instance and emit only when needed
-// - In assignment, trigger a cow for every thing as it could be referenced and modifying
-//   the end of field chain modify all references to upper level in chain
-//      - Cow for last element of chain is not necessary if it's not a heap object
-// - In RHS, trigger a cow only if there is an invoke in the chain, otherwise it's only access
-// - Simple assignment triggers ow if variable is a heap object, for locals and globals
-//      - What happens if the variable isn't init? The cow looks for r1.obj
-
+fn testFn(pt: Point, poly: Poly, structure: Structure) {}
 
 fn main() {
-    // Here anonymus union
-    fn add(self, other: Vec2 | int) {
-        // 'when' to pattern math on types and '::' to extrat the value
-        when other {
-            Vec2 :: v => todo!(),
-            int :: i => todo!(),
-        }
-    }
+    var pt = Point{x=2, y=6}
+    var poly = Poly{pt}
+    var structure = Structure{poly, polys=[poly]}
 
-    // Enums can't have pyaload but can have methods
-    enum Expr {
-        binop,
-        block,
-    }
+    // var ref = pt
+    // var ref1 = structure.poly
+    // var ref2 = structure.poly.pt
+    // var ref3 = structure.polys
+    // var ref4 = structure.polys[0]
+    // var ref5 = structure.polys[0].pt
+    // var noref = structure.polys[0].pt.x
+    //
+    // var pts = [pt]
+    // var structs = [structure.poly.pt]
 
-    fn check(expr: Expr) {
-        // 'match' to match on a regular value
-        match expr {
-            binop => todo!(),
-            _ => todo!()
-        }
-    }
+    var tmp = structure.poly.clone()
+    var tmp1 = structure.poly.clone().pt
+    var tmp2 = structure.poly.clone().pt.x
 
-    // Can define unions like this, tag: Type
-    union Geom {
-        vec: Vec2,
-        scalar: int
-    }
+    // testFn(pt, structure.poly, structure)
+    // testFn(structure.poly.pt, structure.polys[0], structure)
 
-    fn add(self, other: Geom) {
-        // 'when' to pattern match on tagged unions type + extract value
-        when other {
-            Vec2 :: v => todo!(),
-            int :: i => todo!(),
-        }
+    // print "----------------------"
+    // pt.display()
+    // pts[0].display()
+    // print "----------------------\n"
 
-        // 'match' to pattern match on tag value + extraction
-        match other {
-            vec :: v => todo!(),
-            _ => unreachable,
-        }
-    }
-
-    union Nested {
-        geom: Geom,
-        other, // equivalent to void
-    }
-
-    fn nedted(other: Nested) {
-        // Here we use 'when' so we can interact with types and nested types. If analyzer
-        // recognized that we match on a union inside a union, allow a syntaxe to match nested
-        // levels
-        when other {
-            Geom:Vec2 :: v => ,
-            Geom:int :: i => ,
-        }
-
-        match other {
-            geom :: g => , // here we match on tag so we cannot interact with types and nested
-            // types
-        }
-    }
+    // pt.x = 99
+    // poly.pt = Point{x=5, y=8}
+    // structure.poly.pt = Point{x=7, y=9}
+    // pt.display()
+    // pts[0].display()
 }

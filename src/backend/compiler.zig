@@ -183,7 +183,7 @@ const Compiler = struct {
 
     /// Determines if the result of the Op code should be left in a register instead
     /// of top of the stack. Always true if compiling an assignee
-    fn shouldPutResultInReg(self: *Self) bool {
+    fn putChainResultInReg(self: *Self) bool {
         return self.state.is_assignee or !self.consumeEndChainState();
     }
 
@@ -367,7 +367,7 @@ const Compiler = struct {
     fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
         const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
-        const reg = self.shouldPutResultInReg();
+        const reg = self.putChainResultInReg();
 
         // Variable
         try self.compileInstr();
@@ -391,7 +391,7 @@ const Compiler = struct {
 
         // Variable
         self.state.to_reg = true;
-        const reg = self.shouldPutResultInReg();
+        const reg = self.putChainResultInReg();
 
         try self.compileInstr();
 
@@ -585,7 +585,7 @@ const Compiler = struct {
         const start = self.getStart();
 
         // As we compile member first, we preshot the value
-        const reg = self.shouldPutResultInReg();
+        const reg = self.putChainResultInReg();
         // We compile the identifier/call/array access first
         try self.compileInstr();
 
@@ -607,7 +607,7 @@ const Compiler = struct {
             start,
         );
 
-        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
+        if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
     }
 
     fn floatInstr(self: *Self, value: f64) Error!void {
@@ -640,6 +640,10 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         // Compiles the receiver
+        const save_end_chain = self.state.end_of_chain;
+        self.state.end_of_chain = true;
+        self.state.end_of_chain = save_end_chain;
+
         try self.compileInstr();
         if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
         try self.compileArgs(data.arity);
@@ -726,7 +730,7 @@ const Compiler = struct {
         const start = self.getStart();
         const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
         self.emitGetVar(variable_data, start);
-        if (data.incr_ref_count) self.writeOp(.incr_ref_count, start);
+        if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
     }
 
     fn identifierAbsolute(self: *Self, data: usize) Error!void {

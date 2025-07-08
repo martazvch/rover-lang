@@ -1,6 +1,7 @@
 pub const Scope = enum(u2) { builtin, global, heap, local };
 pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
+pub const RcAction = enum { increment, cow, none };
 
 pub const Instruction = struct {
     data: Data,
@@ -111,7 +112,7 @@ pub const Instruction = struct {
         invoke: bool = false,
     };
     pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
-    pub const IdentifierId = struct { index: usize, incr_ref_count: bool };
+    pub const IdentifierId = struct { index: usize, rc_action: RcAction };
     pub const If = struct {
         cast: Cast,
         has_else: bool,
@@ -127,7 +128,7 @@ pub const Instruction = struct {
     pub const Field = struct {
         index: usize,
         kind: Kind,
-        incr_ref_count: bool,
+        rc_action: RcAction,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
