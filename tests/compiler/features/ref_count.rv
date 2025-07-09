@@ -1,42 +1,50 @@
-struct Foo { x = 0 }
 struct Point {
-    x = 0,
-    foo: []Foo,
-}
-struct Poly {
-    p: Point,
+    x, y: int
+
+    fn display(self) {
+        print "Point"
+        print self.x
+        print self.y
+        print ""
+    }
 }
 
-fn incrFirstOnly(p: Point, x: int) {}
+struct Poly {
+    pt: Point,
+
+    fn clone(self) -> Self {
+        // self
+        Poly{pt=Point{x=1, y=2}}
+    }
+}
+
+struct Structure {
+    poly: Poly,
+    polys: []Poly,
+}
+
+fn testFn(pt: Point, poly: Poly, structure: Structure) {}
 
 fn main() {
-    var arr = [1]
-    // Here
-    var arr2 = arr
+    var pt = Point{x=2, y=6}
+    var poly = Poly{pt}
+    var structure = Structure{poly, polys=[poly]}
 
-    var p = Point{foo=[Foo{}]}
-    // Here
-    var poly = Poly{p}
+    var ref = pt
+    var ref1 = structure.poly
+    var ref2 = structure.poly.pt
+    var ref3 = structure.polys
+    var ref4 = structure.polys[0]
+    var ref5 = structure.polys[0].pt
+    var noref = structure.polys[0].pt.x
 
-    // Only first arg should be incremented as 'x' is not heap allocated
-    incrFirstOnly(p, p.x)
-    // Ref count on poly.p, not poly
-    incrFirstOnly(poly.p, poly.p.x)
+    var pts = [pt]
+    var structs = [structure.poly.pt]
 
-    var multiArr = [[1], [2]]
-    // Here
-    var arrRef = multiArr[1]
+    var tmp = structure.poly.clone()
+    var tmp1 = structure.poly.clone().pt
+    var tmp2 = structure.poly.clone().pt.x
 
-    var multiPointArr = [[Point{foo=[Foo{}]}], [Point{foo=[Foo{}]}]]
-    // Here, because we take reference to Point
-    var pRef = multiPointArr[1][0]
-
-    // Here
-    var fooRef = poly.p.foo
-    var fooSubRef = poly.p.foo[0]
-    // Not here
-    var x = poly.p.foo[0].x
-
-    // Here, through another reference counted
-    var fooRef2 = pRef.foo[0]
+    testFn(pt, structure.poly, structure)
 }
+

@@ -642,7 +642,7 @@ const Compiler = struct {
         // Compiles the receiver
         const save_end_chain = self.state.end_of_chain;
         self.state.end_of_chain = true;
-        self.state.end_of_chain = save_end_chain;
+        defer self.state.end_of_chain = save_end_chain;
 
         try self.compileInstr();
         if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
