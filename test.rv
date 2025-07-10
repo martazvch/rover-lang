@@ -30,23 +30,23 @@ fn main() {
     var poly = Poly{pt}
     var structure = Structure{poly, polys=[poly]}
 
-    // var ref = pt
-    // var ref1 = structure.poly
-    // var ref2 = structure.poly.pt
-    // var ref3 = structure.polys
-    // var ref4 = structure.polys[0]
-    // var ref5 = structure.polys[0].pt
-    // var noref = structure.polys[0].pt.x
-    //
-    // var pts = [pt]
-    // var structs = [structure.poly.pt]
+    var ref = pt
+    var ref1 = structure.poly
+    var ref2 = structure.poly.pt
+    var ref3 = structure.polys
+    var ref4 = structure.polys[0]
+    var ref5 = structure.polys[0].pt
+    var noref = structure.polys[0].pt.x
+
+    var pts = [pt]
+    var structs = [structure.poly.pt]
 
     var tmp = structure.poly.clone()
     var tmp1 = structure.poly.clone().pt
     var tmp2 = structure.poly.clone().pt.x
 
-    // testFn(pt, structure.poly, structure)
-    // testFn(structure.poly.pt, structure.polys[0], structure)
+    testFn(pt, structure.poly, structure)
+    testFn(structure.poly.pt, structure.polys[0], structure)
 
     // print "----------------------"
     // pt.display()

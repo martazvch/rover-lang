@@ -806,18 +806,23 @@ fn main() {
 }
 ```
 
-# Cow rules
+# Ref count rules
 
-Rules
+Cow rules
 - Each invoke triggers a cow
      - If this is an instance
-     - Latter, check if function mutates the instance and emit only when needed
+     - Later, check if function mutates the instance and emit only when needed
 - In assignment, trigger a cow for every thing as it could be referenced and modifying
   the end of field chain modify all references to upper level in chain
      - Cow for last element of chain is not necessary if it's not a heap object
 - In RHS, trigger a cow only if there is an invoke in the chain, otherwise it's only access
 - Simple assignment triggers cow if variable is a heap object, for locals and globals
      - What happens if the variable isn't init? The cow looks for r1.obj
+
+Ref count rules
+- Each heap object gets incremented when they are referenced
+- Function arguments aren't because they are immutable by definition unless they are references
+  but in this case it is meant to modify the original object
 
 ```rust
 //                No cow, only access
