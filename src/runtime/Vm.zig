@@ -176,6 +176,7 @@ pub fn runRepl(self: *Self) !void {
                 return;
             },
         };
+
         try self.run("stdin", prompt);
     }
 }
