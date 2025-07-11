@@ -392,7 +392,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
             .get_local_reg => {
                 self.r1 = &frame.slots[frame.readByte()];
-                self.r1.obj = self.cow(self.r1.obj);
+                // self.r1.obj = self.cow(self.r1.obj);
             },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_static_method => {

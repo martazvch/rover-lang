@@ -23,39 +23,31 @@ struct Structure {
     polys: []Poly,
 }
 
-fn testFn(pt: Point, poly: Poly, structure: Structure) {}
-
 fn main() {
+    // Var creation
     var pt = Point{x=2, y=6}
+    var pts = [pt]
     var poly = Poly{pt}
     var structure = Structure{poly, polys=[poly]}
 
-    var ref = pt
-    var ref1 = structure.poly
-    var ref2 = structure.poly.pt
-    var ref3 = structure.polys
-    var ref4 = structure.polys[0]
-    var ref5 = structure.polys[0].pt
-    var noref = structure.polys[0].pt.x
+    // Simple identifier mutation
+    pt.x = 9
+    print pts[0].x
+    pt.display()
+    pt = Point{x=5, y=11}
 
-    var pts = [pt]
-    var structs = [structure.poly.pt]
+    // Array access mutation
+    pts[0].x = 8
+    pts[0] = Point{x=3, y=7}
+    pts[0].display()
 
-    var tmp = structure.poly.clone()
-    var tmp1 = structure.poly.clone().pt
-    var tmp2 = structure.poly.clone().pt.x
+    // Field access
+    poly.pt = Point{x=5, y=8}
+    structure.poly.pt = Point{x=7, y=9}
+    poly.pt.display()
+    structure.polys[0].pt.display()
 
-    testFn(pt, structure.poly, structure)
-    testFn(structure.poly.pt, structure.polys[0], structure)
-
-    // print "----------------------"
-    // pt.display()
-    // pts[0].display()
-    // print "----------------------\n"
-
-    // pt.x = 99
-    // poly.pt = Point{x=5, y=8}
-    // structure.poly.pt = Point{x=7, y=9}
-    // pt.display()
-    // pts[0].display()
+    // In rhs
+    var tmp = poly.clone()
+    var tmp2 = structure.poly.clone()
 }
