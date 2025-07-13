@@ -13,11 +13,14 @@ const ENABLE_ECHO_INPUT = 0x0004;
 const ENABLE_PROCESSED_INPUT = 0x0001;
 
 const KEY_EVENT = 0x0001;
+const VK_TAB = 0x09;
 const VK_UP = 0x26;
 const VK_DOWN = 0x28;
 const VK_LEFT = 0x25;
 const VK_RIGHT = 0x27;
 const VK_RETURN = 0x0D;
+const VK_BACK = 0x08;
+const VK_DELETE = 0x2E;
 
 const RIGHT_ALT_PRESSED = 0x0001;
 const LEFT_ALT_PRESSED = 0x0002;
@@ -65,7 +68,6 @@ pub fn init() Terminal.Error!Self {
     // Set console output to UTF-8
     const prev_cp = win.kernel32.GetConsoleOutputCP();
     _ = win.kernel32.SetConsoleOutputCP(CP_UTF8);
-
     const input_handle = win.kernel32.GetStdHandle(win.STD_INPUT_HANDLE) orelse {
         return error.InitFail;
     };
@@ -130,18 +132,30 @@ pub fn getKey(ctx: *anyopaque) Terminal.Error!Terminal.Key {
         if (only_shift) continue;
 
         return switch (key.wVirtualKeyCode) {
+            VK_UP => .{ .value = .up, .ctrl = ctrl },
+            VK_DOWN => .{ .value = .down, .ctrl = ctrl },
             VK_LEFT => .{ .value = .left, .ctrl = ctrl },
             VK_RIGHT => .{ .value = .right, .ctrl = ctrl },
             VK_RETURN => .{ .value = .enter, .ctrl = ctrl },
+            VK_BACK => .{ .value = .back, .ctrl = ctrl },
+            VK_DELETE => .{ .value = .delete, .ctrl = ctrl },
+            VK_TAB => .{ .value = .tab, .ctrl = ctrl },
             else => {
                 const ch = key.uChar.UnicodeChar;
 
                 if (ch == 0) continue;
+                if (ch > 0x7F) return error.NonAsciiChar;
+
+                // Ctrl-C
+                if (ch == 0x03) {
+                    return .{ .value = .{ .char = 'c' }, .ctrl = true };
+                }
 
                 // Encode character at the end of line
-                var write_ptr: [4]u8 = undefined;
-                const bytes_to_insert = std.unicode.utf8Encode(ch, &write_ptr) catch return error.ReadInputError;
-                return .{ .value = .{ .chars = write_ptr[0..bytes_to_insert] }, .ctrl = ctrl };
+                // var write_ptr: [4]u8 = undefined;
+                // const bytes_to_insert = std.unicode.utf8Encode(ch, &write_ptr) catch return error.ReadInputError;
+                // return .{ .value = .{ .chars = write_ptr[0..bytes_to_insert] }, .ctrl = ctrl };
+                return .{ .value = .{ .char = @intCast(ch) }, .ctrl = ctrl };
             },
         };
     }
