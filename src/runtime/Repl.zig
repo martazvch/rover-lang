@@ -85,20 +85,20 @@ pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
             .up => {
                 if (self.cursor_pos.y == 0) continue;
                 self.cursor_pos.y -= 1;
-                self.restoreHistory(allocator, self.cursor_pos.y, &input, line_offset);
+                line_offset = self.restoreHistory(allocator, self.cursor_pos.y, &input, line_offset);
             },
             .down => {
                 // If end of history, reset line
                 if (self.cursor_pos.y == self.prompts.items.len - 1) {
                     self.cursor_pos.y += 1;
-                    self.clearLineMoveStartOfLine();
-                    self.printPs1();
+                    self.resetLine(&input, 0);
+                    line_offset = 0;
                     continue;
                 } else if (self.cursor_pos.y == self.prompts.items.len) {
                     continue;
                 } else {
                     self.cursor_pos.y += 1;
-                    self.restoreHistory(allocator, self.cursor_pos.y, &input, line_offset);
+                    line_offset = self.restoreHistory(allocator, self.cursor_pos.y, &input, line_offset);
                 }
             },
             .left => {
@@ -136,9 +136,16 @@ pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
                 const trimmed = std.mem.trimRight(u8, input.items[line_offset..], " ");
 
                 if (trimmed.len == 0) {
-                    self.lineReturnContinue(allocator, &input);
-                    self.cursor_pos.x = 0;
+                    try self.stdout.writeAll("\n");
+
+                    if (self.indent_level > 0) {
+                        input.appendSlice(allocator, "\n") catch oom();
+                    }
+
+                    self.printPs1();
                     line_offset = input.items.len;
+                    self.cursor_pos.x = self.indent(allocator, &input);
+                    self.stdout.writeAll(input.items[line_offset..]) catch unreachable;
                     continue;
                 }
 
@@ -146,38 +153,16 @@ pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
                     return error.EndOfFile;
                 }
 
-                const prev_indent = self.indent_level;
-                try self.checkIndent(trimmed);
+                try self.checkIndent(input.items);
 
-                if (prev_indent < self.indent_level or prev_indent > self.indent_level) {
-                    self.moveCursorEndOfLine(input.items.len - line_offset);
-                    input.appendSlice(allocator, "\n") catch oom();
-                    _ = self.stdout.writeAll("\n") catch unreachable;
-                    self.printPs1();
-                    line_offset = input.items.len;
-                    const indent_len = self.indent(allocator, &input);
-                    _ = self.stdout.writeAll(input.items[line_offset..]) catch unreachable;
-                    self.cursor_pos.x = indent_len;
+                if (self.indent_level == 0) {
+                    self.lineReturn(allocator, &input, true);
+                    self.prompts.append(allocator, input.toOwnedSliceSentinel(allocator, 0) catch oom()) catch oom();
+                    self.cursor_pos.y += 1;
+                    return self.prompts.getLast();
                 } else {
-                    if (self.indent_level == 0) {
-                        self.lineReturn(allocator, &input, true);
-                        self.prompts.append(allocator, input.toOwnedSliceSentinel(allocator, 0) catch oom()) catch oom();
-                        self.cursor_pos.y += 1;
-                        return self.prompts.getLast();
-                    } else {
-                        self.moveCursorEndOfLine(input.items[line_offset..].len);
-
-                        input.appendSlice(allocator, "\n") catch oom();
-                        _ = self.stdout.writeAll("\n") catch unreachable;
-                        self.printPs1();
-                        line_offset = input.items.len;
-
-                        const indent_len = self.indent(allocator, &input);
-                        _ = self.stdout.writeAll(input.items[line_offset..]) catch unreachable;
-                        self.cursor_pos.x = indent_len;
-
-                        continue;
-                    }
+                    line_offset = self.lineReturnContinue(allocator, &input);
+                    continue;
                 }
             },
             .char => |char| {
@@ -192,9 +177,9 @@ pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
 
         if (self.cursor_pos.x != input.items.len - line_offset) {
             // Rewrite tail after cursor
-            try self.stdout.writeAll(input.items[self.cursor_pos.x..]);
+            try self.stdout.writeAll(input.items[line_offset + self.cursor_pos.x ..]);
             // Move cursor back to original position
-            const diff = input.items.len - self.cursor_pos.x;
+            const diff = input.items.len - line_offset - self.cursor_pos.x;
             try self.stdout.print("\x1b[{}D", .{diff});
         }
     }
@@ -239,12 +224,8 @@ fn clearLineMoveStartOfLine(self: *Self) void {
     self.stdout.writeAll("\x1b[2K\r") catch unreachable;
 }
 
-/// Prints a new line and Ps1
 fn lineReturn(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8), write: bool) void {
-    if (self.cursor_pos.x < line.items.len) {
-        self.moveCursor(.right, line.items.len - self.cursor_pos.x);
-    }
-
+    self.moveCursorEndOfLine(line.items.len);
     self.stdout.writeAll("\n") catch unreachable;
 
     if (write) {
@@ -252,21 +233,23 @@ fn lineReturn(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u
     }
 }
 
-fn lineReturnContinue(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8)) void {
-    if (self.cursor_pos.x < line.items.len) {
-        self.moveCursor(.right, line.items.len - self.cursor_pos.x);
-    }
-
+fn lineReturnContinue(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8)) usize {
+    self.moveCursorEndOfLine(line.items.len);
     line.appendSlice(allocator, "\n") catch oom();
     _ = self.stdout.writeAll("\n") catch unreachable;
     self.printPs1();
-    const index = line.items.len;
+
+    const line_offset = line.items.len;
     const indent_len = self.indent(allocator, line);
-    _ = self.stdout.writeAll(line.items[index..]) catch unreachable;
+    _ = self.stdout.writeAll(line.items[line_offset..]) catch unreachable;
     self.cursor_pos.x = indent_len;
+
+    return line_offset;
 }
 
 fn checkIndent(self: *Self, input: []const u8) Error!void {
+    self.indent_level = 0;
+
     for (input) |c| {
         if (c == '{')
             self.indent_level += 1
@@ -278,19 +261,33 @@ fn checkIndent(self: *Self, input: []const u8) Error!void {
     if (self.indent_level > MAX_IDENT) return error.TooManyIndents;
 }
 
-fn restoreHistory(self: *Self, allocator: Allocator, index: usize, line: *std.ArrayListUnmanaged(u8), offset: usize) void {
-    // Switching while having edited current line
-    if (line.items.len != offset) {
-        line.shrinkRetainingCapacity(offset);
-        self.cursor_pos.x = 0;
-        // Delete all line and move cursor back to beginning of line
-        self.clearLineMoveStartOfLine();
-        self.printPs1();
-    }
-
+fn restoreHistory(self: *Self, allocator: Allocator, index: usize, line: *std.ArrayListUnmanaged(u8), offset: usize) usize {
+    self.resetLine(line, offset);
     const prev = self.prompts.items[index];
     const prev_no_return = prev[0 .. prev.len - 1];
     line.appendSlice(allocator, prev_no_return) catch oom();
     self.stdout.writeAll(prev_no_return) catch unreachable;
-    self.cursor_pos.x = prev_no_return.len;
+    const start_of_last_line = std.mem.lastIndexOf(u8, prev_no_return, "\n") orelse 0;
+    self.cursor_pos.x = prev_no_return.len - start_of_last_line;
+
+    return start_of_last_line;
+}
+
+/// Resets the line by erasing content from console and line buffer and prints Ps1 back
+fn resetLine(self: *Self, line: *std.ArrayListUnmanaged(u8), offset: usize) void {
+    if (line.items.len != offset) {
+        const line_count = std.mem.count(u8, line.items, "\n");
+
+        self.clearLineMoveStartOfLine();
+        for (0..line_count) |_| {
+            // Move up
+            self.stdout.writeAll("\x1b[A") catch unreachable;
+            self.clearLineMoveStartOfLine();
+        }
+
+        self.printPs1();
+
+        line.shrinkRetainingCapacity(offset);
+        self.cursor_pos.x = 0;
+    }
 }
