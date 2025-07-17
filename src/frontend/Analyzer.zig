@@ -33,7 +33,6 @@ type_manager: *TypeManager,
 instructions: MultiArrayList(Instruction),
 warns: ArrayListUnmanaged(AnalyzerReport),
 errs: ArrayListUnmanaged(AnalyzerReport),
-declarations: AutoHashMapUnmanaged(usize, Type),
 
 globals: ArrayListUnmanaged(Variable),
 locals: ArrayListUnmanaged(Variable),
@@ -90,16 +89,43 @@ const State = struct {
     allow_partial: bool = true,
     /// Current function's type
     fn_type: Type = .void,
-    /// Indicates if we should increment reference count
+    /// Indicates if we should increment reference count or trigger cow
     side: Side = .none,
-    /// In a function
+    /// In a function declaration
     in_fn: bool = false,
     /// Flag to tell if last statement returned from scope
     returns: bool = false,
     /// Current structure's type
     struct_type: Type = .void,
 
+    chain: Chain = .{},
+
     pub const Side = enum { lhs, rhs, none };
+    pub const Chain = struct {
+        active: bool = false,
+        call: bool = false,
+
+        pub fn activate(self: *Chain) void {
+            self.active = true;
+        }
+
+        /// Sets a property of the chain if the chain is active
+        pub fn set(self: *Chain, prop: enum { call }) void {
+            if (!self.active) return;
+
+            switch (prop) {
+                .call => self.call = true,
+            }
+        }
+
+        pub fn cow(self: *const Chain) bool {
+            return self.call;
+        }
+
+        pub fn reset(self: *Chain) void {
+            self.* = .{};
+        }
+    };
 
     pub fn setSideGetPRev(self: *State, value: Side) Side {
         defer self.side = value;
@@ -118,7 +144,6 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline, interner: *I
     self.errs = .{};
     self.warns = .{};
     self.instructions = .{};
-    self.declarations = .{};
     self.globals = .{};
     self.locals = .{};
     self.imports = .{};
@@ -219,6 +244,8 @@ fn analyzeNode(self: *Self, node: *const Node) Error!Type {
         else
             self.err(.unpure_in_global, self.ast.getSpan(node));
     }
+
+    self.state.chain.reset();
 
     switch (node.*) {
         .assignment => |*n| try self.assignment(n),
@@ -455,6 +482,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
     // ------
     //  Body
     // ------
+    // TODO: use block
     // We don't use block because we don't want to emit extra data from the block
     self.scope_depth += 1;
     var body_err = false;
@@ -871,6 +899,10 @@ fn whileStmt(self: *Self, node: *const Ast.While) Error!void {
     );
 }
 
+// Transform: foo.bar[0].baz().x -> AST -> field(x, call(baz, array(0, field(bar, foo))))
+// into:
+// fn chainBuilder(self: *Self, expr: *Expr) Chain {}
+
 fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
     return switch (expr.*) {
         .array => |*e| self.array(e),
@@ -927,15 +959,10 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
         return self.arrayAccessChain(expr);
     }
 
-    // If we are in an array access and that we should increment the reference, we unmark
-    // the flag so that the identifier instruction doesn't trigger a reference increment
-    // but only the last array access, for example:
-    //   var arr = [[1, 2], [3, 4]]
-    //   var arrRef = arr[0]
-    //
-    // Here, we don't want to increment the reference of 'arr' when resolving the identifier,
-    // we want to increment the nested array's reference count
-    const save_side = self.state.setSideGetPRev(.none);
+    // Two cases, example code: 'pts[0] = ...' and '... = pts[0]'
+    // - LHS: we want to trigger cow for 'pts' as well as 'pts[0]' (we cow every level)
+    // - RHS: we want to increment ref count only for 'pts[0]' (we ref count only last)
+    const save_side = if (self.state.side == .rhs) self.state.setSideGetPRev(.none) else self.state.side;
     const idx = self.reserveInstr();
     const arr = try self.analyzeExpr(expr.array);
     self.state.side = save_side;
@@ -949,7 +976,10 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
     const child = self.type_manager.type_infos.items[type_value].array.child;
 
     try self.expectArrayIndex(expr.index);
-    self.setInstr(idx, .{ .array_access = .{ .incr_ref = self.getRcAction(child) == .increment } });
+    self.setInstr(idx, .{ .array_access = .{
+        .cow = self.getRcAction(arr) == .cow,
+        .incr_ref = self.getRcAction(child) == .increment,
+    } });
 
     return child;
 }
@@ -978,7 +1008,11 @@ fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess) Error!Type {
         final_type = self.type_manager.type_infos.items[type_value].array.child;
     }
 
-    self.setInstr(idx, .{ .array_access_chain = .{ .depth = depth, .incr_ref = self.getRcAction(final_type) == .increment } });
+    self.setInstr(idx, .{ .array_access_chain = .{
+        .depth = depth,
+        .cow = self.getRcAction(arr) == .cow,
+        .incr_ref = self.getRcAction(final_type) == .increment,
+    } });
 
     return final_type;
 }
@@ -1288,8 +1322,6 @@ fn field(self: *Self, expr: *const Ast.Field, first: bool) Error!StructAndFieldT
         .field = .{
             .index = found_field.index,
             .kind = kind,
-            // Here, '!is_type' protects: 'geom.Point {}' to be incremented
-            // .rc_action = if (!is_type and kind == .field) self.getRcAction(found_field.type) else .none,
             .rc_action = if (kind == .field) self.getRcAction(found_field.type) else .none,
         },
     });
@@ -1333,6 +1365,8 @@ fn getStructAndFieldOrLiteralInfos(self: *Self, expr: *const Expr, only_ident: b
 
 fn call(self: *Self, expr: *const Ast.FnCall) Error!Type {
     const index = self.reserveInstr();
+    self.state.chain.call = true;
+
     const sft = try self.getStructAndFieldOrLiteralInfos(expr.callee, true);
     const type_value = sft.field.getValue();
 
@@ -2058,22 +2092,6 @@ fn isPure(self: *const Self, node: anytype) bool {
     };
 }
 
-/// Checks if an expression if of a certain type kind and returns the associated value or error
-fn expect_type_kind(self: *Self, node: Node.Index, kind: TypeSys.Kind) !TypeSys.Value {
-    const expr_type = try self.analyze_node(node);
-
-    return if (expr_type.is(kind))
-        expr_type.getValue()
-    else
-        self.err(
-            .{ .type_mismatch = .{
-                .expect = kind.toStr(),
-                .found = expr_type.getKind().toStr(),
-            } },
-            self.to_span(node),
-        );
-}
-
 /// Checks if two function types are equal. Functions' type depend on the index
 /// where their infos are in the type manager, so they could be the same type
 /// but with different indices. This is due to anonymus function type (like return
@@ -2237,6 +2255,8 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
 
 fn getRcAction(self: *const Self, typ: Type) rir.RcAction {
     if (!typ.isHeap()) return .none;
+
+    if (self.state.chain.cow()) return .cow;
 
     return switch (self.state.side) {
         .lhs => .cow,

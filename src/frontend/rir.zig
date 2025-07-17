@@ -93,8 +93,19 @@ pub const Instruction = struct {
         /// [1, 3, 4.5]. Here, we need to backtrack all the casts
         cast_until: usize,
     };
-    pub const ArrayAccess = struct { incr_ref: bool };
-    pub const ArrayAccessChain = struct { depth: usize, incr_ref: bool };
+    pub const ArrayAccess = struct {
+        /// Cow for the array identifier
+        cow: bool,
+        /// Increment RC for accessed array element
+        incr_ref: bool,
+    };
+    pub const ArrayAccessChain = struct {
+        depth: usize,
+        /// Cow for the array identifier
+        cow: bool,
+        /// Increment RC for accessed array element
+        incr_ref: bool,
+    };
     pub const Assignment = struct {
         /// Casts to float the value before assignment
         cast: bool,

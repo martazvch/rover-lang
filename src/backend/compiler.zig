@@ -124,6 +124,8 @@ const Compiler = struct {
         end_of_chain: bool = false,
         /// Writes variable getters to the register
         to_reg: bool = false,
+        /// Triggers a cow
+        cow: bool = false,
     };
 
     const FnKind = enum { global, @"fn", method };
@@ -220,7 +222,7 @@ const Compiler = struct {
     }
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
-    fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
+    fn emitGetVar(self: *Self, variable: *const Instruction.Variable, cow: bool, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         // TODO: more frequent paths should be first
         self.writeOpAndByte(
@@ -229,7 +231,7 @@ const Compiler = struct {
             else if (variable.scope == .global)
                 if (self.state.to_reg) .get_global_reg else .get_global
             else if (self.state.to_reg)
-                .get_local_reg
+                if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
             else
                 .get_local,
             @intCast(variable.index),
@@ -307,7 +309,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => |*data| self.arrayAccess(data.incr_ref, self.getStart()),
+            .array_access => |*data| self.arrayAccess(data, self.getStart()),
             .array_access_chain => |*data| self.arrayAccessChain(data, self.getStart()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -364,7 +366,7 @@ const Compiler = struct {
         self.writeOpAndByte(.array, @intCast(data.len), start);
     }
 
-    fn arrayAccess(self: *Self, incr_ref: bool, start: usize) Error!void {
+    fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess, start: usize) Error!void {
         const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
         const reg = self.putChainResultInReg();
@@ -375,8 +377,8 @@ const Compiler = struct {
         self.state.to_reg = false;
         try self.compileInstr();
 
-        self.writeOp(if (reg) .array_access_reg else .array_access, start);
-        if (incr_ref) self.writeOp(.incr_ref_count, start);
+        self.writeOp(if (reg) if (data.cow) .array_access_reg_cow else .array_access_reg else .array_access, start);
+        if (data.incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
     fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
@@ -596,7 +598,7 @@ const Compiler = struct {
         // Get field/bound method of first value on the stack
         self.writeOpAndByte(
             if (data.kind == .field)
-                if (reg) .get_field_reg else .get_field
+                if (reg) if (data.rc_action == .cow) .get_field_reg_cow else .get_field_reg else .get_field
             else if (data.kind == .symbol)
                 if (reg) .get_symbol_reg else .bound_import
             else if (data.kind == .method)
@@ -644,7 +646,10 @@ const Compiler = struct {
         self.state.end_of_chain = true;
         defer self.state.end_of_chain = save_end_chain;
 
+        self.state.cow = true;
         try self.compileInstr();
+        self.state.cow = false;
+
         if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
         try self.compileArgs(data.arity);
 
@@ -723,13 +728,13 @@ const Compiler = struct {
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
-        self.emitGetVar(data, self.getStart());
+        self.emitGetVar(data, false, self.getStart());
     }
 
     fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
         const start = self.getStart();
         const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
-        self.emitGetVar(variable_data, start);
+        self.emitGetVar(variable_data, data.rc_action == .cow, start);
         if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
     }
 

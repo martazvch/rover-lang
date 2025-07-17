@@ -810,14 +810,15 @@ fn main() {
 
 Cow rules
 - Each invoke triggers a cow
-     - If this is an instance
+     - If this is an instance (no static invoke)
      - Later, check if function mutates the instance and emit only when needed
 - In assignment, trigger a cow for every thing as it could be referenced and modifying
   the end of field chain modify all references to upper level in chain
      - Cow for last element of chain is not necessary if it's not a heap object
+     - Array assign always cow
+     - Array assign chain always cow
 - In RHS, trigger a cow only if there is an invoke in the chain, otherwise it's only access
-- Simple assignment triggers cow if variable is a heap object, for locals and globals
-     - What happens if the variable isn't init? The cow looks for r1.obj
+- Simple assignment don't trigger cow because we don't mutate, we reassign a new value.
 
 Ref count rules
 - Each heap object gets incremented when they are referenced

@@ -1,1 +1,83 @@
-var a = 1
+1
+
+
+//struct Point {
+//    x, y: int
+//
+//    fn display(self) {
+//        print "Point"
+//        print self.x
+//        print self.y
+//        print ""
+//    }
+//}
+//
+//struct Poly {
+//    pt: Point,
+//
+//    fn clone(self) -> Self {
+//        self.pt.x = 123
+//        print self.pt.x
+//
+//        // self
+//        Poly{pt=Point{x=1, y=2}}
+//    }
+//}
+//
+//struct Structure {
+//    poly: Poly,
+//    polys: []Poly,
+//}
+//
+//struct Container {
+//    arr: []Point,
+//}
+//
+//fn main() {
+//    // Var creation
+//    var pt = Point{x=2, y=6}
+//    var pts = [pt]
+//    var poly = Poly{pt}
+//    var structure = Structure{poly, polys=[poly]}
+//    var container = Container{arr=pts}
+//
+//    // Simple identifier mutation
+//    //pt.x = 9
+//    //print pts[0].x
+//    //print poly.pt.x
+//    //pt.display()
+//
+//    // Array access mutation
+//    //pts[0].x = 8
+//    //print pts[0].x
+//    //print poly.pt.x
+//    //print container.arr[0].x
+//    //pt.display()
+//    //
+//    //pts[0] = Point{x=3, y=7}
+//    //container.arr[0].display()
+//
+//
+//    // Field chain access
+//    //var polyRef = structure.poly
+//    //var ptRef = structure.poly.pt
+//    //
+//    //structure.poly.pt.y = 99
+//    //print polyRef.pt.y
+//    //print ptRef.y
+//
+//    // Field access
+//    //poly.pt = Point{x=5, y=8}
+//    //print structure.poly.pt.y
+//    //
+//    //structure.polys[0].pt.x = 5
+//    //poly.pt.display()
+//    //structure.polys[0].pt.display()
+//
+//    // In rhs
+//    var tmp = poly.clone()
+//    //print poly.pt.x
+//    //print structure.poly.pt.x
+//
+//    //var tmp2 = structure.poly.clone()
+//}

@@ -106,7 +106,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
     // Analyzer
-    self.analyzer.analyze(&ast);
+    // self.analyzer.analyze(&ast);
     defer self.analyzer.reinit();
 
     // We don't keep errors/warnings from a prompt to another
@@ -144,13 +144,20 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
 
     self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
 
+    // TMP
+    const A2 = @import("frontend/Analyzer2.zig");
+    var analyzer2: A2 = undefined;
+    analyzer2.init(self.vm.allocator, &self.vm.interner, self.config.embedded);
+    analyzer2.analyze(&ast) catch @panic("Error A2");
+
     // Compiler
     var compiler = CompilationManager.init(
         file_name,
         self.vm,
         self.analyzer.type_manager.natives.functions,
         self.instr_count,
-        &self.analyzer.instructions,
+        // &self.analyzer.instructions,
+        &analyzer2.instructions,
         self.analyzer.modules.values(),
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,

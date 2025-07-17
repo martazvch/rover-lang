@@ -261,6 +261,14 @@ fn execute(self: *Self, entry_point: *Function) !void {
 
                 self.r1 = &array.values.items[final];
             },
+            .array_access_reg_cow => {
+                const index = self.stack.pop().int;
+                const array = self.r1.obj.as(Array);
+                const final = checkArrayIndex(array, index);
+
+                self.r1 = &array.values.items[final];
+                self.r1.obj = self.cow(self.r1.obj);
+            },
             .array_access_chain => {
                 const depth = frame.readByte();
                 var tmp: *Array = self.r1.obj.as(Array);
@@ -301,10 +309,9 @@ fn execute(self: *Self, entry_point: *Function) !void {
 
                 for (0..depth - 1) |_| {
                     const idx = checkArrayIndex(last.*, self.stack.pop().int);
-                    last = @constCast(&last.*.values.items[idx].obj);
+                    last = &last.*.values.items[idx].obj;
+                    last.* = self.cow(last.*.asObj()).as(Array);
                 }
-
-                last.* = self.cow(last.*.asObj()).as(Array);
 
                 const idx = checkArrayIndex(last.*, self.stack.pop().int);
                 last.*.values.items[idx] = self.stack.pop();
@@ -379,6 +386,11 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 const field_idx = frame.readByte();
                 self.r1 = &self.r1.obj.as(Instance).fields[field_idx];
             },
+            .get_field_reg_cow => {
+                const field_idx = frame.readByte();
+                self.r1 = &self.r1.obj.as(Instance).fields[field_idx];
+                self.r1.obj = self.cow(self.r1.obj);
+            },
             .get_global => {
                 const idx = frame.readByte();
                 self.stack.push(self.module.globals[idx]);
@@ -391,9 +403,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
-            .get_local_reg => {
+            .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
+            .get_local_reg_cow => {
                 self.r1 = &frame.slots[frame.readByte()];
-                // self.r1.obj = self.cow(self.r1.obj);
+                self.r1.obj = self.cow(self.r1.obj);
             },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_static_method => {
@@ -413,6 +426,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 const args_count = frame.readByte();
                 const method_idx = frame.readByte();
                 const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+
+                // self.stack.peekRef(args_count).obj = self.cow(self.stack.peekRef(args_count).obj);
+                // const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+
                 try self.call(&frame, callee, args_count, imported);
             },
             .jump => {

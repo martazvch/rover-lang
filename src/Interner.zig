@@ -6,6 +6,7 @@ const oom = @import("utils.zig").oom;
 map: StringHashMap(usize),
 
 const Self = @This();
+pub const Index = usize;
 
 pub fn init(allocator: Allocator) Self {
     return .{
@@ -17,7 +18,7 @@ pub fn deinit(self: *Self) void {
     self.map.deinit();
 }
 
-pub fn intern(self: *Self, str: []const u8) usize {
+pub fn intern(self: *Self, str: []const u8) Index {
     const entry = self.map.getOrPut(str) catch oom();
 
     if (!entry.found_existing) {
@@ -27,7 +28,7 @@ pub fn intern(self: *Self, str: []const u8) usize {
     return entry.value_ptr.*;
 }
 
-pub fn getKey(self: *const Self, index: usize) ?[]const u8 {
+pub fn getKey(self: *const Self, index: Index) ?[]const u8 {
     var it = self.map.iterator();
 
     while (it.next()) |entry| {
