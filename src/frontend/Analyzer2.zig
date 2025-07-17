@@ -1,20 +1,19 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
-const MultiArrayList = std.MultiArrayList;
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const Ast = @import("Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
-const rir = @import("rir.zig");
-const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
 const GenReport = @import("../reporter.zig").GenReport;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const oom = @import("../utils.zig").oom;
 const TM2 = @import("TM2.zig");
+const IrBuilder = @import("IrBuilder.zig");
 
 pub const Type = union(enum) {
     void,
@@ -24,9 +23,34 @@ pub const Type = union(enum) {
     str,
     null,
     self,
+    function: struct {
+        params: []Parameter,
+        return_typ: *Type,
+    },
+    fn_ptr: *Type,
+    parameter: Parameter,
 
-    pub fn equal(self: *const Type, other: *const Type) bool {
+    pub const Parameter = struct {
+        type: *Type,
+        default: bool = false,
+    };
+
+    pub fn eql(self: *const Type, other: *const Type) bool {
         return std.meta.eql(self, other);
+    }
+
+    pub fn hash(self: *const Self) u64 {
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(@tagName(self.*));
+
+        switch (self.*) {
+            .function => |ty| {
+                _ = ty;
+            },
+            else => {},
+        }
+
+        return hasher.final();
     }
 
     pub fn cast(self: *const Type, other: *const Type) bool {
@@ -38,19 +62,20 @@ pub const Type = union(enum) {
 };
 
 const Scope = struct {
-    variables: std.AutoArrayHashMapUnmanaged(InternerIdx, Variable),
+    variables: AutoArrayHashMapUnmanaged(InternerIdx, Variable),
+    symbols: AutoArrayHashMapUnmanaged(InternerIdx, Type),
     depth: usize,
     offset: usize,
 
-    pub const empty: Scope = .{ .variables = .{}, .depth = 0, .offset = 0 };
+    pub const empty: Scope = .{ .variables = .{}, .symbols = .{}, .depth = 0, .offset = 0 };
 
-    pub fn declare(self: *Scope, allocator: Allocator, name: InternerIdx, typ: Type, initialized: bool) error{TooManyLocals}!Instruction.Variable {
+    pub fn declare(self: *Scope, allocator: Allocator, name: InternerIdx, typ: Type, initialized: bool) error{TooManyLocals}!usize {
         if (self.variables.count() - self.offset > 255) {
             return error.TooManyLocals;
         }
 
         self.variables.put(allocator, name, .{ .typ = typ, .depth = self.depth, .initialized = initialized }) catch oom();
-        return .{ .index = self.variables.count(), .scope = if (self.depth == 0) .global else .local };
+        return self.variables.count();
     }
 
     pub fn isInScope(self: *const Scope, name: InternerIdx) bool {
@@ -58,17 +83,21 @@ const Scope = struct {
     }
 };
 
-fn declareVariable(self: *Self, name: InternerIdx, typ: Type, initialized: bool, span: Span) Error!Instruction.Variable {
+fn declareVariable(self: *Self, name: InternerIdx, typ: Type, initialized: bool, span: Span) Error!usize {
     return self.scope.declare(self.allocator, name, typ, initialized) catch self.err(.too_many_locals, span);
 }
 
 const Context = struct {
     side: enum { lhs, rhs } = .lhs,
-    fn_type: Type = .void,
-    struct_type: Type = .void,
+    fn_type: ?Type = null,
+    struct_type: ?Type = null,
     ref_count: bool = false,
     cow: bool = false,
     allow_partial: bool = false,
+
+    pub fn restore(self: *Context, saved: Context) void {
+        self.* = saved;
+    }
 
     pub fn reset(self: *Context) void {
         self.* = .{};
@@ -96,8 +125,8 @@ warns: ArrayListUnmanaged(AnalyzerReport),
 
 ast: *const Ast,
 scope: Scope,
-instructions: MultiArrayList(Instruction),
 tm: TM2,
+ir_builder: IrBuilder,
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
@@ -108,8 +137,8 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner, repl: bool) 
     self.scope = .empty;
     self.errs = .{};
     self.warns = .{};
-    self.instructions = .{};
-    self.tm = TM2.init(allocator);
+    self.ir_builder = .init(allocator);
+    self.tm = .init(allocator);
     self.tm.declareBuiltinTypes(interner);
 
     self.cached_names = .{
@@ -131,21 +160,6 @@ pub fn deinit(self: *Self) void {
 fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
     self.errs.append(self.allocator, AnalyzerReport.err(kind, span)) catch oom();
     return error.Err;
-}
-
-/// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstr(self: *Self, data: Instruction.Data) void {
-    self.instructions.append(self.allocator, .{ .data = data }) catch oom();
-}
-
-/// Reserves an empty slot and returns its index
-fn reserveInstr(self: *Self) usize {
-    return self.instructions.addOne(self.allocator) catch oom();
-}
-
-/// Sets the instruction at the given idnex
-fn setInstr(self: *Self, index: usize, data: Instruction.Data) void {
-    self.instructions.set(index, .{ .data = data });
 }
 
 pub fn analyze(self: *Self, ast: *const Ast) Error!void {
@@ -188,7 +202,7 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!Type {
     switch (node.*) {
         // .assignment => |*n| try self.assignment(n),
         // .discard => |n| try self.discard(n),
-        // .fn_decl => |*n| _ = try self.fnDeclaration(n),
+        .fn_decl => |*n| _ = try self.fnDeclaration(n, ctx),
         // .multi_var_decl => |*n| try self.multiVarDecl(n),
         .print => |n| try self.print(n, ctx),
         // .struct_decl => |*n| try self.structDecl(n),
@@ -202,8 +216,66 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!Type {
     return .void;
 }
 
+fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void {
+    const name = try self.internIfNotInScope(node.name);
+
+    if (name == self.cached_names.main) {
+        // TODO: Error
+        if (self.scope.depth != 0)
+            @panic("Main in local scope")
+        else if (self.tm.isDeclared(name))
+            @panic("Multiple mains");
+    }
+
+    const fn_idx = self.ir_builder.reserveInstr();
+    _ = fn_idx; // autofix
+    // TODO: delete and merge this into other Instructions
+    self.ir_builder.name(name, .add);
+
+    const variable_instr = self.ir_builder.reserveInstr();
+    _ = variable_instr; // autofix
+
+    // We reserve slot 0 for potential 'self'
+    _ = try self.declareVariable(self.cached_names.self, ctx.struct_type orelse .void, true, .zero);
+
+    // Function's type
+    // var fn_type: Type = .{ .function = .{ .params = undefined, .return_typ = undefined } };
+
+    var params_type: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
+    params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
+
+    for (node.params) |*p| {
+        const param_name = self.interner.intern(self.ast.toSource(p.name));
+
+        if (self.scope.isInScope(param_name)) {
+            return self.err(
+                .{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } },
+                self.ast.getSpan(p.name),
+            );
+        }
+
+        var param_type = try self.checkAndGetType(p.typ, ctx);
+        if (p.value) |val| {
+            param_type = try self.defaultValue(param_type, val, ctx);
+        }
+
+        if (param_type == .void) {
+            return self.err(.void_param, self.ast.getSpan(p.name));
+        }
+
+        _ = try self.declareVariable(param_name, param_type, true, self.ast.getSpan(p.name));
+        params_type.putAssumeCapacity(param_name, .{ .type = param_type, .default = p.value != null });
+    }
+}
+
+fn defaultValue(self: *Self, decl_type: Type, default_value: *const Expr, ctx: *Context) Error!Type {
+    const value_type = try self.analyzeExpr(default_value, ctx);
+    const coerce = try self.performTypeCoercion(decl_type, value_type, true, self.ast.getSpan(default_value));
+    return coerce.type;
+}
+
 fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
-    self.addInstr(.{ .print = undefined });
+    self.ir_builder.print(.add);
     const typ = try self.analyzeExpr(expr, ctx);
 
     if (typ == .void) {
@@ -211,16 +283,17 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
     }
 }
 
-fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) !void {
+fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!void {
     const name = try self.internIfNotInScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
-    const index = self.reserveInstr();
+    const index = self.ir_builder.reserveInstr();
 
     var initialized = false;
-    var data = Instruction.VarDecl{ .variable = undefined };
+    var cast = false;
+    // var data = Instruction.VarDecl{ .variable = undefined };
 
     if (node.value) |value| {
-        data.has_value = true;
+        // data.has_value = true;
         initialized = true;
 
         // const last = self.state.allow_partial;
@@ -243,12 +316,14 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) !void {
         const value_type = try self.analyzeExpr(value, ctx);
         const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
         checked_type = coherence.type;
-        data.cast = coherence.cast;
+        // data.cast = coherence.cast;
+        cast = coherence.cast;
     }
 
     // data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
-    data.variable = try self.declareVariable(name, checked_type, checked_type != .void, self.ast.getSpan(node.name));
-    self.setInstr(index, .{ .var_decl = data });
+    const decl_index = try self.declareVariable(name, checked_type, initialized, self.ast.getSpan(node.name));
+    self.ir_builder.declareVariable(initialized, cast, decl_index, self.scope.depth, .{ .setAt = index });
+    // self.setInstr(index, .{ .var_decl = data });
 
     // if (data.variable.scope == .global) {
     //     self.addSymbol(name, checked_type);
@@ -274,17 +349,19 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!Type {
     };
 }
 
-fn literal(self: *Self, expr: *const Ast.Literal, _: *Context) Error!Type {
+fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!Type {
     const text = self.ast.toSource(expr);
 
     switch (expr.tag) {
         .bool => {
-            self.addInstr(.{ .bool = self.ast.token_tags[expr.idx] == .true });
+            self.ir_builder.boolLiteral(self.ast.token_tags[expr.idx] == .true, .add);
             return .bool;
         },
         .identifier, .self => {
-            const name_interned = self.interner.intern(text);
-            self.scope.variables.getPtr(name_interned);
+            const resolved = try self.resolveIdentifier(expr.idx, true, ctx);
+            self.ir_builder.identifier(resolved.index, .add);
+
+            return resolved.variable.typ;
         },
         .int => {
             const value = std.fmt.parseInt(isize, text, 10) catch blk: {
@@ -292,7 +369,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, _: *Context) Error!Type {
                 std.debug.print("Error parsing integer\n", .{});
                 break :blk 0;
             };
-            self.addInstr(.{ .int = value });
+            self.ir_builder.intLiteral(value, .add);
             return .int;
         },
         .float => {
@@ -301,11 +378,11 @@ fn literal(self: *Self, expr: *const Ast.Literal, _: *Context) Error!Type {
                 std.debug.print("Error parsing float\n", .{});
                 break :blk 0.0;
             };
-            self.addInstr(.{ .float = value });
+            self.ir_builder.floatLiteral(value, .add);
             return .float;
         },
         .null => {
-            self.addInstr(.{ .null = undefined });
+            self.ir_builder.nullLiteral(.add);
             return .null;
         },
         .string => {
@@ -335,14 +412,42 @@ fn literal(self: *Self, expr: *const Ast.Literal, _: *Context) Error!Type {
             }
 
             const value = self.interner.intern(final.toOwnedSlice(self.allocator) catch oom());
-            self.addInstr(.{ .string = value });
+            self.ir_builder.strLiteral(value, .add);
             return .str;
         },
     }
 }
 
+fn resolveIdentifier(
+    self: *Self,
+    token_name: Ast.TokenIndex,
+    initialized: bool,
+    ctx: *const Context,
+) Error!struct { index: usize, variable: *Variable } {
+    const text = self.ast.toSource(token_name);
+    const name = self.interner.intern(text);
+
+    if (self.scope.variables.getPtr(name)) |variable| {
+        if (initialized and !variable.initialized) {
+            return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
+        }
+
+        return .{ .index = self.scope.variables.getIndex(name).?, .variable = variable };
+    } else if (name == self.cached_names.Self) {
+        _ = ctx;
+        unreachable;
+        // if (ctx.struct_type == null) {
+        //     return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
+        // }
+        //
+        // return &self.big_self;
+    } else {
+        return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(name));
+    }
+}
+
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
-fn internIfNotInScope(self: *Self, token: usize) !usize {
+fn internIfNotInScope(self: *Self, token: usize) Error!usize {
     const name = self.interner.intern(self.ast.toSource(token));
 
     if (self.scope.isInScope(name)) return self.err(
@@ -398,17 +503,19 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type, ctx: *const Context) Erro
         .scalar => {
             const interned = self.interner.intern(self.ast.toSource(t));
 
-            return self.tm.declared.get(interned) orelse {
+            return self.tm.symbols.get(interned) orelse {
                 if (interned == self.cached_names.Self) {
-                    if (ctx.struct_type == .void) {
+                    if (ctx.struct_type) |ty| {
+                        return ty;
+                    } else {
                         return self.err(.big_self_outside_struct, self.ast.getSpan(t));
                     }
-
-                    return ctx.struct_type;
-                } else return self.err(.{ .undeclared_type = .{ .found = self.ast.toSource(t) } }, self.ast.getSpan(t));
+                } else {
+                    return self.err(.{ .undeclared_type = .{ .found = self.ast.toSource(t) } }, self.ast.getSpan(t));
+                }
             };
         },
-        .self => .self,
+        .self => if (ctx.struct_type) |ty| ty else self.err(.self_outside_struct, self.ast.getSpan(t)),
     } else .void;
 }
 
@@ -437,12 +544,13 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
     if (local_decl == .void) {
         local_decl = local_value;
     } else {
-        if (!local_decl.equal(&local_value)) {
+        if (!local_decl.eql(&local_value)) {
             // One case in wich we can coerce, int -> float
             // if (self.checkCast(local_decl, local_value, emit_cast)) {
             if (local_decl.cast(&local_value)) {
                 cast = true;
-                if (emit_cast) self.addInstr(.{ .cast = .float });
+                // if (emit_cast) self.addInstr(.{ .cast = .float });
+                if (emit_cast) self.ir_builder.castTo(.add);
             } else return self.err(
                 .{ .type_mismatch = .{
                     .expect = self.getTypeName(local_decl),

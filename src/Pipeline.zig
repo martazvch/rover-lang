@@ -157,7 +157,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         self.analyzer.type_manager.natives.functions,
         self.instr_count,
         // &self.analyzer.instructions,
-        &analyzer2.instructions,
+        &analyzer2.ir_builder.instructions,
         self.analyzer.modules.values(),
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,

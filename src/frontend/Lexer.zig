@@ -21,6 +21,8 @@ pub const Span = struct {
     start: usize,
     end: usize,
 
+    pub const zero: Span = .{ .start = 0, .end = 0 };
+
     pub fn text(self: *const Span, source: []const u8) []const u8 {
         return source[self.start..self.end];
     }

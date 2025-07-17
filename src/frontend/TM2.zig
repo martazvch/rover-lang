@@ -16,7 +16,7 @@ const builtin_init = BA.init;
 const Type = @import("Analyzer2.zig").Type;
 
 allocator: Allocator,
-declared: AutoHashMapUnmanaged(InternerIdx, Type) = .{},
+symbols: AutoHashMapUnmanaged(InternerIdx, Type) = .{},
 // array_cache: AutoHashMapUnmanaged(Type, u32) = .{},
 natives: BuiltinAnalyzer = builtin_init(),
 
@@ -28,22 +28,22 @@ pub fn init(allocator: Allocator) Self {
 }
 
 pub fn declareBuiltinTypes(self: *Self, interner: *Interner) void {
-    self.declared.put(self.allocator, interner.intern("void"), .void) catch oom();
-    self.declared.put(self.allocator, interner.intern("null"), .null) catch oom();
-    self.declared.put(self.allocator, interner.intern("bool"), .bool) catch oom();
-    self.declared.put(self.allocator, interner.intern("float"), .float) catch oom();
-    self.declared.put(self.allocator, interner.intern("int"), .int) catch oom();
-    self.declared.put(self.allocator, interner.intern("str"), .str) catch oom();
+    self.symbols.put(self.allocator, interner.intern("void"), .void) catch oom();
+    self.symbols.put(self.allocator, interner.intern("null"), .null) catch oom();
+    self.symbols.put(self.allocator, interner.intern("bool"), .bool) catch oom();
+    self.symbols.put(self.allocator, interner.intern("float"), .float) catch oom();
+    self.symbols.put(self.allocator, interner.intern("int"), .int) catch oom();
+    self.symbols.put(self.allocator, interner.intern("str"), .str) catch oom();
 }
 
 pub fn deinit(self: *Self) void {
-    self.declared.deinit(self.allocator);
+    self.symbols.deinit(self.allocator);
     // self.array_cache.deinit(self.allocator);
 }
 
-/// Adds a type linked associated with the name
-pub fn addType(self: *Self, name: usize, typ: Type) void {
-    self.declared.put(self.allocator, name, typ) catch oom();
+/// Adds a symbol
+pub fn addSymbol(self: *Self, name: usize, typ: Type) void {
+    self.symbols.put(self.allocator, name, typ) catch oom();
 }
 
 /// If type is a function, returns the same type but without any default values and without self
@@ -60,7 +60,7 @@ pub fn addType(self: *Self, name: usize, typ: Type) void {
 //     return Type.create(.function, index);
 // }
 
-/// If an array of `child` type as already been declared, return a type with the
+/// If an array of `child` type as already been symbols, return a type with the
 /// index as `Value`, otherwise create it
 // pub fn getOrCreateArray(self: *Self, child: Type) Error!Type {
 //     if (self.array_cache.get(child)) |cached_index| {
@@ -86,20 +86,20 @@ pub fn addType(self: *Self, name: usize, typ: Type) void {
 //     return .{ dim, child };
 // }
 
-/// Checks if the type has already been declared
+/// Checks if the type has already been symbols
 pub fn isDeclared(self: *const Self, type_name: InternerIdx) bool {
-    return self.declared.get(type_name) != null;
+    return self.symbols.get(type_name) != null;
 }
 
 /// Use natives function whose informations are gathered at compile time. Import the
-/// informations among other declared types
+/// informations among other symbols types
 // pub fn importNative(self: *Self, name: []const u8) ?std.StaticStringMap(FnDeclaration) {
 //     return self.natives.declarations.get(name);
 // }
 
 /// Used only in error mode, no need for performance. If used in performance path
 pub fn getInternerIndex(self: *const Self, typ: Type) usize {
-    var iter = self.declared.iterator();
+    var iter = self.symbols.iterator();
     while (iter.next()) |entry| {
         if (entry.value_ptr.equal(&typ)) {
             return entry.key_ptr.*;
