@@ -24,33 +24,18 @@ pub const Type = union(enum) {
     null,
     self,
     function: struct {
-        params: []Parameter,
-        return_typ: *Type,
+        // TODO: Do I need a map? Not just a slice?
+        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter),
+        return_type: *const Type,
     },
-    fn_ptr: *Type,
-    parameter: Parameter,
 
     pub const Parameter = struct {
-        type: *Type,
+        type: *const Type,
         default: bool = false,
     };
 
     pub fn eql(self: *const Type, other: *const Type) bool {
-        return std.meta.eql(self, other);
-    }
-
-    pub fn hash(self: *const Self) u64 {
-        var hasher = std.hash.Wyhash.init(0);
-        hasher.update(@tagName(self.*));
-
-        switch (self.*) {
-            .function => |ty| {
-                _ = ty;
-            },
-            else => {},
-        }
-
-        return hasher.final();
+        return std.meta.eql(self.*, other.*);
     }
 
     pub fn cast(self: *const Type, other: *const Type) bool {
@@ -59,41 +44,175 @@ pub const Type = union(enum) {
         else
             false;
     }
+
+    pub fn hash(self: Type, hasher: anytype) void {
+        const asBytes = std.mem.asBytes;
+
+        comptime {
+            if (@typeInfo(@TypeOf(hasher)) != .pointer) {
+                @compileError("You must pass a pointer to a haser");
+            }
+
+            if (!@hasDecl(@TypeOf(hasher.*), "update")) {
+                @compileError("Hasher must have an 'update' method");
+            }
+        }
+
+        hasher.update(asBytes(&@intFromEnum(self)));
+
+        switch (self) {
+            .void, .int, .float, .bool, .str, .null, .self => {},
+            .function => |typ| {
+                for (typ.params.values()) |param| {
+                    param.type.hash(hasher);
+                }
+                typ.return_type.hash(hasher);
+            },
+        }
+    }
+};
+
+const TypeInterner = struct {
+    arena: Allocator,
+    interned: std.AutoHashMapUnmanaged(u64, *Type),
+    cache: Cache,
+
+    const Cache = struct {
+        void: *const Type,
+        bool: *const Type,
+        int: *const Type,
+        float: *const Type,
+        str: *const Type,
+        null: *const Type,
+
+        pub const empty: Cache = .{
+            .void = undefined,
+            .bool = undefined,
+            .int = undefined,
+            .float = undefined,
+            .str = undefined,
+            .null = undefined,
+        };
+    };
+
+    pub fn init(arena: Allocator) TypeInterner {
+        return .{ .arena = arena, .interned = .{}, .cache = .empty };
+    }
+
+    pub fn cacheFrequentTypes(self: *TypeInterner) void {
+        self.cache.void = self.intern(.void);
+        self.cache.bool = self.intern(.bool);
+        self.cache.int = self.intern(.int);
+        self.cache.float = self.intern(.float);
+        self.cache.str = self.intern(.str);
+        self.cache.null = self.intern(.null);
+    }
+
+    pub fn intern(self: *TypeInterner, typ: Type) *Type {
+        var hasher = std.hash.Wyhash.init(0);
+        typ.hash(&hasher);
+        const hash = hasher.final();
+
+        if (self.interned.get(hash)) |interned| {
+            return interned;
+        }
+
+        const new_type = self.arena.create(Type) catch oom();
+        new_type.* = typ;
+        self.interned.put(self.arena, hash, new_type) catch oom();
+
+        return new_type;
+    }
 };
 
 const Scope = struct {
     variables: AutoArrayHashMapUnmanaged(InternerIdx, Variable),
-    symbols: AutoArrayHashMapUnmanaged(InternerIdx, Type),
-    depth: usize,
-    offset: usize,
+    parent: ?*Scope,
 
-    pub const empty: Scope = .{ .variables = .{}, .symbols = .{}, .depth = 0, .offset = 0 };
+    symbols: AutoArrayHashMapUnmanaged(InternerIdx, Symbol),
+    symbols_offset: usize,
 
-    pub fn declare(self: *Scope, allocator: Allocator, name: InternerIdx, typ: Type, initialized: bool) error{TooManyLocals}!usize {
-        if (self.variables.count() - self.offset > 255) {
+    pub const Symbol = struct { type: *const Type, global: bool };
+
+    pub const empty: Scope = .{ .variables = .{}, .symbols = .{}, .symbols_offset = 0, .parent = null };
+
+    pub fn open(self: *Scope) void {
+        const scope: Scope = .{
+            .variables = .{},
+            .symbols = .{},
+            .symbols_offset = self.symbols.count(),
+            .parent = self,
+        };
+        self.* = scope;
+    }
+
+    pub fn close(self: *Scope) usize {
+        std.debug.assert(self.parent != null);
+
+        const var_count = self.variables.count();
+        const symbol_offset = self.symbols_offset + self.symbols.count();
+        self.* = self.parent.?.*;
+        self.symbols_offset = symbol_offset;
+        return var_count;
+    }
+
+    pub fn isGlobal(self: *const Scope) bool {
+        return self.parent == null;
+    }
+
+    pub fn declareVar(self: *Scope, allocator: Allocator, name: InternerIdx, typ: *const Type, initialized: bool) error{TooManyLocals}!usize {
+        if (self.variables.count() > 255 and !self.isGlobal()) {
             return error.TooManyLocals;
         }
 
-        self.variables.put(allocator, name, .{ .typ = typ, .depth = self.depth, .initialized = initialized }) catch oom();
+        self.variables.put(allocator, name, .{
+            .typ = typ,
+            .kind = if (self.isGlobal()) .global else .local,
+            .initialized = initialized,
+        }) catch oom();
+
         return self.variables.count();
     }
 
+    pub fn declareSymbol(self: *Scope, allocator: Allocator, name: InternerIdx, typ: *const Type) void {
+        self.symbols.put(allocator, name, .{ .type = typ, .global = self.isGlobal() }) catch oom();
+    }
+
+    pub fn getSymbolIdx(self: *const Scope, name: InternerIdx) usize {
+        var scope: ?*Scope = self;
+
+        while (scope) |s| {
+            if (s.symbols.getIndex(name)) |i| {
+                return i + s.symbols_offset;
+            }
+
+            if (s.parent) |p| {
+                scope = p;
+            } else break;
+        }
+
+        @panic("Symbol not found");
+    }
+
     pub fn isInScope(self: *const Scope, name: InternerIdx) bool {
-        return if (self.variables.get(name)) |v| v.depth == self.depth else false;
+        return self.variables.get(name) != null;
     }
 };
 
-fn declareVariable(self: *Self, name: InternerIdx, typ: Type, initialized: bool, span: Span) Error!usize {
-    return self.scope.declare(self.allocator, name, typ, initialized) catch self.err(.too_many_locals, span);
+const SymbolTable = struct {};
+
+fn declareVariable(self: *Self, name: InternerIdx, typ: *const Type, initialized: bool, span: Span) Error!usize {
+    return self.scope.declareVar(self.allocator, name, typ, initialized) catch self.err(.too_many_locals, span);
 }
 
 const Context = struct {
     side: enum { lhs, rhs } = .lhs,
-    fn_type: ?Type = null,
-    struct_type: ?Type = null,
+    fn_type: ?*Type = null,
+    struct_type: ?*Type = null,
     ref_count: bool = false,
     cow: bool = false,
     allow_partial: bool = false,
+    returns: bool = false,
 
     pub fn restore(self: *Context, saved: Context) void {
         self.* = saved;
@@ -106,11 +225,11 @@ const Context = struct {
 
 const Variable = struct {
     /// Variable's type
-    typ: Type = .void,
-    /// Depth
-    depth: usize = 0,
+    typ: *const Type,
+    /// Kind: global, local or captured
+    kind: enum { local, global, captured },
     /// Is initialized
-    initialized: bool = false,
+    initialized: bool,
 };
 
 const Self = @This();
@@ -126,11 +245,13 @@ warns: ArrayListUnmanaged(AnalyzerReport),
 ast: *const Ast,
 scope: Scope,
 tm: TM2,
+type_interner: TypeInterner,
 ir_builder: IrBuilder,
+main: ?usize,
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
-pub fn init(self: *Self, allocator: Allocator, interner: *Interner, repl: bool) void {
+pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
     self.arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = self.arena.allocator();
     self.interner = interner;
@@ -140,6 +261,9 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner, repl: bool) 
     self.ir_builder = .init(allocator);
     self.tm = .init(allocator);
     self.tm.declareBuiltinTypes(interner);
+    self.type_interner = .init(self.allocator);
+    self.type_interner.cacheFrequentTypes();
+    self.main = null;
 
     self.cached_names = .{
         .empty = self.interner.intern(""),
@@ -149,8 +273,6 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner, repl: bool) 
         .Self = self.interner.intern("Self"),
         .init = self.interner.intern("init"),
     };
-
-    if (repl) self.scope.depth = 1;
 }
 
 pub fn deinit(self: *Self) void {
@@ -160,6 +282,10 @@ pub fn deinit(self: *Self) void {
 fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
     self.errs.append(self.allocator, AnalyzerReport.err(kind, span)) catch oom();
     return error.Err;
+}
+
+fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
+    self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
 }
 
 pub fn analyze(self: *Self, ast: *const Ast) Error!void {
@@ -176,7 +302,7 @@ pub fn analyze(self: *Self, ast: *const Ast) Error!void {
 
         ctx.reset();
 
-        if (node_type != .void) {
+        if (!self.isVoid(node_type)) {
             self.err(.unused_value, self.ast.getSpan(node)) catch {};
         }
     }
@@ -188,7 +314,7 @@ pub fn analyze(self: *Self, ast: *const Ast) Error!void {
     // else if (self.main == null) self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
 }
 
-fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!Type {
+fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!*const Type {
     // if (self.scope_depth == 0 and !self.repl and !self.isPure(node.*)) {
     //     // TODO: add block, not allowed to have local scopes in global scope
     //     return if (std.meta.activeTag(node.*) == .expr and std.meta.activeTag(node.expr.*) == .@"return")
@@ -213,7 +339,7 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!Type {
         else => unreachable,
     }
 
-    return .void;
+    return self.type_interner.intern(.void);
 }
 
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void {
@@ -221,28 +347,26 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 
     if (name == self.cached_names.main) {
         // TODO: Error
-        if (self.scope.depth != 0)
+        if (!self.scope.isGlobal())
             @panic("Main in local scope")
         else if (self.tm.isDeclared(name))
             @panic("Multiple mains");
+
+        self.main = self.ir_builder.instructions.len;
     }
 
     const fn_idx = self.ir_builder.reserveInstr();
-    _ = fn_idx; // autofix
     // TODO: delete and merge this into other Instructions
     self.ir_builder.name(name, .add);
 
-    const variable_instr = self.ir_builder.reserveInstr();
-    _ = variable_instr; // autofix
+    self.scope.open();
 
     // We reserve slot 0 for potential 'self'
-    _ = try self.declareVariable(self.cached_names.self, ctx.struct_type orelse .void, true, .zero);
-
-    // Function's type
-    // var fn_type: Type = .{ .function = .{ .params = undefined, .return_typ = undefined } };
+    _ = try self.declareVariable(self.cached_names.self, ctx.struct_type orelse self.type_interner.cache.void, true, .zero);
 
     var params_type: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
     params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
+    var default_count: usize = 0;
 
     for (node.params) |*p| {
         const param_name = self.interner.intern(self.ast.toSource(p.name));
@@ -256,19 +380,82 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 
         var param_type = try self.checkAndGetType(p.typ, ctx);
         if (p.value) |val| {
+            default_count += 1;
             param_type = try self.defaultValue(param_type, val, ctx);
         }
 
-        if (param_type == .void) {
+        if (self.isVoid(param_type)) {
             return self.err(.void_param, self.ast.getSpan(p.name));
         }
 
         _ = try self.declareVariable(param_name, param_type, true, self.ast.getSpan(p.name));
         params_type.putAssumeCapacity(param_name, .{ .type = param_type, .default = p.value != null });
     }
+
+    const return_type = try self.checkAndGetType(node.return_type, ctx);
+    const fn_type = self.type_interner.intern(.{ .function = .{ .params = params_type, .return_type = return_type } });
+    self.scope.declareSymbol(self.allocator, name, fn_type);
+
+    const body_type, const had_err, const len = self.fnBody(node.body.nodes, ctx);
+
+    if (!had_err and body_type != return_type) {
+        return self.err(
+            .{ .incompatible_fn_type = .{
+                .expect = self.getTypeName(return_type),
+                .found = self.getTypeName(body_type),
+            } },
+            self.ast.getSpan(node.body.nodes[node.body.nodes.len - 1]),
+        );
+    }
+
+    _ = self.scope.close();
+
+    self.ir_builder.declareFunction(
+        len,
+        default_count,
+        if (ctx.returns) .explicit else if (self.isVoid(body_type)) .implicit_void else .implicit_value,
+        .{ .setAt = fn_idx },
+    );
 }
 
-fn defaultValue(self: *Self, decl_type: Type, default_value: *const Expr, ctx: *Context) Error!Type {
+fn fnBody(self: *Self, body: []Node, ctx: *Context) struct { *const Type, bool, usize } {
+    var had_err = false;
+    var final_type: *const Type = self.type_interner.cache.void;
+    var deadcode_start: usize = 0;
+    var deadcode_count: usize = 0;
+    const len = body.len;
+
+    for (body, 0..) |*n, i| {
+        // If previous statement returned, it's only dead code now
+        if (deadcode_start == 0 and ctx.returns) {
+            self.warn(.dead_code, self.ast.getSpan(n));
+            deadcode_start = self.ir_builder.instructions.len;
+            deadcode_count = len - i;
+        }
+
+        // If last statement, we don't allow partial anymore (for return)
+        // Usefull for 'if' for example, in this case we want all the branches to return something
+        if (i == len - 1) ctx.allow_partial = false;
+
+        // We try to analyze the whole body
+        const typ = self.analyzeNode(n, ctx) catch {
+            had_err = true;
+            continue;
+        };
+
+        // If we analyze dead code, we don't update the type
+        if (deadcode_start == 0) final_type = typ;
+
+        // If last expression produced a value and that it wasn't the last one and it wasn't a return, error
+        if (!self.isVoid(final_type) and i != len - 1 and !ctx.returns) {
+            self.err(.unused_value, self.ast.getSpan(n)) catch {};
+        }
+    }
+
+    return .{ final_type, had_err, len - deadcode_count };
+}
+
+fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Error!*const Type {
     const value_type = try self.analyzeExpr(default_value, ctx);
     const coerce = try self.performTypeCoercion(decl_type, value_type, true, self.ast.getSpan(default_value));
     return coerce.type;
@@ -278,7 +465,7 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
     self.ir_builder.print(.add);
     const typ = try self.analyzeExpr(expr, ctx);
 
-    if (typ == .void) {
+    if (self.isVoid(typ)) {
         return self.err(.void_print, self.ast.getSpan(expr));
     }
 }
@@ -322,7 +509,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
 
     // data.variable = try self.declareVariable(name, checked_type, initialized, index, .variable, node.name);
     const decl_index = try self.declareVariable(name, checked_type, initialized, self.ast.getSpan(node.name));
-    self.ir_builder.declareVariable(initialized, cast, decl_index, self.scope.depth, .{ .setAt = index });
+    self.ir_builder.declareVariable(initialized, cast, decl_index, self.scope.isGlobal(), .{ .setAt = index });
     // self.setInstr(index, .{ .var_decl = data });
 
     // if (data.variable.scope == .global) {
@@ -330,11 +517,11 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     // }
 }
 
-fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!Type {
+fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!*const Type {
     return switch (expr.*) {
         // .array => |*e| self.array(e),
         // .array_access => |*e| self.arrayAccess(e),
-        // .block => |*e| self.block(e),
+        .block => |*e| self.block(e, ctx),
         // .binop => |*e| self.binop(e),
         // .field => |*e| (try self.field(e, true)).field,
         // .fn_call => |*e| self.call(e),
@@ -349,13 +536,35 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!Type {
     };
 }
 
-fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!Type {
+fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Error!*const Type {
+    self.scope.open();
+    errdefer _ = self.scope.close();
+
+    const index = self.ir_builder.reserveInstr();
+    var final_type = self.type_interner.cache.void;
+
+    for (expr.nodes, 0..) |*node, i| {
+        final_type = try self.analyzeNode(node, ctx);
+
+        if (self.isVoid(final_type) and i != expr.nodes.len - 1) {
+            return self.err(.unused_value, expr.span);
+        }
+    }
+
+    const var_count = self.scope.close();
+    // TODO: protect cast
+    self.ir_builder.block(expr.nodes.len, @intCast(var_count), !self.isVoid(final_type), .{ .setAt = index });
+
+    return final_type;
+}
+
+fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!*const Type {
     const text = self.ast.toSource(expr);
 
     switch (expr.tag) {
         .bool => {
             self.ir_builder.boolLiteral(self.ast.token_tags[expr.idx] == .true, .add);
-            return .bool;
+            return self.type_interner.cache.bool;
         },
         .identifier, .self => {
             const resolved = try self.resolveIdentifier(expr.idx, true, ctx);
@@ -370,7 +579,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!Type {
                 break :blk 0;
             };
             self.ir_builder.intLiteral(value, .add);
-            return .int;
+            return self.type_interner.cache.int;
         },
         .float => {
             const value = std.fmt.parseFloat(f64, text) catch blk: {
@@ -379,11 +588,11 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!Type {
                 break :blk 0.0;
             };
             self.ir_builder.floatLiteral(value, .add);
-            return .float;
+            return self.type_interner.cache.float;
         },
         .null => {
             self.ir_builder.nullLiteral(.add);
-            return .null;
+            return self.type_interner.cache.null;
         },
         .string => {
             const no_quotes = text[1 .. text.len - 1];
@@ -413,7 +622,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!Type {
 
             const value = self.interner.intern(final.toOwnedSlice(self.allocator) catch oom());
             self.ir_builder.strLiteral(value, .add);
-            return .str;
+            return self.type_interner.cache.str;
         },
     }
 }
@@ -459,8 +668,8 @@ fn internIfNotInScope(self: *Self, token: usize) Error!usize {
 }
 
 /// Checks that the node is a declared type and return it's value. If node is
-/// `empty`, returns `void`
-fn checkAndGetType(self: *Self, typ: ?*const Ast.Type, ctx: *const Context) Error!Type {
+/// `.empty`, returns `void`
+fn checkAndGetType(self: *Self, typ: ?*const Ast.Type, ctx: *const Context) Error!*const Type {
     return if (typ) |t| return switch (t.*) {
         .array => |arr_type| {
             _ = arr_type;
@@ -503,7 +712,7 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type, ctx: *const Context) Erro
         .scalar => {
             const interned = self.interner.intern(self.ast.toSource(t));
 
-            return self.tm.symbols.get(interned) orelse {
+            const declared = self.tm.symbols.get(interned) orelse {
                 if (interned == self.cached_names.Self) {
                     if (ctx.struct_type) |ty| {
                         return ty;
@@ -514,21 +723,23 @@ fn checkAndGetType(self: *Self, typ: ?*const Ast.Type, ctx: *const Context) Erro
                     return self.err(.{ .undeclared_type = .{ .found = self.ast.toSource(t) } }, self.ast.getSpan(t));
                 }
             };
+
+            return self.type_interner.intern(declared);
         },
         .self => if (ctx.struct_type) |ty| ty else self.err(.self_outside_struct, self.ast.getSpan(t)),
-    } else .void;
+    } else self.type_interner.cache.void;
 }
 
-const TypeCoherence = struct { type: Type = .void, cast: bool = false };
+const TypeCoherence = struct { type: *const Type, cast: bool = false };
 
 /// Checks for `void` values, array inference, cast and function type generation
 /// The goal is to see if the two types are equivalent and if so, make the transformations needed
-fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, span: Span) Error!TypeCoherence {
+fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_cast: bool, span: Span) Error!TypeCoherence {
     var cast = false;
     var local_decl = decl;
     const local_value = value;
 
-    if (value == .void) return self.err(.void_value, span);
+    if (self.isVoid(value)) return self.err(.void_value, span);
 
     // if (value.is(.array)) {
     //     local_value = try self.inferArrayType(decl, value, span);
@@ -541,13 +752,13 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
     // } else
     // if (!self.isTypeEqual(local_decl, local_value)) {
 
-    if (local_decl == .void) {
+    if (self.isVoid(local_decl)) {
         local_decl = local_value;
     } else {
-        if (!local_decl.eql(&local_value)) {
+        if (local_decl != local_value) {
             // One case in wich we can coerce, int -> float
             // if (self.checkCast(local_decl, local_value, emit_cast)) {
-            if (local_decl.cast(&local_value)) {
+            if (local_decl.cast(local_value)) {
                 cast = true;
                 // if (emit_cast) self.addInstr(.{ .cast = .float });
                 if (emit_cast) self.ir_builder.castTo(.add);
@@ -564,8 +775,12 @@ fn performTypeCoercion(self: *Self, decl: Type, value: Type, emit_cast: bool, sp
     return .{ .type = local_decl, .cast = cast };
 }
 
+pub fn isVoid(self: *const Self, typ: *const Type) bool {
+    return typ == self.type_interner.cache.void;
+}
+
 /// Helpers used for errors
-fn getTypeName(self: *const Self, typ: Type) []const u8 {
+fn getTypeName(self: *const Self, typ: *const Type) []const u8 {
     // if (typ.is(.function)) {
     //     return self.getFnTypeName(typ) catch oom();
     // } else if (typ.is(.array)) {

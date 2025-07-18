@@ -41,18 +41,28 @@ fn finishInstruction(self: *Self, instr: Instruction, mode: Mode) void {
     }
 }
 
-pub fn declareVariable(self: *Self, has_value: bool, cast: bool, index: usize, depth: usize, mode: Mode) void {
+pub fn declareVariable(self: *Self, has_value: bool, cast: bool, index: usize, global: bool, mode: Mode) void {
     const instr: Instruction = .{ .data = .{ .var_decl = .{
         .has_value = has_value,
         .cast = cast,
-        .variable = .{ .index = index, .scope = if (depth == 0) .global else .local },
+        .variable = .{ .index = index, .scope = if (global) .global else .local },
     } } };
 
     self.finishInstruction(instr, mode);
 }
 
+pub fn declareFunction(self: *Self, body_len: usize, default_count: usize, return_kind: rir.ReturnKind, mode: Mode) void {
+    self.finishInstruction(
+        .{ .data = .{ .fn_decl = .{ .body_len = body_len, .default_params = default_count, .return_kind = return_kind } } },
+        mode,
+    );
+}
 pub fn identifier(self: *Self, index: usize, mode: Mode) void {
     self.finishInstruction(.{ .data = .{ .identifier_id = .{ .index = index, .rc_action = undefined } } }, mode);
+}
+
+pub fn block(self: *Self, len: usize, pop_count: u8, is_expr: bool, mode: Mode) void {
+    self.finishInstruction(.{ .data = .{ .block = .{ .length = len, .pop_count = pop_count, .is_expr = is_expr } } }, mode);
 }
 
 pub fn print(self: *Self, mode: Mode) void {

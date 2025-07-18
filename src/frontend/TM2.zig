@@ -98,10 +98,10 @@ pub fn isDeclared(self: *const Self, type_name: InternerIdx) bool {
 // }
 
 /// Used only in error mode, no need for performance. If used in performance path
-pub fn getInternerIndex(self: *const Self, typ: Type) usize {
+pub fn getInternerIndex(self: *const Self, typ: *const Type) usize {
     var iter = self.symbols.iterator();
     while (iter.next()) |entry| {
-        if (entry.value_ptr.equal(&typ)) {
+        if (entry.value_ptr == typ) {
             return entry.key_ptr.*;
         }
     }

@@ -4,9 +4,9 @@ const Allocator = std.mem.Allocator;
 const options = @import("options");
 
 const Compiler = @import("backend/compiler.zig").Compiler;
-const CompilationManager = @import("backend/compiler.zig").CompilationManager;
+const CompilationManager = @import("backend/compiler2.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
-const Analyzer = @import("frontend/Analyzer.zig");
+const Analyzer = @import("frontend/Analyzer2.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("frontend/Ast.zig");
 const AstRender = @import("frontend/AstRender.zig");
@@ -14,19 +14,21 @@ const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("frontend/RirRenderer.zig");
+const RirRenderer = @import("frontend/RirRenderer2.zig");
 const Symbols = @import("frontend/TypeManager.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
-const Function = @import("runtime/Obj.zig").Function;
-const Value = @import("runtime/values.zig").Value;
-const Vm = @import("runtime/Vm.zig");
+const Function = @import("runtime/Obj2.zig").Function;
+const Value = @import("runtime/values2.zig").Value;
+const Vm = @import("runtime/Vm2.zig");
+
+const Config = @import("runtime/Vm.zig").Config;
 
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
-config: Vm.Config,
+config: Config,
 analyzer: Analyzer,
 type_manager: TypeManager,
 instr_count: usize,
@@ -48,13 +50,13 @@ pub const empty: Self = .{
     .code_count = 0,
 };
 
-pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
+pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.vm = vm;
     self.arena = .init(vm.allocator);
     self.allocator = self.arena.allocator();
     self.config = config;
     self.analyzer = undefined;
-    self.analyzer.init(self.allocator, self, &self.vm.interner, config.embedded);
+    self.analyzer.init(self.allocator, &self.vm.interner);
     self.type_manager = .init(self.allocator);
     self.type_manager.init_builtins(&self.vm.interner);
 }
@@ -64,7 +66,7 @@ pub fn deinit(self: *Self) void {
     self.globals.deinit(self.vm.allocator);
 }
 
-// TODO: clean unused
+// // TODO: clean unused
 pub const Module = struct {
     name: []const u8,
     imports: []Module,
@@ -106,12 +108,16 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
     // Analyzer
-    self.analyzer.analyze(&ast);
-    defer self.analyzer.reinit();
+    // self.analyzer.analyze(&ast);
+    // defer self.analyzer.reinit();
+    //
+    // // We don't keep errors/warnings from a prompt to another
+    // defer self.analyzer.errs.clearRetainingCapacity();
+    // defer self.analyzer.warns.clearRetainingCapacity();
+    //
 
-    // We don't keep errors/warnings from a prompt to another
-    defer self.analyzer.errs.clearRetainingCapacity();
-    defer self.analyzer.warns.clearRetainingCapacity();
+    // TMP
+    self.analyzer.analyze(&ast) catch @panic("Error analyzer");
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
@@ -129,10 +135,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
                 try reporter.reportAll(file_name, self.analyzer.warns.items);
             }
 
-            self.instr_count = self.analyzer.instructions.len;
+            self.instr_count = self.analyzer.ir_builder.instructions.len;
             return error.ExitOnPrint;
-        } else if (self.config.print_ir)
+        } else if (self.config.print_ir) {
             try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        }
     }
 
     // Analyzer warnings
@@ -142,16 +149,19 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     }
 
-    self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
+    // self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
 
     // Compiler
     var compiler = CompilationManager.init(
         file_name,
         self.vm,
-        self.analyzer.type_manager.natives.functions,
+        // self.analyzer.type_manager.natives.functions,
+        undefined,
         self.instr_count,
-        &self.analyzer.instructions,
-        self.analyzer.modules.values(),
+        // &self.analyzer.instructions,
+        &self.analyzer.ir_builder.instructions,
+        // self.analyzer.modules.values(),
+        undefined,
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
@@ -159,7 +169,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     );
     defer compiler.deinit();
 
-    self.instr_count = self.analyzer.instructions.len;
+    self.instr_count = self.analyzer.ir_builder.instructions.len;
     const function = try compiler.compile();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
@@ -167,8 +177,10 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else .{
         .name = file_name,
-        .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
-        .symbols = self.analyzer.symbols,
+        // .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
+        .imports = undefined,
+        // .symbols = self.analyzer.symbols,
+        .symbols = undefined,
         .function = function,
         .globals = self.globals.items,
     };
@@ -217,7 +229,7 @@ fn renderIr(
     var rir_renderer = RirRenderer.init(
         allocator,
         source,
-        analyzer.instructions.items(.data)[start..],
+        analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
         &self.vm.interner,

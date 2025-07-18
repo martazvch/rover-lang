@@ -1,4 +1,6 @@
-1
+fn main() {
+    print 1
+}
 
 
 //struct Point {
