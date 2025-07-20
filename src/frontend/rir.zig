@@ -24,6 +24,7 @@ pub const Instruction = struct {
         identifier: Variable,
         identifier_absolute: usize,
         identifier_id: IdentifierId,
+        symbol_id: u8,
         @"if": If,
         // TODO: delete later
         imported: Imported,

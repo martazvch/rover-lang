@@ -35,6 +35,7 @@ instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
 globals: std.ArrayListUnmanaged(Value) = .{},
+// symbols: std.ArrayListUnmanaged(Value) = .{},
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -70,9 +71,9 @@ pub fn deinit(self: *Self) void {
 pub const Module = struct {
     name: []const u8,
     imports: []Module,
-    symbols: Symbols,
     function: *Function,
     globals: []Value,
+    symbols: []Value,
 };
 
 /// Runs the pipeline
@@ -150,6 +151,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     }
 
     // self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
+    // self.symbols.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols_count) catch oom();
 
     // Compiler
     var compiler = CompilationManager.init(
@@ -166,6 +168,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
         &self.globals,
+        self.analyzer.symbols_count,
     );
     defer compiler.deinit();
 
@@ -180,9 +183,9 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         // .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
         .imports = undefined,
         // .symbols = self.analyzer.symbols,
-        .symbols = undefined,
         .function = function,
         .globals = self.globals.items,
+        .symbols = compiler.symbols.toOwnedSlice(self.vm.allocator) catch oom(),
     };
 }
 

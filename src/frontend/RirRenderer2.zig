@@ -147,6 +147,7 @@ fn parseInstr(self: *Self) void {
         .struct_decl => |*data| self.structDecl(data),
         .default_value => unreachable,
         .struct_literal => |*data| self.structLiteral(data),
+        .symbol_id => |data| self.symbolId(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
@@ -501,6 +502,10 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
+}
+
+fn symbolId(self: *Self, data: u8) void {
+    self.indentAndPrintSlice("[Symbol index: {}]", .{data});
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

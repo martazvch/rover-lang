@@ -5,9 +5,9 @@ const Allocator = std.mem.Allocator;
 const options = @import("options");
 
 const Repl = @import("Repl.zig");
-const Chunk = @import("../backend/Chunk.zig");
+const Chunk = @import("../backend/Chunk2.zig");
 const OpCode = Chunk.OpCode;
-const Disassembler = @import("../backend/Disassembler.zig");
+const Disassembler = @import("../backend/Disassembler2.zig");
 const Interner = @import("../Interner.zig");
 const Pipeline = @import("../Pipeline2.zig");
 const Module = Pipeline.Module;
@@ -43,6 +43,7 @@ interner: Interner,
 strings: Table,
 objects: ?*Obj,
 heap_vars: []Value,
+symbols: []Value,
 
 /// Holds temporary values
 r1: *Value = undefined,
@@ -73,6 +74,7 @@ pub const empty: Self = .{
     .strings = undefined,
     .objects = null,
     .heap_vars = undefined,
+    .symbols = undefined,
 };
 
 pub fn init(self: *Self, allocator: Allocator, config: @import("Vm.zig").Config) void {
@@ -98,6 +100,8 @@ pub fn init(self: *Self, allocator: Allocator, config: @import("Vm.zig").Config)
 }
 
 pub fn deinit(self: *Self) void {
+    self.allocator.free(self.symbols);
+
     self.allocator.free(self.heap_vars);
     self.module_chain.deinit(self.allocator);
     self.interner.deinit();
@@ -147,6 +151,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
         error.ExitOnPrint => return,
         else => return e,
     };
+    self.symbols = self.start_module.symbols;
 
     self.module = &self.start_module;
     self.gc.active = true;
@@ -406,6 +411,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 const structure = self.r1.obj.as(Structure);
                 const method = structure.methods[method_idx];
                 self.stack.push(Value.makeObj(method.asObj()));
+            },
+            .get_symbol => {
+                const symbol_idx = frame.readByte();
+                self.stack.push(self.symbols[symbol_idx]);
             },
             .get_symbol_reg => {
                 const symbol_idx = frame.readByte();

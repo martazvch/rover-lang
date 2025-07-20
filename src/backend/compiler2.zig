@@ -32,11 +32,13 @@ pub const CompilationManager = struct {
     instr_idx: usize,
     modules: []Module,
     render_mode: Disassembler.RenderMode,
-    main: usize,
-    main_index: ?u8 = null,
+    // main: usize,
+    main_index: ?usize = null,
     repl: bool,
     heap_count: usize = 0,
     globals: *ArrayListUnmanaged(Value),
+
+    symbols: ArrayListUnmanaged(Value),
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -50,10 +52,15 @@ pub const CompilationManager = struct {
         instructions: *const MultiArrayList(Instruction),
         modules: []Module,
         render_mode: Disassembler.RenderMode,
-        main: usize,
+        // main: usize,
+        main_index: usize,
         repl: bool,
         globals: *ArrayListUnmanaged(Value),
+        symbol_count: usize,
     ) Self {
+        var symbols: ArrayListUnmanaged(Value) = .{};
+        symbols.ensureTotalCapacity(vm.allocator, symbol_count) catch oom();
+
         return .{
             .file_name = file_name,
             .vm = vm,
@@ -65,9 +72,11 @@ pub const CompilationManager = struct {
             .modules = modules,
             .instr_idx = instr_start,
             .render_mode = render_mode,
-            .main = main,
+            // .main = main,
+            .main_index = main_index,
             .repl = repl,
             .globals = globals,
+            .symbols = symbols,
         };
     }
 
@@ -96,7 +105,9 @@ pub const CompilationManager = struct {
             self.vm.heap_vars = try self.vm.allocator.alloc(Value, self.heap_count);
 
             // Insert a call to main with arity of 0 for now
-            self.compiler.writeOpAndByte(.get_global, self.main_index.?, 0);
+            // self.compiler.writeOpAndByte(.get_global, self.main_index.?, 0);
+            // TODO: protect
+            self.compiler.writeOpAndByte(.get_symbol, @intCast(self.main_index.?), 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
@@ -224,6 +235,12 @@ const Compiler = struct {
         return @intCast(self.manager.globals.items.len - 1);
     }
 
+    fn addSymbol(self: *Self, symbol: Value) void {
+        // self.manager.globals.appendAssumeCapacity(global);
+        self.manager.symbols.append(self.manager.vm.allocator, symbol) catch oom();
+        // return @intCast(self.manager.globals.items.len - 1);
+    }
+
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: *const Instruction.Variable, cow: bool, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
@@ -341,6 +358,7 @@ const Compiler = struct {
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
             .struct_literal => |*data| self.structLiteral(data),
+            .symbol_id => |data| self.symbolId(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .value => unreachable,
@@ -689,7 +707,7 @@ const Compiler = struct {
     }
 
     fn fnDecl(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        const idx = self.manager.instr_idx - 1;
+        // const idx = self.manager.instr_idx - 1;
         const name_idx = self.next().name;
         const fn_name = self.manager.vm.interner.getKey(name_idx).?;
         // const fn_var = self.next().var_decl.variable;
@@ -701,14 +719,15 @@ const Compiler = struct {
         // } else {
         // const symbol_index = self.getChunk().addSymbol(Value.makeObj(func.asObj()));
 
-        const symbol_index = self.addGlobal(Value.makeObj(func.asObj()));
+        // const symbol_index = self.addGlobal(Value.makeObj(func.asObj()));
+        self.addSymbol(Value.makeObj(func.asObj()));
         // self.defineVariable(fn_var, 0);
         // }
 
         // Check for main function
-        if (idx == self.manager.main) {
-            self.manager.main_index = symbol_index;
-        }
+        // if (idx == self.manager.main) {
+        //     self.manager.main_index = symbol_index;
+        // }
     }
 
     fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
@@ -900,6 +919,10 @@ const Compiler = struct {
         if (data.default_count > 0) self.writeOp(.load_struct_def, start);
         try self.compileArgs(data.fields_count);
         self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), start);
+    }
+
+    fn symbolId(self: *Self, index: u8) Error!void {
+        self.writeOpAndByte(.get_symbol, index, self.getStart());
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

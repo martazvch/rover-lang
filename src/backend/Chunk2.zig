@@ -12,10 +12,6 @@ offsets: ArrayList(usize),
 constants: [CONST_MAX]Value,
 constant_count: u8,
 
-// NOTE: V2
-symbols: [CONST_MAX]Value,
-symbol_count: u8,
-
 const Self = @This();
 const CONST_MAX = std.math.maxInt(u8) + 1;
 pub const Error = error{TooManyConst};
@@ -27,8 +23,6 @@ pub fn init(allocator: Allocator) Self {
         .offsets = ArrayList(usize).init(allocator),
         .constants = undefined,
         .constant_count = 0,
-        .symbols = undefined,
-        .symbol_count = 0,
     };
 }
 
@@ -55,20 +49,6 @@ pub fn writeConstant(self: *Self, value: Value) Error!u8 {
     self.constants[self.constant_count] = value;
     self.constant_count += 1;
     return self.constant_count - 1;
-}
-
-// TODO: We could preshot the size of symbols and use 'assumeCapacity'
-pub fn addSymbol(self: *Self, symbol: Value) u8 {
-    // self.symbols.append(allocator, symbol) catch oom();
-
-    // TODO: error
-    if (self.symbol_count == CONST_MAX) {
-        @panic("Too many symbols");
-    }
-
-    self.symbols[self.symbol_count] = symbol;
-    self.symbol_count += 1;
-    return self.symbol_count - 1;
 }
 
 pub const OpCode = enum(u8) {
@@ -112,6 +92,7 @@ pub const OpCode = enum(u8) {
     get_local_reg_cow,
     get_local_absolute,
     get_static_method,
+    get_symbol,
     get_symbol_reg,
     gt_float,
     gt_int,

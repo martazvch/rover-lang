@@ -152,6 +152,7 @@ fn parseInstr(self: *Self) void {
         .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
         .@"while" => self.whileInstr(),
+        else => unreachable,
     }
 }
 
