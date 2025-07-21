@@ -23,6 +23,7 @@ pub const Instruction = struct {
         fn_decl: FnDecl,
         identifier: Variable,
         identifier_absolute: usize,
+        // TODO: deleted in v2
         identifier_id: IdentifierId,
         symbol_id: u8,
         @"if": If,
@@ -52,7 +53,7 @@ pub const Instruction = struct {
         op: Op,
 
         pub const Cast = enum(u2) { lhs, rhs, none };
-        const Op = enum(u6) {
+        pub const Op = enum(u6) {
             add_float,
             add_int,
             add_str,

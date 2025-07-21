@@ -1,7 +1,0 @@
-use data.geom{ introduce }
-// use data.geom
-
-fn main() {
-    // geom.introduce()
-    introduce()
-}

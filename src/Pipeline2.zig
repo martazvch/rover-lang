@@ -168,7 +168,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
         &self.globals,
-        self.analyzer.symbols_count,
+        self.analyzer.scope.symbol_count,
     );
     defer compiler.deinit();
 
