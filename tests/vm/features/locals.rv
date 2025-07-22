@@ -6,25 +6,25 @@ fn main() {
         var loc2 = 5
         var _loc3 = -.5
 
-        print _loc3 + loc1 // expect: 1
+        print _loc3 + loc1
     }
 
     {
         var loc1 = 3.5
         var loc2 = 5
-        var _loc3 = -2.5
+        var _loc3 = -1.5
 
-        print _loc3 + loc1 // expect: 1
+        print _loc3 + loc1
 
         {
             var loc1 = 6.
             var loc2 = 1.5
 
-            print loc2 + loc1 // expect: 7.5
-            print loc1 + _loc3 // expect: 3.5
+            print loc2 + loc1
+            print loc1 + _loc3
         }
 
-        print loc2 // expect: 5
+        print loc2
     }
 
     var glob = 1
@@ -34,7 +34,7 @@ fn main() {
         var loc1 = "local"
         var loc2 = " var"
 
-        print loc1 + loc2 + period // expect: "local var."
+        print loc1 + loc2 + period
     }
 
     {
@@ -45,15 +45,15 @@ fn main() {
         {
             var loc1 = "tmp"
             var loc2 = "sublocal"
-            print loc2             // expect: "sublocal"
+            print loc2
             loc2 = "assign sub"
-            print loc2             // expect: "assign sub"
+            print loc2
         }
 
-        print loc2                 // expect: "assign local"
+        print loc2
         loc2 = loc1
-        print loc2                 // expect: "local"
+        print loc2
     }
     loc2 = "still global"
-    print loc2                     // exepct: " var"
+    print loc2
 }

@@ -575,6 +575,7 @@ const Compiler = struct {
         if (data.is_expr) {
             self.writeOpAndByte(.scope_return, data.pop_count, start);
         } else {
+            // PERF: horrible perf, just emit a stack.top -= count
             for (0..data.pop_count) |_| {
                 self.getChunk().writeOp(.pop, start);
             }

@@ -1,27 +1,36 @@
-fn other(a: int) {
-    print "other"
-    print a
+fn get_nb() -> int { return 5 }
+fn mul(a: int) -> float { return a * get_nb() }
+fn naked() {
+    print "oui"
+    return
+    print "non"
+}
+fn nested() -> str {
+    if not false do return "exit"
+    return "nested"
+}
+fn nested2() -> bool {
+    if true {
+        if true and true {
+            return true
+        }
+    }
+
+    print "not here"
+    return false
 }
 
 fn main() {
-    var a = 1
-    print a
-    other(a)
-
-    fn local(a: float) -> float {
-        print "Multiplying a by 10"
-        a * 10
-    }
-
-    print local(5)
-
-    {
-        var a = 6
-        print a
-    }
-
-    print a
+    print mul(6) // expect: 30
+    naked() // expect: "oui"
+    print nested() // expect: "exit"
+    print nested2() // exepct: true
 }
+
+
+
+
+
 
 
 //struct Point {

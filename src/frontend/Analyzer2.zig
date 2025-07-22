@@ -59,6 +59,10 @@ pub const Type = union(enum) {
         return self.is(.int) or self.is(.float);
     }
 
+    pub fn isSymbol(self: *const Type) bool {
+        return self.is(.function);
+    }
+
     pub fn cast(self: *const Type, other: *const Type) bool {
         return if (self.is(.int) and other.is(.float))
             true
@@ -181,7 +185,8 @@ const ScopeStack = struct {
     };
 
     pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
-        self.scopes.append(allocator, .{ .offset = if (offset_from_child) self.current.variables.count() else 0 }) catch oom();
+        const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
+        self.scopes.append(allocator, .{ .offset = offset }) catch oom();
         self.updateCurrent();
     }
 
@@ -214,24 +219,27 @@ const ScopeStack = struct {
             return error.TooManyLocals;
         }
 
+        const index = self.current.variables.count();
         self.current.variables.put(allocator, name, .{
             .type = ty,
             .kind = if (self.isGlobal()) .global else .local,
             .initialized = initialized,
-            .index = self.current.variables.count(),
+            .index = index,
         }) catch oom();
 
-        return self.current.variables.count();
+        return index;
     }
 
-    pub fn getVariable(self: *const ScopeStack, name: InternerIdx) ?*Variable {
-        var i: usize = self.scopes.items.len - 1;
+    /// Tries to retreive a variable from scopes and the local offset its scope
+    pub fn getVariable(self: *const ScopeStack, name: InternerIdx) ?struct { *Variable, usize } {
+        var i = self.scopes.items.len;
 
-        while (i > 0) : (i -= 1) {
+        while (i > 0) {
+            i -= 1;
             const scope = &self.scopes.items[i];
 
             if (scope.variables.getPtr(name)) |variable| {
-                return variable;
+                return .{ variable, scope.offset };
             }
         }
 
@@ -244,7 +252,7 @@ const ScopeStack = struct {
     }
 
     pub fn getSymbol(self: *const ScopeStack, name: InternerIdx) ?*Scope.Symbol {
-        var i: usize = self.scopes.items.len;
+        var i = self.scopes.items.len;
 
         while (i > 0) {
             i -= 1;
@@ -267,21 +275,6 @@ const ScopeStack = struct {
 
         return null;
     }
-
-    // pub fn getSymbolIdx(self: *const ScopeStack, name: InternerIdx) usize {
-    //     var i: usize = self.scopes.items.len - 1;
-    //
-    //     while (i > 0) : (i -= 1) {
-    //         const scope = &self.scopes.items[i];
-    //
-    //         if (scope.symbols.get(name)) |sym| {
-    //             return sym.index;
-    //         }
-    //     }
-    //
-    //     // TODO: Error
-    //     @panic("Symbol not found");
-    // }
 
     pub fn isInScope(self: *const ScopeStack, name: InternerIdx) bool {
         return self.current.variables.get(name) != null;
@@ -306,11 +299,20 @@ const Context = struct {
     struct_type: ?*Type = null,
     ref_count: bool = false,
     cow: bool = false,
-    allow_partial: bool = false,
+    allow_partial: bool = true,
     returns: bool = false,
 
-    pub fn restore(self: *Context, saved: Context) void {
-        self.* = saved;
+    const ContextSnapshot = struct {
+        saved: Context,
+        ctx: *Context,
+
+        pub fn restore(self: ContextSnapshot) void {
+            self.ctx.* = self.saved;
+        }
+    };
+
+    pub fn snapshot(self: *Context) ContextSnapshot {
+        return .{ .saved = self.*, .ctx = self };
     }
 
     pub fn reset(self: *Context) void {
@@ -331,6 +333,7 @@ const Variable = struct {
 
 const Self = @This();
 const Error = error{Err};
+const Result = Error!*const Type;
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
 arena: std.heap.ArenaAllocator,
@@ -414,7 +417,7 @@ pub fn analyze(self: *Self, ast: *const Ast) Error!void {
     // else if (self.main == null) self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
 }
 
-fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!*const Type {
+fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Result {
     // if (self.scope_depth == 0 and !self.repl and !self.isPure(node.*)) {
     //     // TODO: add block, not allowed to have local scopes in global scope
     //     return if (std.meta.activeTag(node.*) == .expr and std.meta.activeTag(node.expr.*) == .@"return")
@@ -426,8 +429,8 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!*const Type 
     // self.state.chain.reset();
 
     switch (node.*) {
-        // .assignment => |*n| try self.assignment(n),
-        // .discard => |n| try self.discard(n),
+        .assignment => |*n| try self.assignment(n, ctx),
+        .discard => |n| try self.discard(n, ctx),
         .fn_decl => |*n| _ = try self.fnDeclaration(n, ctx),
         // .multi_var_decl => |*n| try self.multiVarDecl(n),
         .print => |n| try self.print(n, ctx),
@@ -442,9 +445,67 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Error!*const Type 
     return self.type_interner.intern(.void);
 }
 
-fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void {
-    const name = try self.internIfNotInScope(node.name);
+fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
+    // TODO: check if not useless
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
 
+    ctx.allow_partial = false;
+    const index = self.ir_builder.reserveInstr();
+
+    ctx.side = .rhs;
+    const value_type = try self.analyzeExpr(node.value, ctx);
+    ctx.side = .lhs;
+
+    const assigne_type, const cow = switch (node.assigne.*) {
+        .literal => |*e| b: {
+            if (e.tag != .identifier) {
+                return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+            }
+
+            const text = self.ast.toSource(e.idx);
+            const name = self.interner.intern(text);
+            var assigne = self.variableIdentifier(name) orelse {
+                return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(e.idx));
+            };
+
+            if (!assigne.initialized) assigne.initialized = true;
+
+            break :b .{ assigne.type, false };
+        },
+        // .field => |*e| b: {
+        //     var field_infos = try self.field(e, true);
+        //     const field_type = &field_infos.field;
+        //
+        //     if (field_infos.kind == .method) {
+        //         return self.err(.assign_to_method, self.ast.getSpan(e.field));
+        //     }
+        //
+        //     // TODO: why false?
+        //     break :b .{ field_type.*, false };
+        // },
+        // .array_access => |*e| .{ try self.arrayAccess(e), true },
+        else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
+    };
+
+    const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.value));
+
+    self.makeInstruction(.{ .assignment = .{ .cast = coherence.cast, .cow = cow } }, .{ .setAt = index });
+}
+
+fn discard(self: *Self, expr: *const Expr, ctx: *Context) !void {
+    self.makeInstruction(.{ .discard = undefined }, .add);
+    const discarded = try self.analyzeExpr(expr, ctx);
+
+    if (self.isVoid(discarded)) return self.err(.void_discard, self.ast.getSpan(expr));
+}
+
+fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void {
+    // TODO: check if not useless
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
+
+    const name = try self.internIfNotInScope(node.name);
     const fn_idx = self.ir_builder.reserveInstr();
     // TODO: delete and merge this into other Instructions
     self.ir_builder.emit(.{ .data = .{ .name = name } }, .add);
@@ -486,6 +547,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
     const return_type = try self.checkAndGetType(node.return_type, ctx);
     const fn_type = self.type_interner.intern(.{ .function = .{ .params = params_type, .return_type = return_type } });
 
+    ctx.fn_type = fn_type;
     const body_type, const had_err, const len = self.fnBody(node.body.nodes, ctx);
 
     if (!had_err and body_type != return_type) {
@@ -527,6 +589,10 @@ fn makeInstruction(self: *Self, data: Instruction.Data, mode: IrBuilder.Mode) vo
 }
 
 fn fnBody(self: *Self, body: []Node, ctx: *Context) struct { *const Type, bool, usize } {
+    // TODO: check if not useless
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
+
     var had_err = false;
     var final_type: *const Type = self.type_interner.cache.void;
     var deadcode_start: usize = 0;
@@ -563,7 +629,7 @@ fn fnBody(self: *Self, body: []Node, ctx: *Context) struct { *const Type, bool, 
     return .{ final_type, had_err, len - deadcode_count };
 }
 
-fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Error!*const Type {
+fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Result {
     const value_type = try self.analyzeExpr(default_value, ctx);
     const coerce = try self.performTypeCoercion(decl_type, value_type, true, self.ast.getSpan(default_value));
     return coerce.type;
@@ -579,6 +645,10 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
 }
 
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!void {
+    // TODO: check if not useless
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
+
     const name = try self.internIfNotInScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
     const index = self.ir_builder.reserveInstr();
@@ -608,7 +678,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     );
 }
 
-fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!*const Type {
+fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
     return switch (expr.*) {
         // .array => |*e| self.array(e),
         // .array_access => |*e| self.arrayAccess(e),
@@ -616,19 +686,19 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Error!*const Type 
         .binop => |*e| self.binop(e, ctx),
         // .field => |*e| (try self.field(e, true)).field,
         .fn_call => |*e| self.call(e, ctx),
-        // .grouping => |*e| self.analyzeExpr(e.expr),
-        // .@"if" => |*e| self.ifExpr(e),
+        .grouping => |*e| self.analyzeExpr(e.expr, ctx),
+        .@"if" => |*e| self.ifExpr(e, ctx),
         .literal => |*e| self.literal(e, ctx),
         // .named_arg => unreachable,
-        // .@"return" => |*e| self.returnExpr(e),
+        .@"return" => |*e| self.returnExpr(e, ctx),
         // .struct_literal => |*e| self.structLiteral(e),
-        // .unary => |*e| self.unary(e),
+        .unary => |*e| self.unary(e, ctx),
         else => unreachable,
     };
 }
 
 // TODO: handle dead code eleminitaion so that it can be used in function's body?
-fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Error!*const Type {
+fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
     self.scope.open(self.allocator, true);
     errdefer _ = self.scope.close();
 
@@ -657,14 +727,13 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Error!*const Type {
     return final_type;
 }
 
-fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Error!*const Type {
+fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
     const op = expr.op;
     const index = self.ir_builder.reserveInstr();
 
     const lhs = try self.analyzeExpr(expr.lhs, ctx);
     const rhs = try self.analyzeExpr(expr.rhs, ctx);
 
-    // Handle string-specific binops first
     if (isStringConcat(op, lhs, rhs)) {
         self.makeInstruction(.{ .binop = .{ .op = .add_str } }, .{ .setAt = index });
         return self.type_interner.cache.str;
@@ -676,7 +745,6 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Error!*const Type {
         return self.type_interner.cache.str;
     }
 
-    // For other ops, build up the Binop instruction
     var data = Instruction.Binop{ .op = undefined };
     var result_type = lhs;
 
@@ -791,7 +859,6 @@ fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, 
     };
 
     if (lhs != rhs) {
-        // Check for implicit casts
         if ((lhs.is(.int) and rhs.is(.float)) or (lhs.is(.float) and rhs.is(.int))) {
             if (lhs.is(.int)) {
                 data.cast = .lhs;
@@ -873,7 +940,7 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
     }
 }
 
-fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Error!*const Type {
+fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
     const callee = try self.analyzeExpr(expr.callee, ctx);
 
@@ -965,7 +1032,122 @@ fn fnArgsList(self: *Self, callee: *const Ast.FnCall, ty: *const Type.Function, 
     return if (err_count < self.errs.items.len) error.Err else .{ param_count, default_count };
 }
 
-fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!*const Type {
+/// Tries to find a match from variables and symbols and returns its type while emitting an instruction
+fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *const Context) Result {
+    const text = self.ast.toSource(token_name);
+    const name = self.interner.intern(text);
+
+    if (self.variableIdentifier(name)) |variable| {
+        if (initialized and !variable.initialized) {
+            return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
+        }
+
+        return variable.type;
+    }
+
+    if (self.symbolIdentifier(name)) |sym| {
+        return sym.type;
+    }
+
+    if (name == self.cached_names.Self) {
+        if (ctx.struct_type) |ty| {
+            return ty;
+        } else {
+            return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
+        }
+
+        return &self.big_self;
+    }
+
+    return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
+}
+
+/// Tries to find a variable in scopes and returns it while emitting an instruction
+fn variableIdentifier(self: *Self, name: InternerIdx) ?*Variable {
+    const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
+    // TODO: handle captured
+    self.makeInstruction(.{ .identifier = .{
+        .index = variable.index + scope_offset,
+        .scope = if (variable.kind == .local) .local else .global,
+    } }, .add);
+
+    return variable;
+}
+
+/// Tries to find a symbol in scopes and returns it while emitting an instruction
+fn symbolIdentifier(self: *Self, name: InternerIdx) ?*ScopeStack.Scope.Symbol {
+    const sym = self.scope.getSymbol(name) orelse return null;
+    // TODO: protect cast
+    self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, .add);
+
+    return sym;
+}
+
+fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
+    const index = self.ir_builder.reserveInstr();
+    var data: Instruction.If = .{ .cast = .none, .has_else = false };
+
+    const cond_type = try self.analyzeExpr(expr.condition, ctx);
+
+    // We can continue to analyze if the condition isn't a bool
+    if (!cond_type.is(.bool)) {
+        self.err(
+            .{ .non_bool_cond = .{ .what = "if", .found = cond_type.toString(self.allocator) } },
+            self.ast.getSpan(expr.condition),
+        ) catch {};
+    }
+
+    // Analyze then branch
+    const then_type = try self.analyzeNode(&expr.then, ctx);
+    const then_returned = ctx.returns;
+    var final_type = if (then_returned) self.type_interner.cache.void else then_type;
+    ctx.returns = false;
+
+    var else_returned = false;
+
+    if (expr.@"else") |*n| {
+        const else_type = try self.analyzeNode(n, ctx);
+        data.has_else = true;
+        else_returned = ctx.returns;
+
+        if (!else_returned) {
+            final_type = else_type;
+        }
+
+        if (!then_returned and !else_returned and then_type != else_type) {
+            try self.ifTypeCoherenceAndCast(then_type, else_type, expr, &data);
+        }
+    } else if (!then_type.is(.void) and !ctx.allow_partial) {
+        return self.err(
+            .{ .missing_else_clause = .{ .if_type = then_type.toString(self.allocator) } },
+            self.ast.getSpan(expr),
+        );
+    }
+
+    // The whole instructions returns out of scope
+    ctx.returns = then_returned and else_returned;
+    self.makeInstruction(.{ .@"if" = data }, .{ .setAt = index });
+
+    return if (ctx.returns) self.type_interner.cache.void else final_type;
+}
+
+fn ifTypeCoherenceAndCast(self: *Self, then_type: *const Type, else_type: *const Type, expr: *const Ast.If, data: *Instruction.If) Error!void {
+    if (else_type.cast(then_type)) {
+        data.cast = .then;
+        self.warn(AnalyzerMsg.implicitCast("then branch", "float"), self.ast.getSpan(expr.then));
+    } else if (then_type.cast(else_type)) {
+        data.cast = .@"else";
+        self.warn(AnalyzerMsg.implicitCast("else branch", "float"), self.ast.getSpan(expr.@"else".?));
+    } else return self.err(
+        .{ .incompatible_if_type = .{
+            .found1 = then_type.toString(self.allocator),
+            .found2 = else_type.toString(self.allocator),
+        } },
+        self.ast.getSpan(expr),
+    );
+}
+
+fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
     const text = self.ast.toSource(expr);
 
     switch (expr.tag) {
@@ -1029,36 +1211,64 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Error!*const Ty
     }
 }
 
-fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *const Context) Error!*const Type {
-    const text = self.ast.toSource(token_name);
-    const name = self.interner.intern(text);
+fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
+    const index = self.ir_builder.reserveInstr();
+    var data: Instruction.Return = .{ .value = false, .cast = false };
 
-    if (self.scope.getVariable(name)) |variable| {
-        if (initialized and !variable.initialized) {
-            return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
-        }
+    var ty = if (expr.expr) |e| blk: {
+        data.value = true;
+        break :blk try self.analyzeExpr(e, ctx);
+    } else self.type_interner.cache.void;
 
-        // TODO: handle captured
-        self.makeInstruction(.{ .identifier = .{
-            .index = variable.index + self.scope.current.offset,
-            .scope = if (variable.kind == .local) .local else .global,
-        } }, .add);
-        return variable.type;
-    } else if (name == self.cached_names.Self) {
-        if (ctx.struct_type) |ty| {
-            return ty;
-        } else {
-            return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
-        }
+    // We check after to advance node idx
+    const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, self.ast.getSpan(expr));
+    const return_type = fn_type.function.return_type;
 
-        return &self.big_self;
-    } else if (self.scope.getSymbol(name)) |sym| {
-        // TODO: protect cast
-        self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, .add);
-        return sym.type;
-    } else {
-        return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
+    // We do that here because we can insert a cast
+    if (return_type != ty) {
+        if (ty.cast(return_type)) {
+            data.cast = true;
+            self.makeInstruction(.{ .cast = .float }, .add);
+            ty = self.type_interner.cache.float;
+        } else return self.err(
+            .{ .incompatible_fn_type = .{
+                .expect = return_type.toString(self.allocator),
+                .found = ty.toString(self.allocator),
+            } },
+            if (expr.expr) |e| self.ast.getSpan(e) else self.ast.getSpan(expr),
+        );
     }
+
+    ctx.returns = true;
+    self.makeInstruction(.{ .@"return" = data }, .{ .setAt = index });
+
+    return ty;
+}
+
+fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
+    const op = self.ast.token_tags[expr.op];
+    const index = self.ir_builder.reserveInstr();
+    var data: Instruction.Unary = .{ .op = if (op == .not) .bang else .minus, .typ = .float };
+
+    const rhs = try self.analyzeExpr(expr.expr, ctx);
+
+    if (op == .not and !rhs.is(.bool)) {
+        return self.err(
+            .{ .invalid_unary = .{ .found = rhs.toString(self.allocator) } },
+            self.ast.getSpan(expr),
+        );
+    } else if (op == .minus and !rhs.isNumeric()) {
+        return self.err(
+            AnalyzerMsg.invalidArithmetic(rhs.toString(self.allocator)),
+            self.ast.getSpan(expr),
+        );
+    }
+
+    if (rhs.is(.int)) data.typ = .int;
+
+    self.makeInstruction(.{ .unary = data }, .{ .setAt = index });
+
+    return rhs;
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
@@ -1075,7 +1285,7 @@ fn internIfNotInScope(self: *Self, token: usize) Error!usize {
 
 /// Checks that the node is a declared type and return it's value. If node is
 /// `.empty`, returns `void`
-fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error!*const Type {
+fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Result {
     return if (ty) |t| return switch (t.*) {
         .array => |arr_type| {
             _ = arr_type;
@@ -1118,7 +1328,6 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
         .scalar => {
             const interned = self.interner.intern(self.ast.toSource(t));
 
-            // const declared = self.tm.symbols.get(interned) orelse {
             const found_type = self.scope.getType(interned) orelse {
                 if (interned == self.cached_names.Self) {
                     if (ctx.struct_type) |struct_type| {
