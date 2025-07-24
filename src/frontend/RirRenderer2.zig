@@ -448,13 +448,7 @@ fn stringInstr(self: *Self, index: usize) void {
 
 fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
     const name = self.next().name;
-    const struct_var = self.next().var_decl.variable;
-
-    self.indentAndPrintSlice("[Structure declaration {s}, index: {}, scope: {s}]", .{
-        self.interner.getKey(name).?,
-        struct_var.index,
-        @tagName(struct_var.scope),
-    });
+    self.indentAndPrintSlice("[Structure declaration {s}]", .{self.interner.getKey(name).?});
     self.indent_level += 1;
     defer self.indent_level -= 1;
 

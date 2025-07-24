@@ -37,6 +37,10 @@ pub fn emit(self: *Self, instr: Instruction, mode: Mode) void {
     }
 }
 
+pub fn count(self: *const Self) usize {
+    return self.instructions.len;
+}
+
 /// Adds a new instruction and add it's `start` field and returns its index.
 fn addInstr(self: *Self, instr: Instruction) void {
     self.instructions.append(self.allocator, instr) catch oom();

@@ -863,10 +863,7 @@ const Compiler = struct {
     }
 
     fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
-        const start = self.getStart();
         const name = self.next().name;
-        const struct_var = self.next().var_decl;
-
         var structure = Obj.Structure.create(
             self.manager.vm,
             Obj.String.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
@@ -877,10 +874,9 @@ const Compiler = struct {
 
         // We forward declare the structure in the globals because when disassembling the
         // structure's method, they need to refer to the object. Only the name can be refered to
-        const idx = if (struct_var.variable.scope == .global) b: {
-            _ = self.addGlobal(Value.makeObj(structure.asObj()));
-            break :b self.manager.globals.items.len - 1;
-        } else 0;
+        // TODO: Create a placeholder that has only the name?
+        const sym_index = self.manager.symbols.items.len;
+        self.addSymbol(Value.makeObj(structure.asObj()));
 
         // We compile each default value and as we know there are pure, we can extract them
         // from the constants (they aren't global either). As we do that, we delete compiled
@@ -904,13 +900,7 @@ const Compiler = struct {
 
         structure.methods = funcs.toOwnedSlice(self.manager.vm.allocator) catch oom();
         const struct_obj = Value.makeObj(structure.asObj());
-
-        if (struct_var.variable.scope == .global) {
-            self.manager.globals.items[idx] = struct_obj;
-        } else {
-            try self.emitConstant(struct_obj, self.getStart());
-            self.defineVariable(struct_var.variable, start);
-        }
+        self.manager.symbols.items[sym_index] = struct_obj;
     }
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
