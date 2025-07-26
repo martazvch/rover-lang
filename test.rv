@@ -1,13 +1,15 @@
 struct Foo {
-    a: int,
+    name: str,
+
+    fn sayHi(self) {
+        print self.name
+    }
 }
 
 fn main() {
-    var foo = Foo{a=2}
-    print foo.a
+    var foo = Foo{name="Tom"}
+    foo.sayHi()
 }
-
-
 
 
 

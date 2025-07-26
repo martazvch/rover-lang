@@ -739,6 +739,8 @@ const Compiler = struct {
         }
 
         for (0..data.body_len) |_| {
+            std.debug.print("Body len: {}\n", .{data.body_len});
+            std.debug.print("First node: {any}\n", .{self.at()});
             compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
@@ -892,7 +894,7 @@ const Compiler = struct {
             const fn_data = self.next().fn_decl;
             const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
             // Skip `variable` cause not needed here
-            self.manager.instr_idx += 1;
+            // self.manager.instr_idx += 1;
 
             const func = try self.compileFn(fn_name, &fn_data);
             funcs.appendAssumeCapacity(func);

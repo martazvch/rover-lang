@@ -408,9 +408,12 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             .get_static_method => {
                 const method_idx = frame.readByte();
-                const structure = self.r1.obj.as(Structure);
+                // const structure = self.r1.obj.as(Structure);
+                const top = self.stack.peekRef(0);
+                const structure = top.obj.as(Structure);
                 const method = structure.methods[method_idx];
-                self.stack.push(Value.makeObj(method.asObj()));
+                // self.stack.push(Value.makeObj(method.asObj()));
+                top.* = Value.makeObj(method.asObj());
             },
             .get_symbol => {
                 const symbol_idx = frame.readByte();
