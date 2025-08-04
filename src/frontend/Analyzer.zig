@@ -555,6 +555,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     self.state = save_state;
     self.setInstr(fn_idx, .{ .fn_decl = .{
+        .index = undefined,
         .body_len = len - deadcode_count,
         .default_params = default_params,
         .return_kind = return_kind,
@@ -665,6 +666,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl) !void {
     _ = self.endScope();
     self.addSymbol(name, struct_type);
     self.setInstr(index, .{ .struct_decl = .{
+        .index = undefined,
         .fields_count = node.fields.len,
         .default_fields = infos.default_value_fields,
         .func_count = node.functions.len,

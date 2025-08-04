@@ -1,18 +1,69 @@
-struct Foo {
-    name: str,
+fn factory() -> fn() -> void {
+    var a = 1
+    
+    fn capture() { print a }
 
-    fn sayHi(self) {
-        print self.name
+    return capture
+}
+
+fn factory2() -> fn() -> void {
+    var a = 1
+    
+    fn capture() {
+        a = a + 1
+        print a
     }
+
+    return capture
+}
+
+fn factory3() -> fn() -> int {
+    var a = 90
+    
+    fn capture() -> int {
+        a = a * 10
+        return a
+    }
+
+    return capture
+}
+
+fn factory4(arg: float) -> fn(float, bool) -> float {
+    var a = arg
+
+    fn capture(value: float, cond: bool) -> float {
+        if cond and value > a do return 56.
+        if not cond and value < a do return 80.
+
+        123.
+    }
+
+    return capture
 }
 
 fn main() {
-    var foo = Foo{name="Tom"}
-    foo.sayHi()
+    var prod1 = factory()
+    prod1() // expect: 1
+
+    var prod2 = factory2()
+    prod2() // expect: 2
+    prod2() // expect: 3
+    prod2() // expect: 4
+
+    var prod3 = factory3()
+    print prod3() // expect: 900
+    print prod3() // expect: 9000
+
+    var prod4 = factory4(25)
+    print prod4(50, true) // expect: 56
+    print prod4(4, false) // expect: 80
+    print prod4(50, false) // expect: 123
+
+    var prod4_bis = factory4(150)
+    print prod4_bis(50, true) // expect: 123
+    print prod4_bis(4, false) // expect: 80
+    print prod4_bis(50, false) // expect: 80
 }
-
-
-
 
 //struct Point {
 //    x, y: int

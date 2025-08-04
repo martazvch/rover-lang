@@ -124,7 +124,7 @@ pub const Instruction = struct {
         default_count: u8,
         invoke: bool = false,
     };
-    pub const FnDecl = struct { body_len: u64, default_params: usize, return_kind: ReturnKind };
+    pub const FnDecl = struct { index: usize, body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, rc_action: RcAction };
     pub const If = struct {
         cast: Cast,
@@ -147,7 +147,7 @@ pub const Instruction = struct {
     };
     pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
-    pub const StructDecl = struct { fields_count: usize, default_fields: usize, func_count: usize };
+    pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
     pub const Value = struct { value_instr: usize, cast: bool = false };
     pub const Unary = struct {

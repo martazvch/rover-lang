@@ -4,20 +4,20 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const TokenTag = @import("Lexer.zig").Token.Tag;
+const Interner = @import("../Interner.zig");
+const InternerIdx = Interner.Index;
+const GenReport = @import("../reporter.zig").GenReport;
+const oom = @import("../utils.zig").oom;
+const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
-const Interner = @import("../Interner.zig");
-const InternerIdx = Interner.Index;
-const Span = @import("Lexer.zig").Span;
-const GenReport = @import("../reporter.zig").GenReport;
-const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const oom = @import("../utils.zig").oom;
-const TM2 = @import("TM2.zig");
+const IrBuilder = @import("IrBuilder.zig");
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
-const IrBuilder = @import("IrBuilder.zig");
+const Span = @import("Lexer.zig").Span;
+const TM2 = @import("TM2.zig");
+const TokenTag = @import("Lexer.zig").Token.Tag;
 
 pub const Type = union(enum) {
     void,
@@ -28,17 +28,11 @@ pub const Type = union(enum) {
     null,
     function: Function,
     structure: Structure,
-    pointer: *const Type,
 
     pub const Function = struct {
-        // TODO: Do I need a map? Not just a slice?
         params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .{},
         return_type: *const Type,
-        structure: ?*const Type = null,
-
-        pub fn isMethod(self: *const Function) bool {
-            return self.structure != null;
-        }
+        is_method: bool,
 
         pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
             var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
@@ -128,17 +122,18 @@ pub const Type = union(enum) {
                     param.type.hash(hasher);
                 }
                 ty.return_type.hash(hasher);
-                hasher.update(asBytes(&@intFromBool(ty.isMethod())));
+                hasher.update(asBytes(&@intFromBool(ty.is_method)));
             },
             .structure => |ty| {
-                for (ty.fields.values()) |f| {
-                    f.type.hash(hasher);
-                }
-                for (ty.functions.values()) |f| {
-                    f.type.hash(hasher);
-                }
+                hasher.update(asBytes(&ty.name));
+                // for (ty.fields.values()) |f| {
+                //     f.type.hash(hasher);
+                // }
+                // for (ty.functions.values()) |f| {
+                //     f.type.hash(hasher);
+                // }
             },
-            .pointer => unreachable,
+            // .pointer => unreachable,
         }
     }
 
@@ -150,14 +145,15 @@ pub const Type = union(enum) {
             .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .function => |ty| {
                 writer.writeAll("fn (") catch oom();
-                for (ty.params.values()) |p| {
+                for (ty.params.values(), 0..) |p, i| {
                     writer.writeAll(p.type.toString(allocator, interner)) catch oom();
+                    if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();
                 }
                 writer.writeAll(") -> ") catch oom();
                 writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
             },
             .structure => |ty| return interner.getKey(ty.name).?,
-            else => unreachable,
+            // else => unreachable,
         }
 
         return res.toOwnedSlice(allocator) catch oom();
@@ -309,15 +305,10 @@ const ScopeStack = struct {
 
     /// Forward declares a symbol without incrementing global symbol count
     pub fn forwardDeclareSymbol(self: *ScopeStack, allocator: Allocator, name: InternerIdx) *Scope.Symbol {
-        self.current.symbols.put(allocator, name, .{ .type = undefined, .index = undefined }) catch oom();
-        return self.current.symbols.getPtr(name).?;
-    }
-
-    /// Takes a symbol (normally forward declared) and updates its index based on symbol count and
-    /// increments global symbol count
-    pub fn endSymbolDeclaration(self: *ScopeStack, sym: *Scope.Symbol) void {
-        sym.index = self.symbol_count;
+        self.current.symbols.put(allocator, name, .{ .type = undefined, .index = self.symbol_count }) catch oom();
         self.symbol_count += 1;
+
+        return self.current.symbols.getPtr(name).?;
     }
 
     /// Removes symbol name from **current** scope
@@ -597,22 +588,13 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
     var fn_type: Type.Function = .{
         .return_type = undefined,
-        .structure = if (ctx.struct_type) |ty| ty else null,
+        .is_method = ctx.struct_type != null,
     };
-
-    // TODO: if we assign now the the type to self it won't be up-to-date. We could put a placeholder for self
-    // and after in structDeclaration, we iterate over each functions and update the first argument type if
-    // function is a method to point to the finished type
-    //
-    // ==> No, we need a more solid solution because when we are gonna introduce traits, when a type will have
-    // a trait implemented all of the types should be updated... I need maybe another type like Type.self which is a **Type
-    // and points back to the structure. YES!
 
     self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
-    // We reserve slot 0 for potential 'self'
-    // TODO: not sure it is necessary, wait for closure implementation
+    // We reserve slot 0 for potential closure's environment
     // _ = try self.declareVariable(self.cached_names.self, ctx.struct_type orelse self.type_interner.cache.void, true, .zero);
 
     var params_type: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
@@ -623,12 +605,12 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         const param_name = self.interner.intern(self.ast.toSource(p.name));
 
         if (i == 0 and param_name == self.cached_names.self) {
-            const struct_type = fn_type.structure orelse {
+            const struct_type = ctx.struct_type orelse {
                 @panic("Self outside of structure");
             };
 
-            params_type.putAssumeCapacity(param_name, .{ .type = struct_type, .default = false });
             _ = try self.declareVariable(param_name, struct_type, true, .zero);
+            params_type.putAssumeCapacity(param_name, .{ .type = struct_type, .default = false });
             continue;
         }
 
@@ -681,9 +663,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     _ = self.scope.close();
 
-    if (ctx.struct_type == null) {
-        self.scope.endSymbolDeclaration(sym);
-    } else {
+    // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
+    if (ctx.struct_type != null) {
         self.scope.removeSymbol(name);
     }
 
@@ -693,6 +674,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     self.makeInstruction(
         .{ .fn_decl = .{
+            .index = sym.index,
             .body_len = len,
             .default_params = default_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(body_type)) .implicit_void else .implicit_value,
@@ -822,7 +804,6 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
     const index = self.ir_builder.reserveInstr();
-    // We add function's name for runtime access
     // TODO: merge as function's name
     self.makeInstruction(.{ .name = name }, .add);
 
@@ -831,32 +812,32 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
 
     var ty: Type.Structure = .{ .name = name };
     ty.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
-
-    try self.structureFields(node.fields, &ty, ctx);
+    ty.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
 
     // Create type before functions to allow 'self' to refer to the structure
-    sym.type = self.type_interner.intern(.{ .structure = ty });
-    ctx.struct_type = sym.type;
+    const interned_type = self.type_interner.intern(.{ .structure = ty });
+    ctx.struct_type = interned_type;
+    const interned_struct = &interned_type.structure;
 
-    ty.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
+    try self.structureFields(node.fields, interned_struct, ctx);
+    sym.type = interned_type;
 
     for (node.functions) |*f| {
         const fn_name = self.interner.intern(self.ast.toSource(f.name));
         const fn_type = try self.fnDeclaration(f, ctx);
-        ty.functions.putAssumeCapacity(fn_name, .{ .type = fn_type });
-
-        // Update type with each new method
-        // TODO: better way?
-        sym.type = self.type_interner.intern(.{ .structure = ty });
-        ctx.struct_type = sym.type;
+        interned_struct.functions.putAssumeCapacity(fn_name, .{ .type = fn_type });
+        sym.type = interned_type;
     }
 
-    self.scope.endSymbolDeclaration(sym);
-    self.makeInstruction(.{ .struct_decl = .{
-        .fields_count = node.fields.len,
-        .default_fields = ty.default_value_fields,
-        .func_count = node.functions.len,
-    } }, .{ .setAt = index });
+    self.makeInstruction(
+        .{ .struct_decl = .{
+            .index = sym.index,
+            .fields_count = node.fields.len,
+            .default_fields = interned_struct.default_value_fields,
+            .func_count = node.functions.len,
+        } },
+        .{ .setAt = index },
+    );
 }
 
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error!void {
@@ -925,7 +906,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
         // .array_access => |*e| self.arrayAccess(e),
         .block => |*e| self.block(e, ctx),
         .binop => |*e| self.binop(e, ctx),
-        .field => |*e| self.field(e, ctx),
+        .field => |*e| (try self.field(e, ctx)).type,
         .fn_call => |*e| self.call(e, ctx),
         .grouping => |*e| self.analyzeExpr(e.expr, ctx),
         .@"if" => |*e| self.ifExpr(e, ctx),
@@ -1181,21 +1162,36 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
     }
 }
 
-fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!*const Type {
-    const index = self.ir_builder.reserveInstr();
-    const lhs = try self.analyzeExpr(expr.structure, ctx);
+const FieldResult = struct {
+    type: *const Type,
+    is_value: bool,
+};
 
-    const field_type, const field_index = switch (lhs.*) {
-        .structure => |*ty| try self.structureAccess(expr.field, ty),
+/// Returns the type of the callee and if it's a value, not a type
+fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
+    const index = self.ir_builder.reserveInstr();
+    const field_result: FieldResult = switch (expr.structure.*) {
+        .field => |*e| try self.field(e, ctx),
+        .literal => |e| b: {
+            const ty, const kind = try self.identifier(e.idx, true, ctx);
+            break :b .{ .type = ty, .is_value = kind == .variable };
+        },
+        else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .is_value = true },
+    };
+
+    const field_type, const field_index = switch (field_result.type.*) {
         // .module => |ty| {},
+        .structure => |*ty| try self.structureAccess(expr.field, ty),
         else => return self.err(
-            .{ .non_struct_field_access = .{ .found = self.getTypeName(lhs) } },
+            .{ .non_struct_field_access = .{ .found = self.getTypeName(field_result.type) } },
             self.ast.getSpan(expr.structure),
         ),
     };
 
     const kind: Instruction.Field.Kind = switch (field_type.*) {
-        .function => |ty| if (ty.isMethod()) .method else .static_method,
+        // TODO: create just a 'function'. For now we need this because we get static method from
+        // symbols that are loaded on stack, not in register so we need a separate logic
+        .function => if (field_result.is_value) .method else .static_method,
         else => .field,
     };
 
@@ -1204,7 +1200,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!*const Type {
         .{ .setAt = index },
     );
 
-    return field_type;
+    return .{ .type = field_type, .is_value = field_result.is_value };
 }
 
 fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Type.Structure) Error!struct { *const Type, usize } {
@@ -1236,17 +1232,31 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Ty
 
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
-    const callee = try self.analyzeExpr(expr.callee, ctx);
-
-    if (!callee.is(.function)) {
-        return self.err(.invalid_call_target, self.ast.getSpan(expr));
-    }
 
     var args: ArrayListUnmanaged(*const Expr) = .{};
     defer args.deinit(self.allocator);
 
-    if (expr.callee.* == .field) {
-        args.append(self.allocator, expr.callee.field.structure) catch oom();
+    // if (expr.callee.* == .field) {
+    //     args.append(self.allocator, expr.callee.field.structure) catch oom();
+    // }
+
+    const callee = switch (expr.callee.*) {
+        .field => |*f| b: {
+            const ty = try self.field(f, ctx);
+
+            if (ty.is_value) {
+                args.append(self.allocator, expr.callee.field.structure) catch oom();
+            }
+
+            break :b ty.type;
+        },
+        else => try self.analyzeExpr(expr.callee, ctx),
+    };
+
+    // const callee = try self.analyzeExpr(expr.callee, ctx);
+
+    if (!callee.is(.function)) {
+        return self.err(.invalid_call_target, self.ast.getSpan(expr));
     }
 
     args.appendSlice(self.allocator, expr.args) catch oom();
@@ -1323,7 +1333,6 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
         if (f.default) default_count += 1;
     }
 
-    // for (callee.args, 0..) |arg, i| {
     for (args, 0..) |arg, i| {
         var cast = false;
         var value_instr: usize = 0;
@@ -1349,8 +1358,6 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
                 value_instr = self.ir_builder.instructions.len;
                 const value_type = try self.analyzeExpr(arg, ctx);
                 param_info = &ty.params.values()[i + offset];
-                std.debug.print("Arg1: {any}\n\nArg2: {any}\n\n", .{ param_info.type.structure, value_type.structure });
-                std.debug.print("Arg1: {*}\n\nArg2: {*}\n", .{ param_info.type, value_type });
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
                 proto_values[i] = true;
                 param_index = i;
@@ -1375,7 +1382,12 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 }
 
 /// Tries to find a match from variables and symbols and returns its type while emitting an instruction
-fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *const Context) Result {
+fn identifier(
+    self: *Self,
+    token_name: Ast.TokenIndex,
+    initialized: bool,
+    ctx: *const Context,
+) Error!struct { *const Type, enum { variable, symbol } } {
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
@@ -1384,21 +1396,21 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
             return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
         }
 
-        return variable.type;
+        return .{ variable.type, .variable };
     }
 
     if (self.symbolIdentifier(name)) |sym| {
-        return sym.type;
+        return .{ sym.type, .symbol };
     }
 
     if (name == self.cached_names.Self) {
         if (ctx.struct_type) |ty| {
-            return ty;
+            return .{ ty, .variable };
         } else {
             return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
         }
 
-        return &self.big_self;
+        return .{ &self.big_self, .variable };
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
@@ -1509,7 +1521,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
             self.makeInstruction(.{ .bool = self.ast.token_tags[expr.idx] == .true }, .add);
             return self.type_interner.cache.bool;
         },
-        .identifier, .self => return self.identifier(expr.idx, true, ctx),
+        .identifier, .self => return (try self.identifier(expr.idx, true, ctx)).@"0",
         .int => {
             const value = std.fmt.parseInt(isize, text, 10) catch blk: {
                 // TODO: error handling, only one possible it's invalid char
@@ -1752,15 +1764,15 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Resul
         },
         .function => |func| {
             var params: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
-            for (func.params) |p| {
+            for (func.params, 0..) |p, i| {
                 const p_type = try self.checkAndGetType(p, ctx);
-                params.put(self.allocator, 0, .{ .type = p_type, .default = false }) catch oom();
+                params.put(self.allocator, i, .{ .type = p_type, .default = false }) catch oom();
             }
 
             return self.type_interner.intern(.{ .function = .{
                 .params = params,
                 .return_type = try self.checkAndGetType(func.return_type, ctx),
-                .structure = null,
+                .is_method = false,
             } });
         },
         .scalar => {

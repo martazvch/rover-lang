@@ -313,13 +313,13 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 const idx = checkArrayIndex(last.*, self.stack.pop().int);
                 last.*.values.items[idx] = self.stack.pop();
             },
-            .bound_method => {
-                const method_idx = frame.readByte();
-                const receiver = self.r1.obj;
-                const method = receiver.as(Instance).parent.methods[method_idx];
-                const bound = BoundMethod.create(self, receiver, method);
-                self.stack.push(Value.makeObj(bound.asObj()));
-            },
+            // .bound_method => {
+            //     const method_idx = frame.readByte();
+            //     const receiver = self.r1.obj;
+            //     const method = receiver.as(Instance).parent.methods[method_idx];
+            //     const bound = BoundMethod.create(self, receiver, method);
+            //     self.stack.push(Value.makeObj(bound.asObj()));
+            // },
             .bound_import => {
                 const symbol_idx = frame.readByte();
                 const bound = BoundImport.create(
@@ -406,6 +406,8 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.r1.obj = self.cow(self.r1.obj);
             },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
+            .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Instance).parent.methods[frame.readByte()].asObj())),
+            // TODO: same as above
             .get_static_method => {
                 const method_idx = frame.readByte();
                 // const structure = self.r1.obj.as(Structure);
@@ -484,7 +486,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
                     break;
                 }
 
-                self.stack.top = frame.slots;
+                self.stack.top = frame.slots - 1;
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
@@ -530,7 +532,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
                     break;
                 }
 
-                self.stack.top = frame.slots;
+                self.stack.top = frame.slots - 1;
                 self.stack.push(result);
 
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
@@ -595,7 +597,8 @@ fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize, i
     new_frame.function = callee;
     new_frame.ip = callee.chunk.code.items.ptr;
     // -1 for the function itself
-    new_frame.slots = self.stack.top - args_count - 1;
+    // new_frame.slots = self.stack.top - args_count - 1;
+    new_frame.slots = self.stack.top - args_count;
     new_frame.imported = imported;
 
     frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];

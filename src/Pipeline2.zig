@@ -185,7 +185,8 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         // .symbols = self.analyzer.symbols,
         .function = function,
         .globals = self.globals.items,
-        .symbols = compiler.symbols.toOwnedSlice(self.vm.allocator) catch oom(),
+        // .symbols = compiler.symbols.toOwnedSlice(self.vm.allocator) catch oom(),
+        .symbols = compiler.symbols,
     };
 }
 

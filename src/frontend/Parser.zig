@@ -247,7 +247,7 @@ fn fnDecl(self: *Self) Error!Node {
     var param_names: ArrayListUnmanaged(TokenIndex) = .{};
     var named_started = false;
 
-    param_list: while (!self.check(.right_paren)) {
+    while (!self.check(.right_paren)) {
         defer param_names.clearRetainingCapacity();
 
         if (self.check(.eof)) {
@@ -281,7 +281,7 @@ fn fnDecl(self: *Self) Error!Node {
             const typ = self.allocator.create(Ast.Type) catch oom();
             typ.* = .{ .self = name_idx };
             params.append(self.allocator, .{ .name = name_idx, .typ = typ }) catch oom();
-            continue :param_list;
+            continue;
         }
 
         while (self.match(.identifier)) {

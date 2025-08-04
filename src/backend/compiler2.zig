@@ -38,7 +38,8 @@ pub const CompilationManager = struct {
     heap_count: usize = 0,
     globals: *ArrayListUnmanaged(Value),
 
-    symbols: ArrayListUnmanaged(Value),
+    // symbols: ArrayListUnmanaged(Value),
+    symbols: []Value,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -58,8 +59,10 @@ pub const CompilationManager = struct {
         globals: *ArrayListUnmanaged(Value),
         symbol_count: usize,
     ) Self {
-        var symbols: ArrayListUnmanaged(Value) = .{};
-        symbols.ensureTotalCapacity(vm.allocator, symbol_count) catch oom();
+        // var symbols: ArrayListUnmanaged(Value) = .{};
+        // symbols.ensureTotalCapacity(vm.allocator, symbol_count) catch oom();
+
+        const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
 
         return .{
             .file_name = file_name,
@@ -235,9 +238,9 @@ const Compiler = struct {
         return @intCast(self.manager.globals.items.len - 1);
     }
 
-    fn addSymbol(self: *Self, symbol: Value) void {
+    fn addSymbol(self: *Self, index: usize, symbol: Value) void {
         // self.manager.globals.appendAssumeCapacity(global);
-        self.manager.symbols.append(self.manager.vm.allocator, symbol) catch oom();
+        self.manager.symbols[index] = symbol;
         // return @intCast(self.manager.globals.items.len - 1);
     }
 
@@ -624,7 +627,8 @@ const Compiler = struct {
             else if (data.kind == .symbol)
                 if (reg) .get_symbol_reg else .bound_import
             else if (data.kind == .method)
-                .bound_method
+                // .bound_method
+                .get_method
             else
                 .get_static_method,
             @intCast(data.index),
@@ -643,13 +647,14 @@ const Compiler = struct {
 
         // Compiles the identifier. We want every thing on the stack
         // TODO: see if there are no side effects if arguments are chained fields/array accesses
-        const prev = self.state.to_reg;
-        defer self.state.to_reg = prev;
-        self.state.to_reg = false;
 
-        if (data.invoke) {
-            return self.invoke(data, start);
-        }
+        // const prev = self.state.to_reg;
+        // defer self.state.to_reg = prev;
+        // self.state.to_reg = false;
+        //
+        // if (data.invoke) {
+        //     return self.invoke(data, start);
+        // }
 
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_fn_default, start);
@@ -721,7 +726,7 @@ const Compiler = struct {
         // const symbol_index = self.getChunk().addSymbol(Value.makeObj(func.asObj()));
 
         // const symbol_index = self.addGlobal(Value.makeObj(func.asObj()));
-        self.addSymbol(Value.makeObj(func.asObj()));
+        self.addSymbol(data.index, Value.makeObj(func.asObj()));
         // self.defineVariable(fn_var, 0);
         // }
 
@@ -739,8 +744,6 @@ const Compiler = struct {
         }
 
         for (0..data.body_len) |_| {
-            std.debug.print("Body len: {}\n", .{data.body_len});
-            std.debug.print("First node: {any}\n", .{self.at()});
             compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
@@ -877,8 +880,7 @@ const Compiler = struct {
         // We forward declare the structure in the globals because when disassembling the
         // structure's method, they need to refer to the object. Only the name can be refered to
         // TODO: Create a placeholder that has only the name?
-        const sym_index = self.manager.symbols.items.len;
-        self.addSymbol(Value.makeObj(structure.asObj()));
+        self.addSymbol(data.index, Value.makeObj(structure.asObj()));
 
         // We compile each default value and as we know there are pure, we can extract them
         // from the constants (they aren't global either). As we do that, we delete compiled
@@ -902,7 +904,7 @@ const Compiler = struct {
 
         structure.methods = funcs.toOwnedSlice(self.manager.vm.allocator) catch oom();
         const struct_obj = Value.makeObj(structure.asObj());
-        self.manager.symbols.items[sym_index] = struct_obj;
+        self.addSymbol(data.index, struct_obj);
     }
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
