@@ -106,6 +106,7 @@ pub const Token = struct {
         not,
         null,
         @"or",
+        pipe,
         plus,
         plus_equal,
         print,
@@ -326,6 +327,10 @@ pub fn next(self: *Self) Token {
                         },
                         else => res.tag = .underscore,
                     }
+                },
+                '|' => {
+                    self.index += 1;
+                    res.tag = .pipe;
                 },
                 0 => {
                     if (self.index == self.source.len) {
@@ -570,13 +575,14 @@ test "numbers" {
 test "tokens" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=[]");
+    lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=[]|");
 
     const res = [_]Token.Tag{
         .left_paren,    .right_paren, .left_brace, .right_brace, .dot,          .colon,
         .comma,         .equal,       .bang,       .less,        .greater,      .less_equal,
         .greater_equal, .bang_equal,  .plus,       .minus,       .star,         .slash,
         .plus_equal,    .minus_equal, .star_equal, .slash_equal, .left_bracket, .right_bracket,
+        .pipe,
     };
 
     for (0..res.len) |i| {

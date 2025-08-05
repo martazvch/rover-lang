@@ -343,6 +343,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 // self.stack.push(result);
             },
             .cast_to_float => self.stack.peekRef(0).* = Value.makeFloat(@floatFromInt(self.stack.peekRef(0).int)),
+            .closure => {
+                const capture_count = frame.readByte();
+                self.stack.top -= capture_count;
+            },
             .constant => self.stack.push(frame.readConstant()),
             .define_heap_var => {
                 const idx = frame.readByte();

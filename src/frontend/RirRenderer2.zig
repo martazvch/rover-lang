@@ -120,6 +120,7 @@ fn parseInstr(self: *Self) void {
         .bool => |data| self.boolInstr(data),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
+        .closure => |*data| self.closure(data),
         .discard => self.discard(),
         .field => |*data| self.getField(data),
         .float => |data| self.floatInstr(data),
@@ -269,6 +270,28 @@ fn boolInstr(self: *Self, value: bool) void {
 
 fn cast(self: *Self, typ: Type) void {
     self.indentAndPrintSlice("[Cast to {s}]", .{@tagName(typ)});
+}
+
+fn closure(self: *Self, data: *const Instruction.Closure) void {
+    self.indentAndPrintSlice("[Closure declaration, return kind: {s}]", .{@tagName(data.return_kind)});
+
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+
+    if (data.default_params > 0) {
+        self.indentAndAppendSlice("- default params");
+        for (0..data.default_params) |_| {
+            self.parseInstr();
+        }
+
+        if (data.body_len > 0) {
+            self.indentAndAppendSlice("- body");
+        }
+    }
+
+    for (0..data.body_len) |_| {
+        self.parseInstr();
+    }
 }
 
 fn discard(self: *Self) void {

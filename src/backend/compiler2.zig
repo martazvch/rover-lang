@@ -340,11 +340,12 @@ const Compiler = struct {
             .bool => |data| self.boolInstr(data),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
+            .closure => |*data| self.compileClosure(data),
             .default_value => unreachable,
             .discard => self.discard(),
             .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
-            .fn_decl => |*data| self.fnDecl(data),
+            .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
             .identifier_id => |*data| self.identifierId(data),
             .identifier_absolute => |data| self.identifierAbsolute(data),
@@ -712,49 +713,45 @@ const Compiler = struct {
         if (last > self.manager.instr_idx) self.manager.instr_idx = last;
     }
 
-    fn fnDecl(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        // const idx = self.manager.instr_idx - 1;
-        const name_idx = self.next().name;
-        const fn_name = self.manager.vm.interner.getKey(name_idx).?;
-        // const fn_var = self.next().var_decl.variable;
+    fn compileCallable(self: *Self, name: []const u8, defaults_count: usize, body_len: usize, return_kind: ReturnKind) Error!*Obj.Function {
+        var compiler = Compiler.init(self.manager, name, defaults_count);
 
-        const func = try self.compileFn(fn_name, data);
-
-        // if (data.scope == .global) {
-        //     self.addGlobal(Value.makeObj(func.asObj()));
-        // } else {
-        // const symbol_index = self.getChunk().addSymbol(Value.makeObj(func.asObj()));
-
-        // const symbol_index = self.addGlobal(Value.makeObj(func.asObj()));
-        self.addSymbol(data.index, Value.makeObj(func.asObj()));
-        // self.defineVariable(fn_var, 0);
-        // }
-
-        // Check for main function
-        // if (idx == self.manager.main) {
-        //     self.manager.main_index = symbol_index;
-        // }
-    }
-
-    fn compileFn(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
-        var compiler = Compiler.init(self.manager, name, data.default_params);
-
-        for (0..data.default_params) |i| {
+        for (0..defaults_count) |i| {
             compiler.function.default_values[i] = try self.compileDefaultValue();
         }
 
-        for (0..data.body_len) |_| {
+        for (0..body_len) |_| {
             compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
 
-        if (data.return_kind == .implicit_value) {
+        if (return_kind == .implicit_value) {
             compiler.writeOp(.@"return", self.manager.instr_offsets[self.manager.instr_idx - 1]);
-        } else if (data.return_kind == .implicit_void) {
+        } else if (return_kind == .implicit_void) {
             compiler.writeOp(.naked_return, self.manager.instr_offsets[self.manager.instr_idx - 1]);
         }
 
         return compiler.end();
+    }
+
+    fn compileFn(self: *Self, data: *const Instruction.FnDecl) Error!void {
+        const name_idx = self.next().name;
+        const fn_name = self.manager.vm.interner.getKey(name_idx).?;
+        const func = try self.compileCallable(fn_name, data.default_params, data.body_len, data.return_kind);
+        self.addSymbol(data.index, Value.makeObj(func.asObj()));
+    }
+
+    fn compileClosure(self: *Self, data: *const Instruction.Closure) Error!void {
+        const start = self.getStart();
+
+        for (data.captures) |capt| {
+            self.writeOpAndByte(.get_local_absolute, @intCast(capt), start);
+        }
+
+        const func = try self.compileCallable("closure", data.default_params, data.body_len, data.return_kind);
+        try self.emitConstant(Value.makeObj(func.asObj()), start);
+
+        self.writeOpAndByte(.closure, @intCast(data.captures.len), start);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
@@ -895,10 +892,8 @@ const Compiler = struct {
         for (0..data.func_count) |_| {
             const fn_data = self.next().fn_decl;
             const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
-            // Skip `variable` cause not needed here
-            // self.manager.instr_idx += 1;
-
-            const func = try self.compileFn(fn_name, &fn_data);
+            // const func = try self.compileFn(fn_name, &fn_data);
+            const func = try self.compileCallable(fn_name, fn_data.default_params, fn_data.body_len, fn_data.return_kind);
             funcs.appendAssumeCapacity(func);
         }
 

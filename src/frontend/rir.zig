@@ -17,6 +17,7 @@ pub const Instruction = struct {
         bool: bool,
         call: Call,
         cast: Type,
+        closure: Closure,
         discard,
         field: Field,
         float: f64,
@@ -123,6 +124,12 @@ pub const Instruction = struct {
         arity: u8,
         default_count: u8,
         invoke: bool = false,
+    };
+    pub const Closure = struct {
+        body_len: u64,
+        default_params: usize,
+        captures: []const usize,
+        return_kind: ReturnKind,
     };
     pub const FnDecl = struct { index: usize, body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, rc_action: RcAction };

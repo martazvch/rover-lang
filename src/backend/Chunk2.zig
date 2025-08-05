@@ -65,6 +65,7 @@ pub const OpCode = enum(u8) {
     bound_import,
     // bound_method,
     cast_to_float,
+    closure,
     constant,
     define_heap_var,
     define_global,

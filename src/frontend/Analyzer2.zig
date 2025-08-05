@@ -248,6 +248,27 @@ const ScopeStack = struct {
         return popped.variables.count();
     }
 
+    pub const ScopeCaptures = struct {
+        count: usize,
+        captured: []const usize,
+    };
+
+    pub fn closeGetCaptures(self: *ScopeStack, allocator: Allocator) ScopeCaptures {
+        const popped = self.scopes.pop().?;
+        self.updateCurrent();
+
+        var captured: ArrayListUnmanaged(usize) = .{};
+
+        var iter = popped.variables.valueIterator();
+        while (iter.next()) |v| {
+            if (v.kind == .captured) {
+                captured.append(allocator, v.index) catch oom();
+            }
+        }
+
+        return .{ .count = popped.variables.count(), .captured = captured.toOwnedSlice(allocator) catch oom() };
+    }
+
     pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
         self.open(allocator, false);
         const builtins = std.meta.fields(TypeInterner.Cache);
@@ -456,6 +477,11 @@ fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
     self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
 }
 
+fn makeInstruction(self: *Self, data: Instruction.Data, mode: IrBuilder.Mode) void {
+    const instr: Instruction = .{ .data = data, .offset = 0 };
+    self.ir_builder.emit(instr, mode);
+}
+
 pub fn analyze(self: *Self, ast: *const Ast) Error!void {
     self.ast = ast;
     var ctx: Context = .{};
@@ -573,7 +599,40 @@ fn discard(self: *Self, expr: *const Expr, ctx: *Context) !void {
     if (self.isVoid(discarded)) return self.err(.void_discard, self.ast.getSpan(expr));
 }
 
+fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) void {
+    var locals: AutoHashMapUnmanaged(InternerIdx, usize) = .{};
+
+    for (node.body.nodes) |n| {
+        switch (n) {
+            .var_decl => |v| {
+                const interned = self.interner.intern(self.ast.toSource(v.name));
+
+                // If already declared, we consider we are in another scope
+                const index = if (locals.contains(interned)) locals.count() + 1 else locals.count();
+                locals.put(self.allocator, interned, index) catch oom();
+            },
+            .expr => |expr| {
+                const c = if (expr.* == .closure) expr.closure else continue;
+
+                for (c.body.nodes) |cn| {
+                    const ce = if (cn == .expr) cn.expr else continue;
+                    const lit = if (ce.* == .literal) ce.literal else continue;
+                    if (lit.tag != .identifier) continue;
+
+                    const interned = self.interner.intern(self.ast.toSource(lit.idx));
+                    if (locals.contains(interned)) {
+                        std.debug.print("Contained\n", .{});
+                    }
+                }
+            },
+            else => {},
+        }
+    }
+}
+
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*const Type {
+    self.checkFunctionCaptures(node);
+
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
@@ -594,14 +653,52 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
-    // We reserve slot 0 for potential closure's environment
-    // _ = try self.declareVariable(self.cached_names.self, ctx.struct_type orelse self.type_interner.cache.void, true, .zero);
+    const params, const default_count = try self.fnParams(node.params, ctx);
+    fn_type.params = params;
 
+    const return_type = try self.checkAndGetType(node.return_type, ctx);
+    fn_type.return_type = return_type;
+    const interned_type = self.type_interner.intern(.{ .function = fn_type });
+
+    // Update type for resolution in function's body
+    ctx.fn_type = interned_type;
+    sym.type = interned_type;
+    const len = try self.fnBody(node.body.nodes, &fn_type, ctx);
+
+    _ = self.scope.close();
+
+    // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
+    if (ctx.struct_type != null) {
+        self.scope.removeSymbol(name);
+    }
+
+    if (name == self.cached_names.main and self.scope.isGlobal()) {
+        self.main = sym.index;
+    }
+
+    self.makeInstruction(
+        .{ .fn_decl = .{
+            .index = sym.index,
+            .body_len = len,
+            .default_params = default_count,
+            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
+        } },
+        .{ .setAt = fn_idx },
+    );
+
+    return interned_type;
+}
+
+fn fnParams(
+    self: *Self,
+    params: []Ast.Param,
+    ctx: *Context,
+) Error!struct { AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter), usize } {
     var params_type: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
-    params_type.ensureTotalCapacity(self.allocator, node.params.len) catch oom();
+    params_type.ensureTotalCapacity(self.allocator, params.len) catch oom();
     var default_count: usize = 0;
 
-    for (node.params, 0..) |*p, i| {
+    for (params, 0..) |*p, i| {
         const param_name = self.interner.intern(self.ast.toSource(p.name));
 
         if (i == 0 and param_name == self.cached_names.self) {
@@ -635,62 +732,10 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         params_type.putAssumeCapacity(param_name, .{ .type = param_type, .default = p.value != null });
     }
 
-    const return_type = try self.checkAndGetType(node.return_type, ctx);
-    fn_type.params = params_type;
-    fn_type.return_type = return_type;
-    const interned_type = self.type_interner.intern(.{ .function = fn_type });
-    // const interned_type = self.type_interner.intern(.{ .function = .{
-    //     .params = params_type,
-    //     .return_type = return_type,
-    //     .is_method = is_method,
-    // } });
-
-    // Update type for resolution in function's body
-    ctx.fn_type = interned_type;
-    sym.type = interned_type;
-
-    const body_type, const had_err, const len = self.fnBody(node.body.nodes, ctx);
-
-    if (!had_err and body_type != return_type) {
-        return self.err(
-            .{ .incompatible_fn_type = .{
-                .expect = self.getTypeName(return_type),
-                .found = self.getTypeName(body_type),
-            } },
-            self.ast.getSpan(node.body.nodes[node.body.nodes.len - 1]),
-        );
-    }
-
-    _ = self.scope.close();
-
-    // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
-    if (ctx.struct_type != null) {
-        self.scope.removeSymbol(name);
-    }
-
-    if (name == self.cached_names.main and self.scope.isGlobal()) {
-        self.main = sym.index;
-    }
-
-    self.makeInstruction(
-        .{ .fn_decl = .{
-            .index = sym.index,
-            .body_len = len,
-            .default_params = default_count,
-            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(body_type)) .implicit_void else .implicit_value,
-        } },
-        .{ .setAt = fn_idx },
-    );
-
-    return interned_type;
+    return .{ params_type, default_count };
 }
 
-fn makeInstruction(self: *Self, data: Instruction.Data, mode: IrBuilder.Mode) void {
-    const instr: Instruction = .{ .data = data, .offset = 0 };
-    self.ir_builder.emit(instr, mode);
-}
-
-fn fnBody(self: *Self, body: []Node, ctx: *Context) struct { *const Type, bool, usize } {
+fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Context) Error!usize {
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
@@ -733,7 +778,17 @@ fn fnBody(self: *Self, body: []Node, ctx: *Context) struct { *const Type, bool, 
         self.ir_builder.instructions.shrinkRetainingCapacity(deadcode_start);
     }
 
-    return .{ final_type, had_err, len - deadcode_count };
+    if (!had_err and final_type != fn_type.return_type) {
+        return self.err(
+            .{ .incompatible_fn_type = .{
+                .expect = self.getTypeName(fn_type.return_type),
+                .found = self.getTypeName(final_type),
+            } },
+            self.ast.getSpan(body[body.len - 1]),
+        );
+    }
+
+    return len - deadcode_count;
 }
 
 fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Result {
@@ -906,6 +961,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
         // .array_access => |*e| self.arrayAccess(e),
         .block => |*e| self.block(e, ctx),
         .binop => |*e| self.binop(e, ctx),
+        .closure => |*e| self.closure(e, ctx),
         .field => |*e| (try self.field(e, ctx)).type,
         .fn_call => |*e| self.call(e, ctx),
         .grouping => |*e| self.analyzeExpr(e.expr, ctx),
@@ -935,12 +991,12 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
         }
     }
 
-    const var_count = self.scope.close();
+    const count = self.scope.close();
     // TODO: protect cast
     self.makeInstruction(
         .{ .block = .{
             .length = expr.nodes.len,
-            .pop_count = @intCast(var_count),
+            .pop_count = @intCast(count),
             .is_expr = !self.isVoid(final_type),
         } },
         .{ .setAt = index },
@@ -1000,6 +1056,43 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
 
     self.makeInstruction(.{ .binop = data }, .{ .setAt = index });
     return result_type;
+}
+
+fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
+    // TODO: check if not useless
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
+
+    const closure_idx = self.ir_builder.reserveInstr();
+
+    self.scope.open(self.allocator, false);
+    errdefer _ = self.scope.close();
+
+    const params, const default_count = try self.fnParams(expr.params, ctx);
+
+    // Update type for resolution in function's body
+    const closure_type: Type.Function = .{
+        .params = params,
+        .return_type = try self.checkAndGetType(expr.return_type, ctx),
+        .is_method = ctx.struct_type != null,
+    };
+    const interned_type = self.type_interner.intern(.{ .function = closure_type });
+
+    ctx.fn_type = interned_type;
+    const len = try self.fnBody(expr.body.nodes, &closure_type, ctx);
+
+    const scope_stats = self.scope.closeGetCaptures(self.allocator);
+
+    self.makeInstruction(
+        .{ .closure = .{
+            .body_len = len,
+            .default_params = default_count,
+            .captures = scope_stats.captured,
+            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
+        } },
+        .{ .setAt = closure_idx },
+    );
+    return interned_type;
 }
 
 fn isStringConcat(op: TokenTag, lhs: *const Type, rhs: *const Type) bool {

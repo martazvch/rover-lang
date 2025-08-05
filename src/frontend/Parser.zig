@@ -242,12 +242,28 @@ fn fnDecl(self: *Self) Error!Node {
     const name = self.token_idx - 1;
     try self.expect(.left_paren, .expect_paren_after_fn_name);
     self.skipNewLines();
+    const params = try self.fnParams(false);
+    try self.expect(.right_paren, .expect_paren_after_fn_params);
 
+    const return_type = try self.fnReturnType();
+    self.skipNewLines();
+    try self.expect(.left_brace, .expect_brace_before_fn_body);
+
+    return .{ .fn_decl = .{
+        .name = name,
+        .params = params,
+        .body = (try self.block()).block,
+        .return_type = return_type,
+    } };
+}
+
+fn fnParams(self: *Self, is_closure: bool) Error![]Ast.Param {
+    const closing_token: Token.Tag = if (is_closure) .pipe else .right_paren;
     var params: ArrayListUnmanaged(Ast.Param) = .{};
     var param_names: ArrayListUnmanaged(TokenIndex) = .{};
     var named_started = false;
 
-    while (!self.check(.right_paren)) {
+    while (!self.check(closing_token)) {
         defer param_names.clearRetainingCapacity();
 
         if (self.check(.eof)) {
@@ -259,7 +275,7 @@ fn fnDecl(self: *Self) Error!Node {
         );
 
         // self managment
-        if (self.match(.self)) {
+        if (!is_closure and self.match(.self)) {
             const name_idx = self.token_idx - 1;
 
             if (params.items.len > 0) {
@@ -315,24 +331,16 @@ fn fnDecl(self: *Self) Error!Node {
         self.skipNewLines();
     }
 
-    try self.expect(.right_paren, .expect_paren_after_fn_params);
+    return params.toOwnedSlice(self.allocator) catch oom();
+}
 
-    const return_type: ?*Ast.Type = if (self.match(.small_arrow))
-        try self.parseType()
+fn fnReturnType(self: *Self) Error!?*Ast.Type {
+    return if (self.match(.small_arrow))
+        self.parseType()
     else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.float_kw))
-        return self.errAtCurrent(.expect_arrow_before_fn_type)
+        self.errAtCurrent(.expect_arrow_before_fn_type)
     else
         null;
-
-    self.skipNewLines();
-    try self.expect(.left_brace, .expect_brace_before_fn_body);
-
-    return .{ .fn_decl = .{
-        .name = name,
-        .params = params.toOwnedSlice(self.allocator) catch oom(),
-        .body = (try self.block()).block,
-        .return_type = return_type,
-    } };
 }
 
 fn structDecl(self: *Self) !Node {
@@ -732,8 +740,9 @@ fn parseExpr(self: *Self) Error!*Expr {
         .float => self.literal(.float),
         .identifier => self.literal(.identifier),
         .int => self.literal(.int),
-        .left_paren => self.grouping(),
+        .left_paren => self.leftParenExprStart(),
         .null => self.literal(.null),
+        .pipe => self.closure(),
         .@"return" => self.returnExpr(),
         .self => self.literal(.self),
         .string => self.literal(.string),
@@ -796,6 +805,27 @@ fn block(self: *Self) Error!*Expr {
     return expr;
 }
 
+fn closure(self: *Self) Error!*Expr {
+    const opening = self.token_idx - 1;
+    const expr = self.allocator.create(Expr) catch oom();
+    const args = try self.fnParams(true);
+    try self.expect(.pipe, .expect_closing_pipe);
+    const closing = self.token_idx - 1;
+
+    const return_type = try self.fnReturnType();
+    self.skipNewLines();
+    try self.expect(.left_brace, .expect_brace_before_fn_body);
+
+    expr.* = .{ .closure = .{
+        .params = args,
+        .body = (try self.block()).block,
+        .return_type = return_type,
+        .span = .{ .start = opening, .end = closing },
+    } };
+
+    return expr;
+}
+
 fn ifExpr(self: *Self) Error!*Expr {
     const save = self.in_cond;
     self.in_cond = true;
@@ -837,27 +867,30 @@ fn ifExpr(self: *Self) Error!*Expr {
     return expr;
 }
 
-fn grouping(self: *Self) Error!*Expr {
+fn leftParenExprStart(self: *Self) Error!*Expr {
     const start = self.token_idx - 1;
     const opening = self.prev(.span).start;
     self.skipNewLines();
 
     const save = self.in_group;
-    self.in_group = true;
     defer self.in_group = save;
+    self.in_group = true;
 
     const expr = self.allocator.create(Expr) catch oom();
     const value = try self.parsePrecedenceExpr(0);
 
-    try self.expectOrErrAtToken(.right_paren, .unclosed_paren, start);
-
-    expr.* = .{ .grouping = .{
-        .expr = value,
-        .span = .{
-            .start = opening,
-            .end = self.current(.span).start,
-        },
-    } };
+    if (self.match(.right_paren)) {
+        expr.* = .{ .grouping = .{
+            .expr = value,
+            .span = .{
+                .start = opening,
+                .end = self.current(.span).start,
+            },
+        } };
+        // Tuple
+    } else if (self.match(.comma)) {
+        unreachable;
+    } else return self.errAt(start, .unclosed_paren);
 
     return expr;
 }
@@ -974,12 +1007,12 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
         self.skipNewLines();
     }
 
-    try self.expect(.right_paren, .expect_paren_after_fn_args);
-
     call_expr.* = .{ .fn_call = .{
         .callee = expr,
         .args = args.toOwnedSlice(self.allocator) catch oom(),
     } };
+
+    try self.expect(.right_paren, .expect_paren_after_fn_args);
 
     return call_expr;
 }

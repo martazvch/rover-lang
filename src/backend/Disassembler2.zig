@@ -62,6 +62,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .call => self.indexInstruction("OP_CALL", offset, writer),
         .call_native => self.indexInstruction("OP_CALL_NATIVE", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
+        .closure => self.indexInstruction("CLOSURE", offset, writer),
         .constant => self.constantInstruction("OP_CONSTANT", offset, writer),
         .define_heap_var => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
         .define_global => self.indexInstruction("OP_DEFINE_GLOBAL", offset, writer),

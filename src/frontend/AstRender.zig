@@ -140,15 +140,31 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
 }
 
 fn renderFnDecl(self: *Self, decl: *const Ast.FnDecl, comma: bool) !void {
-    try self.openKey("fn_decl", .block);
-    try self.pushKeyValue("name", self.spanToSrc(decl.name), true);
+    try self.renderCallableDecl(self.spanToSrc(decl.name), decl.params, decl.return_type, decl.body, false, comma);
+}
 
-    if (decl.params.len == 0) {
+fn renderClosureDecl(self: *Self, decl: *const Ast.Closure, comma: bool) !void {
+    try self.renderCallableDecl("", decl.params, decl.return_type, decl.body, true, comma);
+}
+
+fn renderCallableDecl(
+    self: *Self,
+    name: []const u8,
+    params: []Ast.Param,
+    return_type: ?*Ast.Type,
+    body: Ast.Block,
+    is_closure: bool,
+    comma: bool,
+) !void {
+    try self.openKey(if (is_closure) "closure_decl" else "fn_decl", .block);
+    try self.pushKeyValue("name", name, true);
+
+    if (params.len == 0) {
         try self.emptyKey("params", .list, true);
     } else {
         try self.openKey("params", .list);
-        for (decl.params, 0..) |p, i| {
-            const last = i != decl.params.len - 1;
+        for (params, 0..) |p, i| {
+            const last = i != params.len - 1;
             try self.openBrace();
             try self.pushKeyValue("name", self.spanToSrc(p.name), true);
             if (p.typ) |typ| {
@@ -164,8 +180,8 @@ fn renderFnDecl(self: *Self, decl: *const Ast.FnDecl, comma: bool) !void {
         try self.closeKey(.list, true);
     }
 
-    try self.pushKeyValue("return_type", if (decl.return_type) |ret| try self.renderType(ret) else "void", true);
-    try self.renderBlock(&decl.body, false);
+    try self.pushKeyValue("return_type", if (return_type) |ret| try self.renderType(ret) else "void", true);
+    try self.renderBlock(&body, false);
     try self.closeKey(.block, comma);
 }
 
@@ -273,6 +289,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             }, false);
             try self.closeKey(.block, comma);
         },
+        .closure => |*e| try self.renderClosureDecl(e, comma),
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.openKey("structure", .block);

@@ -346,6 +346,43 @@ pub const Function = struct {
     }
 };
 
+pub const Closure = struct {
+    obj: Obj,
+    function: *Function,
+    captures: []Value,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, function: *Function, env: []Value) *Self {
+        const obj = Obj.allocate(vm, Self, .closure);
+        obj.function = function;
+        obj.env = env;
+
+        if (options.log_gc) {
+            std.debug.print("closure for: {s}\n", .{function.name.?});
+        }
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
+        try writer.print("<fn {s}>", .{self.function.name.?.chars});
+    }
+
+    pub fn log(self: *const Self) void {
+        std.debug.print("<closure {s}>", .{self.function.name.?.chars});
+    }
+
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        _ = self; // autofix
+        _ = vm; // autofix
+    }
+};
+
 pub const NativeFunction = struct {
     obj: Obj,
     function: NativeFn,

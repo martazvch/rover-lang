@@ -911,6 +911,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr) Error!Type {
         .array_access => |*e| self.arrayAccess(e),
         .block => |*e| self.block(e),
         .binop => |*e| self.binop(e),
+        .closure => unreachable,
         .field => |*e| (try self.field(e, true)).field,
         .fn_call => |*e| self.call(e),
         .grouping => |*e| self.analyzeExpr(e.expr),

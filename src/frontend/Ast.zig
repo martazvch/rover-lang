@@ -96,6 +96,7 @@ pub const Expr = union(enum) {
     array_access: ArrayAccess,
     block: Block,
     binop: Binop,
+    closure: Closure,
     field: Field,
     fn_call: FnCall,
     grouping: Grouping,
@@ -127,6 +128,13 @@ pub const Binop = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: Token.Tag,
+};
+
+pub const Closure = struct {
+    params: []Param,
+    body: Block,
+    return_type: ?*Type,
+    span: Span,
 };
 
 pub const Field = struct {
@@ -246,6 +254,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
             .start = self.getSpan(node.lhs.*).start,
             .end = self.getSpan(node.rhs.*).end,
         },
+        Closure => node.span,
         Field => .{
             .start = self.getSpan(node.structure.*).start,
             .end = self.token_spans[node.field].end,
