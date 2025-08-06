@@ -63,6 +63,7 @@ pub const OpCode = enum(u8) {
     add_int,
     add_float,
     bound_import,
+    box,
     // bound_method,
     cast_to_float,
     closure,

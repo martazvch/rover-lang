@@ -3,7 +3,8 @@
 // }
 
 fn main() {
-    var closure = || { print 1 }
+    var a = 3
+    var closure = || { print a }
 
     // print oui(1, 5.)
 }

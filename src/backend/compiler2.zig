@@ -338,6 +338,7 @@ const Compiler = struct {
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
             .bool => |data| self.boolInstr(data),
+            .box => |*data| self.box(data),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
             .closure => |*data| self.compileClosure(data),
@@ -589,6 +590,13 @@ const Compiler = struct {
     fn boolInstr(self: *Self, value: bool) Error!void {
         const op: OpCode = if (value) .true else .false;
         self.writeOp(op, self.getStart());
+    }
+
+    fn box(self: *Self, data: *const Instruction.Variable) Error!void {
+        const start = self.getStart();
+
+        self.emitGetVar(data, false, self.getStart());
+        self.writeOp(.box, start);
     }
 
     fn cast(self: *Self, typ: Rir.Type) Error!void {

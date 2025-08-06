@@ -58,6 +58,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_import => self.getMember("OP_BOUND_IMPORT", offset, writer),
+        .box => self.simpleInstruction("BOX", offset, writer),
         // .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         .call_native => self.indexInstruction("OP_CALL_NATIVE", offset, writer),

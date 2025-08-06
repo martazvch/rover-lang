@@ -381,12 +381,17 @@ fn declareSymbol(self: *Self, name: InternerIdx, ty: *const Type) void {
 
 const Context = struct {
     side: enum { lhs, rhs } = .lhs,
-    fn_type: ?*Type = null,
+    function: ?FnCtx = null,
     struct_type: ?*const Type = null,
     ref_count: bool = false,
     cow: bool = false,
     allow_partial: bool = true,
     returns: bool = false,
+
+    pub const FnCtx = struct {
+        type: *const Type,
+        captures: CaptureRes = .{},
+    };
 
     const ContextSnapshot = struct {
         saved: Context,
@@ -599,40 +604,63 @@ fn discard(self: *Self, expr: *const Expr, ctx: *Context) !void {
     if (self.isVoid(discarded)) return self.err(.void_discard, self.ast.getSpan(expr));
 }
 
-fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) void {
-    var locals: AutoHashMapUnmanaged(InternerIdx, usize) = .{};
+// TODO: put inside Ast? Do a `walker` section
+const VarDecl = struct { index: usize, catpured: bool = false };
+const CaptureRes = AutoHashMapUnmanaged(InternerIdx, VarDecl);
 
-    for (node.body.nodes) |n| {
-        switch (n) {
-            .var_decl => |v| {
-                const interned = self.interner.intern(self.ast.toSource(v.name));
+fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) CaptureRes {
+    var locals: CaptureRes = .{};
+    self.walkFnBody(node.body.nodes, false, &locals);
+    return locals;
+}
 
-                // If already declared, we consider we are in another scope
-                const index = if (locals.contains(interned)) locals.count() + 1 else locals.count();
-                locals.put(self.allocator, interned, index) catch oom();
+fn walkFnBody(self: *const Self, nodes: []const Ast.Node, is_closure: bool, locals: *CaptureRes) void {
+    for (nodes) |*node| {
+        switch (node.*) {
+            .print => |expr| {
+                self.captureFromExpr(expr, is_closure, locals);
             },
-            .expr => |expr| {
-                const c = if (expr.* == .closure) expr.closure else continue;
+            .var_decl => |n| {
+                if (n.value) |val| {
+                    self.captureFromExpr(val, is_closure, locals);
+                }
 
-                for (c.body.nodes) |cn| {
-                    const ce = if (cn == .expr) cn.expr else continue;
-                    const lit = if (ce.* == .literal) ce.literal else continue;
-                    if (lit.tag != .identifier) continue;
+                if (!is_closure) {
+                    const interned = self.interner.intern(self.ast.toSource(n.name));
 
-                    const interned = self.interner.intern(self.ast.toSource(lit.idx));
-                    if (locals.contains(interned)) {
-                        std.debug.print("Contained\n", .{});
-                    }
+                    // If already declared, we consider we are in another scope
+                    const index = if (locals.contains(interned)) locals.count() + 1 else locals.count();
+                    locals.put(self.allocator, interned, .{ .index = index }) catch oom();
+                    std.debug.print("Var declared: {s}\n", .{self.ast.toSource(n.name)});
                 }
             },
-            else => {},
+            else => unreachable,
         }
     }
 }
 
-fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*const Type {
-    self.checkFunctionCaptures(node);
+fn captureFromExpr(self: *const Self, expr: *const Ast.Expr, is_closure: bool, locals: *CaptureRes) void {
+    switch (expr.*) {
+        .closure => |e| {
+            self.walkFnBody(e.body.nodes, true, locals);
+        },
+        .literal => |e| {
+            if (e.tag != .identifier or !is_closure) return;
 
+            const interned = self.interner.intern(self.ast.toSource(e.idx));
+            std.debug.print("Check capture for: {s}\n", .{self.ast.toSource(e.idx)});
+
+            if (locals.getPtr(interned)) |local| {
+                local.catpured = true;
+                std.debug.print("Contained\n", .{});
+            }
+        },
+        else => unreachable,
+    }
+}
+// ----------------- TODO end ------------------
+
+fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*const Type {
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
@@ -661,7 +689,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     const interned_type = self.type_interner.intern(.{ .function = fn_type });
 
     // Update type for resolution in function's body
-    ctx.fn_type = interned_type;
+    // ctx.fn_type = interned_type;
+    ctx.function = .{ .type = interned_type, .captures = self.checkFunctionCaptures(node) };
     sym.type = interned_type;
     const len = try self.fnBody(node.body.nodes, &fn_type, ctx);
 
@@ -1078,7 +1107,7 @@ fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
     };
     const interned_type = self.type_interner.intern(.{ .function = closure_type });
 
-    ctx.fn_type = interned_type;
+    ctx.function = .{ .type = interned_type };
     const len = try self.fnBody(expr.body.nodes, &closure_type, ctx);
 
     const scope_stats = self.scope.closeGetCaptures(self.allocator);
@@ -1754,8 +1783,8 @@ fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
     } else self.type_interner.cache.void;
 
     // We check after to advance node idx
-    const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, self.ast.getSpan(expr));
-    const return_type = fn_type.function.return_type;
+    const fn_ctx = ctx.function orelse return self.err(.return_outside_fn, self.ast.getSpan(expr));
+    const return_type = fn_ctx.type.function.return_type;
 
     // We do that here because we can insert a cast
     if (return_type != ty) {

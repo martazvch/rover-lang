@@ -118,6 +118,7 @@ fn parseInstr(self: *Self) void {
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
+        .box => |*data| self.box(data),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
         .closure => |*data| self.closure(data),
@@ -266,6 +267,13 @@ fn block(self: *Self, data: *const Instruction.Block) void {
 
 fn boolInstr(self: *Self, value: bool) void {
     self.indentAndPrintSlice("[Bool {}]", .{value});
+}
+
+fn box(self: *Self, data: *const Instruction.Variable) void {
+    self.indentAndAppendSlice("[Box]");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    self.identifier(data);
 }
 
 fn cast(self: *Self, typ: Type) void {

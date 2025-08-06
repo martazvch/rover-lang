@@ -15,6 +15,7 @@ pub const Instruction = struct {
         binop: Binop,
         block: Block,
         bool: bool,
+        box: Variable,
         call: Call,
         cast: Type,
         closure: Closure,

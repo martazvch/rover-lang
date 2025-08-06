@@ -329,6 +329,11 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 );
                 self.stack.push(Value.makeObj(bound.asObj()));
             },
+            .box => {
+                const to_box = self.stack.pop();
+                const boxed = Value.makeObj(Obj.Box.create(self, to_box).asObj());
+                self.stack.push(boxed);
+            },
             .call => {
                 const args_count = frame.readByte();
                 const function, const imported = self.stack.peekRef(args_count).obj.initCall(self, args_count);
