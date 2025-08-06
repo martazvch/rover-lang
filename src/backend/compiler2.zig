@@ -967,17 +967,23 @@ const Compiler = struct {
 
         // TODO: Fix this, just to avoid accessing an empty slot at runtime
         // If we are top level, value should be pure and compile time known
-        if (data.variable.scope == .global) _ = self.addGlobal(.null_);
+        // The purpose is to initialize the slot so when accessed like self.globals[idx] we don't segfault
+        if (data.variable.scope == .global) {
+            _ = self.addGlobal(.null_);
+        } else if (data.box) {
+            self.writeOp(.box, start);
+        }
+
         self.defineVariable(data.variable, start);
 
-        if (data.variable.scope == .heap) {
-            self.manager.heap_count += 1;
-            // We place a 'tombstone' value here because during static analyzis,
-            // the locals list is synchronized to all following declaration. Instead of
-            // back patching all locals declaration past a heap variable, we make the
-            // compiler place a tombstone.
-            self.writeOp(.null, start);
-        }
+        // if (data.variable.scope == .heap) {
+        //     self.manager.heap_count += 1;
+        //     // We place a 'tombstone' value here because during static analyzis,
+        //     // the locals list is synchronized to all following declaration. Instead of
+        //     // back patching all locals declaration past a heap variable, we make the
+        //     // compiler place a tombstone.
+        //     self.writeOp(.null, start);
+        // }
     }
 
     fn whileInstr(self: *Self) Error!void {

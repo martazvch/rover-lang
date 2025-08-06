@@ -553,9 +553,10 @@ fn use(self: *Self, count: u64) void {
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
-    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}]", .{
+    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}, box: {}]", .{
         data.variable.index,
         @tagName(data.variable.scope),
+        data.box,
     });
 
     self.indent_level += 1;

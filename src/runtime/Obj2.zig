@@ -23,6 +23,8 @@ const Kind = enum {
     array,
     bound_import,
     bound_method,
+    box,
+    closure,
     function,
     instance,
     module,
@@ -52,7 +54,7 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .array => self.as(Array).deepCopy(vm).asObj(),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .bound_import, .bound_method, .function, .module, .native_fn, .string, .structure => self,
+        .bound_import, .bound_method, .box, .closure, .function, .module, .native_fn, .string, .structure => self,
     };
 }
 
@@ -61,6 +63,8 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
         .array => self.as(Array).deinit(vm),
         .bound_import => self.as(BoundImport).deinit(vm.allocator),
         .bound_method => self.as(BoundMethod).deinit(vm.allocator),
+        .box => self.as(Box).deinit(vm),
+        .closure => self.as(Closure).deinit(vm),
         .function => {
             const function = self.as(Function);
             function.deinit(vm);
@@ -96,6 +100,8 @@ pub fn print(self: *Obj, writer: anytype) PrintError!void {
         .array => self.as(Array).print(writer),
         .bound_import => self.as(BoundImport).import.print(writer),
         .bound_method => self.as(BoundMethod).method.print(writer),
+        .box => self.as(Box).print(writer),
+        .closure => self.as(Closure).print(writer),
         .function => self.as(Function).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
         .module => writer.print("<module {s}>", .{self.as(ObjModule).module.name}),
@@ -353,10 +359,10 @@ pub const Closure = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, function: *Function, env: []Value) *Self {
+    pub fn create(vm: *Vm, function: *Function, captures: []Value) *Self {
         const obj = Obj.allocate(vm, Self, .closure);
         obj.function = function;
-        obj.env = env;
+        obj.captures = captures;
 
         if (options.log_gc) {
             std.debug.print("closure for: {s}\n", .{function.name.?});
@@ -378,8 +384,7 @@ pub const Closure = struct {
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
-        _ = self; // autofix
-        _ = vm; // autofix
+        vm.gc_alloc.destroy(self);
     }
 };
 
@@ -405,7 +410,8 @@ pub const Box = struct {
     }
 
     pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        self.value.print(writer);
+        try writer.writeAll("Box ");
+        try self.value.print(writer);
     }
 
     pub fn log(self: *const Self) void {
@@ -414,8 +420,7 @@ pub const Box = struct {
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
-        _ = self; // autofix
-        _ = vm; // autofix
+        vm.gc_alloc.destroy(self);
     }
 };
 

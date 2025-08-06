@@ -140,6 +140,12 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             try self.markObject(bound.receiver);
             try self.markObject(bound.method.asObj());
         },
+        .box => try self.markValue(&obj.as(Obj.Box).value),
+        .closure => {
+            const closure = obj.as(Obj.Closure);
+            try self.markObject(closure.function.asObj());
+            try self.markArray(closure.captures);
+        },
         .function => {
             const function = obj.as(Function);
             if (function.name) |name| {

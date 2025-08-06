@@ -115,6 +115,8 @@ pub const Type = union(enum) {
 
         hasher.update(asBytes(&@intFromEnum(self)));
 
+        // TODO: we could use only name but relative to the base of the project to avoid
+        // name collision between modules
         switch (self) {
             .void, .int, .float, .bool, .str, .null => {},
             .function => |ty| {
@@ -231,14 +233,20 @@ const ScopeStack = struct {
     const Scope = struct {
         variables: AutoHashMapUnmanaged(InternerIdx, Variable) = .{},
         symbols: AutoArrayHashMapUnmanaged(InternerIdx, Symbol) = .{},
+        /// Offset to apply to any index in this scope. Correspond to the numbers of locals
+        /// in parent scopes (represents stack at runtime)
         offset: usize,
+        /// Is a border, meaning that you can't go before this one when resolving variable.
+        /// Useful to declare functions scope as they can't see before themselves but scopes
+        /// and closure can
+        border: bool,
 
         pub const Symbol = struct { type: *const Type, index: usize };
     };
 
-    pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
-        const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
-        self.scopes.append(allocator, .{ .offset = offset }) catch oom();
+    pub fn open(self: *ScopeStack, allocator: Allocator, border: bool) void {
+        const offset = if (!border) self.current.variables.count() + self.current.offset else 0;
+        self.scopes.append(allocator, .{ .offset = offset, .border = border }) catch oom();
         self.updateCurrent();
     }
 
@@ -270,7 +278,7 @@ const ScopeStack = struct {
     }
 
     pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
-        self.open(allocator, false);
+        self.open(allocator, true);
         const builtins = std.meta.fields(TypeInterner.Cache);
         self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
@@ -314,6 +322,8 @@ const ScopeStack = struct {
             if (scope.variables.getPtr(name)) |variable| {
                 return .{ variable, scope.offset };
             }
+
+            if (scope.border) break;
         }
 
         return null;
@@ -559,7 +569,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
                 return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
             }
 
-            var assigne = try self.expectVariableIdentifier(e.idx);
+            var assigne = try self.expectVariableIdentifier(e.idx, ctx);
 
             if (!assigne.initialized) assigne.initialized = true;
 
@@ -606,15 +616,25 @@ fn discard(self: *Self, expr: *const Expr, ctx: *Context) !void {
 
 // TODO: put inside Ast? Do a `walker` section
 const VarDecl = struct { index: usize, catpured: bool = false };
-const CaptureRes = AutoHashMapUnmanaged(InternerIdx, VarDecl);
+const CaptureStats = AutoHashMapUnmanaged(InternerIdx, VarDecl);
+const CaptureRes = AutoHashMapUnmanaged(usize, void);
 
 fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) CaptureRes {
-    var locals: CaptureRes = .{};
+    var locals: CaptureStats = .{};
     self.walkFnBody(node.body.nodes, false, &locals);
-    return locals;
+
+    var res: CaptureRes = .{};
+    var it = locals.valueIterator();
+    while (it.next()) |capt| {
+        if (capt.catpured) {
+            res.put(self.allocator, capt.index, {}) catch oom();
+        }
+    }
+
+    return res;
 }
 
-fn walkFnBody(self: *const Self, nodes: []const Ast.Node, is_closure: bool, locals: *CaptureRes) void {
+fn walkFnBody(self: *const Self, nodes: []const Ast.Node, is_closure: bool, locals: *CaptureStats) void {
     for (nodes) |*node| {
         switch (node.*) {
             .print => |expr| {
@@ -639,7 +659,7 @@ fn walkFnBody(self: *const Self, nodes: []const Ast.Node, is_closure: bool, loca
     }
 }
 
-fn captureFromExpr(self: *const Self, expr: *const Ast.Expr, is_closure: bool, locals: *CaptureRes) void {
+fn captureFromExpr(self: *const Self, expr: *const Ast.Expr, is_closure: bool, locals: *CaptureStats) void {
     switch (expr.*) {
         .closure => |e| {
             self.walkFnBody(e.body.nodes, true, locals);
@@ -678,7 +698,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         .is_method = ctx.struct_type != null,
     };
 
-    self.scope.open(self.allocator, false);
+    self.scope.open(self.allocator, true);
     errdefer _ = self.scope.close();
 
     const params, const default_count = try self.fnParams(node.params, ctx);
@@ -859,10 +879,21 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     }
 
     const decl_index = try self.declareVariable(name, checked_type, initialized, self.ast.getSpan(node.name));
+
+    // Check for boxing
+    var box = false;
+
+    if (ctx.function) |fn_ctx| {
+        if (fn_ctx.captures.contains(decl_index)) {
+            box = true;
+        }
+    }
+
     self.makeInstruction(
         .{ .var_decl = .{
-            .has_value = initialized,
+            .box = box,
             .cast = cast,
+            .has_value = initialized,
             .variable = .{ .index = decl_index, .scope = if (self.scope.isGlobal()) .global else .local },
         } },
         .{ .setAt = index },
@@ -891,7 +922,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
     // TODO: merge as function's name
     self.makeInstruction(.{ .name = name }, .add);
 
-    self.scope.open(self.allocator, false);
+    self.scope.open(self.allocator, true);
     defer _ = self.scope.close();
 
     var ty: Type.Structure = .{ .name = name };
@@ -1006,7 +1037,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
 
 // TODO: handle dead code eleminitaion so that it can be used in function's body?
 fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
-    self.scope.open(self.allocator, true);
+    self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
     const index = self.ir_builder.reserveInstr();
@@ -1513,7 +1544,7 @@ fn identifier(
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    if (self.variableIdentifier(name)) |variable| {
+    if (self.variableIdentifier(name, ctx)) |variable| {
         if (initialized and !variable.initialized) {
             return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
         }
@@ -1539,22 +1570,32 @@ fn identifier(
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx) ?*Variable {
+fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) ?*Variable {
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
-    // TODO: handle captured
+
+    if (ctx.function) |fn_ctx| {
+        if (fn_ctx.captures.contains(variable.index)) {
+            variable.kind = .captured;
+        }
+    }
+
     self.makeInstruction(.{ .identifier = .{
         .index = variable.index + scope_offset,
-        .scope = if (variable.kind == .local) .local else .global,
+        .scope = switch (variable.kind) {
+            .local => .local,
+            .global => .global,
+            .captured => .capture,
+        },
     } }, .add);
 
     return variable;
 }
 
-fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex) Error!*Variable {
+fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *const Context) Error!*Variable {
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    return self.variableIdentifier(name) orelse return self.err(
+    return self.variableIdentifier(name, ctx) orelse return self.err(
         .{ .undeclared_var = .{ .name = self.interner.getKey(name).? } },
         self.ast.getSpan(token_name),
     );
@@ -1737,7 +1778,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
         const typ = if (fv.value) |val|
             try self.analyzeExpr(val, ctx)
         else // Syntax: { x } instead of { x = x }
-            (try self.expectVariableIdentifier(fv.name)).type;
+            (try self.expectVariableIdentifier(fv.name, ctx)).type;
 
         const span = if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name);
         const coercion = try self.performTypeCoercion(f.type, typ, false, span);

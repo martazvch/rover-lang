@@ -14,15 +14,6 @@ const Module = Pipeline.Module;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc2.zig");
 const Obj = @import("Obj2.zig");
-const Array = Obj.Array;
-const Function = Obj.Function;
-const Instance = Obj.Instance;
-const NativeFunction = Obj.NativeFunction;
-const String = Obj.String;
-const Structure = Obj.Structure;
-const ObjModule = Obj.ObjModule;
-const BoundMethod = Obj.BoundMethod;
-const BoundImport = Obj.BoundImport;
 const Table = @import("Table2.zig");
 const Value = @import("values2.zig").Value;
 
@@ -178,7 +169,7 @@ pub fn runRepl(self: *Self) !void {
     }
 }
 
-fn checkArrayIndex(array: *const Array, index: i64) usize {
+fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {
     // TODO: runtime error desactivable with release fast mode
     if (index > array.values.items.len - 1) @panic("Out of bound access");
 
@@ -192,7 +183,7 @@ fn checkArrayIndex(array: *const Array, index: i64) usize {
     };
 }
 
-fn execute(self: *Self, entry_point: *Function) !void {
+fn execute(self: *Self, entry_point: *Obj.Function) !void {
     var frame: *CallFrame = undefined;
     try self.call(&frame, entry_point, 0, false);
 
@@ -240,27 +231,27 @@ fn execute(self: *Self, entry_point: *Function) !void {
             },
             .array => {
                 const len = frame.readByte();
-                const array = Array.create(self, (self.stack.top - len)[0..len]);
+                const array = Obj.Array.create(self, (self.stack.top - len)[0..len]);
                 self.stack.top -= len;
                 self.stack.push(Value.makeObj(array.asObj()));
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Array);
+                const array = self.r1.obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
 
                 self.stack.push(array.values.items[final]);
             },
             .array_access_reg => {
                 const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Array);
+                const array = self.r1.obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
 
                 self.r1 = &array.values.items[final];
             },
             .array_access_reg_cow => {
                 const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Array);
+                const array = self.r1.obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
 
                 self.r1 = &array.values.items[final];
@@ -268,11 +259,11 @@ fn execute(self: *Self, entry_point: *Function) !void {
             },
             .array_access_chain => {
                 const depth = frame.readByte();
-                var tmp: *Array = self.r1.obj.as(Array);
+                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
 
                 for (0..depth - 1) |_| {
                     const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                    tmp = tmp.values.items[idx].obj.as(Array);
+                    tmp = tmp.values.items[idx].obj.as(Obj.Array);
                 }
 
                 const idx = checkArrayIndex(tmp, self.stack.pop().int);
@@ -280,11 +271,11 @@ fn execute(self: *Self, entry_point: *Function) !void {
             },
             .array_access_chain_reg => {
                 const depth = frame.readByte();
-                var tmp: *Array = self.r1.obj.as(Array);
+                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
 
                 for (0..depth - 1) |_| {
                     const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                    tmp = tmp.values.items[idx].obj.as(Array);
+                    tmp = tmp.values.items[idx].obj.as(Obj.Array);
                 }
 
                 const idx = checkArrayIndex(tmp, self.stack.pop().int);
@@ -293,21 +284,21 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .array_assign => {
                 const index = self.stack.pop().int;
                 self.r1.obj = self.cow(self.r1.obj);
-                const array = self.r1.obj.as(Array);
+                const array = self.r1.obj.as(Obj.Array);
 
                 const final = checkArrayIndex(array, index);
                 const value = self.stack.pop();
-                array.obj.as(Array).values.items[final] = value;
+                array.obj.as(Obj.Array).values.items[final] = value;
             },
             .array_assign_chain => {
                 const depth = frame.readByte();
-                var tmp: *Array = self.r1.obj.as(Array);
-                var last: **Array = &tmp;
+                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
+                var last: **Obj.Array = &tmp;
 
                 for (0..depth - 1) |_| {
                     const idx = checkArrayIndex(last.*, self.stack.pop().int);
                     last = &last.*.values.items[idx].obj;
-                    last.* = self.cow(last.*.asObj()).as(Array);
+                    last.* = self.cow(last.*.asObj()).as(Obj.Array);
                 }
 
                 const idx = checkArrayIndex(last.*, self.stack.pop().int);
@@ -322,10 +313,10 @@ fn execute(self: *Self, entry_point: *Function) !void {
             // },
             .bound_import => {
                 const symbol_idx = frame.readByte();
-                const bound = BoundImport.create(
+                const bound = Obj.BoundImport.create(
                     self,
-                    self.r1.obj.as(ObjModule),
-                    self.r1.obj.as(ObjModule).module.globals[symbol_idx].obj,
+                    self.r1.obj.as(Obj.ObjModule),
+                    self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx].obj,
                 );
                 self.stack.push(Value.makeObj(bound.asObj()));
             },
@@ -373,7 +364,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
             .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
-            .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(String) == self.stack.pop().obj.as(String))),
+            .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) == self.stack.pop().obj.as(Obj.String))),
             .exit_repl => {
                 // Here, there is no value to pop for now, no implicit null is
                 // put on top of the stack
@@ -386,15 +377,15 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
-                self.stack.push(self.r1.obj.as(Instance).fields[field_idx]);
+                self.stack.push(self.r1.obj.as(Obj.Instance).fields[field_idx]);
             },
             .get_field_reg => {
                 const field_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(Instance).fields[field_idx];
+                self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
             },
             .get_field_reg_cow => {
                 const field_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(Instance).fields[field_idx];
+                self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
                 self.r1.obj = self.cow(self.r1.obj);
             },
             .get_global => {
@@ -415,13 +406,13 @@ fn execute(self: *Self, entry_point: *Function) !void {
                 self.r1.obj = self.cow(self.r1.obj);
             },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
-            .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Instance).parent.methods[frame.readByte()].asObj())),
+            .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj())),
             // TODO: same as above
             .get_static_method => {
                 const method_idx = frame.readByte();
                 // const structure = self.r1.obj.as(Structure);
                 const top = self.stack.peekRef(0);
-                const structure = top.obj.as(Structure);
+                const structure = top.obj.as(Obj.Structure);
                 const method = structure.methods[method_idx];
                 // self.stack.push(Value.makeObj(method.asObj()));
                 top.* = Value.makeObj(method.asObj());
@@ -432,7 +423,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             },
             .get_symbol_reg => {
                 const symbol_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(ObjModule).module.globals[symbol_idx];
+                self.r1 = &self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx];
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
@@ -466,7 +457,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
 
             .load_fn_default => self.stack.peekRef(0).obj.loadDefaultValues(self, 0),
             .load_invoke_default => self.stack.peekRef(0).obj.loadDefaultValues(self, frame.readByte()),
-            .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Structure).default_values,
+            .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Obj.Structure).default_values,
 
             .loop => {
                 const jump = frame.readShort();
@@ -501,7 +492,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
-            .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(String) != self.stack.pop().obj.as(String))),
+            .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) != self.stack.pop().obj.as(Obj.String))),
             .negate_float => self.stack.peekRef(0).float *= -1,
             .negate_int => self.stack.peekRef(0).int *= -1,
             .not => self.stack.peekRef(0).not(),
@@ -514,7 +505,7 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .push_module => {
                 const index = frame.readByte();
                 const module = &self.module.imports[index];
-                self.stack.push(Value.makeObj(ObjModule.create(self, module).asObj()));
+                self.stack.push(Value.makeObj(Obj.ObjModule.create(self, module).asObj()));
             },
             .reg_push => {
                 self.r2 = self.stack.pop();
@@ -559,8 +550,8 @@ fn execute(self: *Self, entry_point: *Function) !void {
             .set_heap => self.heap_vars[frame.readByte()] = self.stack.pop(),
             .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
             .str_cat => self.strConcat(),
-            .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(String), self.stack.peekRef(1).int),
-            .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(String), self.stack.peekRef(0).int),
+            .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
+            .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
             .struct_literal => {
                 const arity = frame.readByte();
                 var instance = self.stack.peekRef(arity).obj.structLiteral(self);
@@ -596,7 +587,7 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     return obj;
 }
 
-fn call(self: *Self, frame: **CallFrame, callee: *Function, args_count: usize, imported: bool) Error!void {
+fn call(self: *Self, frame: **CallFrame, callee: *Obj.Function, args_count: usize, imported: bool) Error!void {
     if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
         return error.StackOverflow;
     }
@@ -619,18 +610,18 @@ pub fn updateModule(self: *Self, module: *Module) void {
 }
 
 fn strConcat(self: *Self) void {
-    const s2 = self.stack.peekRef(0).obj.as(String);
-    const s1 = self.stack.peekRef(1).obj.as(String);
+    const s2 = self.stack.peekRef(0).obj.as(Obj.String);
+    const s1 = self.stack.peekRef(1).obj.as(Obj.String);
 
     const res = self.gc_alloc.alloc(u8, s1.chars.len + s2.chars.len) catch oom();
     @memcpy(res[0..s1.chars.len], s1.chars);
     @memcpy(res[s1.chars.len..], s2.chars);
 
-    self.stack.peekRef(1).* = Value.makeObj(String.take(self, res).asObj());
+    self.stack.peekRef(1).* = Value.makeObj(Obj.String.take(self, res).asObj());
     self.stack.top -= 1;
 }
 
-fn strMul(self: *Self, str: *const String, factor: i64) void {
+fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
     // BUG: Check if factor is positive
     const f = @as(usize, @intCast(factor));
     const res = self.gc_alloc.alloc(u8, str.chars.len * f) catch oom();
@@ -638,7 +629,7 @@ fn strMul(self: *Self, str: *const String, factor: i64) void {
         @memcpy(res[i * str.chars.len .. (i + 1) * str.chars.len], str.chars);
     }
 
-    self.stack.peekRef(1).* = Value.makeObj(String.take(self, res).asObj());
+    self.stack.peekRef(1).* = Value.makeObj(Obj.String.take(self, res).asObj());
     self.stack.top -= 1;
 }
 
@@ -674,7 +665,8 @@ const Stack = struct {
 };
 
 const CallFrame = struct {
-    function: *Function,
+    function: *Obj.Function,
+    captures: []Value,
     ip: [*]u8,
     slots: [*]Value,
     imported: bool,

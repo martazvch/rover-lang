@@ -19,7 +19,7 @@ const Symbols = @import("frontend/TypeManager.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
-const Function = @import("runtime/Obj2.zig").Function;
+const Obj = @import("runtime/Obj2.zig");
 const Value = @import("runtime/values2.zig").Value;
 const Vm = @import("runtime/Vm2.zig");
 
@@ -71,7 +71,7 @@ pub fn deinit(self: *Self) void {
 pub const Module = struct {
     name: []const u8,
     imports: []Module,
-    function: *Function,
+    function: *Obj.Function,
     globals: []Value,
     symbols: []Value,
 };
