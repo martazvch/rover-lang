@@ -37,7 +37,7 @@ heap_vars: []Value,
 symbols: []Value,
 
 /// Holds temporary values
-r1: *Value = undefined,
+// r1: *Value = undefined,
 /// Holds values that are poped from stack but pointed by r1 as temporary value
 r2: Value = .null_,
 /// Holds default variables of current call
@@ -148,7 +148,7 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
     self.gc.active = true;
 
     // Init on dummy address to avoid nullable pointer (used only in print stack mode)
-    self.r1 = &self.r4;
+    // self.r1 = &self.r4;
     try self.execute(self.module.function);
 }
 
@@ -189,13 +189,13 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
 
     while (true) {
         if (comptime options.print_stack) {
-            if (self.r1 != &self.r4) {
-                print("    R1: [", .{});
-                try self.r1.print(self.stdout);
-                print("]  |  ", .{});
-            } else {
-                print("          ", .{});
-            }
+            // if (self.r1 != &self.r4) {
+            //     print("    R1: [", .{});
+            //     try self.r1.print(self.stdout);
+            //     print("]  |  ", .{});
+            // } else {
+            print("          ", .{});
+            // }
 
             var value = self.stack.values[0..].ptr;
 
@@ -237,73 +237,78 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Obj.Array);
+                // const array = self.r1.obj.as(Obj.Array);
+                const array = self.stack.peekRef(0).obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
 
                 self.stack.push(array.values.items[final]);
             },
-            .array_access_reg => {
-                const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Obj.Array);
-                const final = checkArrayIndex(array, index);
-
-                self.r1 = &array.values.items[final];
-            },
-            .array_access_reg_cow => {
-                const index = self.stack.pop().int;
-                const array = self.r1.obj.as(Obj.Array);
-                const final = checkArrayIndex(array, index);
-
-                self.r1 = &array.values.items[final];
-                self.r1.obj = self.cow(self.r1.obj);
-            },
-            .array_access_chain => {
-                const depth = frame.readByte();
-                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
-
-                for (0..depth - 1) |_| {
-                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                    tmp = tmp.values.items[idx].obj.as(Obj.Array);
-                }
-
-                const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                self.stack.push(tmp.values.items[idx]);
-            },
-            .array_access_chain_reg => {
-                const depth = frame.readByte();
-                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
-
-                for (0..depth - 1) |_| {
-                    const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                    tmp = tmp.values.items[idx].obj.as(Obj.Array);
-                }
-
-                const idx = checkArrayIndex(tmp, self.stack.pop().int);
-                self.r1 = &tmp.values.items[idx];
-            },
-            .array_assign => {
-                const index = self.stack.pop().int;
-                self.r1.obj = self.cow(self.r1.obj);
-                const array = self.r1.obj.as(Obj.Array);
-
-                const final = checkArrayIndex(array, index);
-                const value = self.stack.pop();
-                array.obj.as(Obj.Array).values.items[final] = value;
-            },
-            .array_assign_chain => {
-                const depth = frame.readByte();
-                var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
-                var last: **Obj.Array = &tmp;
-
-                for (0..depth - 1) |_| {
-                    const idx = checkArrayIndex(last.*, self.stack.pop().int);
-                    last = &last.*.values.items[idx].obj;
-                    last.* = self.cow(last.*.asObj()).as(Obj.Array);
-                }
-
-                const idx = checkArrayIndex(last.*, self.stack.pop().int);
-                last.*.values.items[idx] = self.stack.pop();
-            },
+            // .array_access_reg => {
+            //     const index = self.stack.pop().int;
+            //     // const array = self.r1.obj.as(Obj.Array);
+            //     const array = self.stack.peekRef(0).obj.as(Obj.Array);
+            //     const final = checkArrayIndex(array, index);
+            //
+            //     self.r1 = &array.values.items[final];
+            // },
+            // .array_access_reg_cow => {
+            //     const index = self.stack.pop().int;
+            //     const array = self.r1.obj.as(Obj.Array);
+            //     const final = checkArrayIndex(array, index);
+            //
+            //     self.r1 = &array.values.items[final];
+            //     self.r1.obj = self.cow(self.r1.obj);
+            // },
+            .array_access_chain => unreachable,
+            // .array_access_chain => {
+            //     const depth = frame.readByte();
+            //     var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
+            //
+            //     for (0..depth - 1) |_| {
+            //         const idx = checkArrayIndex(tmp, self.stack.pop().int);
+            //         tmp = tmp.values.items[idx].obj.as(Obj.Array);
+            //     }
+            //
+            //     const idx = checkArrayIndex(tmp, self.stack.pop().int);
+            //     self.stack.push(tmp.values.items[idx]);
+            // },
+            // .array_access_chain_reg => {
+            //     const depth = frame.readByte();
+            //     var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
+            //
+            //     for (0..depth - 1) |_| {
+            //         const idx = checkArrayIndex(tmp, self.stack.pop().int);
+            //         tmp = tmp.values.items[idx].obj.as(Obj.Array);
+            //     }
+            //
+            //     const idx = checkArrayIndex(tmp, self.stack.pop().int);
+            //     self.r1 = &tmp.values.items[idx];
+            // },
+            .array_assign => unreachable,
+            // .array_assign => {
+            //     const index = self.stack.pop().int;
+            //     self.r1.obj = self.cow(self.r1.obj);
+            //     const array = self.r1.obj.as(Obj.Array);
+            //
+            //     const final = checkArrayIndex(array, index);
+            //     const value = self.stack.pop();
+            //     array.obj.as(Obj.Array).values.items[final] = value;
+            // },
+            .array_assign_chain => unreachable,
+            // .array_assign_chain => {
+            //     const depth = frame.readByte();
+            //     var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
+            //     var last: **Obj.Array = &tmp;
+            //
+            //     for (0..depth - 1) |_| {
+            //         const idx = checkArrayIndex(last.*, self.stack.pop().int);
+            //         last = &last.*.values.items[idx].obj;
+            //         last.* = self.cow(last.*.asObj()).as(Obj.Array);
+            //     }
+            //
+            //     const idx = checkArrayIndex(last.*, self.stack.pop().int);
+            //     last.*.values.items[idx] = self.stack.pop();
+            // },
             // .bound_method => {
             //     const method_idx = frame.readByte();
             //     const receiver = self.r1.obj;
@@ -311,15 +316,16 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             //     const bound = BoundMethod.create(self, receiver, method);
             //     self.stack.push(Value.makeObj(bound.asObj()));
             // },
-            .bound_import => {
-                const symbol_idx = frame.readByte();
-                const bound = Obj.BoundImport.create(
-                    self,
-                    self.r1.obj.as(Obj.ObjModule),
-                    self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx].obj,
-                );
-                self.stack.push(Value.makeObj(bound.asObj()));
-            },
+            .bound_import => unreachable,
+            // .bound_import => {
+            //     const symbol_idx = frame.readByte();
+            //     const bound = Obj.BoundImport.create(
+            //         self,
+            //         self.r1.obj.as(Obj.ObjModule),
+            //         self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx].obj,
+            //     );
+            //     self.stack.push(Value.makeObj(bound.asObj()));
+            // },
             .box => {
                 const to_box = self.stack.pop();
                 const boxed = Value.makeObj(Obj.Box.create(self, to_box).asObj());
@@ -344,10 +350,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 self.stack.top -= capture_count;
             },
             .constant => self.stack.push(frame.readConstant()),
-            .define_heap_var => {
-                const idx = frame.readByte();
-                self.heap_vars[idx] = self.stack.pop();
-            },
+            // .define_heap_var => {
+            //     const idx = frame.readByte();
+            //     self.heap_vars[idx] = self.stack.pop();
+            // },
             .define_global => {
                 const idx = frame.readByte();
                 self.module.globals[idx] = self.stack.pop();
@@ -377,36 +383,38 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
-                self.stack.push(self.r1.obj.as(Obj.Instance).fields[field_idx]);
+                // self.stack.push(self.r1.obj.as(Obj.Instance).fields[field_idx]);
+                self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Instance).fields[field_idx];
             },
-            .get_field_reg => {
-                const field_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
-            },
-            .get_field_reg_cow => {
-                const field_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
-                self.r1.obj = self.cow(self.r1.obj);
-            },
+            // .get_field_reg => {
+            //     const field_idx = frame.readByte();
+            //     self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
+            // },
+            // .get_field_reg_cow => {
+            //     const field_idx = frame.readByte();
+            //     self.r1 = &self.r1.obj.as(Obj.Instance).fields[field_idx];
+            //     self.r1.obj = self.cow(self.r1.obj);
+            // },
             .get_global => {
                 const idx = frame.readByte();
                 self.stack.push(self.module.globals[idx]);
             },
-            .get_global_reg => {
-                const idx = frame.readByte();
-                self.r1 = &self.module.globals[idx];
-            },
+            // .get_global_reg => {
+            //     const idx = frame.readByte();
+            //     self.r1 = &self.module.globals[idx];
+            // },
             // TODO: see if same compiler bug as get_global
             .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
-            .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
-            .get_local_reg_cow => {
-                self.r1 = &frame.slots[frame.readByte()];
-                self.r1.obj = self.cow(self.r1.obj);
-            },
+            // .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
+            // .get_local_reg_cow => {
+            //     self.r1 = &frame.slots[frame.readByte()];
+            //     self.r1.obj = self.cow(self.r1.obj);
+            // },
             .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
-            .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj())),
+            // .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj())),
+            .get_method => self.stack.peekRef(0).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj()),
             // TODO: same as above
             .get_static_method => {
                 const method_idx = frame.readByte();
@@ -421,10 +429,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const symbol_idx = frame.readByte();
                 self.stack.push(self.symbols[symbol_idx]);
             },
-            .get_symbol_reg => {
-                const symbol_idx = frame.readByte();
-                self.r1 = &self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx];
-            },
+            // .get_symbol_reg => {
+            //     const symbol_idx = frame.readByte();
+            //     self.r1 = &self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx];
+            // },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
@@ -507,15 +515,15 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const module = &self.module.imports[index];
                 self.stack.push(Value.makeObj(Obj.ObjModule.create(self, module).asObj()));
             },
-            .reg_push => {
-                self.r2 = self.stack.pop();
-                self.r1 = &self.r2;
-            },
-            .reg_assign => self.r1.* = self.stack.pop(),
-            .reg_assign_cow => {
-                self.r1.obj = self.cow(self.r1.obj);
-                self.r1.* = self.stack.pop();
-            },
+            // .reg_push => {
+            //     self.r2 = self.stack.pop();
+            //     self.r1 = &self.r2;
+            // },
+            // .reg_assign => self.r1.* = self.stack.pop(),
+            // .reg_assign_cow => {
+            //     self.r1.obj = self.cow(self.r1.obj);
+            //     self.r1.* = self.stack.pop();
+            // },
             .@"return" => {
                 const result = self.stack.pop();
                 self.frame_stack.count -= 1;
@@ -542,6 +550,12 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const res = self.stack.pop();
                 self.stack.top -= locals_count;
                 self.stack.push(res);
+            },
+            .set_field => {
+                const field_idx = frame.readByte();
+                const instance = self.stack.pop().obj.as(Obj.Instance);
+                const value = self.stack.pop();
+                instance.fields[field_idx] = value;
             },
             .set_global => {
                 const idx = frame.readByte();
@@ -572,6 +586,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 self.stack.peekRef(0).int -= rhs;
             },
             .true => self.stack.push(Value.true_),
+            .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }
     }
 }

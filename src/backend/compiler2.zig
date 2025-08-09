@@ -246,17 +246,19 @@ const Compiler = struct {
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: *const Instruction.Variable, cow: bool, offset: usize) void {
+        _ = cow; // autofix
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         // TODO: more frequent paths should be first
         self.writeOpAndByte(
-            if (variable.scope == .heap)
-                .get_heap
+            if (variable.scope == .local)
+                .get_local
             else if (variable.scope == .global)
-                if (self.state.to_reg) .get_global_reg else .get_global
-            else if (self.state.to_reg)
-                if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
+                .get_global
+                // if (self.state.to_reg) .get_global_reg else .get_global
+                // else if (self.state.to_reg)
+                //     if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
             else
-                .get_local,
+                unreachable, // .get_heap and all reg cow variants
             @intCast(variable.index),
             offset,
         );
@@ -268,9 +270,9 @@ const Compiler = struct {
     fn defineVariable(self: *Self, infos: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         if (infos.scope == .global)
-            self.writeOpAndByte(.define_global, @intCast(infos.index), offset)
-        else if (infos.scope == .heap)
-            self.writeOpAndByte(.define_heap_var, @intCast(infos.index), offset);
+            self.writeOpAndByte(.define_global, @intCast(infos.index), offset);
+        // else if (infos.scope == .heap)
+        //     self.writeOpAndByte(.define_heap_var, @intCast(infos.index), offset);
     }
 
     fn emitJump(self: *Self, kind: OpCode, offset: usize) usize {
@@ -348,8 +350,10 @@ const Compiler = struct {
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
-            .identifier_id => |*data| self.identifierId(data),
-            .identifier_absolute => |data| self.identifierAbsolute(data),
+            // .identifier_id => |*data| self.identifierId(data),
+            .identifier_id => unreachable, // TODO: delete
+            // .identifier_absolute => |data| self.identifierAbsolute(data),
+            .identifier_absolute => unreachable, // TODO: delete
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
@@ -395,7 +399,7 @@ const Compiler = struct {
     fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess, start: usize) Error!void {
         const prev = self.setToRegAndGetPrevious(true);
         defer self.state.to_reg = prev;
-        const reg = self.putChainResultInReg();
+        // const reg = self.putChainResultInReg();
 
         // Variable
         try self.compileInstr();
@@ -403,7 +407,7 @@ const Compiler = struct {
         self.state.to_reg = false;
         try self.compileInstr();
 
-        self.writeOp(if (reg) if (data.cow) .array_access_reg_cow else .array_access_reg else .array_access, start);
+        // self.writeOp(if (reg) if (data.cow) .array_access_reg_cow else .array_access_reg else .array_access, start);
         if (data.incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
@@ -419,11 +423,11 @@ const Compiler = struct {
 
         // Variable
         self.state.to_reg = true;
-        const reg = self.putChainResultInReg();
+        // const reg = self.putChainResultInReg();
 
         try self.compileInstr();
 
-        self.writeOpAndByte(if (reg) .array_access_chain_reg else .array_access_chain, @intCast(data.depth), start);
+        // self.writeOpAndByte(if (reg) .array_access_chain_reg else .array_access_chain, @intCast(data.depth), start);
         if (data.incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
@@ -496,8 +500,13 @@ const Compiler = struct {
     }
 
     fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool, start: usize) Error!void {
-        try self.field(data);
-        self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
+        _ = cow; // autofix
+
+        // We compile the identifier/call/array access first
+        try self.compileInstr();
+        self.writeOpAndByte(.set_field, @intCast(data.index), start);
+        // try self.field(data);
+        // self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
@@ -618,23 +627,27 @@ const Compiler = struct {
         defer self.state.to_reg = prev;
 
         const member_data = self.getData();
+        _ = member_data; // autofix
         const start = self.getStart();
 
         // As we compile member first, we preshot the value
         const reg = self.putChainResultInReg();
+        _ = reg; // autofix
         // We compile the identifier/call/array access first
         try self.compileInstr();
 
         // If we're in a member access, the field access that occurs after the call will check
         // the register, not the stack, so we pop the result from the stack
-        if (member_data == .call) self.writeOp(.reg_push, start);
+        // if (member_data == .call) self.writeOp(.reg_push, start);
 
         // Get field/bound method of first value on the stack
         self.writeOpAndByte(
             if (data.kind == .field)
-                if (reg) if (data.rc_action == .cow) .get_field_reg_cow else .get_field_reg else .get_field
+                // if (reg) if (data.rc_action == .cow) .get_field_reg_cow else .get_field_reg else .get_field
+                .get_field
             else if (data.kind == .symbol)
-                if (reg) .get_symbol_reg else .bound_import
+                // if (reg) .get_symbol_reg else .bound_import
+                .get_symbol
             else if (data.kind == .method)
                 // .bound_method
                 .get_method
@@ -766,16 +779,16 @@ const Compiler = struct {
         self.emitGetVar(data, false, self.getStart());
     }
 
-    fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
-        const start = self.getStart();
-        const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
-        self.emitGetVar(variable_data, data.rc_action == .cow, start);
-        if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
-    }
+    // fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
+    //     const start = self.getStart();
+    //     const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
+    //     self.emitGetVar(variable_data, data.rc_action == .cow, start);
+    //     if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
+    // }
 
-    fn identifierAbsolute(self: *Self, data: usize) Error!void {
-        self.writeOpAndByte(.get_local_absolute, @intCast(data), self.getStart());
-    }
+    // fn identifierAbsolute(self: *Self, data: usize) Error!void {
+    //     self.writeOpAndByte(.get_local_absolute, @intCast(data), self.getStart());
+    // }
 
     fn intInstr(self: *Self, value: isize) Error!void {
         try self.emitConstant(Value.makeInt(value), self.getStart());
@@ -933,6 +946,10 @@ const Compiler = struct {
                 start,
             );
         } else self.writeOp(.not, start);
+    }
+
+    fn unbox(self: *Self) Error!void {
+        _ = self; // autofix
     }
 
     fn use(self: *Self, count: usize) Error!void {

@@ -236,17 +236,13 @@ const ScopeStack = struct {
         /// Offset to apply to any index in this scope. Correspond to the numbers of locals
         /// in parent scopes (represents stack at runtime)
         offset: usize,
-        /// Is a border, meaning that you can't go before this one when resolving variable.
-        /// Useful to declare functions scope as they can't see before themselves but scopes
-        /// and closure can
-        border: bool,
 
         pub const Symbol = struct { type: *const Type, index: usize };
     };
 
-    pub fn open(self: *ScopeStack, allocator: Allocator, border: bool) void {
-        const offset = if (!border) self.current.variables.count() + self.current.offset else 0;
-        self.scopes.append(allocator, .{ .offset = offset, .border = border }) catch oom();
+    pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
+        const offset = if (!offset_from_child) self.current.variables.count() + self.current.offset else 0;
+        self.scopes.append(allocator, .{ .offset = offset }) catch oom();
         self.updateCurrent();
     }
 
@@ -269,7 +265,7 @@ const ScopeStack = struct {
 
         var iter = popped.variables.valueIterator();
         while (iter.next()) |v| {
-            if (v.kind == .captured) {
+            if (v.captured) {
                 captured.append(allocator, v.index) catch oom();
             }
         }
@@ -322,8 +318,6 @@ const ScopeStack = struct {
             if (scope.variables.getPtr(name)) |variable| {
                 return .{ variable, scope.offset };
             }
-
-            if (scope.border) break;
         }
 
         return null;
@@ -400,7 +394,7 @@ const Context = struct {
 
     pub const FnCtx = struct {
         type: *const Type,
-        captures: CaptureRes = .{},
+        captures: ?CaptureRes = .{},
     };
 
     const ContextSnapshot = struct {
@@ -425,11 +419,13 @@ const Variable = struct {
     /// Variable's type
     type: *const Type,
     /// Kind: global, local or captured
-    kind: enum { local, global, captured },
+    kind: enum { local, global },
     /// Is initialized
     initialized: bool,
     /// Index of declaration
     index: usize = 0,
+    /// Is captured
+    captured: bool = false,
 };
 
 const Self = @This();
@@ -710,7 +706,10 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     // Update type for resolution in function's body
     // ctx.fn_type = interned_type;
-    ctx.function = .{ .type = interned_type, .captures = self.checkFunctionCaptures(node) };
+    ctx.function = .{
+        .type = interned_type,
+        .captures = if (node.has_closure) self.checkFunctionCaptures(node) else null,
+    };
     sym.type = interned_type;
     const len = try self.fnBody(node.body.nodes, &fn_type, ctx);
 
@@ -883,18 +882,18 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     // Check for boxing
     var box = false;
 
-    if (ctx.function) |fn_ctx| {
-        if (fn_ctx.captures.contains(decl_index)) {
+    if (ctx.function) |fn_ctx| if (fn_ctx.captures) |captures| {
+        if (captures.contains(decl_index)) {
             box = true;
         }
-    }
+    };
 
     self.makeInstruction(
         .{ .var_decl = .{
             .box = box,
             .cast = cast,
             .has_value = initialized,
-            .variable = .{ .index = decl_index, .scope = if (self.scope.isGlobal()) .global else .local },
+            .variable = .{ .index = decl_index, .scope = if (self.scope.isGlobal()) .global else .local, .unbox = false },
         } },
         .{ .setAt = index },
     );
@@ -1573,19 +1572,19 @@ fn identifier(
 fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) ?*Variable {
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
-    if (ctx.function) |fn_ctx| {
-        if (fn_ctx.captures.contains(variable.index)) {
-            variable.kind = .captured;
+    if (ctx.function) |fn_ctx| if (fn_ctx.captures) |captures| {
+        if (captures.contains(variable.index)) {
+            variable.captured = true;
         }
-    }
+    };
 
     self.makeInstruction(.{ .identifier = .{
         .index = variable.index + scope_offset,
         .scope = switch (variable.kind) {
             .local => .local,
             .global => .global,
-            .captured => .capture,
         },
+        .unbox = variable.captured,
     } }, .add);
 
     return variable;

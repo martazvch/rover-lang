@@ -34,6 +34,10 @@ pub const FnDecl = struct {
     params: []Param,
     body: Block,
     return_type: ?*Type,
+    /// Metadata to flag that there is a closure in this function.
+    /// Used to trigger Ast walk in analyzer to check for captures but
+    /// for optimization, only functions with closure should do this
+    has_closure: bool,
 };
 
 pub const MultiVarDecl = struct {

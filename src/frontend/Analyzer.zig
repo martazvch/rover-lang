@@ -1654,10 +1654,13 @@ fn makeVariableInstr(self: *Self, variable: *Variable) void {
             self.addInstr(.{ .identifier_absolute = variable.index });
         } else {
             // It's a declaration
-            self.addInstr(.{ .identifier = .{
-                .index = variable.index,
-                .scope = if (variable.depth > 0) .local else .global,
-            } });
+            self.addInstr(.{
+                .identifier = .{
+                    .index = variable.index,
+                    .scope = if (variable.depth > 0) .local else .global,
+                    .unbox = undefined, // TODO: new in v2
+                },
+            });
         }
     }
 }
@@ -2053,7 +2056,11 @@ fn declareVariable(
         variable.index = index;
 
         self.globals.append(self.allocator, variable) catch oom();
-        return .{ .index = index, .scope = .global };
+        return .{
+            .index = index,
+            .scope = .global,
+            .unbox = undefined, // TODO: new in v2
+        };
     } else {
         // Take function's frame into account
         const index = self.locals.items.len - self.local_offset;
@@ -2064,7 +2071,11 @@ fn declareVariable(
         }
 
         self.locals.append(self.allocator, variable) catch oom();
-        return .{ .index = index, .scope = .local };
+        return .{
+            .index = index,
+            .scope = .local,
+            .unbox = undefined, // TODO: new in v2
+        };
     }
 }
 

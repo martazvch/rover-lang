@@ -23,9 +23,12 @@ token_tags: []const Token.Tag,
 token_spans: []const Span,
 token_idx: usize = 0,
 nodes: ArrayListUnmanaged(Node) = .{},
+
+// TODO: create a Context structure
 panic_mode: bool = false,
 in_cond: bool = false,
 in_group: bool = false,
+has_closure: bool = false,
 
 const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
@@ -249,11 +252,15 @@ fn fnDecl(self: *Self) Error!Node {
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
 
+    const has_closure = self.has_closure;
+    self.has_closure = false;
+
     return .{ .fn_decl = .{
         .name = name,
         .params = params,
         .body = (try self.block()).block,
         .return_type = return_type,
+        .has_closure = has_closure,
     } };
 }
 
@@ -822,6 +829,8 @@ fn closure(self: *Self) Error!*Expr {
         .return_type = return_type,
         .span = .{ .start = opening, .end = closing },
     } };
+
+    self.has_closure = true;
 
     return expr;
 }
