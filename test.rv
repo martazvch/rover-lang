@@ -1,50 +1,31 @@
-struct Human {
+struct Person {
     age: int,
-    name: str,
-}
 
-var answer = 42
-
-fn main() {
-    var human = Human{ age = 5, name = "Tom" }
-    print human
-    print human.age
-    print human.name
-
-    human = Human{ name = "Tom", age = 5 }
-    print human
-    print human.age
-    print human.name
-
-    var age = 95
-    human = Human{ age, name = "Tom" }
-    print human
-    print human.age
-    print human.name
-
-    var name = "Martin"
-    human = Human{ age = 6, name }
-    print human
-    print human.age
-    print human.name
-
-    human = Human{ age, name }
-    print human
-    print human.age
-    print human.name
-    
-    human = Human{ name, age }
-    print human
-    print human.age
-    print human.name
-
-    struct Local {
-        answer: int
+    fn speak(self) {
+        self.age = self.age * 10
+        print self.age
     }
 
-    var adr = Local{answer}
-    print adr
-    print adr.answer
+    // fn getOld(self, amount: int) -> int {
+    //     self.age = self.age + amount
+    //     self.age
+    // }
+}
+
+fn main() {
+    var p = Person{age=5}
+
+    var method1: fn() -> void 
+    method1 = p.speak
+    // var method2: fn() -> void = p.speak
+    // var method3 = p.speak
+    //
+    // method1()
+    //
+    // p.speak()
+    // method2()
+    // _ = p.getOld(8)
+    // method3()
 }
 
 
@@ -61,16 +42,17 @@ fn main() {
 //         print self.x
 //     }
 // }
-//
+
 // fn main() {
 //     var a = 3
-//     // var closure = || { print a }
-//     print a
+//     var closure = || { print a }
+//     closure()
+//     // print a
 //
-//     print oui(1, 5.)
+//     // print oui(1, 5.)
 //
-//     var foo = Foo{x=a}
-//     foo.display()
+//     // var foo = Foo{x=a}
+//     // foo.display()
 // }
 
 //struct Point {

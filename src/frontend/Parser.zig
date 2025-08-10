@@ -28,7 +28,6 @@ nodes: ArrayListUnmanaged(Node) = .{},
 panic_mode: bool = false,
 in_cond: bool = false,
 in_group: bool = false,
-has_closure: bool = false,
 
 const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
@@ -252,15 +251,14 @@ fn fnDecl(self: *Self) Error!Node {
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
 
-    const has_closure = self.has_closure;
-    self.has_closure = false;
+    const body, const has_callable = try self.block();
 
     return .{ .fn_decl = .{
         .name = name,
         .params = params,
-        .body = (try self.block()).block,
+        .body = body.block,
         .return_type = return_type,
-        .has_closure = has_closure,
+        .has_callable = has_callable,
     } };
 }
 
@@ -670,11 +668,11 @@ fn whileStmt(self: *Self) Error!Node {
     self.in_cond = save;
 
     const body = if (self.matchAndSkip(.left_brace))
-        (try self.block()).block
+        try self.blockExpr()
     else
         return self.errAtCurrent(.expect_brace_after_while_cond);
 
-    return .{ .@"while" = .{ .condition = cond, .body = body } };
+    return .{ .@"while" = .{ .condition = cond, .body = body.block } };
 }
 
 const Assoc = enum { left, none };
@@ -739,7 +737,7 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 /// Parses expressions (prefix + sufix)
 fn parseExpr(self: *Self) Error!*Expr {
     const expr = try switch (self.prev(.tag)) {
-        .left_brace => self.block(),
+        .left_brace => self.blockExpr(),
         .left_bracket => self.array(),
         .@"if" => self.ifExpr(),
         .minus, .not => self.unary(),
@@ -791,15 +789,34 @@ fn array(self: *Self) Error!*Expr {
     return expr;
 }
 
-fn block(self: *Self) Error!*Expr {
+fn blockExpr(self: *Self) Error!*Expr {
+    const body, _ = try self.block();
+
+    return body;
+}
+
+/// Returns the block expression and a flag to indicate if a function or closure was
+/// defined in it
+fn block(self: *Self) Error!struct { *Expr, bool } {
     const openning_brace = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
     var exprs: ArrayListUnmanaged(Node) = .{};
+    var has_callable = false;
 
     self.skipNewLines();
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
-        exprs.append(self.allocator, try self.declaration()) catch oom();
+        const node = try self.declaration();
+
+        switch (node) {
+            .fn_decl => has_callable = true,
+            .var_decl => |v| if (v.value) |val| {
+                if (val.* == .closure) has_callable = true;
+            },
+            else => {},
+        }
+
+        exprs.append(self.allocator, node) catch oom();
         self.skipNewLines();
     }
 
@@ -809,7 +826,7 @@ fn block(self: *Self) Error!*Expr {
         .span = .{ .start = openning_brace, .end = self.prev(.span).start },
     } };
 
-    return expr;
+    return .{ expr, has_callable };
 }
 
 fn closure(self: *Self) Error!*Expr {
@@ -825,12 +842,10 @@ fn closure(self: *Self) Error!*Expr {
 
     expr.* = .{ .closure = .{
         .params = args,
-        .body = (try self.block()).block,
+        .body = (try self.blockExpr()).block,
         .return_type = return_type,
         .span = .{ .start = opening, .end = closing },
     } };
-
-    self.has_closure = true;
 
     return expr;
 }
@@ -845,7 +860,7 @@ fn ifExpr(self: *Self) Error!*Expr {
 
     // TODO: Warning for unnecessary 'do' if there is a block after
     const then: Node = if (self.matchAndSkip(.left_brace))
-        .{ .expr = try self.block() }
+        .{ .expr = try self.blockExpr() }
     else if (self.matchAndSkip(.do))
         try self.declaration()
     else
@@ -858,7 +873,7 @@ fn ifExpr(self: *Self) Error!*Expr {
     // tested in the main caller
     const else_body: ?Node = if (self.matchAndSkip(.@"else"))
         if (self.matchAndSkip(.left_brace))
-            .{ .expr = try self.block() }
+            .{ .expr = try self.blockExpr() }
         else
             try self.declaration()
     else blk: {

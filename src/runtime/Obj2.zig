@@ -123,14 +123,14 @@ pub fn log(self: *Obj) void {
     }
 }
 
-pub fn initCall(self: *Obj, vm: *Vm, arity: usize) struct { *Function, bool } {
-    return switch (self.kind) {
-        .bound_import => .{ self.as(BoundImport).initCall(vm, arity), true },
-        .bound_method => .{ self.as(BoundMethod).initCall(vm, arity), false },
-        .function => .{ self.as(Function), false },
-        else => unreachable,
-    };
-}
+// pub fn initCall(self: *Obj, vm: *Vm, arity: usize) struct { *Function, bool } {
+//     return switch (self.kind) {
+//         .bound_import => .{ self.as(BoundImport).initCall(vm, arity), true },
+//         // .bound_method => .{ self.as(BoundMethod).initCall(vm, arity), false },
+//         .function => .{ self.as(Function), false },
+//         else => unreachable,
+//     };
+// }
 
 pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
@@ -362,7 +362,8 @@ pub const Closure = struct {
     pub fn create(vm: *Vm, function: *Function, captures: []Value) *Self {
         const obj = Obj.allocate(vm, Self, .closure);
         obj.function = function;
-        obj.captures = captures;
+        obj.captures = vm.gc_alloc.alloc(Value, captures.len) catch oom();
+        @memcpy(obj.captures, captures);
 
         if (options.log_gc) {
             std.debug.print("closure for: {s}\n", .{function.name.?});
@@ -376,14 +377,25 @@ pub const Closure = struct {
     }
 
     pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        try writer.print("<fn {s}>", .{self.function.name.?.chars});
+        if (comptime @import("builtin").mode == .Debug) {
+            try writer.print("<closure {s}>", .{self.function.name.?.chars});
+        } else {
+            try writer.print("<fn {s}>", .{self.function.name.?.chars});
+        }
     }
 
     pub fn log(self: *const Self) void {
         std.debug.print("<closure {s}>", .{self.function.name.?.chars});
     }
 
+    // pub fn initCall(self: *const Self, vm: *Vm, _: usize) *Function {
+    //
+    //
+    //     return self.function;
+    // }
+
     pub fn deinit(self: *Self, vm: *Vm) void {
+        vm.gc_alloc.free(self.captures);
         vm.gc_alloc.destroy(self);
     }
 };
@@ -558,11 +570,11 @@ pub const BoundMethod = struct {
         allocator.destroy(self);
     }
 
-    pub fn initCall(self: *Self, vm: *Vm, arity: usize) *Function {
-        vm.stack.peekRef(arity).* = Value.makeObj(self.receiver);
-
-        return self.method;
-    }
+    // pub fn initCall(self: *Self, vm: *Vm, arity: usize) *Function {
+    //     vm.stack.peekRef(arity).* = Value.makeObj(self.receiver);
+    //
+    //     return self.method;
+    // }
 };
 
 pub const BoundImport = struct {
@@ -594,11 +606,11 @@ pub const BoundImport = struct {
         allocator.destroy(self);
     }
 
-    pub fn initCall(self: *Self, vm: *Vm, _: usize) *Function {
-        vm.updateModule(self.module.module);
-
-        return self.import.as(Function);
-    }
+    // pub fn initCall(self: *Self, vm: *Vm, _: usize) *Function {
+    //     vm.updateModule(self.module.module);
+    //
+    //     return self.import.as(Function);
+    // }
 };
 
 pub const ObjModule = struct {

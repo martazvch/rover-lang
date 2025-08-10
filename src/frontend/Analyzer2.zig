@@ -257,22 +257,22 @@ const ScopeStack = struct {
         captured: []const usize,
     };
 
-    pub fn closeGetCaptures(self: *ScopeStack, allocator: Allocator) ScopeCaptures {
-        const popped = self.scopes.pop().?;
-        self.updateCurrent();
-
-        var captured: ArrayListUnmanaged(usize) = .{};
-
-        var iter = popped.variables.valueIterator();
-        while (iter.next()) |v| {
-            if (v.captured) {
-                captured.append(allocator, v.index) catch oom();
-            }
-        }
-
-        return .{ .count = popped.variables.count(), .captured = captured.toOwnedSlice(allocator) catch oom() };
-    }
-
+    // pub fn closeGetCaptures(self: *ScopeStack, allocator: Allocator) ScopeCaptures {
+    //     const popped = self.scopes.pop().?;
+    //     self.updateCurrent();
+    //
+    //     var captured: ArrayListUnmanaged(usize) = .{};
+    //
+    //     var iter = popped.variables.valueIterator();
+    //     while (iter.next()) |v| {
+    //         if (v.captured) {
+    //             captured.append(allocator, v.index) catch oom();
+    //         }
+    //     }
+    //
+    //     return .{ .count = popped.variables.count(), .captured = captured.toOwnedSlice(allocator) catch oom() };
+    // }
+    //
     pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
         self.open(allocator, true);
         const builtins = std.meta.fields(TypeInterner.Cache);
@@ -321,6 +321,11 @@ const ScopeStack = struct {
         }
 
         return null;
+    }
+
+    pub fn captureVariableInCurrent(self: *ScopeStack, name: InternerIdx) error{NotInScope}!void {
+        const variable = self.current.variables.getPtr(name) orelse return error.NotInScope;
+        variable.captured = true;
     }
 
     pub fn declareSymbol(self: *ScopeStack, allocator: Allocator, name: InternerIdx, ty: *const Type) void {
@@ -394,7 +399,17 @@ const Context = struct {
 
     pub const FnCtx = struct {
         type: *const Type,
-        captures: ?CaptureRes = .{},
+        boxes: CaptureRes = .{},
+        captures: AutoArrayHashMapUnmanaged(*const Variable, void) = .{},
+
+        pub fn getOrPutCaptureIndex(self: *FnCtx, allocator: Allocator, variable: *const Variable) usize {
+            if (self.captures.contains(variable)) {
+                return self.captures.getIndex(variable).?;
+            } else {
+                self.captures.put(allocator, variable, {}) catch oom();
+                return self.captures.count() - 1;
+            }
+        }
     };
 
     const ContextSnapshot = struct {
@@ -423,9 +438,11 @@ const Variable = struct {
     /// Is initialized
     initialized: bool,
     /// Index of declaration
-    index: usize = 0,
+    index: Index = 0,
     /// Is captured
     captured: bool = false,
+
+    pub const Index = usize;
 };
 
 const Self = @This();
@@ -441,7 +458,6 @@ warns: ArrayListUnmanaged(AnalyzerReport),
 
 ast: *const Ast,
 scope: ScopeStack,
-// tm: TM2,
 type_interner: TypeInterner,
 ir_builder: IrBuilder,
 main: ?usize,
@@ -615,9 +631,12 @@ const VarDecl = struct { index: usize, catpured: bool = false };
 const CaptureStats = AutoHashMapUnmanaged(InternerIdx, VarDecl);
 const CaptureRes = AutoHashMapUnmanaged(usize, void);
 
-fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) CaptureRes {
+fn checkFunctionBoxes(self: *Self, node: *const Ast.FnDecl) CaptureRes {
     var locals: CaptureStats = .{};
-    self.walkFnBody(node.body.nodes, false, &locals);
+
+    for (node.body.nodes) |*n| {
+        self.captureFromNode(n, &locals);
+    }
 
     var res: CaptureRes = .{};
     var it = locals.valueIterator();
@@ -630,48 +649,81 @@ fn checkFunctionCaptures(self: *Self, node: *const Ast.FnDecl) CaptureRes {
     return res;
 }
 
-fn walkFnBody(self: *const Self, nodes: []const Ast.Node, is_closure: bool, locals: *CaptureStats) void {
-    for (nodes) |*node| {
-        switch (node.*) {
-            .print => |expr| {
-                self.captureFromExpr(expr, is_closure, locals);
-            },
-            .var_decl => |n| {
-                if (n.value) |val| {
-                    self.captureFromExpr(val, is_closure, locals);
-                }
+fn captureFromNode(self: *const Self, node: *const Ast.Node, locals: *CaptureStats) void {
+    switch (node.*) {
+        .assignment => |*n| self.captureFromExpr(n.value, locals),
+        .fn_decl => |*n| for (n.body.nodes) |*subn| {
+            self.captureFromNode(subn, locals);
+        },
+        .print => |expr| self.captureFromExpr(expr, locals),
+        .var_decl => |n| {
+            if (n.value) |val| {
+                self.captureFromExpr(val, locals);
+            }
 
-                if (!is_closure) {
-                    const interned = self.interner.intern(self.ast.toSource(n.name));
+            const interned = self.interner.intern(self.ast.toSource(n.name));
 
-                    // If already declared, we consider we are in another scope
-                    const index = if (locals.contains(interned)) locals.count() + 1 else locals.count();
-                    locals.put(self.allocator, interned, .{ .index = index }) catch oom();
-                    std.debug.print("Var declared: {s}\n", .{self.ast.toSource(n.name)});
-                }
-            },
-            else => unreachable,
-        }
+            // If already declared, we consider we are in another scope
+            const index = if (locals.contains(interned)) locals.count() + 1 else locals.count();
+            locals.put(self.allocator, interned, .{ .index = index }) catch oom();
+        },
+        .expr => |e| self.captureFromExpr(e, locals),
+        else => unreachable,
     }
 }
 
-fn captureFromExpr(self: *const Self, expr: *const Ast.Expr, is_closure: bool, locals: *CaptureStats) void {
+fn captureFromExpr(self: *const Self, expr: *const Ast.Expr, locals: *CaptureStats) void {
     switch (expr.*) {
-        .closure => |e| {
-            self.walkFnBody(e.body.nodes, true, locals);
+        .array => |e| for (e.values) |val| {
+            self.captureFromExpr(val, locals);
+        },
+        .array_access => |e| {
+            self.captureFromExpr(e.array, locals);
+            self.captureFromExpr(e.index, locals);
+        },
+        .binop => |e| {
+            self.captureFromExpr(e.lhs, locals);
+            self.captureFromExpr(e.rhs, locals);
+        },
+        .block => |e| {
+            for (e.nodes) |*n| {
+                self.captureFromNode(n, locals);
+            }
+        },
+        .fn_call => |e| {
+            self.captureFromExpr(e.callee, locals);
+            for (e.args) |arg| {
+                self.captureFromExpr(arg, locals);
+            }
+        },
+        .closure => |e| for (e.body.nodes) |*n| {
+            self.captureFromNode(n, locals);
+        },
+        .field => |e| self.captureFromExpr(e.structure, locals),
+        .grouping => |e| self.captureFromExpr(e.expr, locals),
+        .@"if" => |e| {
+            self.captureFromExpr(e.condition, locals);
+            self.captureFromNode(&e.then, locals);
+            if (e.@"else") |*n| self.captureFromNode(n, locals);
         },
         .literal => |e| {
-            if (e.tag != .identifier or !is_closure) return;
+            if (e.tag != .identifier) return;
 
             const interned = self.interner.intern(self.ast.toSource(e.idx));
-            std.debug.print("Check capture for: {s}\n", .{self.ast.toSource(e.idx)});
 
             if (locals.getPtr(interned)) |local| {
                 local.catpured = true;
-                std.debug.print("Contained\n", .{});
             }
         },
-        else => unreachable,
+        .named_arg => |e| self.captureFromExpr(e.value, locals),
+        .@"return" => |e| if (e.expr) |val| self.captureFromExpr(val, locals),
+        .struct_literal => |e| {
+            self.captureFromExpr(e.structure, locals);
+            for (e.fields) |f| {
+                if (f.value) |val| self.captureFromExpr(val, locals);
+            }
+        },
+        .unary => |e| self.captureFromExpr(e.expr, locals),
     }
 }
 // ----------------- TODO end ------------------
@@ -682,10 +734,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     defer snapshot.restore();
 
     const name = try self.internIfNotInScope(node.name);
-
     const fn_idx = self.ir_builder.reserveInstr();
-    // TODO: delete and merge this into other Instructions
-    self.ir_builder.emit(.{ .data = .{ .name = name } }, .add);
 
     // Forward declaration in outer scope for recursion
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
@@ -705,19 +754,23 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     const interned_type = self.type_interner.intern(.{ .function = fn_type });
 
     // Update type for resolution in function's body
-    // ctx.fn_type = interned_type;
     ctx.function = .{
         .type = interned_type,
-        .captures = if (node.has_closure) self.checkFunctionCaptures(node) else null,
+        .boxes = if (node.has_callable) self.checkFunctionBoxes(node) else .{},
     };
     sym.type = interned_type;
     const len = try self.fnBody(node.body.nodes, &fn_type, ctx);
 
     _ = self.scope.close();
+    const captures_count = self.loadClosureCaptures(ctx.function.?.captures.keys());
+    const is_closure = captures_count > 0;
 
     // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
     if (ctx.struct_type != null) {
         self.scope.removeSymbol(name);
+    } else if (is_closure) {
+        self.scope.removeSymbol(name);
+        _ = try self.declareVariable(name, interned_type, true, self.ast.getSpan(node));
     }
 
     if (name == self.cached_names.main and self.scope.isGlobal()) {
@@ -726,10 +779,12 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     self.makeInstruction(
         .{ .fn_decl = .{
-            .index = sym.index,
+            .kind = if (is_closure) .closure else .{ .symbol = sym.index },
+            .name = name,
             .body_len = len,
             .default_params = default_count,
-            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
+            .captures_count = captures_count,
+            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(return_type)) .implicit_void else .implicit_value,
         } },
         .{ .setAt = fn_idx },
     );
@@ -785,8 +840,8 @@ fn fnParams(
 
 fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Context) Error!usize {
     // TODO: check if not useless
-    const snapshot = ctx.snapshot();
-    defer snapshot.restore();
+    // const snapshot = ctx.snapshot();
+    // defer snapshot.restore();
 
     var had_err = false;
     var final_type: *const Type = self.type_interner.cache.void;
@@ -882,11 +937,12 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     // Check for boxing
     var box = false;
 
-    if (ctx.function) |fn_ctx| if (fn_ctx.captures) |captures| {
-        if (captures.contains(decl_index)) {
+    if (ctx.function) |fn_ctx| {
+        if (fn_ctx.boxes.contains(decl_index)) {
             box = true;
+            self.scope.captureVariableInCurrent(name) catch @panic("Capture undeclared variable");
         }
-    };
+    }
 
     self.makeInstruction(
         .{ .var_decl = .{
@@ -931,6 +987,8 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
     // Create type before functions to allow 'self' to refer to the structure
     const interned_type = self.type_interner.intern(.{ .structure = ty });
     ctx.struct_type = interned_type;
+    defer ctx.struct_type = null;
+
     const interned_struct = &interned_type.structure;
 
     try self.structureFields(node.fields, interned_struct, ctx);
@@ -1125,7 +1183,7 @@ fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
     const closure_idx = self.ir_builder.reserveInstr();
 
     self.scope.open(self.allocator, false);
-    errdefer _ = self.scope.close();
+    defer _ = self.scope.close();
 
     const params, const default_count = try self.fnParams(expr.params, ctx);
 
@@ -1133,25 +1191,43 @@ fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
     const closure_type: Type.Function = .{
         .params = params,
         .return_type = try self.checkAndGetType(expr.return_type, ctx),
-        .is_method = ctx.struct_type != null,
+        .is_method = false,
     };
     const interned_type = self.type_interner.intern(.{ .function = closure_type });
 
     ctx.function = .{ .type = interned_type };
     const len = try self.fnBody(expr.body.nodes, &closure_type, ctx);
 
-    const scope_stats = self.scope.closeGetCaptures(self.allocator);
+    const captures_count = self.loadClosureCaptures(ctx.function.?.captures.keys());
 
     self.makeInstruction(
-        .{ .closure = .{
+        .{ .fn_decl = .{
+            .kind = .closure,
+            .name = null,
             .body_len = len,
             .default_params = default_count,
-            .captures = scope_stats.captured,
+            .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
         } },
         .{ .setAt = closure_idx },
     );
     return interned_type;
+}
+
+fn loadClosureCaptures(self: *Self, captures: []*const Variable) usize {
+    for (captures) |capt| {
+        // We put Boxed value in closure env
+        self.makeInstruction(
+            .{ .identifier = .{
+                .index = capt.index,
+                .scope = if (capt.kind == .local) .local else .global,
+                .unbox = false,
+            } },
+            .add,
+        );
+    }
+
+    return captures.len;
 }
 
 fn isStringConcat(op: TokenTag, lhs: *const Type, rhs: *const Type) bool {
@@ -1538,7 +1614,7 @@ fn identifier(
     self: *Self,
     token_name: Ast.TokenIndex,
     initialized: bool,
-    ctx: *const Context,
+    ctx: *Context,
 ) Error!struct { *const Type, enum { variable, symbol } } {
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
@@ -1551,46 +1627,49 @@ fn identifier(
         return .{ variable.type, .variable };
     }
 
-    if (self.symbolIdentifier(name)) |sym| {
-        return .{ sym.type, .symbol };
-    }
-
-    if (name == self.cached_names.Self) {
-        if (ctx.struct_type) |ty| {
-            return .{ ty, .variable };
-        } else {
-            return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
-        }
-
-        return .{ &self.big_self, .variable };
+    if (self.symbolIdentifier(name, ctx)) |sym| {
+        if (sym) |s| return .{ s.type, .symbol };
+    } else |_| {
+        return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) ?*Variable {
+fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *Context) ?*Variable {
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
-    if (ctx.function) |fn_ctx| if (fn_ctx.captures) |captures| {
-        if (captures.contains(variable.index)) {
-            variable.captured = true;
+    const scope: rir.Scope, const index, const unbox = var_infos: {
+        if (variable.captured) {
+            // If inside a function, we check if it's a boxed value from current function's body. If so,
+            // it is just accessed on the stack as usual, if not we get the capture index in closure's env
+            // Captures are automatically unboxed, no need to ask for an unboxing
+            if (ctx.function) |*fn_ctx| {
+                if (!fn_ctx.boxes.contains(variable.index)) {
+                    break :var_infos .{ .env, fn_ctx.getOrPutCaptureIndex(self.allocator, variable), false };
+                }
+            }
         }
+
+        const scope: rir.Scope = switch (variable.kind) {
+            .local => .local,
+            .global => .global,
+        };
+
+        break :var_infos .{ scope, variable.index + scope_offset, variable.captured };
     };
 
     self.makeInstruction(.{ .identifier = .{
-        .index = variable.index + scope_offset,
-        .scope = switch (variable.kind) {
-            .local => .local,
-            .global => .global,
-        },
-        .unbox = variable.captured,
+        .index = index,
+        .scope = scope,
+        .unbox = unbox,
     } }, .add);
 
     return variable;
 }
 
-fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *const Context) Error!*Variable {
+fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*Variable {
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
@@ -1601,8 +1680,14 @@ fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *const
 }
 
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
-fn symbolIdentifier(self: *Self, name: InternerIdx) ?*ScopeStack.Scope.Symbol {
-    const sym = self.scope.getSymbol(name) orelse return null;
+fn symbolIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) error{BigSelfOutsideStruct}!?*ScopeStack.Scope.Symbol {
+    const sym_name = if (name == self.cached_names.Self) n: {
+        if (ctx.struct_type) |ty| {
+            break :n ty.structure.name;
+        } else return error.BigSelfOutsideStruct;
+    } else name;
+
+    const sym = self.scope.getSymbol(sym_name) orelse return null;
     // TODO: protect cast
     self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, .add);
 

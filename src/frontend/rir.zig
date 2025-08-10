@@ -1,5 +1,5 @@
 // TODO: remove heap
-pub const Scope = enum { builtin, global, heap, local };
+pub const Scope = enum { builtin, global, heap, local, env };
 pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
@@ -19,7 +19,7 @@ pub const Instruction = struct {
         box: Variable,
         call: Call,
         cast: Type,
-        closure: Closure,
+        // closure: Closure,
         discard,
         field: Field,
         float: f64,
@@ -127,13 +127,22 @@ pub const Instruction = struct {
         default_count: u8,
         invoke: bool = false,
     };
-    pub const Closure = struct {
+    // pub const Closure = struct {
+    //     body_len: u64,
+    //     default_params: usize,
+    //     captures: []const usize,
+    //     return_kind: ReturnKind,
+    // };
+    pub const FnDecl = struct {
+        kind: Kind,
+        name: ?usize,
         body_len: u64,
         default_params: usize,
-        captures: []const usize,
+        captures_count: usize,
         return_kind: ReturnKind,
+
+        pub const Kind = union(enum) { closure, symbol: usize };
     };
-    pub const FnDecl = struct { index: usize, body_len: u64, default_params: usize, return_kind: ReturnKind };
     pub const IdentifierId = struct { index: usize, rc_action: RcAction };
     pub const If = struct {
         cast: Cast,

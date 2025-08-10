@@ -555,7 +555,9 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl) Error!Type {
 
     self.state = save_state;
     self.setInstr(fn_idx, .{ .fn_decl = .{
-        .index = undefined,
+        .kind = undefined,
+        .name = undefined,
+        .captures_count = undefined,
         .body_len = len - deadcode_count,
         .default_params = default_params,
         .return_kind = return_kind,

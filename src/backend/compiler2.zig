@@ -232,16 +232,13 @@ const Compiler = struct {
     }
 
     fn addGlobal(self: *Self, global: Value) u8 {
-        // self.manager.globals.appendAssumeCapacity(global);
         self.manager.globals.append(self.manager.vm.allocator, global) catch oom();
         // TODO: protect
         return @intCast(self.manager.globals.items.len - 1);
     }
 
     fn addSymbol(self: *Self, index: usize, symbol: Value) void {
-        // self.manager.globals.appendAssumeCapacity(global);
         self.manager.symbols[index] = symbol;
-        // return @intCast(self.manager.globals.items.len - 1);
     }
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
@@ -258,10 +255,13 @@ const Compiler = struct {
                 // else if (self.state.to_reg)
                 //     if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
             else
-                unreachable, // .get_heap and all reg cow variants
+                .get_capture,
+            // unreachable, // .get_heap and all reg cow variants
             @intCast(variable.index),
             offset,
         );
+
+        if (variable.unbox) self.writeOp(.unbox, offset);
     }
 
     /// Declare the variable based on informations coming from Analyzer. Declares
@@ -343,7 +343,7 @@ const Compiler = struct {
             .box => |*data| self.box(data),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
-            .closure => |*data| self.compileClosure(data),
+            // .closure => |*data| self.compileClosure(data, null),
             .default_value => unreachable,
             .discard => self.discard(),
             .field => |*data| self.field(data),
@@ -490,10 +490,12 @@ const Compiler = struct {
         self.writeOpAndByte(
             if (variable_data.scope == .global)
                 .set_global
-            else if (variable_data.scope == .heap)
-                .set_heap
+                // else if (variable_data.scope == .heap)
+                //     .set_heap
+            else if (variable_data.scope == .local)
+                .set_local
             else
-                .set_local,
+                .set_capture,
             @intCast(variable_data.index),
             start,
         );
@@ -685,26 +687,26 @@ const Compiler = struct {
         self.writeOpAndByte(.call, data.arity, start);
     }
 
-    fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
-        // We do not compile the member as we invoke it (it does not go on the stack)
-        const member_data = self.getData().field;
-        self.manager.instr_idx += 1;
-
-        // Compiles the receiver
-        const save_end_chain = self.state.end_of_chain;
-        self.state.end_of_chain = true;
-        defer self.state.end_of_chain = save_end_chain;
-
-        self.state.cow = true;
-        try self.compileInstr();
-        self.state.cow = false;
-
-        if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
-        try self.compileArgs(data.arity);
-
-        self.writeOpAndByte(.invoke, data.arity, start);
-        self.writeByte(@intCast(member_data.index), start);
-    }
+    // fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
+    //     // We do not compile the member as we invoke it (it does not go on the stack)
+    //     const member_data = self.getData().field;
+    //     self.manager.instr_idx += 1;
+    //
+    //     // Compiles the receiver
+    //     const save_end_chain = self.state.end_of_chain;
+    //     self.state.end_of_chain = true;
+    //     defer self.state.end_of_chain = save_end_chain;
+    //
+    //     self.state.cow = true;
+    //     try self.compileInstr();
+    //     self.state.cow = false;
+    //
+    //     if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
+    //     try self.compileArgs(data.arity);
+    //
+    //     self.writeOpAndByte(.invoke, data.arity, start);
+    //     self.writeByte(@intCast(member_data.index), start);
+    // }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
         const start = self.getStart();
@@ -734,21 +736,21 @@ const Compiler = struct {
         if (last > self.manager.instr_idx) self.manager.instr_idx = last;
     }
 
-    fn compileCallable(self: *Self, name: []const u8, defaults_count: usize, body_len: usize, return_kind: ReturnKind) Error!*Obj.Function {
-        var compiler = Compiler.init(self.manager, name, defaults_count);
+    fn compileCallable(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
+        var compiler = Compiler.init(self.manager, name, data.default_params);
 
-        for (0..defaults_count) |i| {
+        for (0..data.default_params) |i| {
             compiler.function.default_values[i] = try self.compileDefaultValue();
         }
 
-        for (0..body_len) |_| {
+        for (0..data.body_len) |_| {
             compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
 
-        if (return_kind == .implicit_value) {
+        if (data.return_kind == .implicit_value) {
             compiler.writeOp(.@"return", self.manager.instr_offsets[self.manager.instr_idx - 1]);
-        } else if (return_kind == .implicit_void) {
+        } else if (data.return_kind == .implicit_void) {
             compiler.writeOp(.naked_return, self.manager.instr_offsets[self.manager.instr_idx - 1]);
         }
 
@@ -756,23 +758,28 @@ const Compiler = struct {
     }
 
     fn compileFn(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        const name_idx = self.next().name;
-        const fn_name = self.manager.vm.interner.getKey(name_idx).?;
-        const func = try self.compileCallable(fn_name, data.default_params, data.body_len, data.return_kind);
-        self.addSymbol(data.index, Value.makeObj(func.asObj()));
+        const fn_name = if (data.name) |idx| self.manager.vm.interner.getKey(idx).? else "anonymus";
+
+        const index = switch (data.kind) {
+            .symbol => |idx| idx,
+            .closure => return self.compileClosure(data, fn_name),
+        };
+
+        const func = try self.compileCallable(fn_name, data);
+        self.addSymbol(index, Value.makeObj(func.asObj()));
     }
 
-    fn compileClosure(self: *Self, data: *const Instruction.Closure) Error!void {
+    fn compileClosure(self: *Self, data: *const Instruction.FnDecl, name: ?[]const u8) Error!void {
         const start = self.getStart();
 
-        for (data.captures) |capt| {
-            self.writeOpAndByte(.get_local_absolute, @intCast(capt), start);
-        }
-
-        const func = try self.compileCallable("closure", data.default_params, data.body_len, data.return_kind);
+        const func = try self.compileCallable(name orelse "anonymus", data);
         try self.emitConstant(Value.makeObj(func.asObj()), start);
 
-        self.writeOpAndByte(.closure, @intCast(data.captures.len), start);
+        for (0..data.captures_count) |_| {
+            self.emitGetVar(&self.next().identifier, false, start);
+        }
+
+        self.writeOpAndByte(.closure, @intCast(data.captures_count), start);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
@@ -912,9 +919,10 @@ const Compiler = struct {
 
         for (0..data.func_count) |_| {
             const fn_data = self.next().fn_decl;
-            const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
+            // const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
             // const func = try self.compileFn(fn_name, &fn_data);
-            const func = try self.compileCallable(fn_name, fn_data.default_params, fn_data.body_len, fn_data.return_kind);
+            const fn_name = if (fn_data.name) |idx| self.manager.vm.interner.getKey(idx).? else "anonymus";
+            const func = try self.compileCallable(fn_name, &fn_data);
             funcs.appendAssumeCapacity(func);
         }
 

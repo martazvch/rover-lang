@@ -140,11 +140,11 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
 }
 
 fn renderFnDecl(self: *Self, decl: *const Ast.FnDecl, comma: bool) !void {
-    try self.renderCallableDecl(self.spanToSrc(decl.name), decl.params, decl.return_type, decl.body, false, comma);
+    try self.renderCallableDecl(self.spanToSrc(decl.name), decl.params, decl.return_type, decl.body, false, decl.has_callable, comma);
 }
 
 fn renderClosureDecl(self: *Self, decl: *const Ast.Closure, comma: bool) !void {
-    try self.renderCallableDecl("", decl.params, decl.return_type, decl.body, true, comma);
+    try self.renderCallableDecl("", decl.params, decl.return_type, decl.body, true, false, comma);
 }
 
 fn renderCallableDecl(
@@ -154,6 +154,7 @@ fn renderCallableDecl(
     return_type: ?*Ast.Type,
     body: Ast.Block,
     is_closure: bool,
+    has_callable: bool,
     comma: bool,
 ) !void {
     try self.openKey(if (is_closure) "closure_decl" else "fn_decl", .block);
@@ -181,6 +182,7 @@ fn renderCallableDecl(
     }
 
     try self.pushKeyValue("return_type", if (return_type) |ret| try self.renderType(ret) else "void", true);
+    try self.pushKeyValue("has_callable", if (has_callable) "true" else "false", true);
     try self.renderBlock(&body, false);
     try self.closeKey(.block, comma);
 }

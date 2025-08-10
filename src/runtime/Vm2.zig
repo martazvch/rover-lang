@@ -184,8 +184,11 @@ fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {
 }
 
 fn execute(self: *Self, entry_point: *Obj.Function) !void {
-    var frame: *CallFrame = undefined;
-    try self.call(&frame, entry_point, 0, false);
+    var frame = try self.frame_stack.new();
+    frame.initCall(entry_point.asObj(), &self.stack, 0);
+
+    // try self.call(&frame, entry_point, 0, false);
+    // try self.call(frame, 0);
 
     while (true) {
         if (comptime options.print_stack) {
@@ -201,7 +204,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
 
             while (value != self.stack.top) : (value += 1) {
                 // Start of call frame
-                if (value == frame.slots) print(">", .{});
+                if (value == frame.slots - 1) print(">", .{});
 
                 print("[", .{});
                 try value[0].print(self.stdout);
@@ -333,8 +336,12 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .call => {
                 const args_count = frame.readByte();
-                const function, const imported = self.stack.peekRef(args_count).obj.initCall(self, args_count);
-                try self.call(&frame, function, args_count, imported);
+                frame = try self.frame_stack.new();
+                // const function, const imported = self.stack.peekRef(args_count).obj.initCall(self, args_count);
+                frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count);
+                // self.stack.peekRef(args_count).obj.initCallFrame(frame);
+                // try self.call(&frame, function, args_count, imported);
+                // try self.call(frame, args_count);
             },
             .call_native => {
                 // const args_count = frame.readByte();
@@ -346,8 +353,15 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .cast_to_float => self.stack.peekRef(0).* = Value.makeFloat(@floatFromInt(self.stack.peekRef(0).int)),
             .closure => {
-                const capture_count = frame.readByte();
-                self.stack.top -= capture_count;
+                const captures_count = frame.readByte();
+                const closure = Obj.Closure.create(
+                    self,
+                    self.stack.peekRef(captures_count).obj.as(Obj.Function),
+                    (self.stack.top - captures_count)[0..captures_count],
+                );
+                // Discard the function
+                self.stack.top -= captures_count + 1;
+                self.stack.push(Value.makeObj(closure.asObj()));
             },
             .constant => self.stack.push(frame.readConstant()),
             // .define_heap_var => {
@@ -380,6 +394,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .false => self.stack.push(Value.false_),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
+            .get_capture => {
+                const index = frame.readByte();
+                self.stack.push(frame.captures[index].obj.as(Obj.Box).value);
+            },
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
@@ -436,16 +454,16 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
-            .invoke => {
-                const args_count = frame.readByte();
-                const method_idx = frame.readByte();
-                const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
-
-                // self.stack.peekRef(args_count).obj = self.cow(self.stack.peekRef(args_count).obj);
-                // const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
-
-                try self.call(&frame, callee, args_count, imported);
-            },
+            // .invoke => {
+            //     const args_count = frame.readByte();
+            //     const method_idx = frame.readByte();
+            //     const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+            //
+            //     // self.stack.peekRef(args_count).obj = self.cow(self.stack.peekRef(args_count).obj);
+            //     // const callee, const imported = self.stack.peekRef(args_count).obj.invoke(self, method_idx);
+            //
+            //     try self.call(&frame, callee, args_count, imported);
+            // },
             .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
@@ -551,6 +569,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 self.stack.top -= locals_count;
                 self.stack.push(res);
             },
+            .set_capture => {
+                const index = frame.readByte();
+                frame.captures[index].obj.as(Obj.Box).value = self.stack.pop();
+            },
             .set_field => {
                 const field_idx = frame.readByte();
                 const instance = self.stack.pop().obj.as(Obj.Instance);
@@ -602,22 +624,27 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     return obj;
 }
 
-fn call(self: *Self, frame: **CallFrame, callee: *Obj.Function, args_count: usize, imported: bool) Error!void {
-    if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
-        return error.StackOverflow;
-    }
+// TODO: ArrayList?
+// fn call(self: *Self, frame: **CallFrame, callee: *Obj.Function, args_count: usize, imported: bool) Error!void {
+// fn call(self: *Self, frame: *CallFrame, args_count: usize) Error!void {
+// if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
+//     return error.StackOverflow;
+// }
 
-    const new_frame = &self.frame_stack.frames[self.frame_stack.count];
-    self.frame_stack.count += 1;
-    new_frame.function = callee;
-    new_frame.ip = callee.chunk.code.items.ptr;
-    // -1 for the function itself
-    // new_frame.slots = self.stack.top - args_count - 1;
-    new_frame.slots = self.stack.top - args_count;
-    new_frame.imported = imported;
+// const new_frame = &self.frame_stack.frames[self.frame_stack.count];
+// self.frame_stack.count += 1;
+// new_frame.function = callee;
+// new_frame.ip = callee.chunk.code.items.ptr;
+// -1 for the function itself
+// new_frame.slots = self.stack.top - args_count - 1;
+// new_frame.slots = self.stack.top - args_count;
+// frame.slots = self.stack.top - args_count;
+// new_frame.imported = imported;
+// new_frame.imported = false;
+// frame.imported = false;
 
-    frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
-}
+// frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
+// }
 
 pub fn updateModule(self: *Self, module: *Module) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
@@ -648,7 +675,6 @@ fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
     self.stack.top -= 1;
 }
 
-// PERF: bench avec BoundedArray
 const Stack = struct {
     values: [STACK_SIZE]Value,
     top: [*]Value,
@@ -679,7 +705,7 @@ const Stack = struct {
     }
 };
 
-const CallFrame = struct {
+pub const CallFrame = struct {
     function: *Obj.Function,
     captures: []Value,
     ip: [*]u8,
@@ -702,6 +728,25 @@ const CallFrame = struct {
 
         return (@as(u16, part1) << 8) | part2;
     }
+
+    // PERF: preshot the closure or function?
+    pub fn initCall(self: *CallFrame, callee: *Obj, stack: *const Stack, args_count: usize) void {
+        const function = switch (callee.kind) {
+            .closure => f: {
+                const closure = callee.as(Obj.Closure);
+                self.captures = closure.captures;
+                break :f closure.function;
+            },
+            .function => callee.as(Obj.Function),
+            else => unreachable,
+        };
+
+        self.function = function;
+        self.ip = function.chunk.code.items.ptr;
+
+        self.slots = stack.top - args_count;
+        self.imported = false;
+    }
 };
 
 const FrameStack = struct {
@@ -711,4 +756,15 @@ const FrameStack = struct {
     const FRAMES_MAX: u8 = 64;
 
     pub const empty: FrameStack = .{ .frames = undefined, .count = 0 };
+
+    pub fn new(self: *FrameStack) Error!*CallFrame {
+        if (self.count == FRAMES_MAX) {
+            return error.StackOverflow;
+        }
+
+        const new_frame = &self.frames[self.count];
+        self.count += 1;
+
+        return new_frame;
+    }
 };
