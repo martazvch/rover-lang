@@ -381,6 +381,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const lhs = self.stack.pop().int;
                 self.stack.push(Value.makeInt(@divTrunc(lhs, rhs)));
             },
+            .dup => self.stack.push(self.stack.peek(0)),
             .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
             .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
@@ -394,10 +395,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .false => self.stack.push(Value.false_),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
-            .get_capture => {
-                const index = frame.readByte();
-                self.stack.push(frame.captures[index].obj.as(Obj.Box).value);
-            },
+            // .get_capture => {
+            //     const index = frame.readByte();
+            //     self.stack.push(frame.captures[index].obj.as(Obj.Box).value);
+            // },
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
@@ -607,6 +608,13 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
             },
+            .swap => {
+                const a = self.stack.peekRef(0);
+                const b = self.stack.peekRef(1);
+                const tmp = a.*;
+                a.* = b.*;
+                b.* = tmp;
+            },
             .true => self.stack.push(Value.true_),
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }
@@ -675,6 +683,7 @@ fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
     self.stack.top -= 1;
 }
 
+// PERF: inline methods?
 const Stack = struct {
     values: [STACK_SIZE]Value,
     top: [*]Value,
@@ -730,11 +739,20 @@ pub const CallFrame = struct {
     }
 
     // PERF: preshot the closure or function?
-    pub fn initCall(self: *CallFrame, callee: *Obj, stack: *const Stack, args_count: usize) void {
+    pub fn initCall(self: *CallFrame, callee: *Obj, stack: *Stack, args_count: usize) void {
+        self.slots = stack.top - args_count;
+        self.imported = false;
+
         const function = switch (callee.kind) {
             .closure => f: {
                 const closure = callee.as(Obj.Closure);
                 self.captures = closure.captures;
+
+                // PERF: memcpy?
+                for (closure.captures) |capt| {
+                    stack.push(capt);
+                }
+
                 break :f closure.function;
             },
             .function => callee.as(Obj.Function),
@@ -743,9 +761,6 @@ pub const CallFrame = struct {
 
         self.function = function;
         self.ip = function.chunk.code.items.ptr;
-
-        self.slots = stack.top - args_count;
-        self.imported = false;
     }
 };
 

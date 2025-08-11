@@ -1,5 +1,5 @@
 // TODO: remove heap
-pub const Scope = enum { builtin, global, heap, local, env };
+pub const Scope = enum { builtin, global, heap, local };
 pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
@@ -16,10 +16,10 @@ pub const Instruction = struct {
         binop: Binop,
         block: Block,
         bool: bool,
+        bound_method: usize,
         box: Variable,
         call: Call,
         cast: Type,
-        // closure: Closure,
         discard,
         field: Field,
         float: f64,

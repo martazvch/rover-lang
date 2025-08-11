@@ -135,11 +135,6 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             try self.markModule(bound.module.module);
             try self.markObject(bound.import);
         },
-        .bound_method => {
-            const bound = obj.as(BoundMethod);
-            try self.markObject(bound.receiver);
-            try self.markObject(bound.method.asObj());
-        },
         .box => try self.markValue(&obj.as(Obj.Box).value),
         .closure => {
             const closure = obj.as(Obj.Closure);

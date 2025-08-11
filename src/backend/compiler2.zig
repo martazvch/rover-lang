@@ -255,8 +255,8 @@ const Compiler = struct {
                 // else if (self.state.to_reg)
                 //     if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
             else
-                .get_capture,
-            // unreachable, // .get_heap and all reg cow variants
+                // .get_capture,
+                unreachable, // .get_heap, env, and all reg cow variants
             @intCast(variable.index),
             offset,
         );
@@ -340,6 +340,7 @@ const Compiler = struct {
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
             .bool => |data| self.boolInstr(data),
+            .bound_method => |data| self.boundMethod(data),
             .box => |*data| self.box(data),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
@@ -601,6 +602,17 @@ const Compiler = struct {
     fn boolInstr(self: *Self, value: bool) Error!void {
         const op: OpCode = if (value) .true else .false;
         self.writeOp(op, self.getStart());
+    }
+
+    // TODO: protext cast
+    fn boundMethod(self: *Self, field_index: usize) Error!void {
+        const start = self.getStart();
+        // Variable
+        try self.compileInstr();
+        self.writeOp(.dup, start);
+        self.writeOpAndByte(.get_method, @intCast(field_index), start);
+        self.writeOp(.swap, start);
+        self.writeOpAndByte(.closure, 1, start);
     }
 
     fn box(self: *Self, data: *const Instruction.Variable) Error!void {

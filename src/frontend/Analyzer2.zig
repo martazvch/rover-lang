@@ -8,6 +8,7 @@ const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const GenReport = @import("../reporter.zig").GenReport;
 const oom = @import("../utils.zig").oom;
+const EnumFromStruct = @import("../utils.zig").EnumFromStruct;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("Ast.zig");
 const Node = Ast.Node;
@@ -44,6 +45,17 @@ pub const Type = union(enum) {
             }
 
             return res;
+        }
+
+        pub fn toBoundMethod(self: *const Function, self_interned: InternerIdx, allocator: Allocator) Function {
+            var params = self.params.clone(allocator) catch oom();
+            _ = params.orderedRemove(self_interned);
+
+            return .{
+                .params = params,
+                .return_type = self.return_type,
+                .is_method = false,
+            };
         }
     };
 
@@ -135,7 +147,6 @@ pub const Type = union(enum) {
                 //     f.type.hash(hasher);
                 // }
             },
-            // .pointer => unreachable,
         }
     }
 
@@ -155,7 +166,6 @@ pub const Type = union(enum) {
                 writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
             },
             .structure => |ty| return interner.getKey(ty.name).?,
-            // else => unreachable,
         }
 
         return res.toOwnedSlice(allocator) catch oom();
@@ -257,22 +267,6 @@ const ScopeStack = struct {
         captured: []const usize,
     };
 
-    // pub fn closeGetCaptures(self: *ScopeStack, allocator: Allocator) ScopeCaptures {
-    //     const popped = self.scopes.pop().?;
-    //     self.updateCurrent();
-    //
-    //     var captured: ArrayListUnmanaged(usize) = .{};
-    //
-    //     var iter = popped.variables.valueIterator();
-    //     while (iter.next()) |v| {
-    //         if (v.captured) {
-    //             captured.append(allocator, v.index) catch oom();
-    //         }
-    //     }
-    //
-    //     return .{ .count = popped.variables.count(), .captured = captured.toOwnedSlice(allocator) catch oom() };
-    // }
-    //
     pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
         self.open(allocator, true);
         const builtins = std.meta.fields(TypeInterner.Cache);
@@ -396,19 +390,18 @@ const Context = struct {
     cow: bool = false,
     allow_partial: bool = true,
     returns: bool = false,
+    in_call: bool = false,
+
+    /// Auto-generate an enum with all field names
+    const Field = EnumFromStruct(Context);
 
     pub const FnCtx = struct {
         type: *const Type,
         boxes: CaptureRes = .{},
         captures: AutoArrayHashMapUnmanaged(*const Variable, void) = .{},
 
-        pub fn getOrPutCaptureIndex(self: *FnCtx, allocator: Allocator, variable: *const Variable) usize {
-            if (self.captures.contains(variable)) {
-                return self.captures.getIndex(variable).?;
-            } else {
-                self.captures.put(allocator, variable, {}) catch oom();
-                return self.captures.count() - 1;
-            }
+        pub fn addCapture(self: *FnCtx, allocator: Allocator, variable: *const Variable) void {
+            self.captures.put(allocator, variable, {}) catch oom();
         }
     };
 
@@ -420,6 +413,13 @@ const Context = struct {
             self.ctx.* = self.saved;
         }
     };
+
+    pub fn setAndGetPrevious(self: *Context, comptime ctx_field: Field, value: @TypeOf(@field(self, @tagName(ctx_field)))) @TypeOf(value) {
+        const prev = @field(self, @tagName(ctx_field));
+        @field(self, @tagName(ctx_field)) = value;
+
+        return prev;
+    }
 
     pub fn snapshot(self: *Context) ContextSnapshot {
         return .{ .saved = self.*, .ctx = self };
@@ -1423,6 +1423,10 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
         else => .field,
     };
 
+    if (kind == .method and !ctx.in_call) {
+        return self.boundMethod(field_type, field_index, index);
+    }
+
     self.makeInstruction(
         .{ .field = .{ .index = field_index, .kind = kind, .rc_action = .none } },
         .{ .setAt = index },
@@ -1443,6 +1447,14 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Ty
         self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
 }
 
+fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, instr_idx: usize) FieldResult {
+    const bounded_type = func_type.function.toBoundMethod(self.cached_names.self, self.allocator);
+    const ty = self.type_interner.intern(.{ .function = bounded_type });
+    self.makeInstruction(.{ .bound_method = field_index }, .{ .setAt = instr_idx });
+
+    return .{ .type = ty, .is_value = true };
+}
+
 // fn analyzeChain(self: *Self, expr: *const Ast.Expr, ctx: *Context) Error!struct { ?*const Type, *const Type } {
 //     var prev: ?*const Type = null;
 //     _ = &prev;
@@ -1456,17 +1468,14 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Ty
 //     }
 // }
 
-// fn resolveMethodCall(self: *Self, callee: *const Ast.Field, ctx: *Context) Result {}
-
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
 
     var args: ArrayListUnmanaged(*const Expr) = .{};
     defer args.deinit(self.allocator);
 
-    // if (expr.callee.* == .field) {
-    //     args.append(self.allocator, expr.callee.field.structure) catch oom();
-    // }
+    const ctx_call = ctx.setAndGetPrevious(.in_call, true);
+    defer ctx.in_call = ctx_call;
 
     const callee = switch (expr.callee.*) {
         .field => |*f| b: {
@@ -1481,8 +1490,6 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
         else => try self.analyzeExpr(expr.callee, ctx),
     };
 
-    // const callee = try self.analyzeExpr(expr.callee, ctx);
-
     if (!callee.is(.function)) {
         return self.err(.invalid_call_target, self.ast.getSpan(expr));
     }
@@ -1491,17 +1498,6 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 
     const arity, const default_count = try self.fnArgsList(args.items, &callee.function, self.ast.getSpan(expr), ctx);
 
-    // const arity, const default_count = args_list: {
-    //     // Desugar foo.bar() into bar(foo) by putting foo back onto stack
-    //     if (expr.callee.* == .field) {
-    //         _ = try self.analyzeExpr(expr.callee.field.structure, ctx);
-    //         const arity, const default_count = try self.fnArgsList(expr, &callee.function, true, ctx);
-    //         break :args_list .{ arity + 1, default_count };
-    //     } else {
-    //         break :args_list try self.fnArgsList(expr, &callee.function, false, ctx);
-    //     }
-    // };
-
     // TODO: protect casts
     self.makeInstruction(
         .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count), .invoke = expr.callee.* == .field } },
@@ -1509,45 +1505,19 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     );
 
     return callee.function.return_type;
-
-    // const index = self.ir_builder.reserveInstr();
-    // // if (expr.callee.* == .field) {
-    // //     try self.resolveMethodCall(expr.callee.field);
-    // // }
-    // const callee = try self.analyzeExpr(expr.callee, ctx);
-    //
-    // if (!callee.is(.function)) {
-    //     return self.err(.invalid_call_target, self.ast.getSpan(expr));
-    // }
-    //
-    // const arity, const default_count = try self.fnArgsList(expr, &callee.function, ctx);
-    // // TODO: protect casts
-    // self.makeInstruction(
-    //     .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count), .invoke = expr.callee.* == .field } },
-    //     .{ .setAt = index },
-    // );
-    //
-    // return callee.function.return_type;
 }
 
-// fn fnArgsList(self: *Self, callee: *const Ast.FnCall, ty: *const Type.Function, ctx: *Context) Error!struct { usize, usize } {
+// TODO: rewrite
 fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error!struct { usize, usize } {
-    // If it's a bound method, 'self' is implictly inside the function so we skip it
-    // const offset = @intFromBool(ty.kind == .method);
-    // const offset = @intFromBool(implicit_first);
-    const offset = 0;
-    // const param_count = ty.params.count() - offset;
     const param_count = ty.params.count();
 
-    // if (callee.args.len > param_count) return self.err(
     if (args.len > param_count) return self.err(
-        // AnalyzerMsg.tooManyFnArgs(param_count, callee.args.len),
         AnalyzerMsg.tooManyFnArgs(param_count, args.len),
         err_span,
     );
 
     var proto = ty.proto(self.allocator);
-    var proto_values = proto.values()[offset..];
+    var proto_values = proto.values();
     const start = self.ir_builder.instructions.len;
     self.ir_builder.ensureUnusedSize(param_count);
 
@@ -1555,8 +1525,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
     // the form of 'default_value' but we check for all real param default to mark their index (order
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
-    // Self is always the first parameter
-    for (ty.params.values()[offset..]) |*f| {
+    for (ty.params.values()) |*f| {
         self.makeInstruction(.{ .default_value = default_count }, .add_no_alloc);
         if (f.default) default_count += 1;
     }
@@ -1585,7 +1554,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
             else => {
                 value_instr = self.ir_builder.instructions.len;
                 const value_type = try self.analyzeExpr(arg, ctx);
-                param_info = &ty.params.values()[i + offset];
+                param_info = &ty.params.values()[i];
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
                 proto_values[i] = true;
                 param_index = i;
@@ -1593,7 +1562,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
         }
 
         // We take into account here too
-        self.makeInstruction(.{ .value = .{ .value_instr = value_instr, .cast = cast } }, .{ .setAt = start + param_index - offset });
+        self.makeInstruction(.{ .value = .{ .value_instr = value_instr, .cast = cast } }, .{ .setAt = start + param_index });
     }
 
     // Check if any missing non-default parameter
@@ -1601,12 +1570,12 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
     for (proto_values, 0..) |has_value, i| if (!has_value) {
         self.err(
-            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i + offset]).? } },
+            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i]).? } },
             err_span,
         ) catch {};
     };
 
-    return if (err_count < self.errs.items.len) error.Err else .{ param_count + offset, default_count };
+    return if (err_count < self.errs.items.len) error.Err else .{ param_count, default_count };
 }
 
 /// Tries to find a match from variables and symbols and returns its type while emitting an instruction
@@ -1636,39 +1605,6 @@ fn identifier(
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
 }
 
-/// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *Context) ?*Variable {
-    const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
-
-    const scope: rir.Scope, const index, const unbox = var_infos: {
-        if (variable.captured) {
-            // If inside a function, we check if it's a boxed value from current function's body. If so,
-            // it is just accessed on the stack as usual, if not we get the capture index in closure's env
-            // Captures are automatically unboxed, no need to ask for an unboxing
-            if (ctx.function) |*fn_ctx| {
-                if (!fn_ctx.boxes.contains(variable.index)) {
-                    break :var_infos .{ .env, fn_ctx.getOrPutCaptureIndex(self.allocator, variable), false };
-                }
-            }
-        }
-
-        const scope: rir.Scope = switch (variable.kind) {
-            .local => .local,
-            .global => .global,
-        };
-
-        break :var_infos .{ scope, variable.index + scope_offset, variable.captured };
-    };
-
-    self.makeInstruction(.{ .identifier = .{
-        .index = index,
-        .scope = scope,
-        .unbox = unbox,
-    } }, .add);
-
-    return variable;
-}
-
 fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*Variable {
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
@@ -1677,6 +1613,35 @@ fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Conte
         .{ .undeclared_var = .{ .name = self.interner.getKey(name).? } },
         self.ast.getSpan(token_name),
     );
+}
+
+/// Tries to find a variable in scopes and returns it while emitting an instruction
+fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *Context) ?*Variable {
+    const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
+
+    if (variable.captured) {
+        // If the variable is captured but not from current function, it means we capture an outter variable
+        if (ctx.function) |*fn_ctx| {
+            if (!fn_ctx.boxes.contains(variable.index)) {
+                fn_ctx.addCapture(self.allocator, variable);
+            }
+        }
+    }
+
+    const scope: rir.Scope = switch (variable.kind) {
+        .local => .local,
+        .global => .global,
+    };
+
+    self.makeInstruction(.{
+        .identifier = .{
+            .index = variable.index + scope_offset,
+            .scope = scope,
+            .unbox = variable.captured,
+        },
+    }, .add);
+
+    return variable;
 }
 
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
@@ -2098,16 +2063,3 @@ fn isVoid(self: *const Self, ty: *const Type) bool {
 fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
     return ty.toString(self.allocator, self.interner);
 }
-
-// /// Helpers used for errors
-// fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
-//     // if (ty.is(.function)) {
-//     //     return self.getFnTypeName(ty) catch oom();
-//     // } else if (ty.is(.array)) {
-//     //     return self.getArrayTypeName(ty) catch oom();
-//     // } else {
-//     self.type_interner.
-//     const index = self.tm.getInternerIndex(ty);
-//     return self.interner.getKey(index).?;
-//     // }
-// }
