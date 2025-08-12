@@ -7,11 +7,11 @@ const Interner = @import("../Interner.zig");
 const oom = @import("../utils.zig").oom;
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Ast = @import("Ast.zig");
-const Instruction = @import("rir.zig").Instruction;
+const Instruction = @import("rir2.zig").Instruction;
 const Node = @import("Ast.zig").Node;
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
-const Type = @import("rir.zig").Type;
+const Type = @import("rir2.zig").Type;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 
@@ -119,7 +119,7 @@ fn parseInstr(self: *Self) void {
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
         .bound_method => |data| self.boundMethod(data),
-        .box => |*data| self.box(data),
+        // .box => self.box(),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
         .discard => self.discard(),
@@ -128,7 +128,7 @@ fn parseInstr(self: *Self) void {
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
         .identifier_id => |*data| self.identifierId(data),
-        .identifier_absolute => |data| self.identifierAbsolute(data),
+        // .identifier_absolute => |data| self.identifierAbsolute(data),
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
@@ -279,12 +279,9 @@ fn boundMethod(self: *Self, field_index: usize) void {
     self.parseInstr();
 }
 
-fn box(self: *Self, data: *const Instruction.Variable) void {
-    self.indentAndAppendSlice("[Box]");
-    self.indent_level += 1;
-    defer self.indent_level -= 1;
-    self.identifier(data);
-}
+// fn box(self: *Self) void {
+//     self.indentAndAppendSlice("[Box]");
+// }
 
 fn cast(self: *Self, typ: Type) void {
     self.indentAndPrintSlice("[Cast to {s}]", .{@tagName(typ)});
@@ -321,6 +318,9 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
                 .value => |param_data| {
                     if (param_data.cast) {
                         self.indentAndAppendSlice("[Cast next value to float]");
+                    }
+                    if (param_data.box) {
+                        self.indentAndAppendSlice("[Box next value]");
                     }
                     const save = self.instr_idx;
                     self.instr_idx = param_data.value_instr;
@@ -360,14 +360,14 @@ fn getField(self: *Self, data: *const Instruction.Field) void {
 fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     const fn_name = if (data.name) |idx| self.interner.getKey(idx).? else "";
 
-    const fn_kind, const space = switch (data.kind) {
-        .symbol => .{ "Function", " " },
-        .closure => .{ "Closure", "" },
+    const fn_kind = switch (data.kind) {
+        .symbol => "Function",
+        .closure => "Closure",
     };
 
     self.indentAndPrintSlice(
-        "[{s} declaration{s}{s}, return kind: {s}]",
-        .{ fn_kind, space, fn_name, @tagName(data.return_kind) },
+        "[{s} declaration {s}, return kind: {s}]",
+        .{ fn_kind, fn_name, @tagName(data.return_kind) },
     );
 
     self.indent_level += 1;
@@ -414,9 +414,9 @@ fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
         self.indentAndAppendSlice("[Cow]");
 }
 
-fn identifierAbsolute(self: *Self, data: usize) void {
-    self.indentAndPrintSlice("[Variable absolute index: {}]", .{data});
-}
+// fn identifierAbsolute(self: *Self, data: usize) void {
+//     self.indentAndPrintSlice("[Variable absolute index: {}]", .{data});
+// }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
     self.indentAndPrintSlice("[If cast: {s}, has else: {}]", .{

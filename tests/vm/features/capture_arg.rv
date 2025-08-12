@@ -1,0 +1,12 @@
+fn main() {
+    fn first(a: int) -> fn() -> void {
+        fn second() {
+            print a
+        }
+
+        return second
+    }
+
+    var callable = first(5)
+    callable()
+}

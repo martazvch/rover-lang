@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const MultiArrayList = std.MultiArrayList;
 
-const rir = @import("rir.zig");
+const rir = @import("rir2.zig");
 const Instruction = rir.Instruction;
 const oom = @import("../utils.zig").oom;
 

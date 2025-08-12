@@ -5,7 +5,7 @@ const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 
 const Disassembler = @import("../backend/Disassembler2.zig");
-const Rir = @import("../frontend/rir.zig");
+const Rir = @import("../frontend/rir2.zig");
 const Scope = Rir.Scope;
 const ReturnKind = Rir.ReturnKind;
 const Instruction = Rir.Instruction;
@@ -32,13 +32,10 @@ pub const CompilationManager = struct {
     instr_idx: usize,
     modules: []Module,
     render_mode: Disassembler.RenderMode,
-    // main: usize,
     main_index: ?usize = null,
     repl: bool,
     heap_count: usize = 0,
     globals: *ArrayListUnmanaged(Value),
-
-    // symbols: ArrayListUnmanaged(Value),
     symbols: []Value,
 
     const Self = @This();
@@ -53,15 +50,11 @@ pub const CompilationManager = struct {
         instructions: *const MultiArrayList(Instruction),
         modules: []Module,
         render_mode: Disassembler.RenderMode,
-        // main: usize,
         main_index: usize,
         repl: bool,
         globals: *ArrayListUnmanaged(Value),
         symbol_count: usize,
     ) Self {
-        // var symbols: ArrayListUnmanaged(Value) = .{};
-        // symbols.ensureTotalCapacity(vm.allocator, symbol_count) catch oom();
-
         const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
 
         return .{
@@ -75,7 +68,6 @@ pub const CompilationManager = struct {
             .modules = modules,
             .instr_idx = instr_start,
             .render_mode = render_mode,
-            // .main = main,
             .main_index = main_index,
             .repl = repl,
             .globals = globals,
@@ -341,7 +333,7 @@ const Compiler = struct {
             .block => |*data| self.block(data),
             .bool => |data| self.boolInstr(data),
             .bound_method => |data| self.boundMethod(data),
-            .box => |*data| self.box(data),
+            // .box => self.box(),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
             // .closure => |*data| self.compileClosure(data, null),
@@ -354,7 +346,7 @@ const Compiler = struct {
             // .identifier_id => |*data| self.identifierId(data),
             .identifier_id => unreachable, // TODO: delete
             // .identifier_absolute => |data| self.identifierAbsolute(data),
-            .identifier_absolute => unreachable, // TODO: delete
+            // .identifier_absolute => unreachable, // TODO: delete
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
@@ -494,9 +486,9 @@ const Compiler = struct {
                 // else if (variable_data.scope == .heap)
                 //     .set_heap
             else if (variable_data.scope == .local)
-                .set_local
+                if (variable_data.unbox) .set_local_box else .set_local
             else
-                .set_capture,
+                unreachable,
             @intCast(variable_data.index),
             start,
         );
@@ -615,11 +607,8 @@ const Compiler = struct {
         self.writeOpAndByte(.closure, 1, start);
     }
 
-    fn box(self: *Self, data: *const Instruction.Variable) Error!void {
-        const start = self.getStart();
-
-        self.emitGetVar(data, false, self.getStart());
-        self.writeOp(.box, start);
+    fn box(self: *Self) Error!void {
+        self.writeOp(.box, self.getStart());
     }
 
     fn cast(self: *Self, typ: Rir.Type) Error!void {
@@ -681,44 +670,12 @@ const Compiler = struct {
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         const start = self.getStart();
 
-        // Compiles the identifier. We want every thing on the stack
-        // TODO: see if there are no side effects if arguments are chained fields/array accesses
-
-        // const prev = self.state.to_reg;
-        // defer self.state.to_reg = prev;
-        // self.state.to_reg = false;
-        //
-        // if (data.invoke) {
-        //     return self.invoke(data, start);
-        // }
-
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_fn_default, start);
         try self.compileArgs(data.arity);
 
         self.writeOpAndByte(.call, data.arity, start);
     }
-
-    // fn invoke(self: *Self, data: *const Instruction.Call, start: usize) Error!void {
-    //     // We do not compile the member as we invoke it (it does not go on the stack)
-    //     const member_data = self.getData().field;
-    //     self.manager.instr_idx += 1;
-    //
-    //     // Compiles the receiver
-    //     const save_end_chain = self.state.end_of_chain;
-    //     self.state.end_of_chain = true;
-    //     defer self.state.end_of_chain = save_end_chain;
-    //
-    //     self.state.cow = true;
-    //     try self.compileInstr();
-    //     self.state.cow = false;
-    //
-    //     if (data.default_count > 0) self.writeOpAndByte(.load_invoke_default, @intCast(member_data.index), start);
-    //     try self.compileArgs(data.arity);
-    //
-    //     self.writeOpAndByte(.invoke, data.arity, start);
-    //     self.writeByte(@intCast(member_data.index), start);
-    // }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
         const start = self.getStart();
@@ -739,6 +696,7 @@ const Compiler = struct {
                     last = @max(last, self.manager.instr_idx);
 
                     if (data.cast) self.writeOp(.cast_to_float, start);
+                    if (data.box) self.writeOp(.box, start);
                 },
                 .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), start),
                 else => unreachable,

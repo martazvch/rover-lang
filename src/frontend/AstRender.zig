@@ -150,7 +150,7 @@ fn renderClosureDecl(self: *Self, decl: *const Ast.Closure, comma: bool) !void {
 fn renderCallableDecl(
     self: *Self,
     name: []const u8,
-    params: []Ast.Param,
+    params: []Ast.VarDecl,
     return_type: ?*Ast.Type,
     body: Ast.Block,
     is_closure: bool,

@@ -8,12 +8,13 @@ const CompilationManager = @import("backend/compiler2.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer2.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("frontend/Ast.zig");
-const AstRender = @import("frontend/AstRender.zig");
 const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
+const Ast = @import("frontend/Ast.zig");
+const AstRender = @import("frontend/AstRender.zig");
+const Walker = @import("frontend/AstWalker.zig");
 const RirRenderer = @import("frontend/RirRenderer2.zig");
 const Symbols = @import("frontend/TypeManager.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
@@ -35,7 +36,6 @@ instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
 globals: std.ArrayListUnmanaged(Value) = .{},
-// symbols: std.ArrayListUnmanaged(Value) = .{},
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -97,6 +97,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     const token_slice = lexer.tokens.toOwnedSlice();
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
+    var walker: Walker = undefined;
+    walker.init(self.allocator, &self.vm.interner, &ast);
+    defer walker.deinit();
+    walker.walk();
+
     if (options.test_mode and self.config.print_ast) {
         try printAst(self.allocator, &ast, &parser);
         return error.ExitOnPrint;
@@ -150,19 +155,13 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     }
 
-    // self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
-    // self.symbols.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols_count) catch oom();
-
     // Compiler
     var compiler = CompilationManager.init(
         file_name,
         self.vm,
-        // self.analyzer.type_manager.natives.functions,
         undefined,
         self.instr_count,
-        // &self.analyzer.instructions,
         &self.analyzer.ir_builder.instructions,
-        // self.analyzer.modules.values(),
         undefined,
         if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
         if (self.config.embedded) 0 else self.analyzer.main.?,
@@ -180,12 +179,9 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else .{
         .name = file_name,
-        // .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
         .imports = undefined,
-        // .symbols = self.analyzer.symbols,
         .function = function,
         .globals = self.globals.items,
-        // .symbols = compiler.symbols.toOwnedSlice(self.vm.allocator) catch oom(),
         .symbols = compiler.symbols,
     };
 }

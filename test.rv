@@ -1,20 +1,15 @@
-fn outer() -> fn() -> void {
-    var x = "outside"
+fn main() {
+    fn first(a: int) -> fn() -> void {
+        fn second() {
+            print a
+        }
 
-    fn inner() {
-        print x
+        return second
     }
 
-    return inner
+    var callable = first(5)
+    callable()
 }
-
-fn main() {
-    var closure = outer()
-
-    closure()
-}
-
-
 
 
 // fn oui(a: int, b: float) -> float {

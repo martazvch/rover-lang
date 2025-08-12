@@ -262,9 +262,9 @@ fn fnDecl(self: *Self) Error!Node {
     } };
 }
 
-fn fnParams(self: *Self, is_closure: bool) Error![]Ast.Param {
+fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
     const closing_token: Token.Tag = if (is_closure) .pipe else .right_paren;
-    var params: ArrayListUnmanaged(Ast.Param) = .{};
+    var params: ArrayListUnmanaged(Ast.VarDecl) = .{};
     var param_names: ArrayListUnmanaged(TokenIndex) = .{};
     var named_started = false;
 
@@ -301,7 +301,7 @@ fn fnParams(self: *Self, is_closure: bool) Error![]Ast.Param {
             // TODO: Allocate only one `Self` type for all
             const typ = self.allocator.create(Ast.Type) catch oom();
             typ.* = .{ .self = name_idx };
-            params.append(self.allocator, .{ .name = name_idx, .typ = typ }) catch oom();
+            params.append(self.allocator, .{ .name = name_idx, .typ = typ, .value = null }) catch oom();
             continue;
         }
 

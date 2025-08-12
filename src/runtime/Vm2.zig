@@ -431,7 +431,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             //     self.r1 = &frame.slots[frame.readByte()];
             //     self.r1.obj = self.cow(self.r1.obj);
             // },
-            .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
+            // .get_local_absolute => self.stack.push(self.stack.values[frame.readByte()]),
             // .get_method => self.stack.push(Value.makeObj(self.r1.obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj())),
             .get_method => self.stack.peekRef(0).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj()),
             // TODO: same as above
@@ -570,10 +570,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 self.stack.top -= locals_count;
                 self.stack.push(res);
             },
-            .set_capture => {
-                const index = frame.readByte();
-                frame.captures[index].obj.as(Obj.Box).value = self.stack.pop();
-            },
+            // .set_capture => {
+            //     const index = frame.readByte();
+            //     frame.captures[index].obj.as(Obj.Box).value = self.stack.pop();
+            // },
             .set_field => {
                 const field_idx = frame.readByte();
                 const instance = self.stack.pop().obj.as(Obj.Instance);
@@ -584,8 +584,12 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const idx = frame.readByte();
                 self.module.globals[idx] = self.stack.pop();
             },
-            .set_heap => self.heap_vars[frame.readByte()] = self.stack.pop(),
+            // .set_heap => self.heap_vars[frame.readByte()] = self.stack.pop(),
             .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
+            .set_local_box => {
+                const index = frame.readByte();
+                frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
+            },
             .str_cat => self.strConcat(),
             .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
@@ -716,7 +720,6 @@ const Stack = struct {
 
 pub const CallFrame = struct {
     function: *Obj.Function,
-    captures: []Value,
     ip: [*]u8,
     slots: [*]Value,
     imported: bool,
@@ -746,7 +749,6 @@ pub const CallFrame = struct {
         const function = switch (callee.kind) {
             .closure => f: {
                 const closure = callee.as(Obj.Closure);
-                self.captures = closure.captures;
 
                 // PERF: memcpy?
                 for (closure.captures) |capt| {

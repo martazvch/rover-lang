@@ -1,14 +1,16 @@
 const std = @import("std");
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
+const InternerIndex = @import("../Interner.zig").Index;
 
 source: [:0]const u8,
 token_tags: []const Token.Tag,
 token_spans: []const Span,
 nodes: []Node,
 
-const Ast = @This();
+const Self = @This();
 pub const TokenIndex = usize;
 
 pub const Node = union(enum) {
@@ -31,20 +33,25 @@ pub const Assignment = struct {
 
 pub const FnDecl = struct {
     name: TokenIndex,
-    params: []Param,
+    params: []VarDecl,
     body: Block,
     return_type: ?*Type,
     has_callable: bool,
+
+    /// Meta data gathered by the Ast walker
+    meta: Meta = .{},
+
+    pub const Meta = struct {
+        // boxes: Boxes = .{},
+        // TODO: change name type
+        captures: Captures = .{},
+
+        pub const Captures = AutoArrayHashMapUnmanaged(InternerIndex, void);
+    };
 };
 
 pub const MultiVarDecl = struct {
     decls: []VarDecl,
-};
-
-pub const Param = struct {
-    name: TokenIndex,
-    typ: ?*Type = null,
-    value: ?*Expr = null,
 };
 
 pub const Type = union(enum) {
@@ -85,6 +92,12 @@ pub const VarDecl = struct {
     name: TokenIndex,
     typ: ?*Type,
     value: ?*Expr,
+
+    meta: Meta = .{},
+
+    pub const Meta = struct {
+        captured: bool = false,
+    };
 };
 
 pub const While = struct {
@@ -132,7 +145,7 @@ pub const Binop = struct {
 };
 
 pub const Closure = struct {
-    params: []Param,
+    params: []VarDecl,
     body: Block,
     return_type: ?*Type,
     span: Span,
@@ -192,7 +205,7 @@ pub const Unary = struct {
 };
 
 /// Can be used with any `*Node`, `*Expr` or a `token index`
-pub fn toSource(self: *const Ast, node: anytype) []const u8 {
+pub fn toSource(self: *const Self, node: anytype) []const u8 {
     const span = if (@TypeOf(node) == usize)
         self.token_spans[node]
     else
@@ -202,7 +215,7 @@ pub fn toSource(self: *const Ast, node: anytype) []const u8 {
 }
 
 /// Should be either a token index or a Node
-pub fn getSpan(self: *const Ast, anynode: anytype) Span {
+pub fn getSpan(self: *const Self, anynode: anytype) Span {
     const NodeType, const node = switch (@typeInfo(@TypeOf(anynode))) {
         .pointer => |ptr| .{ ptr.child, anynode.* },
         else => .{ @TypeOf(anynode), anynode },
@@ -217,7 +230,7 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
             .start = self.getSpan(node.assigne.*).start,
             .end = self.getSpan(node.value.*).end,
         },
-        FnDecl, Param, StructDecl, VarDecl => self.token_spans[node.name],
+        FnDecl, StructDecl, VarDecl => self.token_spans[node.name],
         MultiVarDecl => .{
             .start = self.getSpan(node.decls[0]).start,
             .end = self.getSpan(node.decls[node.decls.len - 1]).end,
@@ -277,8 +290,3 @@ pub fn getSpan(self: *const Ast, anynode: anytype) Span {
         else => @compileError("Trying to get span on a non Node object and not usize"),
     };
 }
-
-// comptime {
-//     @compileLog(@sizeOf(Node));
-//     @compileLog(@sizeOf(Expr));
-// }
