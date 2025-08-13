@@ -127,7 +127,7 @@ fn parseInstr(self: *Self) void {
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
-        .identifier_id => |*data| self.identifierId(data),
+        // .identifier_id => |*data| self.identifierId(data),
         // .identifier_absolute => |data| self.identifierAbsolute(data),
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
@@ -214,7 +214,7 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
         .array_access => return self.arrayAccess(1, false, true, true),
         .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, true, true),
         .identifier => |*variable| variable,
-        .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
+        // .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
         .field => |*member| return self.fieldAssignment(member),
         else => unreachable,
     };
@@ -299,8 +299,8 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}, invoke: {}]", .{
-        data.arity, data.default_count, data.invoke,
+    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}]", .{
+        data.arity, data.default_count,
     });
 
     self.indent_level += 1;

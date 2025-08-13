@@ -115,7 +115,10 @@ fn functionCaptures(self: *Self, node: *Ast.FnDecl, ctx: *CaptureCtx) void {
 
 fn captureFromNode(self: *Self, node: *Ast.Node, ctx: *CaptureCtx) void {
     switch (node.*) {
-        .assignment => |*n| self.captureFromExpr(n.value, ctx),
+        .assignment => |*n| {
+            self.captureFromExpr(n.assigne, ctx);
+            self.captureFromExpr(n.value, ctx);
+        },
         .discard => |e| self.captureFromExpr(e, ctx),
         .fn_decl => |*n| self.functionCaptures(n, ctx),
         .multi_var_decl => |*n| {

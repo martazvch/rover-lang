@@ -240,10 +240,8 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .array_access => {
                 const index = self.stack.pop().int;
-                // const array = self.r1.obj.as(Obj.Array);
-                const array = self.stack.peekRef(0).obj.as(Obj.Array);
+                const array = self.stack.pop().obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
-
                 self.stack.push(array.values.items[final]);
             },
             // .array_access_reg => {
@@ -287,7 +285,14 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             //     const idx = checkArrayIndex(tmp, self.stack.pop().int);
             //     self.r1 = &tmp.values.items[idx];
             // },
-            .array_assign => unreachable,
+            .array_assign => {
+                const index = self.stack.pop().int;
+                const array = self.stack.pop().obj.as(Obj.Array);
+                const value = self.stack.pop();
+
+                const final = checkArrayIndex(array, index);
+                array.values.items[final] = value;
+            },
             // .array_assign => {
             //     const index = self.stack.pop().int;
             //     self.r1.obj = self.cow(self.r1.obj);
@@ -722,6 +727,7 @@ pub const CallFrame = struct {
     function: *Obj.Function,
     ip: [*]u8,
     slots: [*]Value,
+    // TODO: useless?
     imported: bool,
 
     pub fn readByte(self: *CallFrame) u8 {
@@ -743,19 +749,19 @@ pub const CallFrame = struct {
 
     // PERF: preshot the closure or function?
     pub fn initCall(self: *CallFrame, callee: *Obj, stack: *Stack, args_count: usize) void {
-        self.slots = stack.top - args_count;
         self.imported = false;
+        self.slots = stack.top - args_count;
 
         const function = switch (callee.kind) {
-            .closure => f: {
+            .closure => b: {
                 const closure = callee.as(Obj.Closure);
+                const capt_len = closure.captures.len;
 
-                // PERF: memcpy?
-                for (closure.captures) |capt| {
-                    stack.push(capt);
-                }
+                std.mem.copyBackwards(Value, self.slots[capt_len .. capt_len + args_count], self.slots[0..args_count]);
+                @memcpy(self.slots, closure.captures);
+                stack.top += capt_len;
 
-                break :f closure.function;
+                break :b closure.function;
             },
             .function => callee.as(Obj.Function),
             else => unreachable,

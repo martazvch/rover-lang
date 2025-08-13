@@ -27,7 +27,7 @@ pub const Instruction = struct {
         identifier: Variable,
         // identifier_absolute: usize,
         // TODO: deleted in v2
-        identifier_id: IdentifierId,
+        // identifier_id: IdentifierId,
         symbol_id: u8,
         @"if": If,
         // TODO: delete later
@@ -122,11 +122,7 @@ pub const Instruction = struct {
         // value_instr: usize,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct {
-        arity: u8,
-        default_count: u8,
-        invoke: bool = false,
-    };
+    pub const Call = struct { arity: u8, default_count: u8 };
     // pub const Closure = struct {
     //     body_len: u64,
     //     default_params: usize,

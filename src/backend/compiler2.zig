@@ -344,7 +344,7 @@ const Compiler = struct {
             .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
             // .identifier_id => |*data| self.identifierId(data),
-            .identifier_id => unreachable, // TODO: delete
+            // .identifier_id => unreachable, // TODO: delete
             // .identifier_absolute => |data| self.identifierAbsolute(data),
             // .identifier_absolute => unreachable, // TODO: delete
             .@"if" => |*data| self.ifInstr(data),
@@ -399,6 +399,7 @@ const Compiler = struct {
         // Index, we want to leave it on the stack
         self.state.to_reg = false;
         try self.compileInstr();
+        self.writeOp(.array_access, start);
 
         // self.writeOp(if (reg) if (data.cow) .array_access_reg_cow else .array_access_reg else .array_access, start);
         if (data.incr_ref) self.writeOp(.incr_ref_count, start);
@@ -471,9 +472,9 @@ const Compiler = struct {
 
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
-            .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
+            // .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
-            .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
+            // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
             .field => |*field_data| return self.fieldAssignment(field_data, data.cow, start),
             else => unreachable,
         };

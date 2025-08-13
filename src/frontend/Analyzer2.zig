@@ -27,6 +27,7 @@ pub const Type = union(enum) {
     bool,
     str,
     null,
+    array: *const Type,
     function: Function,
     structure: Structure,
 
@@ -132,6 +133,7 @@ pub const Type = union(enum) {
         // name collision between modules
         switch (self) {
             .void, .int, .float, .bool, .str, .null => {},
+            .array => |ty| ty.hash(hasher),
             .function => |ty| {
                 for (ty.params.values()) |param| {
                     param.type.hash(hasher);
@@ -157,6 +159,11 @@ pub const Type = union(enum) {
 
         switch (self.*) {
             .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
+            .array => |ty| {
+                writer.writeAll("[") catch oom();
+                writer.writeAll(ty.toString(allocator, interner)) catch oom();
+                writer.writeAll("]") catch oom();
+            },
             .function => |ty| {
                 writer.writeAll("fn (") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
@@ -250,6 +257,8 @@ const ScopeStack = struct {
 
         pub const Symbol = struct { type: *const Type, index: usize };
     };
+
+    pub const Kind = enum { variable, symbol };
 
     pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
         const offset = if (!offset_from_child) self.current.variables.count() + self.current.offset else 0;
@@ -374,8 +383,11 @@ const ScopeStack = struct {
         return null;
     }
 
-    pub fn isInScope(self: *const ScopeStack, name: InternerIdx) bool {
-        return self.current.variables.get(name) != null;
+    pub fn isInScope(self: *const ScopeStack, name: InternerIdx, kind: Kind) bool {
+        return switch (kind) {
+            .variable => self.current.variables.get(name) != null,
+            .symbol => self.current.symbols.get(name) != null,
+        };
     }
 };
 
@@ -573,6 +585,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
     ctx.side = .lhs;
 
     const assigne_type, const cow = switch (node.assigne.*) {
+        .array_access => |*e| .{ try self.arrayAccess(e, ctx), true },
         .literal => |*e| b: {
             if (e.tag != .identifier) {
                 return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
@@ -590,19 +603,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
 
             break :b .{ ty, false };
         },
-        // .field => |*e| b: {
-        //     var field_infos = try self.field(e, true);
-        //     const field_type = &field_infos.field;
-        //
-        //     if (field_infos.kind == .method) {
-        //         return self.err(.assign_to_method, self.ast.getSpan(e.field));
-        //     }
-        //
-        //     // TODO: why false?
-        //     break :b .{ field_type.*, false };
-        // },
-        // .array_access => |*e| .{ try self.arrayAccess(e), true },
-        // else => return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne)),
     };
     const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.value));
 
@@ -628,7 +628,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
-    const name = try self.internIfNotInScope(node.name);
+    const name = try self.internIfNotInScope(node.name, .symbol);
     const fn_idx = self.ir_builder.reserveInstr();
 
     // Forward declaration in outer scope for recursion
@@ -641,9 +641,9 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     self.scope.open(self.allocator, true);
     errdefer _ = self.scope.close();
 
+    const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
     const params, const default_count = try self.fnParams(node.params, ctx);
     fn_type.params = params;
-    const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
 
     const return_type = try self.checkAndGetType(node.return_type, ctx);
     fn_type.return_type = return_type;
@@ -730,7 +730,7 @@ fn fnParams(
             continue;
         }
 
-        if (self.scope.isInScope(param_name)) {
+        if (self.scope.isInScope(param_name, .variable)) {
             return self.err(
                 .{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } },
                 self.ast.getSpan(p.name),
@@ -834,7 +834,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
-    const name = try self.internIfNotInScope(node.name);
+    const name = try self.internIfNotInScope(node.name, .variable);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
     const index = self.ir_builder.reserveInstr();
 
@@ -874,12 +874,7 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error
 }
 
 fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
-    const name = self.interner.intern(self.ast.toSource(node.name));
-
-    if (self.scope.isInScope(name)) {
-        return self.err(.{ .already_declared_struct = .{ .name = self.ast.toSource(node.name) } }, self.ast.getSpan(node));
-    }
-
+    const name = try self.internIfNotInScope(node.name, .symbol);
     // We forward declare for self referencing
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
@@ -967,10 +962,7 @@ fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) Error!void {
     const cond_type = try self.analyzeExpr(node.condition, ctx);
 
     if (!cond_type.is(.bool)) return self.err(
-        .{ .non_bool_cond = .{
-            .what = "while",
-            .found = self.getTypeName(cond_type),
-        } },
+        .{ .non_bool_cond = .{ .what = "while", .found = self.getTypeName(cond_type) } },
         self.ast.getSpan(node.condition),
     );
 
@@ -984,8 +976,8 @@ fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) Error!void {
 
 fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
     return switch (expr.*) {
-        // .array => |*e| self.array(e),
-        // .array_access => |*e| self.arrayAccess(e),
+        .array => |*e| self.array(e, ctx),
+        .array_access => |*e| self.arrayAccess(e, ctx),
         .block => |*e| self.block(e, ctx),
         .binop => |*e| self.binop(e, ctx),
         .closure => |*e| self.closure(e, ctx),
@@ -994,12 +986,87 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
         .grouping => |*e| self.analyzeExpr(e.expr, ctx),
         .@"if" => |*e| self.ifExpr(e, ctx),
         .literal => |*e| self.literal(e, ctx),
-        // .named_arg => unreachable,
+        .named_arg => unreachable,
         .@"return" => |*e| self.returnExpr(e, ctx),
         .struct_literal => |*e| self.structLiteral(e, ctx),
         .unary => |*e| self.unary(e, ctx),
-        else => unreachable,
     };
+}
+
+fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
+    const index = self.ir_builder.reserveInstr();
+    var value_type = self.type_interner.cache.void;
+    var cast_count: usize = 0;
+    var cast_until: usize = 0;
+
+    for (expr.values, 0..) |val, i| {
+        var typ = try self.analyzeExpr(val, ctx);
+
+        // TODO: error
+        if (self.isVoid(typ)) {
+            @panic("Void value in array");
+        }
+
+        if (!self.isVoid(value_type) and value_type != typ) {
+            if (!value_type.canCastTo(typ)) return self.err(
+                .{ .array_elem_different_type = .{ .found1 = self.getTypeName(value_type), .found2 = self.getTypeName(typ) } },
+                self.ast.getSpan(val),
+            );
+
+            // Backtrack casts without emitting an instruction
+            if (cast_until == 0) {
+                cast_until = i + 1;
+            } else {
+                self.makeInstruction(.{ .cast = .float }, .add);
+                cast_count += 1;
+                typ = value_type;
+            }
+        }
+
+        value_type = typ;
+    }
+
+    self.makeInstruction(
+        .{ .array = .{
+            .len = expr.values.len,
+            .cast_count = cast_count,
+            .cast_until = cast_until,
+        } },
+        .{ .setAt = index },
+    );
+
+    return self.type_interner.intern(.{ .array = value_type });
+}
+
+fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result {
+    const index = self.ir_builder.reserveInstr();
+    const arr = try self.analyzeExpr(expr.array, ctx);
+
+    const type_value = switch (arr.*) {
+        .array => |child| child,
+        else => return self.err(
+            .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
+            self.ast.getSpan(expr.array),
+        ),
+    };
+
+    try self.expectArrayIndex(expr.index, ctx);
+    self.makeInstruction(
+        .{ .array_access = .{ .cow = false, .incr_ref = false } },
+        .{ .setAt = index },
+    );
+
+    return type_value;
+}
+
+/// Analyze the expression and return an error if the type isn't an integer
+fn expectArrayIndex(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
+    const index = try self.analyzeExpr(expr, ctx);
+
+    if (index != self.type_interner.cache.int) return self.err(
+        .{ .non_integer_index = .{ .found = self.getTypeName(index) } },
+        self.ast.getSpan(expr),
+    );
 }
 
 // TODO: handle dead code eleminitaion so that it can be used in function's body?
@@ -1399,7 +1466,7 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 
     // TODO: protect casts
     self.makeInstruction(
-        .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count), .invoke = expr.callee.* == .field } },
+        .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count) } },
         .{ .setAt = index },
     );
 
@@ -1827,10 +1894,10 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
-fn internIfNotInScope(self: *Self, token: usize) Error!usize {
+fn internIfNotInScope(self: *Self, token: usize, kind: ScopeStack.Kind) Error!usize {
     const name = self.interner.intern(self.ast.toSource(token));
 
-    if (self.scope.isInScope(name)) return self.err(
+    if (self.scope.isInScope(name, kind)) return self.err(
         .{ .already_declared = .{ .name = self.interner.getKey(name).? } },
         self.ast.getSpan(token),
     );
@@ -1842,15 +1909,13 @@ fn internIfNotInScope(self: *Self, token: usize) Error!usize {
 fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Result {
     return if (ty) |t| return switch (t.*) {
         .array => |arr_type| {
-            _ = arr_type;
-            unreachable;
-            // const child = try self.checkAndGetType(arr_type.child);
-            //
-            // if (child == .void) {
-            //     return self.err(.void_array, self.ast.getSpan(arr_type.child));
-            // }
-            //
-            // return self.type_manager.getOrCreateArray(child);
+            const child = try self.checkAndGetType(arr_type.child, ctx);
+
+            if (self.isVoid(child)) {
+                return self.err(.void_array, self.ast.getSpan(arr_type.child));
+            }
+
+            return self.type_interner.intern(.{ .array = child });
         },
         .fields => |fields| {
             _ = fields;
@@ -1922,35 +1987,16 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
 
     if (self.isVoid(value)) return self.err(.void_value, span);
 
-    // if (value.is(.array)) {
-    //     local_value = try self.inferArrayType(decl, value, span);
-    // }
-
-    // if (local_decl == .void) {
-    //     // For functions, we get an anonymus type from it to not point to the same type infos
-    //     // This is made to avoid getting like default values that can't be used on
-    //     local_decl = try self.type_manager.createBoundedFnType(self.allocator, local_value);
-    // } else
-    // if (!self.isTypeEqual(local_decl, local_value)) {
-
     if (self.isVoid(local_decl)) {
         local_decl = local_value;
     } else {
         if (local_decl != local_value) {
             // One case in wich we can coerce, int -> float
-            // if (self.checkCast(local_decl, local_value, emit_cast)) {
             if (local_value.canCastTo(local_decl)) {
                 cast = true;
-                // if (emit_cast) self.addInstr(.{ .cast = .float });
-                // if (emit_cast) self.ir_builder.castTo(.add);
                 if (emit_cast) self.makeInstruction(.{ .cast = .float }, .add);
             } else return self.err(
-                .{
-                    .type_mismatch = .{
-                        .expect = self.getTypeName(local_decl),
-                        .found = self.getTypeName(local_value),
-                    },
-                },
+                .{ .type_mismatch = .{ .expect = self.getTypeName(local_decl), .found = self.getTypeName(local_value) } },
                 span,
             );
         }

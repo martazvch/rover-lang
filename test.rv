@@ -1,28 +1,60 @@
+struct Point {
+    x, y: int,
+    past: [][]int,
+}
+
+struct Poly {
+    vertex: [][]Point
+}
+
+struct Object {
+    poly: Poly,
+    name: str = "object",
+}
+
 fn main() {
-    fn first(a: int) -> fn() -> void {
-        fn second() {
-            print a
-        }
+    var i = 1
 
-        return second
-    }
+    var p1 = Point{ x = 1, y = 2, past = [[1, 2], [3, 4]]}
+    var p2 = Point{ x = 5, y = 6, past = [[7, 8], [9, 10]]}
+    var p3 = Point{ x = 11, y = 12, past = [[13, 14], [15, 16]]}
+    var p4 = Point{ x = 17, y = 18, past = [[19, 20], [21, 22]]}
 
-    var callable = first(5)
-    callable()
+    var poly = Poly{ vertex = [[p1, p2], [p3, p4]] }
+    var obj = Object{ poly } 
+
+    print obj.poly.vertex[1][0]
+    print obj.poly.vertex[1][0].x
+    print obj.poly.vertex[i][0].past[0]
+    print obj.poly.vertex[1][0].past[i][1]
+
+    // Don't change
+    p3.past = [[11, 22], [33, 44]]
+    print obj.poly.vertex[1][0].past[0]
+    
+    obj.poly.vertex[1][0].past[0] = [55, 66]
+    print obj.poly.vertex[1][0].past
 }
 
 
-// fn oui(a: int, b: float) -> float {
-//     a + b
-// }
+
+// ---------- Runtime switch on functions
+
+// struct Person {
+//     // Method
+//     fn speak(self, a: int) { }
+//     // Static
+//     fn otherSpeak(a: int) {}
 //
-// struct Foo {
-//     x: int,
-//
-//     fn display(self) {
-//         print self.x
+//     fn getSpeak(self) -> fn(int) -> void {
+//         if (true) {
+//             return self.speak
+//         } else return Person.otherSpeak
 //     }
 // }
+
+
+// ---------- Closure
 
 // fn main() {
 //     var a = 3
@@ -35,6 +67,9 @@ fn main() {
 //     // var foo = Foo{x=a}
 //     // foo.display()
 // }
+
+
+// ---------- Cow
 
 //struct Point {
 //    x, y: int
