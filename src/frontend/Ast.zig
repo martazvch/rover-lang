@@ -37,13 +37,12 @@ pub const FnDecl = struct {
     body: Block,
     return_type: ?*Type,
     has_callable: bool,
+    is_closure: bool,
 
     /// Meta data gathered by the Ast walker
     meta: Meta = .{},
 
     pub const Meta = struct {
-        // boxes: Boxes = .{},
-        // TODO: change name type
         captures: Captures = .{},
 
         pub const Captures = AutoArrayHashMapUnmanaged(InternerIndex, void);
@@ -110,7 +109,7 @@ pub const Expr = union(enum) {
     array_access: ArrayAccess,
     block: Block,
     binop: Binop,
-    closure: Closure,
+    closure: FnDecl,
     field: Field,
     fn_call: FnCall,
     grouping: Grouping,
@@ -142,13 +141,6 @@ pub const Binop = struct {
     lhs: *Expr,
     rhs: *Expr,
     op: Token.Tag,
-};
-
-pub const Closure = struct {
-    params: []VarDecl,
-    body: Block,
-    return_type: ?*Type,
-    span: Span,
 };
 
 pub const Field = struct {
@@ -268,7 +260,6 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
             .start = self.getSpan(node.lhs.*).start,
             .end = self.getSpan(node.rhs.*).end,
         },
-        Closure => node.span,
         Field => .{
             .start = self.getSpan(node.structure.*).start,
             .end = self.token_spans[node.field].end,

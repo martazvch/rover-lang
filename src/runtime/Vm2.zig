@@ -287,6 +287,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             // },
             .array_assign => {
                 const index = self.stack.pop().int;
+                // const array = self.stack.pop().obj.as(Obj.Array);
                 const array = self.stack.pop().obj.as(Obj.Array);
                 const value = self.stack.pop();
 
@@ -428,9 +429,15 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             //     self.r1 = &self.module.globals[idx];
             // },
             // TODO: see if same compiler bug as get_global
-            .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
+            // .get_heap => self.stack.push(self.heap_vars[frame.readByte()]),
             // TODO: see if same compiler bug as get_global
             .get_local => self.stack.push(frame.slots[frame.readByte()]),
+            .get_local_cow => {
+                const index = frame.readByte();
+                const value = &frame.slots[index];
+                value.obj = self.cow(value.obj);
+                self.stack.push(value.*);
+            },
             // .get_local_reg => self.r1 = &frame.slots[frame.readByte()],
             // .get_local_reg_cow => {
             //     self.r1 = &frame.slots[frame.readByte()];

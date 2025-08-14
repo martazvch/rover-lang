@@ -50,7 +50,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
             try self.renderExpr(n, false);
             try self.closeKey(.block, comma);
         },
-        .fn_decl => |*n| try self.renderFnDecl(n, comma),
+        .fn_decl => |*n| try self.renderFnDecl(self.ast.toSource(n.name), n, comma),
         .multi_var_decl => |n| {
             try self.openKey(@tagName(node.*), .list);
             for (n.decls, 0..) |*decl, i| {
@@ -88,7 +88,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
                 try self.openKey("functions", .list);
                 for (n.functions, 0..) |*f, i| {
                     const last = i != n.functions.len - 1;
-                    try self.renderFnDecl(f, last);
+                    try self.renderFnDecl(self.ast.toSource(f.name), f, last);
                 }
                 try self.closeKey(.list, false);
             }
@@ -139,33 +139,16 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
     }
 }
 
-fn renderFnDecl(self: *Self, decl: *const Ast.FnDecl, comma: bool) !void {
-    try self.renderCallableDecl(self.spanToSrc(decl.name), decl.params, decl.return_type, decl.body, false, decl.has_callable, comma);
-}
-
-fn renderClosureDecl(self: *Self, decl: *const Ast.Closure, comma: bool) !void {
-    try self.renderCallableDecl("", decl.params, decl.return_type, decl.body, true, false, comma);
-}
-
-fn renderCallableDecl(
-    self: *Self,
-    name: []const u8,
-    params: []Ast.VarDecl,
-    return_type: ?*Ast.Type,
-    body: Ast.Block,
-    is_closure: bool,
-    has_callable: bool,
-    comma: bool,
-) !void {
-    try self.openKey(if (is_closure) "closure_decl" else "fn_decl", .block);
+fn renderFnDecl(self: *Self, name: []const u8, decl: *const Ast.FnDecl, comma: bool) !void {
+    try self.openKey(if (decl.is_closure) "closure_decl" else "fn_decl", .block);
     try self.pushKeyValue("name", name, true);
 
-    if (params.len == 0) {
+    if (decl.params.len == 0) {
         try self.emptyKey("params", .list, true);
     } else {
         try self.openKey("params", .list);
-        for (params, 0..) |p, i| {
-            const last = i != params.len - 1;
+        for (decl.params, 0..) |p, i| {
+            const last = i != decl.params.len - 1;
             try self.openBrace();
             try self.pushKeyValue("name", self.spanToSrc(p.name), true);
             if (p.typ) |typ| {
@@ -181,9 +164,9 @@ fn renderCallableDecl(
         try self.closeKey(.list, true);
     }
 
-    try self.pushKeyValue("return_type", if (return_type) |ret| try self.renderType(ret) else "void", true);
-    try self.pushKeyValue("has_callable", if (has_callable) "true" else "false", true);
-    try self.renderBlock(&body, false);
+    try self.pushKeyValue("return_type", if (decl.return_type) |ret| try self.renderType(ret) else "void", true);
+    try self.pushKeyValue("has_callable", if (decl.has_callable) "true" else "false", true);
+    try self.renderBlock(&decl.body, false);
     try self.closeKey(.block, comma);
 }
 
@@ -291,7 +274,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             }, false);
             try self.closeKey(.block, comma);
         },
-        .closure => |*e| try self.renderClosureDecl(e, comma),
+        .closure => |*e| try self.renderFnDecl("", e, comma),
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.openKey("structure", .block);

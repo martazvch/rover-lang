@@ -106,6 +106,13 @@ pub const Type = union(enum) {
         return self.is(.function);
     }
 
+    pub fn isHeap(self: *const Type) bool {
+        return switch (self.*) {
+            .void, .int, .float, .bool, .str, .null => false,
+            else => true,
+        };
+    }
+
     pub fn canCastTo(self: *const Type, other: *const Type) bool {
         return if (self.is(.int) and other.is(.float))
             true
@@ -261,7 +268,7 @@ const ScopeStack = struct {
     pub const Kind = enum { variable, symbol };
 
     pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
-        const offset = if (!offset_from_child) self.current.variables.count() + self.current.offset else 0;
+        const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
         self.scopes.append(allocator, .{ .offset = offset }) catch oom();
         self.updateCurrent();
     }
@@ -278,7 +285,7 @@ const ScopeStack = struct {
     };
 
     pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
-        self.open(allocator, true);
+        self.open(allocator, false);
         const builtins = std.meta.fields(TypeInterner.Cache);
         self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
@@ -471,7 +478,7 @@ ast: *const Ast,
 scope: ScopeStack,
 type_interner: TypeInterner,
 ir_builder: IrBuilder,
-main: ?usize,
+main: ?usize = null,
 globals: ArrayListUnmanaged(usize),
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
@@ -480,14 +487,13 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
     self.arena = std.heap.ArenaAllocator.init(allocator);
     self.allocator = self.arena.allocator();
     self.interner = interner;
-    self.scope = .empty;
     self.errs = .{};
     self.warns = .{};
+    self.scope = .empty;
     self.ir_builder = .init(allocator);
     self.type_interner = .init(self.allocator);
     self.type_interner.cacheFrequentTypes();
     self.scope.initGlobalScope(allocator, interner, &self.type_interner);
-    self.main = null;
     self.globals = .{};
 
     self.cached_names = .{
@@ -513,9 +519,8 @@ fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
     self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
 }
 
-fn makeInstruction(self: *Self, data: Instruction.Data, mode: IrBuilder.Mode) void {
-    const instr: Instruction = .{ .data = data, .offset = 0 };
-    self.ir_builder.emit(instr, mode);
+fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrBuilder.Mode) void {
+    self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
 pub fn analyze(self: *Self, ast: *const Ast) Error!void {
@@ -523,14 +528,8 @@ pub fn analyze(self: *Self, ast: *const Ast) Error!void {
     var ctx: Context = .{};
 
     for (ast.nodes) |*node| {
-        const node_type = self.analyzeNode(node, &ctx) catch |e| {
-            switch (e) {
-                // error.too_many_types => self.err(.too_many_types, ctx.ast.getSpan(node)) catch continue,
-                error.Err => continue,
-            }
-        };
-
         ctx.reset();
+        const node_type = self.analyzeNode(node, &ctx) catch continue;
 
         if (!self.isVoid(node_type)) {
             self.err(.unused_value, self.ast.getSpan(node)) catch {};
@@ -576,37 +575,43 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
+    const span = self.ast.getSpan(node.assigne);
 
     ctx.allow_partial = false;
     const index = self.ir_builder.reserveInstr();
 
+    // TODO: useless side?
     ctx.side = .rhs;
     const value_type = try self.analyzeExpr(node.value, ctx);
     ctx.side = .lhs;
 
-    const assigne_type, const cow = switch (node.assigne.*) {
-        .array_access => |*e| .{ try self.arrayAccess(e, ctx), true },
+    const assigne_type = switch (node.assigne.*) {
         .literal => |*e| b: {
             if (e.tag != .identifier) {
-                return self.err(.invalid_assign_target, self.ast.getSpan(node.assigne));
+                return self.err(.invalid_assign_target, span);
             }
 
             var assigne = try self.expectVariableIdentifier(e.idx, ctx);
-
-            if (!assigne.initialized) assigne.initialized = true;
-
-            break :b .{ assigne.type, false };
+            assigne.initialized = true;
+            break :b assigne.type;
         },
         else => b: {
             const ty = try self.analyzeExpr(node.assigne, ctx);
-            try self.isAssignmentAllowed(ty, self.ast.getSpan(node.assigne));
-
-            break :b .{ ty, false };
+            try self.isAssignmentAllowed(ty, span);
+            break :b ty;
         },
     };
     const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.value));
 
-    self.makeInstruction(.{ .assignment = .{ .cast = coherence.cast, .cow = cow } }, .{ .setAt = index });
+    self.makeInstruction(
+        .{ .assignment = .{
+            .cast = coherence.cast,
+            .cow = assigne_type.isHeap(),
+            .incr_rc = value_type.isHeap(),
+        } },
+        span.start,
+        .{ .set_at = index },
+    );
 }
 
 fn isAssignmentAllowed(self: *Self, assigne_type: *const Type, err_span: Span) Error!void {
@@ -617,10 +622,11 @@ fn isAssignmentAllowed(self: *Self, assigne_type: *const Type, err_span: Span) E
 }
 
 fn discard(self: *Self, expr: *const Expr, ctx: *Context) !void {
-    self.makeInstruction(.{ .discard = undefined }, .add);
+    const span = self.ast.getSpan(expr);
+    self.makeInstruction(.{ .discard = undefined }, span.start, .add);
     const discarded = try self.analyzeExpr(expr, ctx);
 
-    if (self.isVoid(discarded)) return self.err(.void_discard, self.ast.getSpan(expr));
+    if (self.isVoid(discarded)) return self.err(.void_discard, span);
 }
 
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*const Type {
@@ -628,6 +634,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
+    const span = self.ast.getSpan(node);
     const name = try self.internIfNotInScope(node.name, .symbol);
     const fn_idx = self.ir_builder.reserveInstr();
 
@@ -638,7 +645,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         .is_method = ctx.struct_type != null,
     };
 
-    self.scope.open(self.allocator, true);
+    self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
     const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
@@ -663,23 +670,25 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         self.scope.removeSymbol(name);
     } else if (is_closure) {
         self.scope.removeSymbol(name);
-        _ = try self.declareVariable(name, interned_type, false, true, self.ast.getSpan(node));
+        _ = try self.declareVariable(name, interned_type, false, true, span);
     }
 
     if (name == self.cached_names.main and self.scope.isGlobal()) {
         self.main = sym.index;
     }
 
+    // TODO: protect the cast
     self.makeInstruction(
         .{ .fn_decl = .{
             .kind = if (is_closure) .closure else .{ .symbol = sym.index },
             .name = name,
             .body_len = len,
-            .default_params = default_count,
+            .default_params = @intCast(default_count),
             .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(return_type)) .implicit_void else .implicit_value,
         } },
-        .{ .setAt = fn_idx },
+        span.start,
+        .{ .set_at = fn_idx },
     );
 
     return interned_type;
@@ -700,11 +709,11 @@ fn loadFunctionCaptures(self: *Self, captures: []InternerIdx) Error![]const Inst
     return instructions.toOwnedSlice(self.allocator) catch oom();
 }
 
-fn makeFunctionCapturesInstr(self: *Self, datas: []const Instruction.Data) usize {
-    for (datas) |data| {
-        self.makeInstruction(data, .add);
+fn makeFunctionCapturesInstr(self: *Self, instrs: []const Instruction.Data) usize {
+    for (instrs) |instr| {
+        self.makeInstruction(instr, 0, .add);
     }
-    return datas.len;
+    return instrs.len;
 }
 
 fn fnParams(
@@ -773,7 +782,7 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Contex
         // If previous statement returned, it's only dead code now
         if (deadcode_start == 0 and ctx.returns) {
             self.warn(.dead_code, self.ast.getSpan(n));
-            deadcode_start = self.ir_builder.instructions.len;
+            deadcode_start = self.ir_builder.count();
             deadcode_count = len - i;
         }
 
@@ -821,11 +830,12 @@ fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr,
 }
 
 fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
-    self.makeInstruction(.print, .add);
+    const span = self.ast.getSpan(expr);
+    self.makeInstruction(.print, span.start, .add);
     const ty = try self.analyzeExpr(expr, ctx);
 
     if (self.isVoid(ty)) {
-        return self.err(.void_print, self.ast.getSpan(expr));
+        return self.err(.void_print, span);
     }
 }
 
@@ -834,39 +844,53 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
+    const span = self.ast.getSpan(node.name);
     const name = try self.internIfNotInScope(node.name, .variable);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
     const index = self.ir_builder.reserveInstr();
 
-    var initialized = false;
+    var has_value = false;
     var cast = false;
+    var incr_rc = false;
 
     if (node.value) |value| {
-        initialized = true;
+        has_value = true;
         ctx.allow_partial = false;
         ctx.side = .rhs;
 
         const value_type = try self.analyzeExpr(value, ctx);
+        incr_rc = value_type.isHeap() and !isHeapLiteral(value);
+
         const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
         checked_type = coherence.type;
         cast = coherence.cast;
     }
 
-    const decl_index = try self.declareVariable(name, checked_type, node.meta.captured, initialized, self.ast.getSpan(node.name));
+    const decl_index = try self.declareVariable(name, checked_type, node.meta.captured, has_value, span);
 
     self.makeInstruction(
         .{ .var_decl = .{
             .box = node.meta.captured,
             .cast = cast,
-            .has_value = initialized,
+            .has_value = has_value,
             .variable = .{ .index = decl_index, .scope = if (self.scope.isGlobal()) .global else .local, .unbox = false },
+            .incr_rc = incr_rc,
         } },
-        .{ .setAt = index },
+        span.start,
+        .{ .set_at = index },
     );
 }
 
+/// Checks if the expression is a literal generating a heap object
+fn isHeapLiteral(expr: *const Expr) bool {
+    return switch (expr.*) {
+        .array => true,
+        else => false,
+    };
+}
+
 fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error!void {
-    self.makeInstruction(.{ .multiple_var_decl = node.decls.len }, .add);
+    self.makeInstruction(.{ .multiple_var_decl = node.decls.len }, self.ast.getSpan(node).start, .add);
 
     for (node.decls) |*n| {
         try self.varDeclaration(n, ctx);
@@ -874,15 +898,16 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error
 }
 
 fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
+    const span = self.ast.getSpan(node);
     const name = try self.internIfNotInScope(node.name, .symbol);
     // We forward declare for self referencing
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
     const index = self.ir_builder.reserveInstr();
     // TODO: merge as function's name
-    self.makeInstruction(.{ .name = name }, .add);
+    self.makeInstruction(.{ .name = name }, span.start, .add);
 
-    self.scope.open(self.allocator, true);
+    self.scope.open(self.allocator, false);
     defer _ = self.scope.close();
 
     var ty: Type.Structure = .{ .name = name };
@@ -913,19 +938,21 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
             .default_fields = interned_struct.default_value_fields,
             .func_count = node.functions.len,
         } },
-        .{ .setAt = index },
+        span.start,
+        .{ .set_at = index },
     );
 }
 
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error!void {
     for (fields) |*f| {
+        const span = self.ast.getSpan(f.name);
         var struct_field: Type.Structure.Field = .{ .type = undefined };
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (ty.fields.get(field_name) != null) {
             return self.err(
                 .{ .already_declared_field = .{ .name = self.ast.toSource(f.name) } },
-                self.ast.getSpan(f.name),
+                span,
             );
         }
 
@@ -943,7 +970,7 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 
         if (!self.isVoid(field_value_type) and !self.isVoid(field_type) and field_value_type != field_type) {
             if (field_value_type.canCastTo(field_type)) {
-                self.makeInstruction(.{ .cast = .float }, .add);
+                self.makeInstruction(.{ .cast = .float }, span.start, .add);
             } else return self.err(
                 .{ .default_value_type_mismatch = .new(self.getTypeName(field_type), self.getTypeName(field_value_type), .field) },
                 self.ast.getSpan(f.name),
@@ -958,12 +985,13 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 }
 
 fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) Error!void {
-    self.makeInstruction(.{ .@"while" = undefined }, .add);
+    const span = self.ast.getSpan(node.condition);
+    self.makeInstruction(.{ .@"while" = undefined }, span.start, .add);
     const cond_type = try self.analyzeExpr(node.condition, ctx);
 
     if (!cond_type.is(.bool)) return self.err(
         .{ .non_bool_cond = .{ .what = "while", .found = self.getTypeName(cond_type) } },
-        self.ast.getSpan(node.condition),
+        span,
     );
 
     const body_type = try self.block(&node.body, ctx);
@@ -1008,16 +1036,18 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
         }
 
         if (!self.isVoid(value_type) and value_type != typ) {
+            const span = self.ast.getSpan(val);
+
             if (!value_type.canCastTo(typ)) return self.err(
                 .{ .array_elem_different_type = .{ .found1 = self.getTypeName(value_type), .found2 = self.getTypeName(typ) } },
-                self.ast.getSpan(val),
+                span,
             );
 
             // Backtrack casts without emitting an instruction
             if (cast_until == 0) {
                 cast_until = i + 1;
             } else {
-                self.makeInstruction(.{ .cast = .float }, .add);
+                self.makeInstruction(.{ .cast = .float }, span.start, .add);
                 cast_count += 1;
                 typ = value_type;
             }
@@ -1032,13 +1062,15 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
             .cast_count = cast_count,
             .cast_until = cast_until,
         } },
-        .{ .setAt = index },
+        self.ast.getSpan(expr).start,
+        .{ .set_at = index },
     );
 
     return self.type_interner.intern(.{ .array = value_type });
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr.array);
     const index = self.ir_builder.reserveInstr();
     const arr = try self.analyzeExpr(expr.array, ctx);
 
@@ -1046,14 +1078,15 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result 
         .array => |child| child,
         else => return self.err(
             .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
-            self.ast.getSpan(expr.array),
+            span,
         ),
     };
 
     try self.expectArrayIndex(expr.index, ctx);
     self.makeInstruction(
         .{ .array_access = .{ .cow = false, .incr_ref = false } },
-        .{ .setAt = index },
+        span.start,
+        .{ .set_at = index },
     );
 
     return type_value;
@@ -1071,7 +1104,7 @@ fn expectArrayIndex(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
 
 // TODO: handle dead code eleminitaion so that it can be used in function's body?
 fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
-    self.scope.open(self.allocator, false);
+    self.scope.open(self.allocator, true);
     errdefer _ = self.scope.close();
 
     const index = self.ir_builder.reserveInstr();
@@ -1093,7 +1126,8 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
             .pop_count = @intCast(count),
             .is_expr = !self.isVoid(final_type),
         } },
-        .{ .setAt = index },
+        self.ast.getSpan(expr).start,
+        .{ .set_at = index },
     );
 
     return final_type;
@@ -1106,53 +1140,57 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
     const lhs = try self.analyzeExpr(expr.lhs, ctx);
     const rhs = try self.analyzeExpr(expr.rhs, ctx);
 
+    const lhs_span = self.ast.getSpan(expr.lhs);
+    const rhs_span = self.ast.getSpan(expr.rhs);
+
     if (isStringConcat(op, lhs, rhs)) {
-        self.makeInstruction(.{ .binop = .{ .op = .add_str } }, .{ .setAt = index });
+        self.makeInstruction(.{ .binop = .{ .op = .add_str } }, lhs_span.start, .{ .set_at = index });
         return self.type_interner.cache.str;
     } else if (isStringRepeat(op, lhs, rhs)) {
         self.makeInstruction(
             .{ .binop = .{ .op = .mul_str, .cast = if (rhs.is(.int)) .rhs else .lhs } },
-            .{ .setAt = index },
+            lhs_span.start,
+            .{ .set_at = index },
         );
         return self.type_interner.cache.str;
     }
 
-    var data = Instruction.Binop{ .op = undefined };
+    var instr = Instruction.Binop{ .op = undefined };
     var result_type = lhs;
 
     switch (op) {
         .plus, .slash, .star, .minus => {
-            try self.expectNumeric(lhs, self.ast.getSpan(expr.lhs));
-            try self.expectNumeric(rhs, self.ast.getSpan(expr.rhs));
+            try self.expectNumeric(lhs, lhs_span);
+            try self.expectNumeric(rhs, rhs_span);
             const info = self.getArithmeticOp(op, lhs, rhs, expr);
-            data = info.instr;
+            instr = info.instr;
             result_type = info.result_type;
         },
         .equal_equal, .bang_equal => {
             const info = try self.getEqualityOp(op, lhs, rhs, expr);
-            data = info.instr;
+            instr = info.instr;
             result_type = info.result_type;
         },
         .greater_equal, .greater, .less_equal, .less => {
-            try self.expectNumeric(lhs, self.ast.getSpan(expr.lhs));
-            try self.expectNumeric(rhs, self.ast.getSpan(expr.rhs));
+            try self.expectNumeric(lhs, lhs_span);
+            try self.expectNumeric(rhs, rhs_span);
             const info = try self.getComparisonOp(op, lhs, rhs, expr);
-            data = info.instr;
+            instr = info.instr;
             result_type = info.result_type;
         },
         .@"and", .@"or" => {
             try self.checkBooleanLogic(lhs, rhs, expr);
-            data.op = if (op == .@"and") .@"and" else .@"or";
+            instr.op = if (op == .@"and") .@"and" else .@"or";
             result_type = self.type_interner.cache.bool;
         },
         else => unreachable,
     }
 
-    self.makeInstruction(.{ .binop = data }, .{ .setAt = index });
+    self.makeInstruction(.{ .binop = instr }, lhs_span.start, .{ .set_at = index });
     return result_type;
 }
 
-fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
+fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
@@ -1162,6 +1200,7 @@ fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
     self.scope.open(self.allocator, false);
     defer _ = self.scope.close();
 
+    const captures_instrs_data = try self.loadFunctionCaptures(expr.meta.captures.keys());
     const params, const default_count = try self.fnParams(expr.params, ctx);
 
     // Update type for resolution in function's body
@@ -1175,19 +1214,20 @@ fn closure(self: *Self, expr: *const Ast.Closure, ctx: *Context) Result {
     ctx.fn_type = interned_type;
     const len = try self.fnBody(expr.body.nodes, &closure_type, ctx);
 
-    // const captures_count = self.loadClosureCaptures(ctx.function.?.captures.keys());
-    const captures_count = 0;
+    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data);
 
+    // TODO: protect the cast
     self.makeInstruction(
         .{ .fn_decl = .{
             .kind = .closure,
             .name = null,
             .body_len = len,
-            .default_params = default_count,
+            .default_params = @intCast(default_count),
             .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
         } },
-        .{ .setAt = closure_idx },
+        self.ast.getSpan(expr).start,
+        .{ .set_at = closure_idx },
     );
     return interned_type;
 }
@@ -1201,6 +1241,7 @@ fn loadClosureCaptures(self: *Self, captures: []*const Variable) usize {
                 .scope = if (capt.kind == .local) .local else .global,
                 .unbox = false,
             } },
+            0,
             .add,
         );
     }
@@ -1228,7 +1269,7 @@ const ArithmeticResult = struct {
 };
 
 fn getArithmeticOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, expr: *const Ast.Binop) ArithmeticResult {
-    var data = Instruction.Binop{ .op = switch (op) {
+    var instr = Instruction.Binop{ .op = switch (op) {
         .plus => .add_float,
         .slash => .div_float,
         .star => .mul_float,
@@ -1240,17 +1281,17 @@ fn getArithmeticOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type
     switch (lhs.*) {
         .float => {
             if (rhs.is(.int)) {
-                data.cast = .rhs;
+                instr.cast = .rhs;
                 self.warn(AnalyzerMsg.implicitCast("right hand side", self.getTypeName(lhs)), self.ast.getSpan(expr.rhs));
             }
         },
         .int => {
             if (rhs.is(.float)) {
-                data.cast = .lhs;
+                instr.cast = .lhs;
                 self.warn(AnalyzerMsg.implicitCast("left hand side", self.getTypeName(rhs)), self.ast.getSpan(expr.lhs));
                 result_type = self.type_interner.cache.float;
             } else {
-                data.op = switch (op) {
+                instr.op = switch (op) {
                     .plus => .add_int,
                     .slash => .div_int,
                     .star => .mul_int,
@@ -1262,13 +1303,13 @@ fn getArithmeticOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type
         else => unreachable,
     }
 
-    return .{ .instr = data, .result_type = result_type };
+    return .{ .instr = instr, .result_type = result_type };
 }
 
 fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, expr: *const Ast.Binop) Error!ArithmeticResult {
-    var data = Instruction.Binop{ .op = undefined };
+    var instr = Instruction.Binop{ .op = undefined };
 
-    data.op = switch (op) {
+    instr.op = switch (op) {
         .equal_equal => switch (lhs.*) {
             .bool => .eq_bool,
             .int => .eq_int,
@@ -1289,14 +1330,14 @@ fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, 
     if (lhs != rhs) {
         if ((lhs.is(.int) and rhs.is(.float)) or (lhs.is(.float) and rhs.is(.int))) {
             if (lhs.is(.int)) {
-                data.cast = .lhs;
+                instr.cast = .lhs;
                 self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
             } else {
-                data.cast = .rhs;
+                instr.cast = .rhs;
                 self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
             }
 
-            data.op = if (op == .equal_equal) .eq_float else .ne_float;
+            instr.op = if (op == .equal_equal) .eq_float else .ne_float;
         } else {
             return self.err(
                 AnalyzerMsg.invalidCmp(self.getTypeName(lhs), self.getTypeName(rhs)),
@@ -1309,7 +1350,7 @@ fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, 
         }
     }
 
-    return .{ .instr = data, .result_type = self.type_interner.cache.bool };
+    return .{ .instr = instr, .result_type = self.type_interner.cache.bool };
 }
 
 fn getComparisonOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, expr: *const Ast.Binop) Error!ArithmeticResult {
@@ -1375,6 +1416,7 @@ const FieldResult = struct {
 
 /// Returns the type of the callee and if it's a value, not a type
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
+    const span = self.ast.getSpan(expr.structure);
     const index = self.ir_builder.reserveInstr();
     const field_result: FieldResult = switch (expr.structure.*) {
         .field => |*e| try self.field(e, ctx),
@@ -1390,7 +1432,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
         .structure => |*ty| try self.structureAccess(expr.field, ty),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.getTypeName(field_result.type) } },
-            self.ast.getSpan(expr.structure),
+            span,
         ),
     };
 
@@ -1402,12 +1444,13 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
     };
 
     if (kind == .method and !ctx.in_call) {
-        return self.boundMethod(field_type, field_index, index);
+        return self.boundMethod(field_type, field_index, span, index);
     }
 
     self.makeInstruction(
-        .{ .field = .{ .index = field_index, .kind = kind, .rc_action = .none } },
-        .{ .setAt = index },
+        .{ .field = .{ .index = field_index, .kind = kind } },
+        span.start,
+        .{ .set_at = index },
     );
 
     return .{ .type = field_type, .is_value = field_result.is_value };
@@ -1425,15 +1468,16 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Ty
         self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
 }
 
-fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, instr_idx: usize) FieldResult {
+fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Span, instr_idx: usize) FieldResult {
     const bounded_type = func_type.function.toBoundMethod(self.cached_names.self, self.allocator);
     const ty = self.type_interner.intern(.{ .function = bounded_type });
-    self.makeInstruction(.{ .bound_method = field_index }, .{ .setAt = instr_idx });
+    self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
     return .{ .type = ty, .is_value = true };
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr);
     const index = self.ir_builder.reserveInstr();
 
     var args: ArrayListUnmanaged(*const Expr) = .{};
@@ -1457,17 +1501,18 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     };
 
     if (!callee.is(.function)) {
-        return self.err(.invalid_call_target, self.ast.getSpan(expr));
+        return self.err(.invalid_call_target, span);
     }
 
     args.appendSlice(self.allocator, expr.args) catch oom();
 
-    const arity, const default_count = try self.fnArgsList(args.items, &callee.function, self.ast.getSpan(expr), ctx);
+    const arity, const default_count = try self.fnArgsList(args.items, &callee.function, span, ctx);
 
     // TODO: protect casts
     self.makeInstruction(
         .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count) } },
-        .{ .setAt = index },
+        span.start,
+        .{ .set_at = index },
     );
 
     return callee.function.return_type;
@@ -1484,7 +1529,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
     var proto = ty.proto(self.allocator);
     var proto_values = proto.values();
-    const start = self.ir_builder.instructions.len;
+    const start = self.ir_builder.count();
     self.ir_builder.ensureUnusedSize(param_count);
 
     // We initialize all the values used for the initialization. By default, we put empty data under
@@ -1492,7 +1537,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
     for (ty.params.values()) |*f| {
-        self.makeInstruction(.{ .default_value = default_count }, .add_no_alloc);
+        self.makeInstruction(.{ .default_value = default_count }, err_span.start, .add_no_alloc);
         if (f.default) default_count += 1;
     }
 
@@ -1501,6 +1546,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
         var value_instr: usize = 0;
         var param_info: *const Type.Parameter = undefined;
         var param_index: usize = undefined;
+        const span_start = self.ast.getSpan(arg).start;
 
         switch (arg.*) {
             .named_arg => |na| {
@@ -1513,12 +1559,12 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
                     self.ast.getSpan(na.name),
                 );
 
-                value_instr = self.ir_builder.instructions.len;
+                value_instr = self.ir_builder.count();
                 const value_type = try self.analyzeExpr(na.value, ctx);
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(na.value))).cast;
             },
             else => {
-                value_instr = self.ir_builder.instructions.len;
+                value_instr = self.ir_builder.count();
                 const value_type = try self.analyzeExpr(arg, ctx);
                 param_info = &ty.params.values()[i];
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
@@ -1529,7 +1575,8 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
         self.makeInstruction(
             .{ .value = .{ .value_instr = value_instr, .cast = cast, .box = param_info.captured } },
-            .{ .setAt = start + param_index },
+            span_start,
+            .{ .set_at = start + param_index },
         );
     }
 
@@ -1553,10 +1600,11 @@ fn identifier(
     initialized: bool,
     ctx: *Context,
 ) Error!struct { *const Type, enum { variable, symbol } } {
+    const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    if (self.variableIdentifier(name, ctx)) |variable| {
+    if (self.variableIdentifier(name, span, ctx)) |variable| {
         if (initialized and !variable.initialized) {
             return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
         }
@@ -1564,7 +1612,7 @@ fn identifier(
         return .{ variable.type, .variable };
     }
 
-    if (self.symbolIdentifier(name, ctx)) |sym| {
+    if (self.symbolIdentifier(name, span, ctx)) |sym| {
         if (sym) |s| return .{ s.type, .symbol };
     } else |_| {
         return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
@@ -1574,48 +1622,49 @@ fn identifier(
 }
 
 fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*Variable {
+    const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    return self.variableIdentifier(name, ctx) orelse return self.err(
+    return self.variableIdentifier(name, span, ctx) orelse return self.err(
         .{ .undeclared_var = .{ .name = self.interner.getKey(name).? } },
-        self.ast.getSpan(token_name),
+        span,
     );
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, ctx: *Context) ?*Variable {
+fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*Variable {
     _ = ctx; // autofix
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
-    // if (variable.captured) {
-    //     // If the variable is captured but not from current function, it means we capture an outter variable
-    //     if (ctx.function) |*fn_ctx| {
-    //         _ = fn_ctx; // autofix
-    //         // if (!fn_ctx.boxes.contains(variable.index)) {
-    //         //     fn_ctx.addCapture(self.allocator, variable);
-    //         // }
-    //     }
-    // }
-
+    // TODO: useless
     const scope: rir.Scope = switch (variable.kind) {
         .local => .local,
         .global => .global,
     };
 
-    self.makeInstruction(.{
-        .identifier = .{
+    self.makeInstruction(
+        .{ .identifier = .{
             .index = variable.index + scope_offset,
             .scope = scope,
             .unbox = variable.captured,
-        },
-    }, .add);
+        } },
+        span.start,
+        .add,
+    );
 
     return variable;
 }
 
+fn getRcAction(ty: *const Type, ctx: *const Context) rir.RcAction {
+    return switch (ctx.side) {
+        .lhs => if (ty.isHeap()) .cow else .none,
+        .rhs => .none,
+    };
+}
+
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
-fn symbolIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) error{BigSelfOutsideStruct}!?*ScopeStack.Scope.Symbol {
+fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *const Context) error{BigSelfOutsideStruct}!?*ScopeStack.Scope.Symbol {
     const sym_name = if (name == self.cached_names.Self) n: {
         if (ctx.struct_type) |ty| {
             break :n ty.structure.name;
@@ -1624,14 +1673,15 @@ fn symbolIdentifier(self: *Self, name: InternerIdx, ctx: *const Context) error{B
 
     const sym = self.scope.getSymbol(sym_name) orelse return null;
     // TODO: protect cast
-    self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, .add);
+    self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, span.start, .add);
 
     return sym;
 }
 
 fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr.condition);
     const index = self.ir_builder.reserveInstr();
-    var data: Instruction.If = .{ .cast = .none, .has_else = false };
+    var instr: Instruction.If = .{ .cast = .none, .has_else = false };
 
     const cond_type = try self.analyzeExpr(expr.condition, ctx);
 
@@ -1639,7 +1689,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
     if (!cond_type.is(.bool)) {
         self.err(
             .{ .non_bool_cond = .{ .what = "if", .found = self.getTypeName(cond_type) } },
-            self.ast.getSpan(expr.condition),
+            span,
         ) catch {};
     }
 
@@ -1653,14 +1703,14 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
 
     if (expr.@"else") |*n| {
         const else_type = try self.analyzeNode(n, ctx);
-        data.has_else = true;
+        instr.has_else = true;
         else_returned = ctx.returns;
 
         if (!else_returned) {
             if (then_returned) {
                 final_type = else_type;
             } else {
-                try self.ifTypeCoherenceAndCast(then_type, else_type, expr, &data);
+                try self.ifTypeCoherenceAndCast(then_type, else_type, expr, &instr);
             }
         }
     } else if (!then_type.is(.void) and !ctx.allow_partial) {
@@ -1672,19 +1722,25 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
 
     // The whole instructions returns out of scope
     ctx.returns = then_returned and else_returned;
-    self.makeInstruction(.{ .@"if" = data }, .{ .setAt = index });
+    self.makeInstruction(.{ .@"if" = instr }, span.start, .{ .set_at = index });
 
     return if (ctx.returns) self.type_interner.cache.void else final_type;
 }
 
-fn ifTypeCoherenceAndCast(self: *Self, then_type: *const Type, else_type: *const Type, expr: *const Ast.If, data: *Instruction.If) Error!void {
+fn ifTypeCoherenceAndCast(
+    self: *Self,
+    then_type: *const Type,
+    else_type: *const Type,
+    expr: *const Ast.If,
+    instr: *Instruction.If,
+) Error!void {
     if (then_type == else_type) return;
 
     if (else_type.canCastTo(then_type)) {
-        data.cast = .@"else";
+        instr.cast = .@"else";
         self.warn(AnalyzerMsg.implicitCast("then branch", "float"), self.ast.getSpan(expr.then));
     } else if (then_type.canCastTo(else_type)) {
-        data.cast = .then;
+        instr.cast = .then;
         self.warn(AnalyzerMsg.implicitCast("else branch", "float"), self.ast.getSpan(expr.@"else".?));
     } else return self.err(
         .{ .incompatible_if_type = .{
@@ -1696,11 +1752,12 @@ fn ifTypeCoherenceAndCast(self: *Self, then_type: *const Type, else_type: *const
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr);
     const text = self.ast.toSource(expr);
 
     switch (expr.tag) {
         .bool => {
-            self.makeInstruction(.{ .bool = self.ast.token_tags[expr.idx] == .true }, .add);
+            self.makeInstruction(.{ .bool = self.ast.token_tags[expr.idx] == .true }, span.start, .add);
             return self.type_interner.cache.bool;
         },
         .identifier, .self => return (try self.identifier(expr.idx, true, ctx)).@"0",
@@ -1710,7 +1767,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
                 std.debug.print("Error parsing integer\n", .{});
                 break :blk 0;
             };
-            self.makeInstruction(.{ .int = value }, .add);
+            self.makeInstruction(.{ .int = value }, span.start, .add);
             return self.type_interner.cache.int;
         },
         .float => {
@@ -1719,11 +1776,11 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
                 std.debug.print("Error parsing float\n", .{});
                 break :blk 0.0;
             };
-            self.makeInstruction(.{ .float = value }, .add);
+            self.makeInstruction(.{ .float = value }, span.start, .add);
             return self.type_interner.cache.float;
         },
         .null => {
-            self.makeInstruction(.null, .add);
+            self.makeInstruction(.null, span.start, .add);
             return self.type_interner.cache.null;
         },
         .string => {
@@ -1746,25 +1803,26 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
                         '\\' => final.append(self.allocator, '\\') catch oom(),
                         else => return self.err(
                             .{ .unknow_char_escape = .{ .found = no_quotes[i .. i + 1] } },
-                            self.ast.getSpan(expr),
+                            span,
                         ),
                     }
                 } else final.append(self.allocator, c) catch oom();
             }
 
             const value = self.interner.intern(final.toOwnedSlice(self.allocator) catch oom());
-            self.makeInstruction(.{ .string = value }, .add);
+            self.makeInstruction(.{ .string = value }, span.start, .add);
             return self.type_interner.cache.str;
         },
     }
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Error!*const Type {
+    const span = self.ast.getSpan(expr.structure);
     const index = self.ir_builder.reserveInstr();
     const ty = try self.analyzeExpr(expr.structure, ctx);
 
     const struct_type = if (ty.is(.structure)) ty.structure else {
-        return self.err(.non_struct_struct_literal, self.ast.getSpan(expr.structure));
+        return self.err(.non_struct_struct_literal, span);
     };
 
     var proto = struct_type.proto(self.allocator);
@@ -1778,16 +1836,18 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
     for (struct_type.fields.values()) |f| {
-        self.makeInstruction(.{ .default_value = default_count }, .add);
+        self.makeInstruction(.{ .default_value = default_count }, 0, .add);
         if (f.default) default_count += 1;
     }
 
     // BUG: Doesn't check for field duplication
     for (expr.fields) |*fv| {
+        const field_span = self.ast.getSpan(fv.name);
         const field_name = self.interner.intern(self.ast.toSource(fv.name));
+
         const f = struct_type.fields.get(field_name) orelse return self.err(
             .{ .unknown_struct_field = .{ .name = self.ast.toSource(fv.name) } },
-            self.ast.getSpan(fv.name),
+            field_span,
         );
         const field_index = struct_type.fields.getIndex(field_name).?;
 
@@ -1799,12 +1859,13 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
         else // Syntax: { x } instead of { x = x }
             (try self.expectVariableIdentifier(fv.name, ctx)).type;
 
-        const span = if (fv.value) |val| self.ast.getSpan(val) else self.ast.getSpan(fv.name);
-        const coercion = try self.performTypeCoercion(f.type, typ, false, span);
+        const value_span = if (fv.value) |val| self.ast.getSpan(val) else field_span;
+        const coercion = try self.performTypeCoercion(f.type, typ, false, value_span);
 
         self.makeInstruction(
             .{ .value = .{ .value_instr = value_instr, .cast = coercion.cast, .box = false } },
-            .{ .setAt = start + field_index },
+            field_span.start,
+            .{ .set_at = start + field_index },
         );
     }
 
@@ -1813,7 +1874,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
         while (kv.next()) |entry| {
             if (!entry.value_ptr.*) self.err(
                 .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
-                self.ast.getSpan(expr.structure),
+                span,
             ) catch {};
         }
 
@@ -1827,68 +1888,65 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
             .fields_count = @intCast(struct_type.fields.count()),
             .default_count = @intCast(default_count),
         } },
-        .{ .setAt = index },
+        span.start,
+        .{ .set_at = index },
     );
 
     return ty;
 }
 
 fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr);
     const index = self.ir_builder.reserveInstr();
-    var data: Instruction.Return = .{ .value = false, .cast = false };
+    var instr: Instruction.Return = .{ .value = false, .cast = false };
 
     var ty = if (expr.expr) |e| blk: {
-        data.value = true;
+        instr.value = true;
         break :blk try self.analyzeExpr(e, ctx);
     } else self.type_interner.cache.void;
 
     // We check after to advance node idx
-    const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, self.ast.getSpan(expr));
+    const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, span);
     const return_type = fn_type.function.return_type;
 
     // We do that here because we can insert a cast
     if (return_type != ty) {
         if (ty.canCastTo(return_type)) {
-            data.cast = true;
-            self.makeInstruction(.{ .cast = .float }, .add);
+            instr.cast = true;
+            self.makeInstruction(.{ .cast = .float }, span.start, .add);
             ty = self.type_interner.cache.float;
         } else return self.err(
             .{ .incompatible_fn_type = .{
                 .expect = self.getTypeName(return_type),
                 .found = self.getTypeName(ty),
             } },
-            if (expr.expr) |e| self.ast.getSpan(e) else self.ast.getSpan(expr),
+            if (expr.expr) |e| self.ast.getSpan(e) else span,
         );
     }
 
     ctx.returns = true;
-    self.makeInstruction(.{ .@"return" = data }, .{ .setAt = index });
+    self.makeInstruction(.{ .@"return" = instr }, span.start, .{ .set_at = index });
 
     return ty;
 }
 
 fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr);
     const op = self.ast.token_tags[expr.op];
     const index = self.ir_builder.reserveInstr();
-    var data: Instruction.Unary = .{ .op = if (op == .not) .bang else .minus, .typ = .float };
+    var instr: Instruction.Unary = .{ .op = if (op == .not) .bang else .minus, .typ = .float };
 
     const rhs = try self.analyzeExpr(expr.expr, ctx);
 
     if (op == .not and !rhs.is(.bool)) {
-        return self.err(
-            .{ .invalid_unary = .{ .found = self.getTypeName(rhs) } },
-            self.ast.getSpan(expr),
-        );
+        return self.err(.{ .invalid_unary = .{ .found = self.getTypeName(rhs) } }, span);
     } else if (op == .minus and !rhs.isNumeric()) {
-        return self.err(
-            AnalyzerMsg.invalidArithmetic(self.getTypeName(rhs)),
-            self.ast.getSpan(expr),
-        );
+        return self.err(AnalyzerMsg.invalidArithmetic(self.getTypeName(rhs)), span);
     }
 
-    if (rhs.is(.int)) data.typ = .int;
+    if (rhs.is(.int)) instr.typ = .int;
 
-    self.makeInstruction(.{ .unary = data }, .{ .setAt = index });
+    self.makeInstruction(.{ .unary = instr }, span.start, .{ .set_at = index });
 
     return rhs;
 }
@@ -1994,7 +2052,7 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
             // One case in wich we can coerce, int -> float
             if (local_value.canCastTo(local_decl)) {
                 cast = true;
-                if (emit_cast) self.makeInstruction(.{ .cast = .float }, .add);
+                if (emit_cast) self.makeInstruction(.{ .cast = .float }, span.start, .add);
             } else return self.err(
                 .{ .type_mismatch = .{ .expect = self.getTypeName(local_decl), .found = self.getTypeName(local_value) } },
                 span,

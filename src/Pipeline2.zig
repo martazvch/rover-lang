@@ -8,13 +8,13 @@ const CompilationManager = @import("backend/compiler2.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer2.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
+const Ast = @import("frontend/Ast.zig");
+const AstRender = @import("frontend/AstRender.zig");
+const Walker = @import("frontend/AstWalker.zig");
 const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const Ast = @import("frontend/Ast.zig");
-const AstRender = @import("frontend/AstRender.zig");
-const Walker = @import("frontend/AstWalker.zig");
 const RirRenderer = @import("frontend/RirRenderer2.zig");
 const Symbols = @import("frontend/TypeManager.zig").Symbols;
 const TypeManager = @import("frontend/TypeManager.zig");
@@ -22,9 +22,8 @@ const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
 const Obj = @import("runtime/Obj2.zig");
 const Value = @import("runtime/values2.zig").Value;
-const Vm = @import("runtime/Vm2.zig");
-
 const Config = @import("runtime/Vm.zig").Config;
+const Vm = @import("runtime/Vm2.zig");
 
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
@@ -113,16 +112,6 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    // Analyzer
-    // self.analyzer.analyze(&ast);
-    // defer self.analyzer.reinit();
-    //
-    // // We don't keep errors/warnings from a prompt to another
-    // defer self.analyzer.errs.clearRetainingCapacity();
-    // defer self.analyzer.warns.clearRetainingCapacity();
-    //
-
-    // TMP
     self.analyzer.analyze(&ast) catch @panic("Error analyzer");
 
     // Analyzed Ast printer
@@ -141,7 +130,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
                 try reporter.reportAll(file_name, self.analyzer.warns.items);
             }
 
-            self.instr_count = self.analyzer.ir_builder.instructions.len;
+            self.instr_count = self.analyzer.ir_builder.count();
             return error.ExitOnPrint;
         } else if (self.config.print_ir) {
             try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
@@ -157,23 +146,26 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
 
     // Compiler
     var compiler = CompilationManager.init(
-        file_name,
         self.vm,
         undefined,
-        self.instr_count,
-        &self.analyzer.ir_builder.instructions,
-        undefined,
-        if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
-        if (self.config.embedded) 0 else self.analyzer.main.?,
-        self.config.embedded,
+        if (options.test_mode and self.config.print_bytecode) .@"test" else if (self.config.print_bytecode) .normal else .none,
         &self.globals,
         self.analyzer.scope.symbol_count,
+        undefined,
     );
     defer compiler.deinit();
-
-    self.instr_count = self.analyzer.ir_builder.instructions.len;
-    const function = try compiler.compile();
     errdefer compiler.globals.deinit(self.vm.allocator);
+
+    const line_numbers = self.computeLineFromOffsets(source, self.analyzer.ir_builder.instructions.items(.offset));
+    const function = try compiler.compile(
+        file_name,
+        self.instr_count,
+        self.analyzer.ir_builder.instructions.items(.data),
+        line_numbers,
+        if (self.config.embedded) 0 else self.analyzer.main.?,
+        self.config.embedded,
+    );
+    self.instr_count = self.analyzer.ir_builder.count();
 
     return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
         return error.ExitOnPrint;
@@ -239,4 +231,29 @@ fn renderIr(
 
     try rir_renderer.parse_ir(file_name);
     try rir_renderer.display();
+}
+
+fn computeLineFromOffsets(self: *Self, source: [:0]const u8, offsets: []const usize) []const usize {
+    var list: std.ArrayListUnmanaged(usize) = .{};
+    list.ensureUnusedCapacity(self.allocator, offsets.len) catch oom();
+
+    var line: usize = 1;
+    var offset_index: usize = 0;
+
+    for (source, 0..) |c, i| {
+        if (c == '\n') {
+            for (offsets[offset_index..offsets.len]) |o| {
+                if (o <= i) {
+                    offset_index += 1;
+                    list.appendAssumeCapacity(line);
+                }
+            }
+
+            line += 1;
+
+            if (offset_index == offsets.len) break;
+        }
+    }
+
+    return list.toOwnedSlice(self.allocator) catch oom();
 }

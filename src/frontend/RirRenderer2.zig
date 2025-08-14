@@ -7,7 +7,8 @@ const Interner = @import("../Interner.zig");
 const oom = @import("../utils.zig").oom;
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Ast = @import("Ast.zig");
-const Instruction = @import("rir2.zig").Instruction;
+const rir = @import("rir2.zig");
+const Instruction = rir.Instruction;
 const Node = @import("Ast.zig").Node;
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
@@ -16,7 +17,7 @@ const Type = @import("rir2.zig").Type;
 const Labels = struct { depth: usize, msg: []const u8 };
 
 source: []const u8,
-instr_data: []const Instruction.Data,
+instrs: []const Instruction.Data,
 errs: []const AnalyzerReport,
 warns: []const AnalyzerReport,
 interner: *const Interner,
@@ -35,7 +36,7 @@ const Self = @This();
 pub fn init(
     allocator: Allocator,
     source: []const u8,
-    instr_data: []const Instruction.Data,
+    instrs: []const Instruction.Data,
     errs: []const AnalyzerReport,
     warns: []const AnalyzerReport,
     interner: *const Interner,
@@ -43,7 +44,7 @@ pub fn init(
 ) Self {
     return .{
         .source = source,
-        .instr_data = instr_data,
+        .instrs = instrs,
         .errs = errs,
         .warns = warns,
         .interner = interner,
@@ -75,7 +76,7 @@ pub fn parse_ir(self: *Self, file_name: []const u8) !void {
         try self.parseErrs()
     else if (self.static_analyzis and self.warns.len > 0)
         try self.parseErrs()
-    else while (self.instr_idx < self.instr_data.len)
+    else while (self.instr_idx < self.instrs.len)
         self.parseInstr();
 
     try self.writer.writeAll("\n");
@@ -96,17 +97,17 @@ fn parseErrs(self: *Self) !void {
 }
 
 fn at(self: *const Self) *const Instruction.Data {
-    return &self.instr_data[self.instr_idx];
+    return &self.instrs[self.instr_idx];
 }
 
 fn eof(self: *const Self) bool {
-    return self.instr_idx == self.instr_data.len;
+    return self.instr_idx == self.instrs.len;
 }
 
 fn next(self: *Self) Instruction.Data {
     defer self.instr_idx += 1;
 
-    return self.instr_data[self.instr_idx];
+    return self.instrs[self.instr_idx];
 }
 
 fn parseInstr(self: *Self) void {
@@ -119,16 +120,13 @@ fn parseInstr(self: *Self) void {
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
         .bound_method => |data| self.boundMethod(data),
-        // .box => self.box(),
         .call => |*data| self.fnCall(data),
         .cast => |data| self.cast(data),
         .discard => self.discard(),
-        .field => |*data| self.getField(data),
+        .field => |*data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
-        // .identifier_id => |*data| self.identifierId(data),
-        // .identifier_absolute => |data| self.identifierAbsolute(data),
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
@@ -208,22 +206,21 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
 
     if (data.cast) {
         self.indentAndAppendSlice("[Cast to float]");
+    } else if (data.incr_rc) {
+        self.indentAndAppendSlice("[Incr ref count]");
     }
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAccess(1, false, true, true),
-        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, true, true),
+        .array_access => return self.arrayAccess(1, false, data.cow, true),
+        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, data.cow, true),
         .identifier => |*variable| variable,
-        // .identifier_id => |ident_data| &self.instr_data[ident_data.index].var_decl.variable,
-        .field => |*member| return self.fieldAssignment(member),
+        .field => |*member| return self.fieldAssignment(member, data.cow),
         else => unreachable,
     };
 
-    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}]", .{
-        variable_data.index, @tagName(variable_data.scope),
+    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}{s}]", .{
+        variable_data.index, @tagName(variable_data.scope), if (data.cow) ", cow" else "",
     });
-
-    if (data.cow) self.indentAndAppendSlice("[Cow]");
 }
 
 fn arrayAssignment(self: *Self, depth: usize) void {
@@ -240,11 +237,11 @@ fn arrayAssignment(self: *Self, depth: usize) void {
     for (0..depth) |_| self.parseInstr();
 }
 
-fn fieldAssignment(self: *Self, data: *const Instruction.Field) void {
+fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void {
     self.indentAndAppendSlice("[Field assignment]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.getField(data);
+    self.getField(data, cow);
 }
 
 fn binop(self: *Self, data: *const Instruction.Binop) void {
@@ -278,10 +275,6 @@ fn boundMethod(self: *Self, field_index: usize) void {
     // Variable
     self.parseInstr();
 }
-
-// fn box(self: *Self) void {
-//     self.indentAndAppendSlice("[Box]");
-// }
 
 fn cast(self: *Self, typ: Type) void {
     self.indentAndPrintSlice("[Cast to {s}]", .{@tagName(typ)});
@@ -338,16 +331,11 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
     }
 }
 
-fn getField(self: *Self, data: *const Instruction.Field) void {
+fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {
     self.indentAndPrintSlice(
-        "[{s} access {}]",
-        .{ if (data.kind == .field) "Field" else "Method", data.index },
+        "[{s} access {}{s}]",
+        .{ if (data.kind == .field) "Field" else "Method", data.index, if (cow) ", cow" else "" },
     );
-
-    if (data.rc_action == .increment)
-        self.indentAndAppendSlice("[Increment reference count]")
-    else if (data.rc_action == .cow)
-        self.indentAndAppendSlice("[Cow]");
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
@@ -403,7 +391,7 @@ fn identifier(self: *Self, data: *const Instruction.Variable) void {
 }
 
 fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
-    const variable_data = self.instr_data[data.index].var_decl.variable;
+    const variable_data = self.instrs[data.index].var_decl.variable;
     self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
         variable_data.index, @tagName(variable_data.scope),
     });
@@ -554,10 +542,11 @@ fn use(self: *Self, count: u64) void {
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
-    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}, box: {}]", .{
+    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}{s}{s}]", .{
         data.variable.index,
         @tagName(data.variable.scope),
-        data.box,
+        if (data.box) ", box" else "",
+        if (data.incr_rc) ", incr_rc" else "",
     });
 
     self.indent_level += 1;

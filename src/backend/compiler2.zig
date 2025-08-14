@@ -5,11 +5,8 @@ const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 
 const Disassembler = @import("../backend/Disassembler2.zig");
-const Rir = @import("../frontend/rir2.zig");
-const Scope = Rir.Scope;
-const ReturnKind = Rir.ReturnKind;
-const Instruction = Rir.Instruction;
-const Symbols = @import("../frontend/type_system.zig").Symbols;
+const rir = @import("../frontend/rir2.zig");
+const Instruction = rir.Instruction;
 const Module = @import("../Pipeline2.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
 const Obj = @import("../runtime/Obj2.zig");
@@ -22,56 +19,44 @@ const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
 pub const CompilationManager = struct {
-    file_name: []const u8,
     vm: *Vm,
     natives: []const NativeFn,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
     instr_data: []const Instruction.Data,
-    instr_offsets: []const usize,
+    instr_lines: []const usize,
     instr_idx: usize,
-    modules: []Module,
     render_mode: Disassembler.RenderMode,
-    main_index: ?usize = null,
-    repl: bool,
-    heap_count: usize = 0,
     globals: *ArrayListUnmanaged(Value),
     symbols: []Value,
+    modules: []Module,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
     const CompilerReport = GenReport(CompilerMsg);
 
     pub fn init(
-        file_name: []const u8,
         vm: *Vm,
         natives: []const NativeFn,
-        instr_start: usize,
-        instructions: *const MultiArrayList(Instruction),
-        modules: []Module,
         render_mode: Disassembler.RenderMode,
-        main_index: usize,
-        repl: bool,
         globals: *ArrayListUnmanaged(Value),
         symbol_count: usize,
+        modules: []Module,
     ) Self {
         const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
 
         return .{
-            .file_name = file_name,
             .vm = vm,
             .natives = natives,
             .compiler = undefined,
             .errs = .init(vm.allocator),
-            .instr_data = instructions.items(.data),
-            .instr_offsets = instructions.items(.offset),
-            .modules = modules,
-            .instr_idx = instr_start,
+            .instr_idx = undefined,
+            .instr_data = undefined,
+            .instr_lines = undefined,
             .render_mode = render_mode,
-            .main_index = main_index,
-            .repl = repl,
             .globals = globals,
             .symbols = symbols,
+            .modules = modules,
         };
     }
 
@@ -79,30 +64,35 @@ pub const CompilationManager = struct {
         self.errs.deinit();
     }
 
-    pub fn compile(self: *Self) !*Obj.Function {
+    pub fn compile(
+        self: *Self,
+        file_name: []const u8,
+        instr_start: usize,
+        instr_data: []const Instruction.Data,
+        instr_lines: []const usize,
+        main_index: ?usize,
+        repl: bool,
+    ) !*Obj.Function {
+        self.instr_idx = instr_start;
+        self.instr_data = instr_data;
+        self.instr_lines = instr_lines;
+
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
-            try stdout.print("//---- {s} ----\n\n", .{self.file_name});
+            try stdout.print("//---- {s} ----\n\n", .{file_name});
         }
 
         self.compiler = Compiler.init(self, "global scope", 0);
 
         while (self.instr_idx < self.instr_data.len) {
-            // As we don't compile a function, we set this flag here in REPL mode
-            if (self.repl) self.compiler.state.end_of_chain = true;
-
             try self.compiler.compileInstr();
         }
 
-        if (!self.repl) {
-            // We init the heap variables into the Vm
-            // NOTE: maybe return the count as we return the function and let the Vm allocate?
-            self.vm.heap_vars = try self.vm.allocator.alloc(Value, self.heap_count);
-
+        if (!repl) {
             // Insert a call to main with arity of 0 for now
             // self.compiler.writeOpAndByte(.get_global, self.main_index.?, 0);
             // TODO: protect
-            self.compiler.writeOpAndByte(.get_symbol, @intCast(self.main_index.?), 0);
+            self.compiler.writeOpAndByte(.get_symbol, @intCast(main_index.?), 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
@@ -123,13 +113,6 @@ const Compiler = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     const State = struct {
-        /// Compiling an assignee. We always leave the result of an op code in a register in this case
-        is_assignee: bool = false,
-        /// Used to know if we're the last part of a chain like: 'foo.bar[0].baz'. Being the last
-        /// part means that we push the result on top of stack
-        end_of_chain: bool = false,
-        /// Writes variable getters to the register
-        to_reg: bool = false,
         /// Triggers a cow
         cow: bool = false,
     };
@@ -160,39 +143,20 @@ const Compiler = struct {
         return &self.function.chunk;
     }
 
+    // TODO: useless? same as `at`
     fn getData(self: *const Self) Instruction.Data {
-        return self.manager.instr_data[self.manager.instr_idx];
+        return self.at().*;
     }
 
-    fn getStart(self: *const Self) usize {
-        const idx = if (self.manager.instr_idx >= self.manager.instr_data.len)
-            self.manager.instr_idx - 1
-        else
-            self.manager.instr_idx;
-        return self.manager.instr_offsets[idx];
+    /// Get the line number of previous instruction
+    fn getLineNumber(self: *const Self) usize {
+        return self.manager.instr_lines[self.manager.instr_idx - 1];
     }
 
     fn setInstrIndexGetPrev(self: *Self, index: usize) usize {
         const variable_instr = self.manager.instr_idx;
         self.manager.instr_idx = index;
         return variable_instr;
-    }
-
-    /// Set the state's flag `to_reg` to true and return previous value
-    fn setToRegAndGetPrevious(self: *Self, state: bool) bool {
-        defer self.state.to_reg = state;
-        return self.state.to_reg;
-    }
-
-    fn consumeEndChainState(self: *Self) bool {
-        defer self.state.end_of_chain = false;
-        return self.state.end_of_chain;
-    }
-
-    /// Determines if the result of the Op code should be left in a register instead
-    /// of top of the stack. Always true if compiling an assignee
-    fn putChainResultInReg(self: *Self) bool {
-        return self.state.is_assignee or !self.consumeEndChainState();
     }
 
     /// Writes an OpCode to the current chunk
@@ -234,21 +198,15 @@ const Compiler = struct {
     }
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
-    fn emitGetVar(self: *Self, variable: *const Instruction.Variable, cow: bool, offset: usize) void {
-        _ = cow; // autofix
+    fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
-        // TODO: more frequent paths should be first
         self.writeOpAndByte(
             if (variable.scope == .local)
-                .get_local
+                if (self.state.cow) .get_local_cow else .get_local
             else if (variable.scope == .global)
                 .get_global
-                // if (self.state.to_reg) .get_global_reg else .get_global
-                // else if (self.state.to_reg)
-                //     if (cow or self.state.cow) .get_local_reg_cow else .get_local_reg
             else
-                // .get_capture,
-                unreachable, // .get_heap, env, and all reg cow variants
+                unreachable,
             @intCast(variable.index),
             offset,
         );
@@ -259,6 +217,7 @@ const Compiler = struct {
     /// Declare the variable based on informations coming from Analyzer. Declares
     /// either in global scope or heap, as for local it's already living
     /// on the stack
+    // TODO: rename as it can only act on global?
     fn defineVariable(self: *Self, infos: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         if (infos.scope == .global)
@@ -326,27 +285,21 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => |*data| self.arrayAccess(data, self.getStart()),
-            .array_access_chain => |*data| self.arrayAccessChain(data, self.getStart()),
+            .array_access => |*data| self.arrayAccess(data, self.getLineNumber()),
+            .array_access_chain => |*data| self.arrayAccessChain(data, self.getLineNumber()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
             .bool => |data| self.boolInstr(data),
             .bound_method => |data| self.boundMethod(data),
-            // .box => self.box(),
             .call => |*data| self.fnCall(data),
             .cast => |data| self.cast(data),
-            // .closure => |*data| self.compileClosure(data, null),
             .default_value => unreachable,
             .discard => self.discard(),
             .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
-            // .identifier_id => |*data| self.identifierId(data),
-            // .identifier_id => unreachable, // TODO: delete
-            // .identifier_absolute => |data| self.identifierAbsolute(data),
-            // .identifier_absolute => unreachable, // TODO: delete
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
             .int => |data| self.intInstr(data),
@@ -370,7 +323,7 @@ const Compiler = struct {
     }
 
     fn array(self: *Self, data: *const Instruction.Array) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         var cast_count: usize = 0;
 
         for (0..data.len) |i| {
@@ -390,33 +343,22 @@ const Compiler = struct {
     }
 
     fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess, start: usize) Error!void {
-        const prev = self.setToRegAndGetPrevious(true);
-        defer self.state.to_reg = prev;
-        // const reg = self.putChainResultInReg();
-
         // Variable
         try self.compileInstr();
-        // Index, we want to leave it on the stack
-        self.state.to_reg = false;
         try self.compileInstr();
         self.writeOp(.array_access, start);
 
-        // self.writeOp(if (reg) if (data.cow) .array_access_reg_cow else .array_access_reg else .array_access, start);
         if (data.incr_ref) self.writeOp(.incr_ref_count, start);
     }
 
     fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
-        // We want indecies to be on stack
-        const prev = self.setToRegAndGetPrevious(false);
-        defer self.state.to_reg = prev;
-
         // Indicies
         for (0..data.depth) |_| {
             try self.compileInstr();
         }
 
         // Variable
-        self.state.to_reg = true;
+        // self.state.to_reg = true;
         // const reg = self.putChainResultInReg();
 
         try self.compileInstr();
@@ -426,14 +368,12 @@ const Compiler = struct {
     }
 
     fn arrayAssign(self: *Self, start: usize) Error!void {
-        const prev = self.setToRegAndGetPrevious(true);
-        defer self.state.to_reg = prev;
-
         // Variable
+        self.state.cow = true;
+        defer self.state.cow = false;
         try self.compileInstr();
 
-        // Index, we want to leave it on the stack
-        self.state.to_reg = false;
+        // Index
         try self.compileInstr();
 
         // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
@@ -458,24 +398,24 @@ const Compiler = struct {
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         // Value
         try self.compileInstr();
 
         // We cast the value on top of stack if needed
-        if (data.cast) self.writeOp(.cast_to_float, start);
+        if (data.cast) {
+            self.writeOp(.cast_to_float, start);
+        } else if (data.incr_rc) {
+            self.writeOp(.incr_ref_count, start);
+        }
 
-        // Used by `getVar` in case we fetch a simple identifier
-        self.state.is_assignee = true;
-        defer self.state.is_assignee = false;
-
+        // TODO: no use of data.cow?
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
-            // .identifier_id => |*ident_data| &self.manager.instr_data[ident_data.index].var_decl.variable,
             .array_access => return self.arrayAssign(start),
             // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
-            .field => |*field_data| return self.fieldAssignment(field_data, data.cow, start),
+            .field => |*field_data| return self.fieldAssignment(field_data, start),
             else => unreachable,
         };
 
@@ -484,8 +424,6 @@ const Compiler = struct {
         self.writeOpAndByte(
             if (variable_data.scope == .global)
                 .set_global
-                // else if (variable_data.scope == .heap)
-                //     .set_heap
             else if (variable_data.scope == .local)
                 if (variable_data.unbox) .set_local_box else .set_local
             else
@@ -495,27 +433,23 @@ const Compiler = struct {
         );
     }
 
-    fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool, start: usize) Error!void {
-        _ = cow; // autofix
-
-        // We compile the identifier/call/array access first
+    fn fieldAssignment(self: *Self, data: *const Instruction.Field, start: usize) Error!void {
+        // Variable
+        self.state.cow = true;
+        defer self.state.cow = false;
         try self.compileInstr();
         self.writeOpAndByte(.set_field, @intCast(data.index), start);
-        // try self.field(data);
-        // self.writeOp(if (cow) .reg_assign_cow else .reg_assign, start);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         // Special handle for logicals
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
 
-        self.state.end_of_chain = true;
         try self.compileInstr();
         if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
-        self.state.end_of_chain = true;
         try self.compileInstr();
         if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
 
@@ -575,10 +509,9 @@ const Compiler = struct {
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         for (0..data.length) |_| {
-            self.state.end_of_chain = true;
             try self.compileInstr();
         }
 
@@ -594,12 +527,12 @@ const Compiler = struct {
 
     fn boolInstr(self: *Self, value: bool) Error!void {
         const op: OpCode = if (value) .true else .false;
-        self.writeOp(op, self.getStart());
+        self.writeOp(op, self.getLineNumber());
     }
 
     // TODO: protext cast
     fn boundMethod(self: *Self, field_index: usize) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         // Variable
         try self.compileInstr();
         self.writeOp(.dup, start);
@@ -609,11 +542,11 @@ const Compiler = struct {
     }
 
     fn box(self: *Self) Error!void {
-        self.writeOp(.box, self.getStart());
+        self.writeOp(.box, self.getLineNumber());
     }
 
-    fn cast(self: *Self, typ: Rir.Type) Error!void {
-        const start = self.getStart();
+    fn cast(self: *Self, typ: rir.Type) Error!void {
+        const start = self.getLineNumber();
 
         switch (typ) {
             .float => self.writeOp(.cast_to_float, start),
@@ -627,49 +560,34 @@ const Compiler = struct {
     }
 
     fn field(self: *Self, data: *const Instruction.Field) Error!void {
-        const prev = self.setToRegAndGetPrevious(true);
-        defer self.state.to_reg = prev;
-
         const member_data = self.getData();
         _ = member_data; // autofix
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
-        // As we compile member first, we preshot the value
-        const reg = self.putChainResultInReg();
-        _ = reg; // autofix
-        // We compile the identifier/call/array access first
+        // Member first
         try self.compileInstr();
-
-        // If we're in a member access, the field access that occurs after the call will check
-        // the register, not the stack, so we pop the result from the stack
-        // if (member_data == .call) self.writeOp(.reg_push, start);
 
         // Get field/bound method of first value on the stack
         self.writeOpAndByte(
             if (data.kind == .field)
-                // if (reg) if (data.rc_action == .cow) .get_field_reg_cow else .get_field_reg else .get_field
                 .get_field
             else if (data.kind == .symbol)
-                // if (reg) .get_symbol_reg else .bound_import
                 .get_symbol
             else if (data.kind == .method)
-                // .bound_method
                 .get_method
             else
                 .get_static_method,
             @intCast(data.index),
             start,
         );
-
-        if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
     }
 
     fn floatInstr(self: *Self, value: f64) Error!void {
-        try self.emitConstant(Value.makeFloat(value), self.getStart());
+        try self.emitConstant(Value.makeFloat(value), self.getLineNumber());
     }
 
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_fn_default, start);
@@ -679,7 +597,7 @@ const Compiler = struct {
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         var last: usize = 0;
 
         for (0..arity) |_| {
@@ -687,10 +605,6 @@ const Compiler = struct {
                 .value => |data| {
                     const save = self.setInstrIndexGetPrev(data.value_instr);
                     defer self.manager.instr_idx = save;
-
-                    // To push to stack each arguments
-                    self.state.end_of_chain = true;
-
                     try self.compileInstr();
                     // Arguments may not be in the same order as the declaration, we could be
                     // resolving the first value during the last iteration
@@ -715,14 +629,13 @@ const Compiler = struct {
         }
 
         for (0..data.body_len) |_| {
-            compiler.state.end_of_chain = true;
             try compiler.compileInstr();
         }
 
         if (data.return_kind == .implicit_value) {
-            compiler.writeOp(.@"return", self.manager.instr_offsets[self.manager.instr_idx - 1]);
+            compiler.writeOp(.@"return", self.getLineNumber());
         } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(.naked_return, self.manager.instr_offsets[self.manager.instr_idx - 1]);
+            compiler.writeOp(.naked_return, self.getLineNumber());
         }
 
         return compiler.end();
@@ -741,39 +654,28 @@ const Compiler = struct {
     }
 
     fn compileClosure(self: *Self, data: *const Instruction.FnDecl, name: ?[]const u8) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         const func = try self.compileCallable(name orelse "anonymus", data);
         try self.emitConstant(Value.makeObj(func.asObj()), start);
 
         for (0..data.captures_count) |_| {
-            self.emitGetVar(&self.next().identifier, false, start);
+            self.emitGetVar(&self.next().identifier, start);
         }
 
         self.writeOpAndByte(.closure, @intCast(data.captures_count), start);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
-        self.emitGetVar(data, false, self.getStart());
+        self.emitGetVar(data, self.getLineNumber());
     }
 
-    // fn identifierId(self: *Self, data: *const Instruction.IdentifierId) Error!void {
-    //     const start = self.getStart();
-    //     const variable_data = &self.manager.instr_data[data.index].var_decl.variable;
-    //     self.emitGetVar(variable_data, data.rc_action == .cow, start);
-    //     if (data.rc_action == .increment) self.writeOp(.incr_ref_count, start);
-    // }
-
-    // fn identifierAbsolute(self: *Self, data: usize) Error!void {
-    //     self.writeOpAndByte(.get_local_absolute, @intCast(data), self.getStart());
-    // }
-
     fn intInstr(self: *Self, value: isize) Error!void {
-        try self.emitConstant(Value.makeInt(value), self.getStart());
+        try self.emitConstant(Value.makeInt(value), self.getLineNumber());
     }
 
     fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         // Condition
         try self.compileInstr();
@@ -814,7 +716,7 @@ const Compiler = struct {
         if (data.scope == .global) {
             _ = self.addGlobal(value);
         } else {
-            try self.emitConstant(value, self.getStart());
+            try self.emitConstant(value, self.getLineNumber());
         }
     }
 
@@ -822,7 +724,7 @@ const Compiler = struct {
         if (data.scope == .global) {
             _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
         } else {
-            self.writeOpAndByte(.push_module, @intCast(data.index), self.getStart());
+            self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
         }
     }
 
@@ -833,17 +735,17 @@ const Compiler = struct {
     }
 
     fn nullInstr(self: *Self) Error!void {
-        self.writeOp(.null, self.getStart());
+        self.writeOp(.null, self.getLineNumber());
     }
 
     fn print(self: *Self) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         try self.compileInstr();
         self.getChunk().writeOp(.print, start);
     }
 
     fn returnInstr(self: *Self, data: *const Instruction.Return) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         if (data.value) {
             try self.compileInstr();
@@ -859,7 +761,7 @@ const Compiler = struct {
                 self.manager.vm,
                 self.manager.vm.interner.getKey(index).?,
             ).asObj()),
-            self.getStart(),
+            self.getLineNumber(),
         );
     }
 
@@ -890,8 +792,6 @@ const Compiler = struct {
 
         for (0..data.func_count) |_| {
             const fn_data = self.next().fn_decl;
-            // const fn_name = self.manager.vm.interner.getKey(self.next().name).?;
-            // const func = try self.compileFn(fn_name, &fn_data);
             const fn_name = if (fn_data.name) |idx| self.manager.vm.interner.getKey(idx).? else "anonymus";
             const func = try self.compileCallable(fn_name, &fn_data);
             funcs.appendAssumeCapacity(func);
@@ -903,7 +803,7 @@ const Compiler = struct {
     }
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         // Compile structure
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_struct_def, start);
@@ -912,11 +812,11 @@ const Compiler = struct {
     }
 
     fn symbolId(self: *Self, index: u8) Error!void {
-        self.writeOpAndByte(.get_symbol, index, self.getStart());
+        self.writeOpAndByte(.get_symbol, index, self.getLineNumber());
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
         try self.compileInstr();
 
         if (data.op == .minus) {
@@ -927,17 +827,13 @@ const Compiler = struct {
         } else self.writeOp(.not, start);
     }
 
-    fn unbox(self: *Self) Error!void {
-        _ = self; // autofix
-    }
-
     fn use(self: *Self, count: usize) Error!void {
         // NOTE: For now, analyzer places an empty import
         // to skip "std" by placing a Null instruction. Needs a rework
         self.manager.instr_idx += 1;
 
         for (0..count) |_| {
-            const start = self.getStart();
+            const start = self.getLineNumber();
             const imported = self.next().imported;
 
             try self.emitConstant(
@@ -952,11 +848,15 @@ const Compiler = struct {
     }
 
     fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         if (data.has_value) {
             try self.compileInstr();
-            if (data.cast) try self.compileInstr();
+            if (data.cast) {
+                try self.compileInstr();
+            } else if (data.incr_rc) {
+                self.writeOp(.incr_ref_count, start);
+            }
         } else {
             self.writeOp(.null, start);
         }
@@ -971,19 +871,10 @@ const Compiler = struct {
         }
 
         self.defineVariable(data.variable, start);
-
-        // if (data.variable.scope == .heap) {
-        //     self.manager.heap_count += 1;
-        //     // We place a 'tombstone' value here because during static analyzis,
-        //     // the locals list is synchronized to all following declaration. Instead of
-        //     // back patching all locals declaration past a heap variable, we make the
-        //     // compiler place a tombstone.
-        //     self.writeOp(.null, start);
-        // }
     }
 
     fn whileInstr(self: *Self) Error!void {
-        const start = self.getStart();
+        const start = self.getLineNumber();
 
         const chunk = self.getChunk();
         const loop_start = chunk.code.items.len;
@@ -1011,9 +902,7 @@ const Compiler = struct {
                 self.function.chunk.constant_count -= 1;
                 var val = self.function.chunk.constants[self.function.chunk.constant_count];
 
-                if (self.manager.instr_idx < self.manager.instr_data.len and
-                    self.manager.instr_data[self.manager.instr_idx] == .cast)
-                {
+                if (self.manager.instr_idx < self.manager.instr_data.len and self.at().* == .cast) {
                     self.manager.instr_idx += 1;
                     val = Value.makeFloat(@floatFromInt(val.int));
                 }

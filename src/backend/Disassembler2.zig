@@ -12,8 +12,10 @@ globals: []const Value,
 disassembled: ArrayList(u8),
 render_mode: RenderMode,
 
+prev_line: usize = 0,
+
 const Self = @This();
-pub const RenderMode = enum { none, Normal, Test };
+pub const RenderMode = enum { none, normal, @"test" };
 
 pub fn init(allocator: Allocator, chunk: *const Chunk, globals: []const Value, render_mode: RenderMode) Self {
     return .{
@@ -42,8 +44,18 @@ pub fn disSlice(self: *Self, name: []const u8, start: usize) !void {
     }
 }
 
-pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
-    if (self.render_mode == .Normal) try writer.print("{:0>4} ", .{offset});
+pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
+    const line = self.chunk.offsets.items[offset];
+
+    if (self.render_mode == .normal) {
+        if (line > self.prev_line) {
+            try writer.print("{:>4}  ", .{line});
+        } else {
+            try writer.writeAll("   |  ");
+        }
+    }
+
+    self.prev_line = line;
 
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
@@ -85,8 +97,9 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         // .get_field_reg_cow => self.getMember("OP_GET_FIELD_REG_COW", offset, writer),
         .get_global => self.getGlobal(false, offset, writer),
         // .get_global_reg => self.getGlobal(true, offset, writer),
-        .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
+        // .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
+        .get_local_cow => self.indexInstruction("GET_LOCAL_COW", offset, writer),
         // .get_local_reg => self.indexInstruction("OP_GET_LOCAL_REG", offset, writer),
         // .get_local_reg_cow => self.indexInstruction("OP_GET_LOCAL_REG_COW", offset, writer),
         // .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
@@ -147,7 +160,7 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
 }
 
 fn simpleInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s}\n", .{name});
     } else {
         try writer.print("{s:<24}\n", .{name});
@@ -159,7 +172,7 @@ fn simpleInstruction(self: *const Self, name: []const u8, offset: usize, writer:
 fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     const index = self.chunk.code.items[offset + 1];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}\n", .{ name, index });
     } else {
         try writer.print("{s:<24} index {:>4}\n", .{ name, index });
@@ -172,7 +185,7 @@ fn getGlobal(self: *const Self, reg: bool, offset: usize, writer: anytype) !usiz
     const index = self.chunk.code.items[offset + 1];
     const text = if (reg) "OP_GET_GLOBAL_REG" else "OP_GET_GLOBAL";
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}", .{ text, index });
     } else {
         try writer.print("{s:<24} index {:>4}", .{ text, index });
@@ -191,7 +204,7 @@ fn constantInstruction(self: *const Self, name: []const u8, offset: usize, write
     const constant = self.chunk.code.items[offset + 1];
     const value = self.chunk.constants[constant];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}, value ", .{ name, constant });
     } else {
         try writer.print("{s:<24} index {:>4}, value ", .{ name, constant });
@@ -213,7 +226,7 @@ fn jumpInstruction(
     jump |= self.chunk.code.items[offset + 2];
     const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 3;
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} {} -> {}\n", .{ name, offset, target });
     } else {
         try writer.print("{s:<24} {:>4} -> {}\n", .{ name, offset, target });
@@ -234,7 +247,7 @@ fn for_instruction(
     const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 4;
     const iter_index = self.chunk.code.items[offset + 3];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} iter index {}, {} -> {}\n", .{ name, iter_index, offset, target });
     } else {
         try writer.print("{s:<24} iter index {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });
@@ -249,7 +262,7 @@ fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}\n", .{ name, idx });
     } else {
         try writer.print("{s:<24} index {:>4}\n", .{ name, idx });
@@ -262,7 +275,7 @@ fn invokeInstruction(self: *const Self, text: []const u8, offset: usize, writer:
     const arity = self.chunk.code.items[offset + 1];
     const obj_idx = self.chunk.code.items[offset + 2];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} arity {}, method index {}\n", .{ text, arity, obj_idx });
     } else {
         try writer.print("{s:<24} arity {:>4}, method index {:>4}\n", .{ text, arity, obj_idx });
@@ -276,7 +289,7 @@ fn importItem(self: *const Self, offset: usize, writer: anytype) !usize {
     const field = self.chunk.code.items[offset + 2];
     const text = "OP_IMPORT_ITEM";
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} module index: {}, field index: {}\n", .{ text, module, field });
     } else {
         try writer.print("{s:<24} module index {:>4}: field index: {:>4}\n", .{ text, module, field });

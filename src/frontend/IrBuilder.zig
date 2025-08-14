@@ -2,15 +2,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const MultiArrayList = std.MultiArrayList;
 
-const rir = @import("rir2.zig");
-const Instruction = rir.Instruction;
+const Instruction = @import("rir2.zig").Instruction;
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
 pub const Mode = union(enum) {
     add,
     add_no_alloc,
-    setAt: usize,
+    set_at: usize,
 };
 
 allocator: Allocator,
@@ -33,7 +32,7 @@ pub fn emit(self: *Self, instr: Instruction, mode: Mode) void {
     switch (mode) {
         .add => self.addInstr(instr),
         .add_no_alloc => self.addInstrNoAlloc(instr),
-        .setAt => |idx| self.setInstr(idx, instr),
+        .set_at => |idx| self.setInstr(idx, instr),
     }
 }
 

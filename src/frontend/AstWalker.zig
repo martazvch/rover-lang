@@ -178,9 +178,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
                 self.captureFromExpr(arg, ctx);
             }
         },
-        .closure => |*e| for (e.body.nodes) |*n| {
-            self.captureFromNode(n, ctx);
-        },
+        .closure => |*e| self.functionCaptures(e, ctx),
         .field => |*e| self.captureFromExpr(e.structure, ctx),
         .grouping => |e| self.captureFromExpr(e.expr, ctx),
         .@"if" => |*e| {

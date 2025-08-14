@@ -33,6 +33,7 @@ const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
 const Error = error{Err};
 
+// TODO: useless
 pub const empty: Self = .{
     .source = undefined,
     .errs = undefined,
@@ -61,12 +62,9 @@ pub fn parse(self: *Self, source: [:0]const u8, token_tags: []const Token.Tag, t
     self.skipNewLines();
 
     while (!self.match(.eof)) {
-        const stmt = self.declaration() catch |e| switch (e) {
-            // If it's our own error, we continue on parsing
-            Error.Err => {
-                self.synchronize();
-                continue;
-            },
+        const stmt = self.declaration() catch {
+            self.synchronize();
+            continue;
         };
         self.nodes.append(self.allocator, stmt) catch oom();
 
@@ -242,6 +240,7 @@ fn declaration(self: *Self) Error!Node {
 fn fnDecl(self: *Self) Error!Node {
     try self.expect(.identifier, .expect_fn_name);
     const name = self.token_idx - 1;
+
     try self.expect(.left_paren, .expect_paren_after_fn_name);
     self.skipNewLines();
     const params = try self.fnParams(false);
@@ -259,6 +258,7 @@ fn fnDecl(self: *Self) Error!Node {
         .body = body.block,
         .return_type = return_type,
         .has_callable = has_callable,
+        .is_closure = false,
     } };
 }
 
@@ -834,17 +834,18 @@ fn closure(self: *Self) Error!*Expr {
     const expr = self.allocator.create(Expr) catch oom();
     const args = try self.fnParams(true);
     try self.expect(.pipe, .expect_closing_pipe);
-    const closing = self.token_idx - 1;
 
     const return_type = try self.fnReturnType();
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
 
     expr.* = .{ .closure = .{
+        .name = opening,
         .params = args,
         .body = (try self.blockExpr()).block,
         .return_type = return_type,
-        .span = .{ .start = opening, .end = closing },
+        .has_callable = false,
+        .is_closure = true,
     } };
 
     return expr;

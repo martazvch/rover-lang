@@ -6,7 +6,7 @@ pub const RcAction = enum { increment, cow, none };
 
 pub const Instruction = struct {
     data: Data,
-    offset: usize = 0,
+    offset: usize,
 
     pub const Data = union(enum) {
         array: Array,
@@ -17,7 +17,6 @@ pub const Instruction = struct {
         block: Block,
         bool: bool,
         bound_method: usize,
-        // box,
         call: Call,
         cast: Type,
         discard,
@@ -25,9 +24,6 @@ pub const Instruction = struct {
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
-        // identifier_absolute: usize,
-        // TODO: deleted in v2
-        // identifier_id: IdentifierId,
         symbol_id: u8,
         @"if": If,
         // TODO: delete later
@@ -118,28 +114,21 @@ pub const Instruction = struct {
         /// of it before mutation. If so, check the reference count and perform a deep copy if
         /// it is referenced
         cow: bool,
-        // Value instruction index, used to jump right to it to compile it first
-        // value_instr: usize,
+        /// Increment assigned value reference count
+        incr_rc: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct { arity: u8, default_count: u8 };
-    // pub const Closure = struct {
-    //     body_len: u64,
-    //     default_params: usize,
-    //     captures: []const usize,
-    //     return_kind: ReturnKind,
-    // };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
         body_len: u64,
-        default_params: usize,
+        default_params: u8,
         captures_count: usize,
         return_kind: ReturnKind,
 
         pub const Kind = union(enum) { closure, symbol: usize };
     };
-    pub const IdentifierId = struct { index: usize, rc_action: RcAction };
     pub const If = struct {
         cast: Cast,
         has_else: bool,
@@ -155,7 +144,7 @@ pub const Instruction = struct {
     pub const Field = struct {
         index: usize,
         kind: Kind,
-        rc_action: RcAction,
+        // rc_action: RcAction,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
@@ -165,7 +154,7 @@ pub const Instruction = struct {
     pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
     pub const Value = struct {
         value_instr: usize,
-        cast: bool = false,
+        cast: bool,
         box: bool,
     };
     pub const Unary = struct {
@@ -175,12 +164,18 @@ pub const Instruction = struct {
         pub const Op = enum { minus, bang };
     };
     pub const VarDecl = struct {
-        box: bool = false,
-        cast: bool = false,
+        box: bool,
+        cast: bool,
         variable: Variable,
-        has_value: bool = false,
+        has_value: bool,
+        /// Increment reference count of value
+        incr_rc: bool,
     };
-    pub const Variable = struct { index: u64, scope: Scope, unbox: bool };
+    pub const Variable = struct {
+        index: u64,
+        scope: Scope,
+        unbox: bool,
+    };
 };
 
 comptime {

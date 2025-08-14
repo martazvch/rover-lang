@@ -53,7 +53,7 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .array => self.as(Array).deepCopy(vm).asObj(),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .bound_import, .bound_method, .box, .closure, .function, .module, .native_fn, .string, .structure => self,
+        .bound_import, .box, .closure, .function, .module, .native_fn, .string, .structure => self,
     };
 }
 
