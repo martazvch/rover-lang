@@ -85,14 +85,17 @@ pub const Instruction = struct {
     };
 
     pub const Array = struct {
-        /// Number of expressions
-        len: usize,
-        /// Number of casts after the cast_until field
-        cast_count: usize,
-        /// Cast all element until this one. Used for cases where we discover later in the
-        /// array analysis that all previous expressions should be casted like in this case:
-        /// [1, 3, 4.5]. Here, we need to backtrack all the casts
-        cast_until: usize,
+        // /// Number of expressions
+        // len: usize,
+        // /// Number of casts after the cast_until field
+        // cast_count: usize,
+        // /// Cast all element until this one. Used for cases where we discover later in the
+        // /// array analysis that all previous expressions should be casted like in this case:
+        // /// [1, 3, 4.5]. Here, we need to backtrack all the casts
+        // cast_until: usize,
+        elems: []const Elem,
+
+        pub const Elem = struct { cast: bool, incr_rc: bool };
     };
     pub const ArrayAccess = struct {
         /// Cow for the array identifier

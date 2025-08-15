@@ -54,3 +54,30 @@ fn addInstrNoAlloc(self: *Self, instr: Instruction) void {
 fn setInstr(self: *Self, index: usize, instr: Instruction) void {
     self.instructions.set(index, instr);
 }
+
+/// Converts instructions offsets to line numbers
+pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
+    const offsets = self.instructions.items(.offset);
+    var list: std.ArrayListUnmanaged(usize) = .{};
+    list.ensureUnusedCapacity(self.allocator, offsets.len) catch oom();
+
+    var line: usize = 1;
+    var offset_index: usize = 0;
+
+    for (source, 0..) |c, i| {
+        if (c == '\n') {
+            for (offsets[offset_index..offsets.len]) |o| {
+                if (o <= i) {
+                    offset_index += 1;
+                    list.appendAssumeCapacity(line);
+                }
+            }
+
+            line += 1;
+
+            if (offset_index == offsets.len) break;
+        }
+    }
+
+    return list.toOwnedSlice(self.allocator) catch oom();
+}

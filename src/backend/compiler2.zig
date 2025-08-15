@@ -204,7 +204,7 @@ const Compiler = struct {
             if (variable.scope == .local)
                 if (self.state.cow) .get_local_cow else .get_local
             else if (variable.scope == .global)
-                .get_global
+                if (self.state.cow) .get_global_cow else .get_global
             else
                 unreachable,
             @intCast(variable.index),
@@ -285,7 +285,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => |*data| self.arrayAccess(data, self.getLineNumber()),
+            .array_access => |*data| self.arrayAccess(data),
             .array_access_chain => |*data| self.arrayAccessChain(data, self.getLineNumber()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -323,51 +323,42 @@ const Compiler = struct {
     }
 
     fn array(self: *Self, data: *const Instruction.Array) Error!void {
-        const start = self.getLineNumber();
-        var cast_count: usize = 0;
+        const line = self.getLineNumber();
 
-        for (0..data.len) |i| {
+        for (data.elems) |elem| {
             try self.compileInstr();
 
-            if (data.cast_until > 0 and i < data.cast_until - 1) {
-                self.writeOp(.cast_to_float, start);
-            }
-
-            if (!self.eof() and self.at().* == .cast and cast_count < data.cast_count) {
-                cast_count += 1;
-                try self.compileInstr();
+            if (elem.cast) {
+                self.writeOp(.cast_to_float, line);
+            } else if (elem.incr_rc) {
+                self.writeOp(.incr_ref_count, line);
             }
         }
         // TODO: protect cast
-        self.writeOpAndByte(.array, @intCast(data.len), start);
+        self.writeOpAndByte(.array, @intCast(data.elems.len), line);
     }
 
-    fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess, start: usize) Error!void {
+    fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess) Error!void {
+        const line = self.getLineNumber();
         // Variable
         try self.compileInstr();
         try self.compileInstr();
-        self.writeOp(.array_access, start);
-
-        if (data.incr_ref) self.writeOp(.incr_ref_count, start);
+        self.writeOp(if (self.state.cow) .array_access_cow else .array_access, line);
+        if (data.incr_ref) self.writeOp(.incr_ref_count, line);
     }
 
-    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
+    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
         // Indicies
         for (0..data.depth) |_| {
             try self.compileInstr();
         }
 
         // Variable
-        // self.state.to_reg = true;
-        // const reg = self.putChainResultInReg();
-
         try self.compileInstr();
-
-        // self.writeOpAndByte(if (reg) .array_access_chain_reg else .array_access_chain, @intCast(data.depth), start);
-        if (data.incr_ref) self.writeOp(.incr_ref_count, start);
+        if (data.incr_ref) self.writeOp(.incr_ref_count, line);
     }
 
-    fn arrayAssign(self: *Self, start: usize) Error!void {
+    fn arrayAssign(self: *Self, line: usize) Error!void {
         // Variable
         self.state.cow = true;
         defer self.state.cow = false;
@@ -375,14 +366,10 @@ const Compiler = struct {
 
         // Index
         try self.compileInstr();
-
-        // If it's a simple identifier, when we fetch the variable we check for cow, so we don't place
-        // the variable in a register as it is already cloned if needed on the stack
-        // For more complex array expressions, it will be in a register
-        self.writeOp(.array_assign, start);
+        self.writeOp(.array_assign, line);
     }
 
-    fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, start: usize) Error!void {
+    fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
         // Indicies
         for (0..data.depth) |_| {
             try self.compileInstr();
@@ -394,28 +381,28 @@ const Compiler = struct {
         try self.compileInstr();
 
         // TODO: protect the cast
-        self.writeOpAndByte(.array_assign_chain, @intCast(data.depth), start);
+        self.writeOpAndByte(.array_assign_chain, @intCast(data.depth), line);
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         // Value
         try self.compileInstr();
 
         // We cast the value on top of stack if needed
         if (data.cast) {
-            self.writeOp(.cast_to_float, start);
+            self.writeOp(.cast_to_float, line);
         } else if (data.incr_rc) {
-            self.writeOp(.incr_ref_count, start);
+            self.writeOp(.incr_ref_count, line);
         }
 
         // TODO: no use of data.cow?
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
-            .array_access => return self.arrayAssign(start),
-            // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, start),
-            .field => |*field_data| return self.fieldAssignment(field_data, start),
+            .array_access => return self.arrayAssign(line),
+            // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, line),
+            .field => |*field_data| return self.fieldAssignment(field_data, line),
             else => unreachable,
         };
 
@@ -429,29 +416,29 @@ const Compiler = struct {
             else
                 unreachable,
             @intCast(variable_data.index),
-            start,
+            line,
         );
     }
 
-    fn fieldAssignment(self: *Self, data: *const Instruction.Field, start: usize) Error!void {
+    fn fieldAssignment(self: *Self, data: *const Instruction.Field, line: usize) Error!void {
         // Variable
         self.state.cow = true;
         defer self.state.cow = false;
         try self.compileInstr();
-        self.writeOpAndByte(.set_field, @intCast(data.index), start);
+        self.writeOpAndByte(.set_field, @intCast(data.index), line);
     }
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         // Special handle for logicals
-        if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(start, data);
+        if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(line, data);
 
         try self.compileInstr();
-        if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
+        if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, line);
 
         try self.compileInstr();
-        if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, start);
+        if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, line);
 
         self.writeOp(
             switch (data.op) {
@@ -483,24 +470,24 @@ const Compiler = struct {
                 .sub_int => .sub_int,
                 else => unreachable,
             },
-            start,
+            line,
         );
     }
 
-    fn logicalBinop(self: *Self, start: usize, data: *const Instruction.Binop) Error!void {
+    fn logicalBinop(self: *Self, line: usize, data: *const Instruction.Binop) Error!void {
         switch (data.op) {
             .@"and" => {
                 try self.compileInstr();
-                const end_jump = self.emitJump(.jump_if_false, start);
+                const end_jump = self.emitJump(.jump_if_false, line);
                 // If true, pop the value, else the 'false' remains on top of stack
-                self.writeOp(.pop, start);
+                self.writeOp(.pop, line);
                 try self.compileInstr();
                 try self.patchJump(end_jump);
             },
             .@"or" => {
                 try self.compileInstr();
-                const else_jump = self.emitJump(.jump_if_true, start);
-                self.writeOp(.pop, start);
+                const else_jump = self.emitJump(.jump_if_true, line);
+                self.writeOp(.pop, line);
                 try self.compileInstr();
                 try self.patchJump(else_jump);
             },
@@ -509,18 +496,18 @@ const Compiler = struct {
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         for (0..data.length) |_| {
             try self.compileInstr();
         }
 
         if (data.is_expr) {
-            self.writeOpAndByte(.scope_return, data.pop_count, start);
+            self.writeOpAndByte(.scope_return, data.pop_count, line);
         } else {
             // PERF: horrible perf, just emit a stack.top -= count
             for (0..data.pop_count) |_| {
-                self.getChunk().writeOp(.pop, start);
+                self.getChunk().writeOp(.pop, line);
             }
         }
     }
@@ -532,13 +519,13 @@ const Compiler = struct {
 
     // TODO: protext cast
     fn boundMethod(self: *Self, field_index: usize) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
         // Variable
         try self.compileInstr();
-        self.writeOp(.dup, start);
-        self.writeOpAndByte(.get_method, @intCast(field_index), start);
-        self.writeOp(.swap, start);
-        self.writeOpAndByte(.closure, 1, start);
+        self.writeOp(.dup, line);
+        self.writeOpAndByte(.get_method, @intCast(field_index), line);
+        self.writeOp(.swap, line);
+        self.writeOpAndByte(.closure, 1, line);
     }
 
     fn box(self: *Self) Error!void {
@@ -546,10 +533,8 @@ const Compiler = struct {
     }
 
     fn cast(self: *Self, typ: rir.Type) Error!void {
-        const start = self.getLineNumber();
-
         switch (typ) {
-            .float => self.writeOp(.cast_to_float, start),
+            .float => self.writeOp(.cast_to_float, self.getLineNumber()),
             .int => unreachable,
         }
     }
@@ -560,9 +545,7 @@ const Compiler = struct {
     }
 
     fn field(self: *Self, data: *const Instruction.Field) Error!void {
-        const member_data = self.getData();
-        _ = member_data; // autofix
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         // Member first
         try self.compileInstr();
@@ -570,7 +553,7 @@ const Compiler = struct {
         // Get field/bound method of first value on the stack
         self.writeOpAndByte(
             if (data.kind == .field)
-                .get_field
+                if (self.state.cow) .get_field_cow else .get_field
             else if (data.kind == .symbol)
                 .get_symbol
             else if (data.kind == .method)
@@ -578,7 +561,7 @@ const Compiler = struct {
             else
                 .get_static_method,
             @intCast(data.index),
-            start,
+            line,
         );
     }
 
@@ -587,17 +570,17 @@ const Compiler = struct {
     }
 
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOp(.load_fn_default, start);
+        if (data.default_count > 0) self.writeOp(.load_fn_default, line);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(.call, data.arity, start);
+        self.writeOpAndByte(.call, data.arity, line);
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
         var last: usize = 0;
 
         for (0..arity) |_| {
@@ -610,10 +593,10 @@ const Compiler = struct {
                     // resolving the first value during the last iteration
                     last = @max(last, self.manager.instr_idx);
 
-                    if (data.cast) self.writeOp(.cast_to_float, start);
-                    if (data.box) self.writeOp(.box, start);
+                    if (data.cast) self.writeOp(.cast_to_float, line);
+                    if (data.box) self.writeOp(.box, line);
                 },
-                .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), start),
+                .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), line),
                 else => unreachable,
             }
         }
@@ -654,16 +637,16 @@ const Compiler = struct {
     }
 
     fn compileClosure(self: *Self, data: *const Instruction.FnDecl, name: ?[]const u8) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         const func = try self.compileCallable(name orelse "anonymus", data);
-        try self.emitConstant(Value.makeObj(func.asObj()), start);
+        try self.emitConstant(Value.makeObj(func.asObj()), line);
 
         for (0..data.captures_count) |_| {
-            self.emitGetVar(&self.next().identifier, start);
+            self.emitGetVar(&self.next().identifier, line);
         }
 
-        self.writeOpAndByte(.closure, @intCast(data.captures_count), start);
+        self.writeOpAndByte(.closure, @intCast(data.captures_count), line);
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
@@ -675,30 +658,30 @@ const Compiler = struct {
     }
 
     fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         // Condition
         try self.compileInstr();
-        const then_jump = self.emitJump(.jump_if_false, start);
+        const then_jump = self.emitJump(.jump_if_false, line);
         // Pops the condition, no longer needed
-        self.writeOp(.pop, start);
+        self.writeOp(.pop, line);
 
         // Then body
         try self.compileInstr();
-        if (data.cast == .then) self.writeOp(.cast_to_float, start);
+        if (data.cast == .then) self.writeOp(.cast_to_float, line);
 
         // Exits the if expression
-        const else_jump = self.emitJump(.jump, start);
+        const else_jump = self.emitJump(.jump, line);
         try self.patchJump(then_jump);
 
         // If we go in the else branch, we pop the condition too
-        self.writeOp(.pop, start);
+        self.writeOp(.pop, line);
 
         // We insert a jump in the then body to be able to jump over the else branch
         // Otherwise, we just patch the then_jump
         if (data.has_else) {
             try self.compileInstr();
-            if (data.cast == .@"else") self.writeOp(.cast_to_float, start);
+            if (data.cast == .@"else") self.writeOp(.cast_to_float, line);
         }
 
         try self.patchJump(else_jump);
@@ -739,20 +722,20 @@ const Compiler = struct {
     }
 
     fn print(self: *Self) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
         try self.compileInstr();
-        self.getChunk().writeOp(.print, start);
+        self.getChunk().writeOp(.print, line);
     }
 
     fn returnInstr(self: *Self, data: *const Instruction.Return) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         if (data.value) {
             try self.compileInstr();
             if (data.cast) try self.compileInstr();
 
-            self.writeOp(.@"return", start);
-        } else self.writeOp(.naked_return, start);
+            self.writeOp(.@"return", line);
+        } else self.writeOp(.naked_return, line);
     }
 
     fn stringInstr(self: *Self, index: usize) Error!void {
@@ -803,12 +786,12 @@ const Compiler = struct {
     }
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
         // Compile structure
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOp(.load_struct_def, start);
+        if (data.default_count > 0) self.writeOp(.load_struct_def, line);
         try self.compileArgs(data.fields_count);
-        self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), start);
+        self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), line);
     }
 
     fn symbolId(self: *Self, index: u8) Error!void {
@@ -816,15 +799,15 @@ const Compiler = struct {
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
         try self.compileInstr();
 
         if (data.op == .minus) {
             self.writeOp(
                 if (data.typ == .int) .negate_int else .negate_float,
-                start,
+                line,
             );
-        } else self.writeOp(.not, start);
+        } else self.writeOp(.not, line);
     }
 
     fn use(self: *Self, count: usize) Error!void {
@@ -833,7 +816,7 @@ const Compiler = struct {
         self.manager.instr_idx += 1;
 
         for (0..count) |_| {
-            const start = self.getLineNumber();
+            const line = self.getLineNumber();
             const imported = self.next().imported;
 
             try self.emitConstant(
@@ -841,24 +824,24 @@ const Compiler = struct {
                     self.manager.vm,
                     self.manager.natives[imported.index],
                 ).asObj()),
-                start,
+                line,
             );
-            self.defineVariable(imported.variable, start);
+            self.defineVariable(imported.variable, line);
         }
     }
 
     fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         if (data.has_value) {
             try self.compileInstr();
             if (data.cast) {
                 try self.compileInstr();
             } else if (data.incr_rc) {
-                self.writeOp(.incr_ref_count, start);
+                self.writeOp(.incr_ref_count, line);
             }
         } else {
-            self.writeOp(.null, start);
+            self.writeOp(.null, line);
         }
 
         // TODO: Fix this, just to avoid accessing an empty slot at runtime
@@ -867,34 +850,35 @@ const Compiler = struct {
         if (data.variable.scope == .global) {
             _ = self.addGlobal(.null_);
         } else if (data.box) {
-            self.writeOp(.box, start);
+            self.writeOp(.box, line);
         }
 
-        self.defineVariable(data.variable, start);
+        self.defineVariable(data.variable, line);
     }
 
     fn whileInstr(self: *Self) Error!void {
-        const start = self.getLineNumber();
+        const line = self.getLineNumber();
 
         const chunk = self.getChunk();
         const loop_start = chunk.code.items.len;
 
         try self.compileInstr();
-        const exit_jump = self.emitJump(.jump_if_false, start);
+        const exit_jump = self.emitJump(.jump_if_false, line);
 
         // If true
-        chunk.writeOp(.pop, start);
+        chunk.writeOp(.pop, line);
         try self.compileInstr();
-        try self.emitLoop(loop_start, start);
+        try self.emitLoop(loop_start, line);
 
         try self.patchJump(exit_jump);
         // If false
-        chunk.writeOp(.pop, start);
+        chunk.writeOp(.pop, line);
     }
 
     fn compileDefaultValue(self: *Self) Error!Value {
         const code_start = self.function.chunk.code.items.len;
         defer self.function.chunk.code.shrinkRetainingCapacity(code_start);
+        defer self.function.chunk.offsets.shrinkRetainingCapacity(code_start);
         try self.compileInstr();
 
         return switch (@as(OpCode, @enumFromInt(self.function.chunk.code.items[code_start]))) {

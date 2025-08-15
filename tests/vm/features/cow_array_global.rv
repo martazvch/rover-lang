@@ -1,0 +1,29 @@
+var arr = [1, 2]
+
+fn main() {
+    var ref = arr
+    print arr
+    print ref
+    print "------"
+
+    arr[0] = 4
+    print arr
+    print ref
+    print "------"
+
+    arr = [8]
+    print arr
+    print ref
+    print "------"
+
+    ref[1] = 99
+    print arr
+    print ref
+    print "------"
+
+    ref = arr
+    ref[0] = 56
+    print arr
+    print ref
+    print "------"
+}

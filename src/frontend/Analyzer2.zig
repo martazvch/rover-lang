@@ -108,7 +108,7 @@ pub const Type = union(enum) {
 
     pub fn isHeap(self: *const Type) bool {
         return switch (self.*) {
-            .void, .int, .float, .bool, .str, .null => false,
+            .void, .int, .float, .bool, .str, .null, .function => false,
             else => true,
         };
     }
@@ -411,14 +411,12 @@ fn declareSymbol(self: *Self, name: InternerIdx, ty: *const Type) void {
 }
 
 const Context = struct {
-    side: enum { lhs, rhs } = .lhs,
     fn_type: ?*const Type = null,
     struct_type: ?*const Type = null,
-    ref_count: bool = false,
-    cow: bool = false,
     allow_partial: bool = true,
     returns: bool = false,
     in_call: bool = false,
+    in_array: bool = false,
 
     /// Auto-generate an enum with all field names
     const Field = EnumFromStruct(Context);
@@ -579,35 +577,29 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
 
     ctx.allow_partial = false;
     const index = self.ir_builder.reserveInstr();
-
-    // TODO: useless side?
-    ctx.side = .rhs;
     const value_type = try self.analyzeExpr(node.value, ctx);
-    ctx.side = .lhs;
 
-    const assigne_type = switch (node.assigne.*) {
+    const maybe_assigne_type = switch (node.assigne.*) {
         .literal => |*e| b: {
-            if (e.tag != .identifier) {
-                return self.err(.invalid_assign_target, span);
-            }
-
+            if (e.tag != .identifier) break :b null;
             var assigne = try self.expectVariableIdentifier(e.idx, ctx);
             assigne.initialized = true;
             break :b assigne.type;
         },
-        else => b: {
-            const ty = try self.analyzeExpr(node.assigne, ctx);
-            try self.isAssignmentAllowed(ty, span);
-            break :b ty;
+        .field => |*e| b: {
+            const field_result = try self.field(e, ctx);
+            break :b if (field_result.is_value) field_result.type else null;
         },
+        else => try self.analyzeExpr(node.assigne, ctx),
     };
+    const assigne_type = maybe_assigne_type orelse return self.err(.invalid_assign_target, span);
     const coherence = try self.performTypeCoercion(assigne_type, value_type, false, self.ast.getSpan(node.value));
 
     self.makeInstruction(
         .{ .assignment = .{
             .cast = coherence.cast,
             .cow = assigne_type.isHeap(),
-            .incr_rc = value_type.isHeap(),
+            .incr_rc = value_type.isHeap() and !isHeapLiteral(node.value),
         } },
         span.start,
         .{ .set_at = index },
@@ -663,7 +655,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     _ = self.scope.close();
 
     // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
-    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data);
+    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, span.start);
     const is_closure = captures_count > 0;
 
     if (ctx.struct_type != null) {
@@ -709,9 +701,9 @@ fn loadFunctionCaptures(self: *Self, captures: []InternerIdx) Error![]const Inst
     return instructions.toOwnedSlice(self.allocator) catch oom();
 }
 
-fn makeFunctionCapturesInstr(self: *Self, instrs: []const Instruction.Data) usize {
+fn makeFunctionCapturesInstr(self: *Self, instrs: []const Instruction.Data, offset: usize) usize {
     for (instrs) |instr| {
-        self.makeInstruction(instr, 0, .add);
+        self.makeInstruction(instr, offset, .add);
     }
     return instrs.len;
 }
@@ -856,7 +848,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     if (node.value) |value| {
         has_value = true;
         ctx.allow_partial = false;
-        ctx.side = .rhs;
 
         const value_type = try self.analyzeExpr(value, ctx);
         incr_rc = value_type.isHeap() and !isHeapLiteral(value);
@@ -884,7 +875,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
 /// Checks if the expression is a literal generating a heap object
 fn isHeapLiteral(expr: *const Expr) bool {
     return switch (expr.*) {
-        .array => true,
+        .array, .struct_literal => true,
         else => false,
     };
 }
@@ -1024,44 +1015,43 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
 fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
     var value_type = self.type_interner.cache.void;
-    var cast_count: usize = 0;
-    var cast_until: usize = 0;
+    var patch_casts = false;
 
-    for (expr.values, 0..) |val, i| {
+    var elems: ArrayListUnmanaged(Instruction.Array.Elem) = .{};
+    elems.ensureUnusedCapacity(self.allocator, expr.values.len) catch oom();
+
+    for (expr.values) |val| {
+        const span = self.ast.getSpan(val);
+        var cast = false;
         var typ = try self.analyzeExpr(val, ctx);
 
         // TODO: error
-        if (self.isVoid(typ)) {
-            @panic("Void value in array");
-        }
+        if (self.isVoid(typ)) @panic("Void value in array");
 
         if (!self.isVoid(value_type) and value_type != typ) {
-            const span = self.ast.getSpan(val);
-
             if (!value_type.canCastTo(typ)) return self.err(
                 .{ .array_elem_different_type = .{ .found1 = self.getTypeName(value_type), .found2 = self.getTypeName(typ) } },
                 span,
             );
 
-            // Backtrack casts without emitting an instruction
-            if (cast_until == 0) {
-                cast_until = i + 1;
+            // Backtrack casts
+            if (!patch_casts) {
+                for (elems.items) |*e| {
+                    e.cast = true;
+                }
+                patch_casts = true;
             } else {
-                self.makeInstruction(.{ .cast = .float }, span.start, .add);
-                cast_count += 1;
-                typ = value_type;
+                cast = true;
             }
+            typ = value_type;
         }
 
         value_type = typ;
+        elems.appendAssumeCapacity(.{ .cast = cast, .incr_rc = typ.isHeap() and !isHeapLiteral(val) });
     }
 
     self.makeInstruction(
-        .{ .array = .{
-            .len = expr.values.len,
-            .cast_count = cast_count,
-            .cast_until = cast_until,
-        } },
+        .{ .array = .{ .elems = elems.toOwnedSlice(self.allocator) catch oom() } },
         self.ast.getSpan(expr).start,
         .{ .set_at = index },
     );
@@ -1214,7 +1204,8 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     ctx.fn_type = interned_type;
     const len = try self.fnBody(expr.body.nodes, &closure_type, ctx);
 
-    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data);
+    const offset = self.ast.getSpan(expr).start;
+    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, offset);
 
     // TODO: protect the cast
     self.makeInstruction(
@@ -1226,27 +1217,10 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
             .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
         } },
-        self.ast.getSpan(expr).start,
+        offset,
         .{ .set_at = closure_idx },
     );
     return interned_type;
-}
-
-fn loadClosureCaptures(self: *Self, captures: []*const Variable) usize {
-    for (captures) |capt| {
-        // We put Boxed value in closure env
-        self.makeInstruction(
-            .{ .identifier = .{
-                .index = capt.index,
-                .scope = if (capt.kind == .local) .local else .global,
-                .unbox = false,
-            } },
-            0,
-            .add,
-        );
-    }
-
-    return captures.len;
 }
 
 fn isStringConcat(op: TokenTag, lhs: *const Type, rhs: *const Type) bool {
@@ -1656,13 +1630,6 @@ fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context)
     return variable;
 }
 
-fn getRcAction(ty: *const Type, ctx: *const Context) rir.RcAction {
-    return switch (ctx.side) {
-        .lhs => if (ty.isHeap()) .cow else .none,
-        .rhs => .none,
-    };
-}
-
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
 fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *const Context) error{BigSelfOutsideStruct}!?*ScopeStack.Scope.Symbol {
     const sym_name = if (name == self.cached_names.Self) n: {
@@ -1836,7 +1803,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
     for (struct_type.fields.values()) |f| {
-        self.makeInstruction(.{ .default_value = default_count }, 0, .add);
+        self.makeInstruction(.{ .default_value = default_count }, span.start, .add);
         if (f.default) default_count += 1;
     }
 

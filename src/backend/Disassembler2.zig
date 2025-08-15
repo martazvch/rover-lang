@@ -61,6 +61,7 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
     return switch (op) {
         .array => self.indexInstruction("OP_ARRAY", offset, writer),
         .array_access => self.simpleInstruction("OP_ARRAY_ACCESS", offset, writer),
+        .array_access_cow => self.simpleInstruction("OP_ARRAY_ACCESS_COW", offset, writer),
         // .array_access_reg => self.simpleInstruction("OP_ARRAY_ACCESS_REG", offset, writer),
         // .array_access_reg_cow => self.simpleInstruction("OP_ARRAY_ACCESS_REG_COW", offset, writer),
         .array_access_chain => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN", offset, writer),
@@ -93,9 +94,11 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
         // .get_capture => self.indexInstruction("GET_CAPTURE", offset, writer),
         .get_default => self.indexInstruction("OP_GET_DEFAULT", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", offset, writer),
+        .get_field_cow => self.getMember("OP_GET_FIELD_COW", offset, writer),
         // .get_field_reg => self.getMember("OP_GET_FIELD_REG", offset, writer),
         // .get_field_reg_cow => self.getMember("OP_GET_FIELD_REG_COW", offset, writer),
         .get_global => self.getGlobal(false, offset, writer),
+        .get_global_cow => self.getGlobal(true, offset, writer),
         // .get_global_reg => self.getGlobal(true, offset, writer),
         // .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
@@ -181,9 +184,9 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     return offset + 2;
 }
 
-fn getGlobal(self: *const Self, reg: bool, offset: usize, writer: anytype) !usize {
+fn getGlobal(self: *const Self, cow: bool, offset: usize, writer: anytype) !usize {
     const index = self.chunk.code.items[offset + 1];
-    const text = if (reg) "OP_GET_GLOBAL_REG" else "OP_GET_GLOBAL";
+    const text = if (cow) "OP_GET_GLOBAL_COW" else "OP_GET_GLOBAL";
 
     if (self.render_mode == .@"test") {
         try writer.print("{s} index {}", .{ text, index });
@@ -258,6 +261,7 @@ fn for_instruction(
 
 fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     // Skips the structure op
+    // TODO: What?
     var local_offset = offset + 1;
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;

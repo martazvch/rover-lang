@@ -160,18 +160,14 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     self.indentAndAppendSlice("[Array]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    var cast_count: usize = 0;
 
-    for (0..data.len) |i| {
+    for (data.elems) |elem| {
         self.parseInstr();
 
-        if (data.cast_until > 0 and i < data.cast_until - 1) {
+        if (elem.cast) {
             self.indentAndAppendSlice("[Cast to float]");
-        }
-
-        if (!self.eof() and self.at().* == .cast and cast_count < data.cast_count) {
-            cast_count += 1;
-            self.parseInstr();
+        } else if (elem.incr_rc) {
+            self.indentAndAppendSlice("[Increment ref count]");
         }
     }
 }

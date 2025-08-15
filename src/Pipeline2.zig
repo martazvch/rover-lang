@@ -156,12 +156,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     defer compiler.deinit();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
-    const line_numbers = self.computeLineFromOffsets(source, self.analyzer.ir_builder.instructions.items(.offset));
     const function = try compiler.compile(
         file_name,
         self.instr_count,
         self.analyzer.ir_builder.instructions.items(.data),
-        line_numbers,
+        self.analyzer.ir_builder.computeLineFromOffsets(source),
         if (self.config.embedded) 0 else self.analyzer.main.?,
         self.config.embedded,
     );
@@ -231,29 +230,4 @@ fn renderIr(
 
     try rir_renderer.parse_ir(file_name);
     try rir_renderer.display();
-}
-
-fn computeLineFromOffsets(self: *Self, source: [:0]const u8, offsets: []const usize) []const usize {
-    var list: std.ArrayListUnmanaged(usize) = .{};
-    list.ensureUnusedCapacity(self.allocator, offsets.len) catch oom();
-
-    var line: usize = 1;
-    var offset_index: usize = 0;
-
-    for (source, 0..) |c, i| {
-        if (c == '\n') {
-            for (offsets[offset_index..offsets.len]) |o| {
-                if (o <= i) {
-                    offset_index += 1;
-                    list.appendAssumeCapacity(line);
-                }
-            }
-
-            line += 1;
-
-            if (offset_index == offsets.len) break;
-        }
-    }
-
-    return list.toOwnedSlice(self.allocator) catch oom();
 }

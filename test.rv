@@ -1,67 +1,43 @@
-struct Person {
-    age: int,
+fn insideStruct() {
+    print "Inside struct"
+    struct Foo {data: []int, data2: [][]int}
 
-    fn speak(self) {
-        self.age = self.age * 10
-        print self.age
-    }
+    var foo = Foo{data=[10, 20], data2=[[1, 2, 3], [4, 5, 6]]}
 
-    fn getOld(self, amount: int) -> int {
-        self.age = self.age + amount
-        self.age
-    }
+    print "Test 1"
+    var ref = foo.data
+    foo.data[0] = 9
+    print ref // [10, 20]
+    print foo.data // [9, 20]
+
+    print "Test 2"
+    ref = foo.data
+    print ref // [9, 20]
+    ref[1] = 98
+    print ref // [9, 98]
+    print foo.data // [9, 20]
+
+    print "Test 3" 
+    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    var ref2 = foo.data2[1]
+    print ref2 // [4, 5, 6]
+    ref2[1] = 56
+    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    print ref2 // [4, 56, 6]
+
+    print "Test 4" 
+    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
+    var ref3 = foo.data2[1]
+    print ref3 // [4, 5, 6]
+    foo.data2[1][2] = 56
+    print foo.data2 // [[1, 2, 3], [4, 5, 56]]
+    print ref3 // [4, 5, 6]
 }
 
-fn oui() {
-    print "oui"
-}
 
 fn main() {
-    var p = Person{age=5}
-
-    // Mess up with stack
-    var a = 5
-
-    var method1: fn() -> void 
-    method1 = p.speak
-    var method2: fn() -> void = p.speak
-    var method3 = p.speak
-
-    method1()
-    oui()
-
-    p.speak()
-    method2()
-    _ = p.getOld(8)
-    method3()
+    insideStruct()
 }
-
-
-// --------- Cow ----------
-
-//     Array simple
-
-// fn main() {
-//     var arr = [1, 2]
-//     var ref = arr
-//     arr[0] = 4
-//
-//     // When overwritting it, no cow or change to the other, it's anyway a brand new object
-//     arr = [8]
-// }
-
-
-//     Field simple
-// struct Foo { a: int }
-// fn main() {
-//     var foo = Foo{a=1}
-//     var ref = foo
-//     foo.a = 8
-//
-//     print foo.a
-//     print ref.a
-// }
-
 
 
 // ---------- Runtime switch on functions
