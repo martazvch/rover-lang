@@ -5,10 +5,10 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const Ast = @import("Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Interner = @import("../Interner.zig");
+const PathBuilder = @import("PathBuilder.zig");
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
-const Path = ArrayListUnmanaged([]const u8);
 pub const Result = union(enum) {
     ok: struct { name: []const u8, content: [:0]const u8 },
     err: AnalyzerReport,
@@ -22,15 +22,17 @@ pub const Result = union(enum) {
 ///
 /// Naming rules
 /// - Last identifier is the file to import
+///
+/// **Caller owns memory of result**
 pub fn fetchImportedFile(
     allocator: Allocator,
     ast: *const Ast,
-    path_parts: []const Ast.TokenIndex,
-    path: *Path,
+    path_chunks: []const Ast.TokenIndex,
+    pb: *PathBuilder,
     interner: *Interner,
 ) Result {
-    if (ast.token_tags[path_parts[0]] == .dot) {
-        return fetchRelative(allocator, ast, path_parts[1..], path, interner);
+    if (ast.token_tags[path_chunks[0]] == .dot) {
+        return fetchRelative(allocator, ast, path_chunks[1..], pb, interner);
     }
 
     unreachable;
@@ -39,17 +41,19 @@ pub fn fetchImportedFile(
 fn fetchRelative(
     allocator: Allocator,
     ast: *const Ast,
-    path_parts: []const Ast.TokenIndex,
-    path: *Path,
+    path_chunks: []const Ast.TokenIndex,
+    pb: *PathBuilder,
     interner: *Interner,
 ) Result {
     _ = interner; // autofix
-    var cwd = std.fs.openDirAbsolute(path.items[0], .{}) catch unreachable;
+    var buf_path: [std.fs.max_path_bytes]u8 = undefined;
+    var cwd = std.fs.openDirAbsolute(pb.fullPath(&buf_path), .{}) catch unreachable;
+    std.debug.print("Path: {s}\n", .{pb.fullPath(&buf_path)});
 
-    for (path_parts, 0..) |part, i| {
+    for (path_chunks, 0..) |part, i| {
         const name = ast.toSource(part);
 
-        if (i == path_parts.len - 1) {
+        if (i == path_chunks.len - 1) {
             // TODO: manage this better. We should hash the whole path and later manage it even better
             // because same module could be imported from different files with different path. We should
             // create a path from the root folder for every import so that all path can be compared regardless
@@ -58,18 +62,16 @@ fn fetchRelative(
             // if (self.modules.get(interned)) |mod| return .{ mod, true };
 
             const file_name = allocator.alloc(u8, name.len + 3) catch oom();
-            defer allocator.free(file_name);
-
             @memcpy(file_name[0..name.len], name);
             @memcpy(file_name[name.len..], ".rv");
 
             const file = cwd.openFile(file_name, .{}) catch {
                 const owned_name = allocator.dupe(u8, file_name) catch oom();
                 return .{ .err = .err(
-                    if (path_parts.len > 1)
+                    if (path_chunks.len > 1)
                         .{ .missing_file_in_module = .{
                             .file = owned_name,
-                            .module = ast.toSource(path_parts[path_parts.len - 2]),
+                            .module = ast.toSource(path_chunks[path_chunks.len - 2]),
                         } }
                     else
                         .{ .missing_file_in_cwd = .{ .file = owned_name } },
@@ -80,10 +82,10 @@ fn fetchRelative(
 
             // The file has a new line inserted by default
             const size = file.getEndPos() catch @panic("Rover internal error: wrong import file end position");
-            const buf = allocator.alloc(u8, size + 1) catch oom();
-
+            const buf = allocator.allocSentinel(u8, size, 0) catch oom();
             _ = file.readAll(buf) catch @panic("Rover internal error: error while reading imported file");
-            buf[size] = 0;
+
+            return .{ .ok = .{ .name = file_name, .content = buf } };
 
             // var pipeline = self.pipeline.createSubPipeline();
             // // Exit for now, just showing the error of the sub-pipeline
@@ -94,6 +96,7 @@ fn fetchRelative(
             // return .{ module, false };
         } else {
             cwd = cwd.openDir(name, .{}) catch return .{ .err = .err(.{ .unknown_module = .{ .name = name } }, ast.getSpan(part)) };
+            pb.cd(name);
         }
     }
 

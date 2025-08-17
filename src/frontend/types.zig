@@ -17,6 +17,7 @@ pub const Type = union(enum) {
     null,
     array: *const Type,
     function: Function,
+    module: Module,
     structure: Structure,
 
     pub const Function = struct {
@@ -82,6 +83,11 @@ pub const Type = union(enum) {
         }
     };
 
+    pub const Module = struct {
+        globals: []usize,
+        symbols: []const *Type,
+    };
+
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
     }
@@ -136,6 +142,7 @@ pub const Type = union(enum) {
                 ty.return_type.hash(hasher);
                 hasher.update(asBytes(&@intFromBool(ty.is_method)));
             },
+            .module => unreachable,
             .structure => |ty| {
                 hasher.update(asBytes(&ty.name));
                 // for (ty.fields.values()) |f| {
@@ -168,6 +175,7 @@ pub const Type = union(enum) {
                 writer.writeAll(") -> ") catch oom();
                 writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
             },
+            .module => unreachable,
             .structure => |ty| return interner.getKey(ty.name).?,
         }
 
@@ -176,14 +184,14 @@ pub const Type = union(enum) {
 };
 
 pub const TypeInterner = struct {
-    arena: Allocator,
+    allocator: Allocator,
     interned: AutoHashMapUnmanaged(u64, *Type) = .{},
     cache: Cache,
 
     pub const Cache = CreateCache(&.{ .int, .float, .bool, .str, .null, .void });
 
-    pub fn init(arena: Allocator) TypeInterner {
-        return .{ .arena = arena, .cache = undefined };
+    pub fn init(allocator: Allocator) TypeInterner {
+        return .{ .allocator = allocator, .cache = undefined };
     }
 
     pub fn CreateCache(comptime types: []const Type) type {
@@ -227,9 +235,9 @@ pub const TypeInterner = struct {
             return interned;
         }
 
-        const new_type = self.arena.create(Type) catch oom();
+        const new_type = self.allocator.create(Type) catch oom();
         new_type.* = ty;
-        self.interned.put(self.arena, hash, new_type) catch oom();
+        self.interned.put(self.allocator, hash, new_type) catch oom();
 
         return new_type;
     }

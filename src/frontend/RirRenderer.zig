@@ -67,7 +67,7 @@ fn indent(self: *Self) void {
     self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
 }
 
-pub fn parse_ir(self: *Self, file_name: []const u8) !void {
+pub fn parseIr(self: *Self, file_name: []const u8) !void {
     self.writer = self.tree.writer();
     // TODO: remove the comment
     try self.writer.print("//-- {s} --\n", .{file_name});

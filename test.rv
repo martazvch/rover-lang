@@ -1,42 +1,8 @@
-fn insideStruct() {
-    print "Inside struct"
-    struct Foo {data: []int, data2: [][]int}
-
-    var foo = Foo{data=[10, 20], data2=[[1, 2, 3], [4, 5, 6]]}
-
-    print "Test 1"
-    var ref = foo.data
-    foo.data[0] = 9
-    print ref // [10, 20]
-    print foo.data // [9, 20]
-
-    print "Test 2"
-    ref = foo.data
-    print ref // [9, 20]
-    ref[1] = 98
-    print ref // [9, 98]
-    print foo.data // [9, 20]
-
-    print "Test 3" 
-    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
-    var ref2 = foo.data2[1]
-    print ref2 // [4, 5, 6]
-    ref2[1] = 56
-    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
-    print ref2 // [4, 56, 6]
-
-    print "Test 4" 
-    print foo.data2 // [[1, 2, 3], [4, 5, 6]]
-    var ref3 = foo.data2[1]
-    print ref3 // [4, 5, 6]
-    foo.data2[1][2] = 56
-    print foo.data2 // [[1, 2, 3], [4, 5, 56]]
-    print ref3 // [4, 5, 6]
-}
+use .data.geom
 
 
 fn main() {
-    insideStruct()
+     
 }
 
 

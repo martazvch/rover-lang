@@ -92,7 +92,6 @@ fn markRoots(self: *Self) Allocator.Error!void {
     while (value != self.vm.stack.top) : (value += 1) {
         try self.markValue(&value[0]);
     }
-    try self.markArray(self.vm.heap_vars);
 
     // TODO: see if we can do other manner
     try self.markModule(self.vm.module);

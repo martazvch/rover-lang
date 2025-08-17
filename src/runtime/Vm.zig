@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 
 const options = @import("options");
 
-const Repl = @import("Repl.zig");
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
@@ -14,6 +13,7 @@ const Module = Pipeline.Module;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
+const Repl = @import("Repl.zig");
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 
@@ -33,40 +33,13 @@ interner: Interner,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
-heap_vars: []Value,
 symbols: []Value,
 
-/// Holds temporary values
-// r1: *Value = undefined,
-/// Holds values that are poped from stack but pointed by r1 as temporary value
-r2: Value = .null_,
 /// Holds default variables of current call
 r3: []Value = undefined,
-/// Empty for printing
-r4: Value = .null_,
 
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
-
-pub const empty: Self = .{
-    .pipeline = .empty,
-    .gc = undefined,
-    .gc_alloc = undefined,
-    .repl = undefined,
-    .module = undefined,
-    .start_module = undefined,
-    .module_chain = .{},
-    .stack = .empty,
-    .frame_stack = .empty,
-    .ip = undefined,
-    .allocator = undefined,
-    .stdout = undefined,
-    .interner = undefined,
-    .strings = undefined,
-    .objects = null,
-    .heap_vars = undefined,
-    .symbols = undefined,
-};
 
 pub const Config = struct {
     embedded: bool = false,
@@ -76,16 +49,22 @@ pub const Config = struct {
     print_ir: bool = false,
 };
 
-pub fn init(self: *Self, allocator: Allocator, config: @import("Vm.zig").Config) void {
+pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.allocator = allocator;
     // TODO: pass an ObjectPoolAlloc?
     self.gc = .init(self, allocator);
     self.gc_alloc = self.gc.allocator();
     self.stdout = std.io.getStdOut().writer();
     self.interner = .init(allocator);
+    self.pipeline = undefined;
     self.pipeline.init(self, config);
     self.stack.init();
     self.strings = .init(self.allocator);
+    self.stack = .empty;
+    self.stack.init();
+    self.frame_stack = .empty;
+    self.objects = null;
+    self.module_chain = .{};
 
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
@@ -101,7 +80,6 @@ pub fn init(self: *Self, allocator: Allocator, config: @import("Vm.zig").Config)
 pub fn deinit(self: *Self) void {
     self.allocator.free(self.symbols);
 
-    self.allocator.free(self.heap_vars);
     self.module_chain.deinit(self.allocator);
     self.interner.deinit();
     self.gc.deinit();
@@ -156,7 +134,6 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
     self.gc.active = true;
 
     // Init on dummy address to avoid nullable pointer (used only in print stack mode)
-    // self.r1 = &self.r4;
     try self.execute(self.module.function);
 }
 
@@ -197,14 +174,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
 
     while (true) {
         if (comptime options.print_stack) {
-            // if (self.r1 != &self.r4) {
-            //     print("    R1: [", .{});
-            //     try self.r1.print(self.stdout);
-            //     print("]  |  ", .{});
-            // } else {
             print("          ", .{});
-            // }
-
             var value = self.stack.values[0..].ptr;
 
             while (value != self.stack.top) : (value += 1) {
@@ -219,7 +189,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.init(self.allocator, &frame.function.chunk, self.module.globals, .Normal);
+            var dis = Disassembler.init(self.allocator, &frame.function.chunk, self.module.globals, .normal);
             defer dis.deinit();
             const instr_nb = self.instructionNb();
             _ = try dis.disInstruction(instr_nb, self.stdout);

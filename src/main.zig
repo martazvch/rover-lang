@@ -49,7 +49,7 @@ pub fn main() !void {
         .embedded = if (res.positionals[0] == null) true else false,
     };
 
-    var vm: Vm = .empty;
+    var vm: Vm = undefined;
     vm.init(allocator, config);
     defer vm.deinit();
 

@@ -16,6 +16,7 @@ const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/RirRenderer.zig");
+const PathBuilder = @import("frontend/PathBuilder.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
 const Obj = @import("runtime/Obj.zig");
@@ -31,21 +32,11 @@ analyzer: Analyzer,
 instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
-globals: std.ArrayListUnmanaged(Value) = .{},
-path: std.ArrayListUnmanaged([]const u8) = .{},
+globals: std.ArrayListUnmanaged(Value),
+path_builder: PathBuilder,
 
 const Self = @This();
 const Error = error{ExitOnPrint};
-
-pub const empty: Self = .{
-    .vm = undefined,
-    .arena = undefined,
-    .allocator = undefined,
-    .config = undefined,
-    .analyzer = undefined,
-    .instr_count = 0,
-    .code_count = 0,
-};
 
 pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.vm = vm;
@@ -54,8 +45,10 @@ pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.config = config;
     self.analyzer = undefined;
     self.analyzer.init(self.allocator, &self.vm.interner);
-
-    self.path.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable) catch oom();
+    self.instr_count = 0;
+    self.code_count = 0;
+    self.globals = .{};
+    self.path_builder = .init(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable);
 }
 
 pub fn deinit(self: *Self) void {
@@ -109,13 +102,13 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    self.analyzer.analyze(&ast, &self.path) catch @panic("Error analyzer");
+    self.analyzer.analyze(&ast, &self.path_builder);
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
         try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
 
-        // If we are a sub-pipeline, we print and contnue compile
+        // If we are a sub-pipeline, we print and continue compile
         if (!self.is_sub) return error.ExitOnPrint;
     } else {
         if (self.analyzer.errs.items.len > 0) {
@@ -175,7 +168,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
 }
 
 pub fn createSubPipeline(self: *Self) Self {
-    var pipeline: Self = .empty;
+    var pipeline: Self = undefined;
     var sub_config = self.config;
     // FIX: To make 'main' function not mandatory
     sub_config.embedded = true;
@@ -225,6 +218,6 @@ fn renderIr(
     );
     defer rir_renderer.deinit();
 
-    try rir_renderer.parse_ir(file_name);
+    try rir_renderer.parseIr(file_name);
     try rir_renderer.display();
 }

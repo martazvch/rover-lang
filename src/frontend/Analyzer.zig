@@ -21,6 +21,8 @@ const TokenTag = @import("Lexer.zig").Token.Tag;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
 const ScopeStack = @import("ScopeStack.zig");
+const Module = @import("Module.zig");
+const PathBuilder = @import("PathBuilder.zig");
 
 const Context = struct {
     fn_type: ?*const Type = null,
@@ -63,7 +65,7 @@ const Error = error{Err};
 const Result = Error!*const Type;
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
-arena: std.heap.ArenaAllocator,
+// arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 interner: *Interner,
 errs: ArrayListUnmanaged(AnalyzerReport),
@@ -75,19 +77,20 @@ type_interner: TypeInterner,
 ir_builder: IrBuilder,
 main: ?usize = null,
 globals: ArrayListUnmanaged(usize),
-path: *ArrayListUnmanaged([]const u8),
+pb: *PathBuilder,
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
 pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
-    self.arena = std.heap.ArenaAllocator.init(allocator);
-    self.allocator = self.arena.allocator();
+    // self.arena = std.heap.ArenaAllocator.init(allocator);
+    // self.allocator = self.arena.allocator();
+    self.allocator = allocator;
     self.interner = interner;
     self.errs = .{};
     self.warns = .{};
     self.scope = .empty;
     self.ir_builder = .init(allocator);
-    self.type_interner = .init(self.allocator);
+    self.type_interner = .init(allocator);
     self.type_interner.cacheFrequentTypes();
     self.scope.initGlobalScope(allocator, interner, &self.type_interner);
     self.globals = .{};
@@ -100,10 +103,6 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
         .Self = self.interner.intern("Self"),
         .init = self.interner.intern("init"),
     };
-}
-
-pub fn deinit(self: *Self) void {
-    self.tm.deinit();
 }
 
 fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
@@ -119,9 +118,9 @@ fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrB
     self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
-pub fn analyze(self: *Self, ast: *const Ast, path: *ArrayListUnmanaged([]const u8)) Error!void {
+pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) void {
     self.ast = ast;
-    self.path = path;
+    self.pb = pb;
     var ctx: Context = .{};
 
     for (ast.nodes) |*node| {
@@ -164,7 +163,7 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Result {
         .expr => |n| return self.analyzeExpr(n, ctx),
     }
 
-    return self.type_interner.intern(.void);
+    return self.type_interner.cache.void;
 }
 
 fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
@@ -426,15 +425,22 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
 }
 
 fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
-    const result = @import("Module.zig").fetchImportedFile(self.allocator, self.ast, node.names, self.path, self.interner);
-    const file = switch (result) {
+    const result = Module.fetchImportedFile(self.allocator, self.ast, node.names, self.pb, self.interner);
+    const file_infos = switch (result) {
         .ok => |f| f,
         .err => |e| {
             self.errs.append(self.allocator, e) catch oom();
             return error.Err;
         },
     };
-    _ = file; // autofix
+    defer {
+        self.allocator.free(file_infos.name);
+        self.allocator.free(file_infos.content);
+    }
+
+    std.log.info("File name: {s}", .{file_infos.name});
+    std.log.info("File content: {s}", .{file_infos.content});
+
     // const module, const cached = try self.importModule(node);
     // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
     // const module_name = self.interner.intern(self.ast.toSource(token));
