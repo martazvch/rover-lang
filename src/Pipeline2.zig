@@ -35,6 +35,7 @@ instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
 globals: std.ArrayListUnmanaged(Value) = .{},
+path: std.ArrayListUnmanaged([]const u8) = .{},
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -59,6 +60,8 @@ pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.analyzer.init(self.allocator, &self.vm.interner);
     self.type_manager = .init(self.allocator);
     self.type_manager.init_builtins(&self.vm.interner);
+
+    self.path.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable) catch oom();
 }
 
 pub fn deinit(self: *Self) void {
@@ -112,7 +115,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    self.analyzer.analyze(&ast) catch @panic("Error analyzer");
+    self.analyzer.analyze(&ast, &self.path) catch @panic("Error analyzer");
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {

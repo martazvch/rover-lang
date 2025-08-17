@@ -478,6 +478,7 @@ type_interner: TypeInterner,
 ir_builder: IrBuilder,
 main: ?usize = null,
 globals: ArrayListUnmanaged(usize),
+path: *ArrayListUnmanaged([]const u8),
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
@@ -521,8 +522,9 @@ fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrB
     self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
-pub fn analyze(self: *Self, ast: *const Ast) Error!void {
+pub fn analyze(self: *Self, ast: *const Ast, path: *ArrayListUnmanaged([]const u8)) Error!void {
     self.ast = ast;
+    self.path = path;
     var ctx: Context = .{};
 
     for (ast.nodes) |*node| {
@@ -559,11 +561,10 @@ fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Result {
         .multi_var_decl => |*n| try self.multiVarDecl(n, ctx),
         .print => |n| try self.print(n, ctx),
         .struct_decl => |*n| try self.structDecl(n, ctx),
-        // .use => |*n| try self.use(n),
+        .use => |*n| try self.use(n, ctx),
         .var_decl => |*n| try self.varDeclaration(n, ctx),
         .@"while" => |*n| try self.whileStmt(n, ctx),
         .expr => |n| return self.analyzeExpr(n, ctx),
-        else => unreachable,
     }
 
     return self.type_interner.intern(.void);
@@ -760,10 +761,6 @@ fn fnParams(
 }
 
 fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Context) Error!usize {
-    // TODO: check if not useless
-    // const snapshot = ctx.snapshot();
-    // defer snapshot.restore();
-
     var had_err = false;
     var final_type: *const Type = self.type_interner.cache.void;
     var deadcode_start: usize = 0;
@@ -831,6 +828,66 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
     }
 }
 
+fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
+    const result = @import("Module.zig").fetchImportedFile(self.allocator, self.ast, node.names, self.path, self.interner);
+    const file = switch (result) {
+        .ok => |f| f,
+        .err => |e| {
+            self.errs.append(self.allocator, e) catch oom();
+            return error.Err;
+        },
+    };
+    _ = file; // autofix
+    // const module, const cached = try self.importModule(node);
+    // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
+    // const module_name = self.interner.intern(self.ast.toSource(token));
+    //
+    // if (node.items) |items| {
+    //     const module_index = if (!cached) b: {
+    //         self.modules.put(self.allocator, module_name, module) catch oom();
+    //         break :b self.modules.count() - 1;
+    //     } else self.modules.getIndex(module_name).?;
+    //
+    //     for (items) |item| {
+    //         const item_name = self.interner.intern(self.ast.toSource(item.item));
+    //         var symbol = module.symbols.get(item_name) orelse return self.err(
+    //             .{ .missing_symbol_in_module = .{
+    //                 .module = self.ast.toSource(node.names[node.names.len - 1]),
+    //                 .symbol = self.ast.toSource(item.item),
+    //             } },
+    //             self.ast.getSpan(item.item),
+    //         );
+    //
+    //         // TODO: error
+    //         if (symbol.type.getKind() != .@"struct" and symbol.type.getKind() != .function) {
+    //             @panic("Not supported yet");
+    //         }
+    //
+    //         const item_token = if (item.alias) |alias| alias else item.item;
+    //         const alias_name = self.interner.intern(self.ast.toSource(item_token));
+    //         const variable = try self.declareVariable(alias_name, symbol.type, true, self.instructions.len, .decl, item_token);
+    //
+    //         self.addInstr(.{ .item_import = .{
+    //             .module_index = module_index,
+    //             .field_index = symbol.index,
+    //             .scope = variable.scope,
+    //         } });
+    //     }
+    // } else {
+    //     if (cached) return self.err(
+    //         .{ .already_imported_module = .{ .name = self.ast.toSource(node.names[node.names.len - 1]) } },
+    //         self.ast.getSpan(node.names[node.names.len - 1]),
+    //     );
+    //
+    //     // TODO: protect cast
+    //     const module_type = Type.create(.module, @intCast(self.modules.count()));
+    //     const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .decl, token);
+    //     self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
+    //     self.modules.put(self.allocator, module_name, module) catch oom();
+    //     self.imports.append(self.allocator, variable) catch oom();
+    // }
+}
+
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!void {
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
@@ -870,14 +927,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
         span.start,
         .{ .set_at = index },
     );
-}
-
-/// Checks if the expression is a literal generating a heap object
-fn isHeapLiteral(expr: *const Expr) bool {
-    return switch (expr.*) {
-        .array, .struct_literal => true,
-        else => false,
-    };
 }
 
 fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error!void {
@@ -2036,4 +2085,12 @@ fn isVoid(self: *const Self, ty: *const Type) bool {
 
 fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
     return ty.toString(self.allocator, self.interner);
+}
+
+/// Checks if the expression is a literal generating a heap object
+fn isHeapLiteral(expr: *const Expr) bool {
+    return switch (expr.*) {
+        .array, .struct_literal => true,
+        else => false,
+    };
 }

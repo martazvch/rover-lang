@@ -567,6 +567,10 @@ fn discard(self: *Self) Error!Node {
 fn use(self: *Self) Error!Node {
     var names: ArrayListUnmanaged(usize) = .{};
 
+    if (self.match(.dot)) {
+        names.append(self.allocator, self.token_idx - 1) catch oom();
+    }
+
     if (!self.check(.identifier)) {
         return self.errAtCurrent(.{ .expect_name = .{ .kind = "module" } });
     }

@@ -5,7 +5,8 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
-pub const Vm = @import("runtime/Vm.zig");
+const Vm = @import("runtime/Vm.zig");
+const oom = @import("utils.zig").oom;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
