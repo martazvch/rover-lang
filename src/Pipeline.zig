@@ -16,7 +16,6 @@ const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/RirRenderer.zig");
-// const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
 const Obj = @import("runtime/Obj.zig");
@@ -145,7 +144,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Compiler
     var compiler = CompilationManager.init(
         self.vm,
-        undefined,
+        // undefined,
         if (options.test_mode and self.config.print_bytecode) .@"test" else if (self.config.print_bytecode) .normal else .none,
         &self.globals,
         self.analyzer.scope.symbol_count,

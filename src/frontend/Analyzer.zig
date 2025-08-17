@@ -18,396 +18,9 @@ const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
 const TokenTag = @import("Lexer.zig").Token.Tag;
-
-pub const Type = union(enum) {
-    void,
-    int,
-    float,
-    bool,
-    str,
-    null,
-    array: *const Type,
-    function: Function,
-    structure: Structure,
-
-    pub const Function = struct {
-        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .{},
-        return_type: *const Type,
-        is_method: bool,
-
-        pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
-            res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
-
-            var kv = self.params.iterator();
-            while (kv.next()) |entry| {
-                res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
-            }
-
-            return res;
-        }
-
-        pub fn toBoundMethod(self: *const Function, self_interned: InternerIdx, allocator: Allocator) Function {
-            var params = self.params.clone(allocator) catch oom();
-            _ = params.orderedRemove(self_interned);
-
-            return .{
-                .params = params,
-                .return_type = self.return_type,
-                .is_method = false,
-            };
-        }
-    };
-
-    pub const Parameter = struct {
-        type: *const Type,
-        default: bool = false,
-        captured: bool = false,
-    };
-
-    pub const Structure = struct {
-        name: InternerIdx,
-        functions: AutoArrayHashMapUnmanaged(usize, Field) = .{},
-        fields: AutoArrayHashMapUnmanaged(usize, Field) = .{},
-        default_value_fields: usize = 0,
-
-        pub const Field = struct {
-            /// Field's type
-            type: *const Type,
-            /// Has a default value
-            default: bool = false,
-        };
-
-        pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
-            res.ensureTotalCapacity(allocator, self.fields.count() - self.default_value_fields) catch oom();
-
-            var kv = self.fields.iterator();
-            while (kv.next()) |entry| {
-                if (!entry.value_ptr.default) {
-                    res.putAssumeCapacity(entry.key_ptr.*, false);
-                }
-            }
-
-            return res;
-        }
-    };
-
-    pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
-        return std.meta.activeTag(self.*) == tag;
-    }
-
-    pub fn isNumeric(self: *const Type) bool {
-        return self.is(.int) or self.is(.float);
-    }
-
-    pub fn isSymbol(self: *const Type) bool {
-        return self.is(.function);
-    }
-
-    pub fn isHeap(self: *const Type) bool {
-        return switch (self.*) {
-            .void, .int, .float, .bool, .str, .null, .function => false,
-            else => true,
-        };
-    }
-
-    pub fn canCastTo(self: *const Type, other: *const Type) bool {
-        return if (self.is(.int) and other.is(.float))
-            true
-        else
-            false;
-    }
-
-    // TODO: maybe name + kind + scope index is enough?
-    pub fn hash(self: Type, hasher: anytype) void {
-        const asBytes = std.mem.asBytes;
-
-        comptime {
-            if (@typeInfo(@TypeOf(hasher)) != .pointer) {
-                @compileError("You must pass a pointer to a haser");
-            }
-
-            if (!@hasDecl(@TypeOf(hasher.*), "update")) {
-                @compileError("Hasher must have an 'update' method");
-            }
-        }
-
-        hasher.update(asBytes(&@intFromEnum(self)));
-
-        // TODO: we could use only name but relative to the base of the project to avoid
-        // name collision between modules
-        switch (self) {
-            .void, .int, .float, .bool, .str, .null => {},
-            .array => |ty| ty.hash(hasher),
-            .function => |ty| {
-                for (ty.params.values()) |param| {
-                    param.type.hash(hasher);
-                }
-                ty.return_type.hash(hasher);
-                hasher.update(asBytes(&@intFromBool(ty.is_method)));
-            },
-            .structure => |ty| {
-                hasher.update(asBytes(&ty.name));
-                // for (ty.fields.values()) |f| {
-                //     f.type.hash(hasher);
-                // }
-                // for (ty.functions.values()) |f| {
-                //     f.type.hash(hasher);
-                // }
-            },
-        }
-    }
-
-    pub fn toString(self: *const Type, allocator: Allocator, interner: *const Interner) []const u8 {
-        var res: std.ArrayListUnmanaged(u8) = .{};
-        var writer = res.writer(allocator);
-
-        switch (self.*) {
-            .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
-            .array => |ty| {
-                writer.writeAll("[") catch oom();
-                writer.writeAll(ty.toString(allocator, interner)) catch oom();
-                writer.writeAll("]") catch oom();
-            },
-            .function => |ty| {
-                writer.writeAll("fn (") catch oom();
-                for (ty.params.values(), 0..) |p, i| {
-                    writer.writeAll(p.type.toString(allocator, interner)) catch oom();
-                    if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();
-                }
-                writer.writeAll(") -> ") catch oom();
-                writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
-            },
-            .structure => |ty| return interner.getKey(ty.name).?,
-        }
-
-        return res.toOwnedSlice(allocator) catch oom();
-    }
-};
-
-const TypeInterner = struct {
-    arena: Allocator,
-    interned: AutoHashMapUnmanaged(u64, *Type) = .{},
-    cache: Cache,
-
-    const Cache = CreateCache(&.{ .int, .float, .bool, .str, .null, .void });
-
-    pub fn init(arena: Allocator) TypeInterner {
-        return .{ .arena = arena, .cache = undefined };
-    }
-
-    pub fn CreateCache(comptime types: []const Type) type {
-        var fields: []const std.builtin.Type.StructField = &.{};
-
-        inline for (types) |ty| {
-            fields = fields ++ .{std.builtin.Type.StructField{
-                .name = @tagName(ty),
-                .type = *const Type,
-                .default_value_ptr = null,
-                .is_comptime = false,
-                .alignment = 1,
-            }};
-        }
-
-        return @Type(.{ .@"struct" = .{
-            .layout = .auto,
-            .fields = fields,
-            .decls = &.{},
-            .is_tuple = false,
-        } });
-    }
-
-    pub fn cacheFrequentTypes(self: *TypeInterner) void {
-        const tags = std.meta.fields(Type);
-        inline for (@typeInfo(Cache).@"struct".fields) |f| {
-            inline for (tags) |tag| {
-                if (comptime std.mem.eql(u8, f.name, tag.name)) {
-                    @field(self.cache, f.name) = self.intern(@unionInit(Type, tag.name, {}));
-                }
-            }
-        }
-    }
-
-    pub fn intern(self: *TypeInterner, ty: Type) *Type {
-        var hasher = std.hash.Wyhash.init(0);
-        ty.hash(&hasher);
-        const hash = hasher.final();
-
-        if (self.interned.get(hash)) |interned| {
-            return interned;
-        }
-
-        const new_type = self.arena.create(Type) catch oom();
-        new_type.* = ty;
-        self.interned.put(self.arena, hash, new_type) catch oom();
-
-        return new_type;
-    }
-};
-
-const ScopeStack = struct {
-    scopes: ArrayListUnmanaged(Scope) = .{},
-    current: *Scope,
-    builtins: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
-    symbol_count: usize = 0,
-
-    pub const empty: ScopeStack = .{ .current = undefined };
-
-    const Scope = struct {
-        variables: AutoHashMapUnmanaged(InternerIdx, Variable) = .{},
-        symbols: AutoArrayHashMapUnmanaged(InternerIdx, Symbol) = .{},
-        /// Offset to apply to any index in this scope. Correspond to the numbers of locals
-        /// in parent scopes (represents stack at runtime)
-        offset: usize,
-
-        pub const Symbol = struct { type: *const Type, index: usize };
-    };
-
-    pub const Kind = enum { variable, symbol };
-
-    pub fn open(self: *ScopeStack, allocator: Allocator, offset_from_child: bool) void {
-        const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
-        self.scopes.append(allocator, .{ .offset = offset }) catch oom();
-        self.updateCurrent();
-    }
-
-    pub fn close(self: *ScopeStack) usize {
-        const popped = self.scopes.pop().?;
-        self.updateCurrent();
-        return popped.variables.count();
-    }
-
-    pub const ScopeCaptures = struct {
-        count: usize,
-        captured: []const usize,
-    };
-
-    pub fn initGlobalScope(self: *ScopeStack, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
-        self.open(allocator, false);
-        const builtins = std.meta.fields(TypeInterner.Cache);
-        self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
-
-        inline for (builtins) |builtin| {
-            self.builtins.putAssumeCapacity(interner.intern(builtin.name), @field(type_interner.cache, builtin.name));
-        }
-    }
-
-    fn updateCurrent(self: *ScopeStack) void {
-        self.current = &self.scopes.items[self.scopes.items.len - 1];
-    }
-
-    pub fn isGlobal(self: *ScopeStack) bool {
-        return self.scopes.items.len == 1;
-    }
-
-    pub fn declareVar(
-        self: *ScopeStack,
-        allocator: Allocator,
-        name: InternerIdx,
-        ty: *const Type,
-        captured: bool,
-        initialized: bool,
-    ) error{TooManyLocals}!usize {
-        if (self.current.variables.count() > 255 and !self.isGlobal()) {
-            return error.TooManyLocals;
-        }
-
-        const index = self.current.variables.count();
-        self.current.variables.put(allocator, name, .{
-            .type = ty,
-            .kind = if (self.isGlobal()) .global else .local,
-            .initialized = initialized,
-            .index = index,
-            .captured = captured,
-        }) catch oom();
-
-        return index;
-    }
-
-    /// Tries to retreive a variable from scopes and the local offset of its scope
-    pub fn getVariable(self: *const ScopeStack, name: InternerIdx) ?struct { *Variable, usize } {
-        var i = self.scopes.items.len;
-
-        while (i > 0) {
-            i -= 1;
-            const scope = &self.scopes.items[i];
-
-            if (scope.variables.getPtr(name)) |variable| {
-                return .{ variable, scope.offset };
-            }
-        }
-
-        return null;
-    }
-
-    // pub fn captureVariableInCurrent(self: *ScopeStack, name: InternerIdx) error{NotInScope}!void {
-    //     const variable = self.current.variables.getPtr(name) orelse return error.NotInScope;
-    //     variable.captured = true;
-    // }
-
-    pub fn declareSymbol(self: *ScopeStack, allocator: Allocator, name: InternerIdx, ty: *const Type) void {
-        self.current.symbols.put(allocator, name, .{ .type = ty, .index = self.symbol_count }) catch oom();
-        self.symbol_count += 1;
-    }
-
-    /// Forward declares a symbol without incrementing global symbol count
-    pub fn forwardDeclareSymbol(self: *ScopeStack, allocator: Allocator, name: InternerIdx) *Scope.Symbol {
-        self.current.symbols.put(allocator, name, .{ .type = undefined, .index = self.symbol_count }) catch oom();
-        self.symbol_count += 1;
-
-        return self.current.symbols.getPtr(name).?;
-    }
-
-    /// Removes symbol name from **current** scope
-    pub fn removeSymbol(self: *ScopeStack, name: InternerIdx) void {
-        _ = self.current.symbols.fetchOrderedRemove(name);
-    }
-
-    pub fn getSymbol(self: *const ScopeStack, name: InternerIdx) ?*Scope.Symbol {
-        var i = self.scopes.items.len;
-
-        while (i > 0) {
-            i -= 1;
-            const scope = &self.scopes.items[i];
-
-            if (scope.symbols.getPtr(name)) |sym| {
-                return sym;
-            }
-        }
-
-        return null;
-    }
-
-    pub fn getType(self: *ScopeStack, name: InternerIdx) ?*const Type {
-        if (self.builtins.get(name)) |builtin| {
-            return builtin;
-        } else if (self.getSymbol(name)) |sym| {
-            return sym.type;
-        }
-
-        return null;
-    }
-
-    pub fn isInScope(self: *const ScopeStack, name: InternerIdx, kind: Kind) bool {
-        return switch (kind) {
-            .variable => self.current.variables.get(name) != null,
-            .symbol => self.current.symbols.get(name) != null,
-        };
-    }
-};
-
-fn declareVariable(self: *Self, name: InternerIdx, ty: *const Type, captured: bool, initialized: bool, span: Span) Error!usize {
-    return self.scope.declareVar(self.allocator, name, ty, captured, initialized) catch self.err(.too_many_locals, span);
-}
-
-fn declareSymbol(self: *Self, name: InternerIdx, ty: *const Type) void {
-    self.scope.declareSymbol(self.allocator, name, ty);
-
-    if (self.scope.isGlobal()) {
-        self.globals.append(self.allocator, self.scope.symbol_count) catch oom();
-    }
-}
+const Type = @import("types.zig").Type;
+const TypeInterner = @import("types.zig").TypeInterner;
+const ScopeStack = @import("ScopeStack.zig");
 
 const Context = struct {
     fn_type: ?*const Type = null,
@@ -443,21 +56,6 @@ const Context = struct {
     pub fn reset(self: *Context) void {
         self.* = .{};
     }
-};
-
-const Variable = struct {
-    /// Variable's type
-    type: *const Type,
-    /// Kind: global, local or captured
-    kind: enum { local, global },
-    /// Is initialized
-    initialized: bool,
-    /// Index of declaration
-    index: Index = 0,
-    /// Is captured
-    captured: bool = false,
-
-    pub const Index = usize;
 };
 
 const Self = @This();
@@ -1643,7 +1241,7 @@ fn identifier(
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
 }
 
-fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*Variable {
+fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*ScopeStack.Variable {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
@@ -1655,7 +1253,7 @@ fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Conte
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*Variable {
+fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*ScopeStack.Variable {
     _ = ctx; // autofix
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
@@ -2092,4 +1690,16 @@ fn isHeapLiteral(expr: *const Expr) bool {
         .array, .struct_literal => true,
         else => false,
     };
+}
+
+fn declareVariable(self: *Self, name: InternerIdx, ty: *const Type, captured: bool, initialized: bool, span: Span) Error!usize {
+    return self.scope.declareVar(self.allocator, name, ty, captured, initialized) catch self.err(.too_many_locals, span);
+}
+
+fn declareSymbol(self: *Self, name: InternerIdx, ty: *const Type) void {
+    self.scope.declareSymbol(self.allocator, name, ty);
+
+    if (self.scope.isGlobal()) {
+        self.globals.append(self.allocator, self.scope.symbol_count) catch oom();
+    }
 }

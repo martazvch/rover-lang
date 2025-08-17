@@ -12,7 +12,7 @@ const GenReport = @import("../reporter.zig").GenReport;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
-const NativeFn = @import("../std/meta.zig").NativeFn;
+// const NativeFn = @import("../std/meta.zig").NativeFn;
 const oom = @import("../utils.zig").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
@@ -20,7 +20,7 @@ const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
 pub const CompilationManager = struct {
     vm: *Vm,
-    natives: []const NativeFn,
+    // natives: []const NativeFn,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
     instr_data: []const Instruction.Data,
@@ -37,7 +37,7 @@ pub const CompilationManager = struct {
 
     pub fn init(
         vm: *Vm,
-        natives: []const NativeFn,
+        // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
         globals: *ArrayListUnmanaged(Value),
         symbol_count: usize,
@@ -47,7 +47,7 @@ pub const CompilationManager = struct {
 
         return .{
             .vm = vm,
-            .natives = natives,
+            // .natives = natives,
             .compiler = undefined,
             .errs = .init(vm.allocator),
             .instr_idx = undefined,
@@ -811,23 +811,24 @@ const Compiler = struct {
     }
 
     fn use(self: *Self, count: usize) Error!void {
+        _ = count; // autofix
         // NOTE: For now, analyzer places an empty import
         // to skip "std" by placing a Null instruction. Needs a rework
         self.manager.instr_idx += 1;
 
-        for (0..count) |_| {
-            const line = self.getLineNumber();
-            const imported = self.next().imported;
-
-            try self.emitConstant(
-                Value.makeObj(Obj.NativeFunction.create(
-                    self.manager.vm,
-                    self.manager.natives[imported.index],
-                ).asObj()),
-                line,
-            );
-            self.defineVariable(imported.variable, line);
-        }
+        // for (0..count) |_| {
+        //     const line = self.getLineNumber();
+        //     const imported = self.next().imported;
+        //
+        //     try self.emitConstant(
+        //         Value.makeObj(Obj.NativeFunction.create(
+        //             self.manager.vm,
+        //             self.manager.natives[imported.index],
+        //         ).asObj()),
+        //         line,
+        //     );
+        //     self.defineVariable(imported.variable, line);
+        // }
     }
 
     fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {
