@@ -6,7 +6,7 @@ pub const RcAction = enum { increment, cow, none };
 
 pub const Instruction = struct {
     data: Data,
-    offset: usize = 0,
+    offset: usize,
 
     pub const Data = union(enum) {
         array: Array,
@@ -17,7 +17,6 @@ pub const Instruction = struct {
         block: Block,
         bool: bool,
         bound_method: usize,
-        box: Variable,
         call: Call,
         cast: Type,
         discard,
@@ -25,9 +24,6 @@ pub const Instruction = struct {
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
-        identifier_absolute: usize,
-        // TODO: deleted in v2
-        identifier_id: IdentifierId,
         symbol_id: u8,
         @"if": If,
         // TODO: delete later
@@ -89,14 +85,17 @@ pub const Instruction = struct {
     };
 
     pub const Array = struct {
-        /// Number of expressions
-        len: usize,
-        /// Number of casts after the cast_until field
-        cast_count: usize,
-        /// Cast all element until this one. Used for cases where we discover later in the
-        /// array analysis that all previous expressions should be casted like in this case:
-        /// [1, 3, 4.5]. Here, we need to backtrack all the casts
-        cast_until: usize,
+        // /// Number of expressions
+        // len: usize,
+        // /// Number of casts after the cast_until field
+        // cast_count: usize,
+        // /// Cast all element until this one. Used for cases where we discover later in the
+        // /// array analysis that all previous expressions should be casted like in this case:
+        // /// [1, 3, 4.5]. Here, we need to backtrack all the casts
+        // cast_until: usize,
+        elems: []const Elem,
+
+        pub const Elem = struct { cast: bool, incr_rc: bool };
     };
     pub const ArrayAccess = struct {
         /// Cow for the array identifier
@@ -118,32 +117,21 @@ pub const Instruction = struct {
         /// of it before mutation. If so, check the reference count and perform a deep copy if
         /// it is referenced
         cow: bool,
-        // Value instruction index, used to jump right to it to compile it first
-        // value_instr: usize,
+        /// Increment assigned value reference count
+        incr_rc: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct {
-        arity: u8,
-        default_count: u8,
-        invoke: bool = false,
-    };
-    // pub const Closure = struct {
-    //     body_len: u64,
-    //     default_params: usize,
-    //     captures: []const usize,
-    //     return_kind: ReturnKind,
-    // };
+    pub const Call = struct { arity: u8, default_count: u8 };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
         body_len: u64,
-        default_params: usize,
+        default_params: u8,
         captures_count: usize,
         return_kind: ReturnKind,
 
         pub const Kind = union(enum) { closure, symbol: usize };
     };
-    pub const IdentifierId = struct { index: usize, rc_action: RcAction };
     pub const If = struct {
         cast: Cast,
         has_else: bool,
@@ -159,7 +147,7 @@ pub const Instruction = struct {
     pub const Field = struct {
         index: usize,
         kind: Kind,
-        rc_action: RcAction,
+        // rc_action: RcAction,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
@@ -167,7 +155,11 @@ pub const Instruction = struct {
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
-    pub const Value = struct { value_instr: usize, cast: bool = false };
+    pub const Value = struct {
+        value_instr: usize,
+        cast: bool,
+        box: bool,
+    };
     pub const Unary = struct {
         op: Op,
         typ: Type,
@@ -175,12 +167,18 @@ pub const Instruction = struct {
         pub const Op = enum { minus, bang };
     };
     pub const VarDecl = struct {
-        box: bool = false,
-        cast: bool = false,
+        box: bool,
+        cast: bool,
         variable: Variable,
-        has_value: bool = false,
+        has_value: bool,
+        /// Increment reference count of value
+        incr_rc: bool,
     };
-    pub const Variable = struct { index: u64, scope: Scope, unbox: bool };
+    pub const Variable = struct {
+        index: u64,
+        scope: Scope,
+        unbox: bool,
+    };
 };
 
 comptime {

@@ -10,29 +10,30 @@ const Analyzer = @import("frontend/Analyzer.zig");
 const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("frontend/Ast.zig");
 const AstRender = @import("frontend/AstRender.zig");
+const Walker = @import("frontend/AstWalker.zig");
 const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const RirRenderer = @import("frontend/RirRenderer.zig");
-const Symbols = @import("frontend/TypeManager.zig").Symbols;
-const TypeManager = @import("frontend/TypeManager.zig");
+// const TypeManager = @import("frontend/TypeManager.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
 const oom = @import("utils.zig").oom;
-const Function = @import("runtime/Obj.zig").Function;
+const Obj = @import("runtime/Obj.zig");
 const Value = @import("runtime/values.zig").Value;
+const Config = @import("runtime/Vm.zig").Config;
 const Vm = @import("runtime/Vm.zig");
 
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
-config: Vm.Config,
+config: Config,
 analyzer: Analyzer,
-type_manager: TypeManager,
 instr_count: usize,
 code_count: usize,
 is_sub: bool = false,
 globals: std.ArrayListUnmanaged(Value) = .{},
+path: std.ArrayListUnmanaged([]const u8) = .{},
 
 const Self = @This();
 const Error = error{ExitOnPrint};
@@ -43,20 +44,19 @@ pub const empty: Self = .{
     .allocator = undefined,
     .config = undefined,
     .analyzer = undefined,
-    .type_manager = undefined,
     .instr_count = 0,
     .code_count = 0,
 };
 
-pub fn init(self: *Self, vm: *Vm, config: Vm.Config) void {
+pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.vm = vm;
     self.arena = .init(vm.allocator);
     self.allocator = self.arena.allocator();
     self.config = config;
     self.analyzer = undefined;
-    self.analyzer.init(self.allocator, self, &self.vm.interner, config.embedded);
-    self.type_manager = .init(self.allocator);
-    self.type_manager.init_builtins(&self.vm.interner);
+    self.analyzer.init(self.allocator, &self.vm.interner);
+
+    self.path.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable) catch oom();
 }
 
 pub fn deinit(self: *Self) void {
@@ -64,13 +64,13 @@ pub fn deinit(self: *Self) void {
     self.globals.deinit(self.vm.allocator);
 }
 
-// TODO: clean unused
+// // TODO: clean unused
 pub const Module = struct {
     name: []const u8,
     imports: []Module,
-    symbols: Symbols,
-    function: *Function,
+    function: *Obj.Function,
     globals: []Value,
+    symbols: []Value,
 };
 
 /// Runs the pipeline
@@ -94,6 +94,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     const token_slice = lexer.tokens.toOwnedSlice();
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
+    var walker: Walker = undefined;
+    walker.init(self.allocator, &self.vm.interner, &ast);
+    defer walker.deinit();
+    walker.walk();
+
     if (options.test_mode and self.config.print_ast) {
         try printAst(self.allocator, &ast, &parser);
         return error.ExitOnPrint;
@@ -105,13 +110,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    // Analyzer
-    self.analyzer.analyze(&ast);
-    defer self.analyzer.reinit();
-
-    // We don't keep errors/warnings from a prompt to another
-    defer self.analyzer.errs.clearRetainingCapacity();
-    defer self.analyzer.warns.clearRetainingCapacity();
+    self.analyzer.analyze(&ast, &self.path) catch @panic("Error analyzer");
 
     // Analyzed Ast printer
     if (options.test_mode and self.config.print_ir) {
@@ -129,10 +128,11 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
                 try reporter.reportAll(file_name, self.analyzer.warns.items);
             }
 
-            self.instr_count = self.analyzer.instructions.len;
+            self.instr_count = self.analyzer.ir_builder.count();
             return error.ExitOnPrint;
-        } else if (self.config.print_ir)
+        } else if (self.config.print_ir) {
             try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        }
     }
 
     // Analyzer warnings
@@ -142,35 +142,36 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         return error.ExitOnPrint;
     }
 
-    self.globals.ensureUnusedCapacity(self.vm.allocator, self.analyzer.symbols.count()) catch oom();
-
     // Compiler
     var compiler = CompilationManager.init(
-        file_name,
         self.vm,
-        self.analyzer.type_manager.natives.functions,
-        self.instr_count,
-        &self.analyzer.instructions,
-        self.analyzer.modules.values(),
-        if (options.test_mode and self.config.print_bytecode) .Test else if (self.config.print_bytecode) .Normal else .none,
-        if (self.config.embedded) 0 else self.analyzer.main.?,
-        self.config.embedded,
+        undefined,
+        if (options.test_mode and self.config.print_bytecode) .@"test" else if (self.config.print_bytecode) .normal else .none,
         &self.globals,
+        self.analyzer.scope.symbol_count,
+        undefined,
     );
     defer compiler.deinit();
-
-    self.instr_count = self.analyzer.instructions.len;
-    const function = try compiler.compile();
     errdefer compiler.globals.deinit(self.vm.allocator);
+
+    const function = try compiler.compile(
+        file_name,
+        self.instr_count,
+        self.analyzer.ir_builder.instructions.items(.data),
+        self.analyzer.ir_builder.computeLineFromOffsets(source),
+        if (self.config.embedded) 0 else self.analyzer.main.?,
+        self.config.embedded,
+    );
+    self.instr_count = self.analyzer.ir_builder.count();
 
     return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
         return error.ExitOnPrint;
     } else .{
         .name = file_name,
-        .imports = self.analyzer.modules.entries.toOwnedSlice().items(.value),
-        .symbols = self.analyzer.symbols,
+        .imports = undefined,
         .function = function,
         .globals = self.globals.items,
+        .symbols = compiler.symbols,
     };
 }
 
@@ -217,7 +218,7 @@ fn renderIr(
     var rir_renderer = RirRenderer.init(
         allocator,
         source,
-        analyzer.instructions.items(.data)[start..],
+        analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
         &self.vm.interner,

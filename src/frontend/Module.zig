@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Ast = @import("Ast.zig");
-const AnalyzerReport = @import("Analyzer2.zig").AnalyzerReport;
+const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Interner = @import("../Interner.zig");
 const oom = @import("../utils.zig").oom;
 

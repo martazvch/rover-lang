@@ -23,7 +23,6 @@ pub fn main() !void {
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
         \\--print-ir             Prints the extra infos on AST
-        \\--v1                   Runs v1
     );
 
     const parsers = comptime .{
@@ -50,59 +49,30 @@ pub fn main() !void {
         .embedded = if (res.positionals[0] == null) true else false,
     };
 
-    if (res.args.v1 == 1) {
-        var vm: Vm = .empty;
-        vm.init(allocator, config);
-        defer vm.deinit();
+    var vm: Vm = .empty;
+    vm.init(allocator, config);
+    defer vm.deinit();
 
-        if (res.positionals[0]) |f| {
-            const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
-                var buf: [500]u8 = undefined;
-                _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, f });
-                print("{s}", .{buf});
-                std.process.exit(0);
-            };
-            defer file.close();
+    if (res.positionals[0]) |f| {
+        const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
+            var buf: [500]u8 = undefined;
+            _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, f });
+            print("{s}", .{buf});
+            std.process.exit(0);
+        };
+        defer file.close();
 
-            // The file has a new line inserted by default
-            const size = try file.getEndPos();
-            const buf = try allocator.alloc(u8, size + 1);
-            defer allocator.free(buf);
+        // The file has a new line inserted by default
+        const size = try file.getEndPos();
+        const buf = try allocator.alloc(u8, size + 1);
+        defer allocator.free(buf);
 
-            _ = try file.readAll(buf);
-            buf[size] = 0;
-            const zt = buf[0..size :0];
+        _ = try file.readAll(buf);
+        buf[size] = 0;
+        const zt = buf[0..size :0];
 
-            try vm.run(f, zt);
-        } else {
-            try vm.runRepl();
-        }
+        try vm.run(f, zt);
     } else {
-        var vm: @import("runtime/Vm2.zig") = .empty;
-        vm.init(allocator, config);
-        defer vm.deinit();
-
-        if (res.positionals[0]) |f| {
-            const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
-                var buf: [500]u8 = undefined;
-                _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, f });
-                print("{s}", .{buf});
-                std.process.exit(0);
-            };
-            defer file.close();
-
-            // The file has a new line inserted by default
-            const size = try file.getEndPos();
-            const buf = try allocator.alloc(u8, size + 1);
-            defer allocator.free(buf);
-
-            _ = try file.readAll(buf);
-            buf[size] = 0;
-            const zt = buf[0..size :0];
-
-            try vm.run(f, zt);
-        } else {
-            try vm.runRepl();
-        }
+        try vm.runRepl();
     }
 }

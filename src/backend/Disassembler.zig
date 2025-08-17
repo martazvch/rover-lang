@@ -12,8 +12,10 @@ globals: []const Value,
 disassembled: ArrayList(u8),
 render_mode: RenderMode,
 
+prev_line: usize = 0,
+
 const Self = @This();
-pub const RenderMode = enum { none, Normal, Test };
+pub const RenderMode = enum { none, normal, @"test" };
 
 pub fn init(allocator: Allocator, chunk: *const Chunk, globals: []const Value, render_mode: RenderMode) Self {
     return .{
@@ -42,31 +44,45 @@ pub fn disSlice(self: *Self, name: []const u8, start: usize) !void {
     }
 }
 
-pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
-    if (self.render_mode == .Normal) try writer.print("{:0>4} ", .{offset});
+pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Error || std.posix.WriteError)!usize {
+    const line = self.chunk.offsets.items[offset];
+
+    if (self.render_mode == .normal) {
+        if (line > self.prev_line) {
+            try writer.print("{:>4}  ", .{line});
+        } else {
+            try writer.writeAll("   |  ");
+        }
+    }
+
+    self.prev_line = line;
 
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);
     return switch (op) {
         .array => self.indexInstruction("OP_ARRAY", offset, writer),
         .array_access => self.simpleInstruction("OP_ARRAY_ACCESS", offset, writer),
-        .array_access_reg => self.simpleInstruction("OP_ARRAY_ACCESS_REG", offset, writer),
-        .array_access_reg_cow => self.simpleInstruction("OP_ARRAY_ACCESS_REG_COW", offset, writer),
+        .array_access_cow => self.simpleInstruction("OP_ARRAY_ACCESS_COW", offset, writer),
+        // .array_access_reg => self.simpleInstruction("OP_ARRAY_ACCESS_REG", offset, writer),
+        // .array_access_reg_cow => self.simpleInstruction("OP_ARRAY_ACCESS_REG_COW", offset, writer),
         .array_access_chain => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN", offset, writer),
-        .array_access_chain_reg => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN_REG", offset, writer),
+        // .array_access_chain_reg => self.indexInstruction("OP_ARRAY_ACCESS_CHAIN_REG", offset, writer),
         .array_assign => self.simpleInstruction("OP_ARRAY_ASSIGN", offset, writer),
         .array_assign_chain => self.indexInstruction("OP_ARRAY_ASSIGN_CHAIN", offset, writer),
         .add_float => self.simpleInstruction("OP_ADD_FLOAT", offset, writer),
         .add_int => self.simpleInstruction("OP_ADD_INT", offset, writer),
         .bound_import => self.getMember("OP_BOUND_IMPORT", offset, writer),
-        .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
+        .box => self.simpleInstruction("BOX", offset, writer),
+        // .bound_method => self.getMember("OP_BOUND_METHOD", offset, writer),
         .call => self.indexInstruction("OP_CALL", offset, writer),
         .call_native => self.indexInstruction("OP_CALL_NATIVE", offset, writer),
         .cast_to_float => self.simpleInstruction("OP_CAST_TO_FLOAT", offset, writer),
+        .closure => self.indexInstruction("CLOSURE", offset, writer),
         .constant => self.constantInstruction("OP_CONSTANT", offset, writer),
-        .define_heap_var => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
+        // .define_heap_var => self.indexInstruction("OP_DEFINE_HEAP_VAR", offset, writer),
         .define_global => self.indexInstruction("OP_DEFINE_GLOBAL", offset, writer),
         .div_float => self.simpleInstruction("OP_DIVIDE_FLOAT", offset, writer),
         .div_int => self.simpleInstruction("OP_DIVIDE_INT", offset, writer),
+        .dup => self.simpleInstruction("DUP", offset, writer),
         .eq_bool => self.simpleInstruction("OP_EQUAL_BOOL", offset, writer),
         .eq_float => self.simpleInstruction("OP_EQUAL_FLOAT", offset, writer),
         .eq_int => self.simpleInstruction("OP_EQUAL_INT", offset, writer),
@@ -75,23 +91,29 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .false => self.simpleInstruction("OP_FALSE", offset, writer),
         .ge_float => self.simpleInstruction("OP_GREATER_EQUAL_FLOAT", offset, writer),
         .ge_int => self.simpleInstruction("OP_GREATER_EQUAL_INT", offset, writer),
+        // .get_capture => self.indexInstruction("GET_CAPTURE", offset, writer),
         .get_default => self.indexInstruction("OP_GET_DEFAULT", offset, writer),
         .get_field => self.getMember("OP_GET_FIELD", offset, writer),
-        .get_field_reg => self.getMember("OP_GET_FIELD_REG", offset, writer),
-        .get_field_reg_cow => self.getMember("OP_GET_FIELD_REG_COW", offset, writer),
+        .get_field_cow => self.getMember("OP_GET_FIELD_COW", offset, writer),
+        // .get_field_reg => self.getMember("OP_GET_FIELD_REG", offset, writer),
+        // .get_field_reg_cow => self.getMember("OP_GET_FIELD_REG_COW", offset, writer),
         .get_global => self.getGlobal(false, offset, writer),
-        .get_global_reg => self.getGlobal(true, offset, writer),
-        .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
+        .get_global_cow => self.getGlobal(true, offset, writer),
+        // .get_global_reg => self.getGlobal(true, offset, writer),
+        // .get_heap => self.indexInstruction("OP_GET_HEAP", offset, writer),
         .get_local => self.indexInstruction("OP_GET_LOCAL", offset, writer),
-        .get_local_reg => self.indexInstruction("OP_GET_LOCAL_REG", offset, writer),
-        .get_local_reg_cow => self.indexInstruction("OP_GET_LOCAL_REG_COW", offset, writer),
-        .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
+        .get_local_cow => self.indexInstruction("GET_LOCAL_COW", offset, writer),
+        // .get_local_reg => self.indexInstruction("OP_GET_LOCAL_REG", offset, writer),
+        // .get_local_reg_cow => self.indexInstruction("OP_GET_LOCAL_REG_COW", offset, writer),
+        // .get_local_absolute => self.indexInstruction("OP_GET_LOCAL_ABSOLUTE", offset, writer),
+        .get_method => self.indexInstruction("OP_GET_METHOD", offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", offset, writer),
-        .get_symbol_reg => self.indexInstruction("OP_GET_SYMBOL_REG", offset, writer),
+        .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
+        // .get_symbol_reg => self.indexInstruction("OP_GET_SYMBOL_REG", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
-        .invoke => self.invokeInstruction("OP_INVOKE", offset, writer),
+        // .invoke => self.invokeInstruction("OP_INVOKE", offset, writer),
         .jump => self.jumpInstruction("OP_JUMP", 1, offset, writer),
         .jump_if_false => self.jumpInstruction("OP_JUMP_IF_FALSE", 1, offset, writer),
         .jump_if_true => self.jumpInstruction("OP_JUMP_IF_TRUE", 1, offset, writer),
@@ -117,26 +139,31 @@ pub fn disInstruction(self: *const Self, offset: usize, writer: anytype) (Alloca
         .pop => self.simpleInstruction("OP_POP", offset, writer),
         .print => self.simpleInstruction("OP_PRINT", offset, writer),
         .push_module => self.indexInstruction("OP_PUSH_MODULE", offset, writer),
-        .reg_assign => self.simpleInstruction("OP_REG_ASSIGN", offset, writer),
-        .reg_assign_cow => self.simpleInstruction("OP_REG_ASSIGN_COW", offset, writer),
-        .reg_push => self.simpleInstruction("OP_REG_PUSH", offset, writer),
+        // .reg_assign => self.simpleInstruction("OP_REG_ASSIGN", offset, writer),
+        // .reg_assign_cow => self.simpleInstruction("OP_REG_ASSIGN_COW", offset, writer),
+        // .reg_push => self.simpleInstruction("OP_REG_PUSH", offset, writer),
         .@"return" => self.simpleInstruction("OP_RETURN", offset, writer),
         .scope_return => self.indexInstruction("OP_SCOPE_RETURN", offset, writer),
+        // .set_capture => self.indexInstruction("SET_CAPTURE", offset, writer),
+        .set_field => self.indexInstruction("SET_FIELD", offset, writer),
         .set_global => self.indexInstruction("OP_SET_GLOBAL", offset, writer),
-        .set_heap => self.indexInstruction("OP_SET_HEAP", offset, writer),
+        // .set_heap => self.indexInstruction("OP_SET_HEAP", offset, writer),
         .set_local => self.indexInstruction("OP_SET_LOCAL", offset, writer),
+        .set_local_box => self.indexInstruction("SET_LOCAL_BOX", offset, writer),
         .str_cat => self.simpleInstruction("OP_STRING_CONCAT", offset, writer),
         .str_mul_l => self.simpleInstruction("OP_STRING_MUL_L", offset, writer),
         .str_mul_r => self.simpleInstruction("OP_STRING_MUL_R", offset, writer),
         .struct_literal => self.indexInstruction("OP_STRUCT_LIT", offset, writer),
         .sub_float => self.simpleInstruction("OP_SUBTRACT_FLOAT", offset, writer),
         .sub_int => self.simpleInstruction("OP_SUBTRACT_INT", offset, writer),
+        .swap => self.simpleInstruction("SWAP", offset, writer),
         .true => self.simpleInstruction("OP_TRUE", offset, writer),
+        .unbox => self.simpleInstruction("UNBOX", offset, writer),
     };
 }
 
 fn simpleInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s}\n", .{name});
     } else {
         try writer.print("{s:<24}\n", .{name});
@@ -148,7 +175,7 @@ fn simpleInstruction(self: *const Self, name: []const u8, offset: usize, writer:
 fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     const index = self.chunk.code.items[offset + 1];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}\n", .{ name, index });
     } else {
         try writer.print("{s:<24} index {:>4}\n", .{ name, index });
@@ -157,11 +184,11 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     return offset + 2;
 }
 
-fn getGlobal(self: *const Self, reg: bool, offset: usize, writer: anytype) !usize {
+fn getGlobal(self: *const Self, cow: bool, offset: usize, writer: anytype) !usize {
     const index = self.chunk.code.items[offset + 1];
-    const text = if (reg) "OP_GET_GLOBAL_REG" else "OP_GET_GLOBAL";
+    const text = if (cow) "OP_GET_GLOBAL_COW" else "OP_GET_GLOBAL";
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}", .{ text, index });
     } else {
         try writer.print("{s:<24} index {:>4}", .{ text, index });
@@ -180,7 +207,7 @@ fn constantInstruction(self: *const Self, name: []const u8, offset: usize, write
     const constant = self.chunk.code.items[offset + 1];
     const value = self.chunk.constants[constant];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}, value ", .{ name, constant });
     } else {
         try writer.print("{s:<24} index {:>4}, value ", .{ name, constant });
@@ -202,7 +229,7 @@ fn jumpInstruction(
     jump |= self.chunk.code.items[offset + 2];
     const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 3;
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} {} -> {}\n", .{ name, offset, target });
     } else {
         try writer.print("{s:<24} {:>4} -> {}\n", .{ name, offset, target });
@@ -223,7 +250,7 @@ fn for_instruction(
     const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 4;
     const iter_index = self.chunk.code.items[offset + 3];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} iter index {}, {} -> {}\n", .{ name, iter_index, offset, target });
     } else {
         try writer.print("{s:<24} iter index {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });
@@ -234,11 +261,12 @@ fn for_instruction(
 
 fn getMember(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
     // Skips the structure op
+    // TODO: What?
     var local_offset = offset + 1;
     const idx = self.chunk.code.items[local_offset];
     local_offset += 1;
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} index {}\n", .{ name, idx });
     } else {
         try writer.print("{s:<24} index {:>4}\n", .{ name, idx });
@@ -251,7 +279,7 @@ fn invokeInstruction(self: *const Self, text: []const u8, offset: usize, writer:
     const arity = self.chunk.code.items[offset + 1];
     const obj_idx = self.chunk.code.items[offset + 2];
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} arity {}, method index {}\n", .{ text, arity, obj_idx });
     } else {
         try writer.print("{s:<24} arity {:>4}, method index {:>4}\n", .{ text, arity, obj_idx });
@@ -265,7 +293,7 @@ fn importItem(self: *const Self, offset: usize, writer: anytype) !usize {
     const field = self.chunk.code.items[offset + 2];
     const text = "OP_IMPORT_ITEM";
 
-    if (self.render_mode == .Test) {
+    if (self.render_mode == .@"test") {
         try writer.print("{s} module index: {}, field index: {}\n", .{ text, module, field });
     } else {
         try writer.print("{s:<24} module index {:>4}: field index: {:>4}\n", .{ text, module, field });

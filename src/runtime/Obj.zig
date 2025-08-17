@@ -22,7 +22,8 @@ const Obj = @This();
 const Kind = enum {
     array,
     bound_import,
-    bound_method,
+    box,
+    closure,
     function,
     instance,
     module,
@@ -52,7 +53,7 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .array => self.as(Array).deepCopy(vm).asObj(),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .bound_import, .bound_method, .function, .module, .native_fn, .string, .structure => self,
+        .bound_import, .box, .closure, .function, .module, .native_fn, .string, .structure => self,
     };
 }
 
@@ -60,7 +61,8 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
     switch (self.kind) {
         .array => self.as(Array).deinit(vm),
         .bound_import => self.as(BoundImport).deinit(vm.allocator),
-        .bound_method => self.as(BoundMethod).deinit(vm.allocator),
+        .box => self.as(Box).deinit(vm),
+        .closure => self.as(Closure).deinit(vm),
         .function => {
             const function = self.as(Function);
             function.deinit(vm);
@@ -82,7 +84,7 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
     }
 }
 
-pub fn as(self: *Obj, comptime T: type) *T {
+pub inline fn as(self: *Obj, comptime T: type) *T {
     comptime assert(@hasField(T, "obj"));
 
     return @alignCast(@fieldParentPtr("obj", self));
@@ -95,7 +97,8 @@ pub fn print(self: *Obj, writer: anytype) PrintError!void {
     try switch (self.kind) {
         .array => self.as(Array).print(writer),
         .bound_import => self.as(BoundImport).import.print(writer),
-        .bound_method => self.as(BoundMethod).method.print(writer),
+        .box => self.as(Box).print(writer),
+        .closure => self.as(Closure).print(writer),
         .function => self.as(Function).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
         .module => writer.print("<module {s}>", .{self.as(ObjModule).module.name}),
@@ -108,7 +111,6 @@ pub fn print(self: *Obj, writer: anytype) PrintError!void {
 pub fn log(self: *Obj) void {
     switch (self.kind) {
         .array => std.debug.print("<array>", .{}),
-        .bound_method => self.as(BoundMethod).method.log(),
         .function => self.as(Function).log(),
         .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
         .native_fn => std.debug.print("<native fn>", .{}),
@@ -117,19 +119,9 @@ pub fn log(self: *Obj) void {
     }
 }
 
-pub fn initCall(self: *Obj, vm: *Vm, arity: usize) struct { *Function, bool } {
-    return switch (self.kind) {
-        .bound_import => .{ self.as(BoundImport).initCall(vm, arity), true },
-        .bound_method => .{ self.as(BoundMethod).initCall(vm, arity), false },
-        .function => .{ self.as(Function), false },
-        else => unreachable,
-    };
-}
-
 pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
         .bound_import => self.as(BoundImport).import.as(Structure).methods[index].default_values,
-        .bound_method => self.as(BoundMethod).method.default_values,
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
         .module => self.as(ObjModule).module.globals[index].obj.as(Function).default_values,
@@ -346,6 +338,83 @@ pub const Function = struct {
     }
 };
 
+pub const Closure = struct {
+    obj: Obj,
+    function: *Function,
+    captures: []Value,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, function: *Function, captures: []Value) *Self {
+        const obj = Obj.allocate(vm, Self, .closure);
+        obj.function = function;
+        obj.captures = vm.gc_alloc.alloc(Value, captures.len) catch oom();
+        @memcpy(obj.captures, captures);
+
+        if (options.log_gc) {
+            std.debug.print("closure for: {s}\n", .{function.name.?});
+        }
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
+        if (comptime @import("builtin").mode == .Debug) {
+            try writer.print("<closure {s}>", .{self.function.name.?.chars});
+        } else {
+            try writer.print("<fn {s}>", .{self.function.name.?.chars});
+        }
+    }
+
+    pub fn log(self: *const Self) void {
+        std.debug.print("<closure {s}>", .{self.function.name.?.chars});
+    }
+
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        vm.gc_alloc.free(self.captures);
+        vm.gc_alloc.destroy(self);
+    }
+};
+
+pub const Box = struct {
+    obj: Obj,
+    value: Value,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, value: Value) *Self {
+        const obj = Obj.allocate(vm, Self, .box);
+        obj.value = value;
+
+        if (options.log_gc) {
+            std.debug.print("box", .{});
+        }
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
+        try writer.writeAll("Box ");
+        try self.value.print(writer);
+    }
+
+    pub fn log(_: *const Self) void {
+        std.debug.print("box", .{});
+    }
+
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        vm.gc_alloc.destroy(self);
+    }
+};
+
 pub const NativeFunction = struct {
     obj: Obj,
     function: NativeFn,
@@ -451,42 +520,6 @@ pub const Instance = struct {
     }
 };
 
-pub const BoundMethod = struct {
-    obj: Obj,
-    receiver: *Obj,
-    method: *Function,
-
-    const Self = @This();
-
-    pub fn create(vm: *Vm, receiver: *Obj, method: *Function) *Self {
-        const obj = Obj.allocate(vm, Self, .bound_method);
-
-        obj.receiver = receiver;
-        obj.method = method;
-
-        if (options.log_gc) {
-            std.debug.print("Bound method:\n", .{});
-            method.log();
-        }
-
-        return obj;
-    }
-
-    pub fn asObj(self: *Self) *Obj {
-        return &self.obj;
-    }
-
-    pub fn deinit(self: *Self, allocator: Allocator) void {
-        allocator.destroy(self);
-    }
-
-    pub fn initCall(self: *Self, vm: *Vm, arity: usize) *Function {
-        vm.stack.peekRef(arity).* = Value.makeObj(self.receiver);
-
-        return self.method;
-    }
-};
-
 pub const BoundImport = struct {
     obj: Obj,
     module: *ObjModule,
@@ -514,12 +547,6 @@ pub const BoundImport = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.destroy(self);
-    }
-
-    pub fn initCall(self: *Self, vm: *Vm, _: usize) *Function {
-        vm.updateModule(self.module.module);
-
-        return self.import.as(Function);
     }
 };
 
