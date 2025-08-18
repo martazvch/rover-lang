@@ -5,8 +5,10 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
-const Vm = @import("runtime/Vm.zig");
 const oom = @import("utils.zig").oom;
+const Pipeline = @import("Pipeline.zig");
+const Repl = @import("runtime/Repl.zig");
+const Vm = @import("runtime/Vm.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -55,24 +57,32 @@ pub fn main() !void {
 
     if (res.positionals[0]) |f| {
         const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
-            var buf: [500]u8 = undefined;
-            _ = try std.fmt.bufPrint(&buf, "Error: {}, unable to open file at: {s}\n", .{ err, f });
-            print("{s}", .{buf});
+            // TODO: Rover error
+            print("Error: {}, unable to open file at: {s}\n", .{ err, f });
             std.process.exit(0);
         };
         defer file.close();
 
         // The file has a new line inserted by default
         const size = try file.getEndPos();
-        const buf = try allocator.alloc(u8, size + 1);
+        const buf = try allocator.allocSentinel(u8, size, 0);
         defer allocator.free(buf);
-
         _ = try file.readAll(buf);
-        buf[size] = 0;
-        const zt = buf[0..size :0];
 
-        try vm.run(f, zt);
+        var pipeline: Pipeline = undefined;
+        defer pipeline.deinit();
+        pipeline.init(&vm, config);
+        var main_module = pipeline.run(f, buf) catch |e| switch (e) {
+            error.ExitOnPrint => return,
+            else => return e,
+        };
+        defer main_module.deinit(vm.allocator);
+
+        try vm.run(main_module);
     } else {
-        try vm.runRepl();
+        var repl: Repl = undefined;
+        defer repl.deinit(allocator);
+        repl.init(allocator, config);
+        try repl.run();
     }
 }

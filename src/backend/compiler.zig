@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const Disassembler = @import("../backend/Disassembler.zig");
 const rir = @import("../frontend/rir.zig");
 const Instruction = rir.Instruction;
+const Interner = @import("../Interner.zig");
 const Module = @import("../Pipeline.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
 const Obj = @import("../runtime/Obj.zig");
@@ -18,16 +19,23 @@ const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
+const CompilerRes = struct {
+    function: *Obj.Function,
+    globals: []Value,
+    symbols: []Value,
+};
+
 pub const CompilationManager = struct {
     vm: *Vm,
     // natives: []const NativeFn,
+    interner: *const Interner,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
     instr_data: []const Instruction.Data,
     instr_lines: []const usize,
     instr_idx: usize,
     render_mode: Disassembler.RenderMode,
-    globals: *ArrayListUnmanaged(Value),
+    globals: ArrayListUnmanaged(Value),
     symbols: []Value,
     modules: []Module,
 
@@ -35,11 +43,12 @@ pub const CompilationManager = struct {
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
     const CompilerReport = GenReport(CompilerMsg);
 
+    // TODO: could know the size of globals in advance
     pub fn init(
         vm: *Vm,
+        interner: *const Interner,
         // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
-        globals: *ArrayListUnmanaged(Value),
         symbol_count: usize,
         modules: []Module,
     ) Self {
@@ -47,14 +56,15 @@ pub const CompilationManager = struct {
 
         return .{
             .vm = vm,
+            .interner = interner,
             // .natives = natives,
             .compiler = undefined,
             .errs = .init(vm.allocator),
-            .instr_idx = undefined,
+            .instr_idx = 0,
             .instr_data = undefined,
             .instr_lines = undefined,
             .render_mode = render_mode,
-            .globals = globals,
+            .globals = .{},
             .symbols = symbols,
             .modules = modules,
         };
@@ -72,7 +82,7 @@ pub const CompilationManager = struct {
         instr_lines: []const usize,
         main_index: ?usize,
         repl: bool,
-    ) !*Obj.Function {
+    ) !CompilerRes {
         self.instr_idx = instr_start;
         self.instr_data = instr_data;
         self.instr_lines = instr_lines;
@@ -98,7 +108,11 @@ pub const CompilationManager = struct {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
         }
 
-        return self.compiler.end();
+        return .{
+            .function = try self.compiler.end(),
+            .globals = self.globals.toOwnedSlice(self.vm.allocator) catch oom(),
+            .symbols = self.symbols,
+        };
     }
 };
 
@@ -625,7 +639,7 @@ const Compiler = struct {
     }
 
     fn compileFn(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        const fn_name = if (data.name) |idx| self.manager.vm.interner.getKey(idx).? else "anonymus";
+        const fn_name = if (data.name) |idx| self.manager.interner.getKey(idx).? else "anonymus";
 
         const index = switch (data.kind) {
             .symbol => |idx| idx,
@@ -742,7 +756,7 @@ const Compiler = struct {
         try self.emitConstant(
             Value.makeObj(Obj.String.copy(
                 self.manager.vm,
-                self.manager.vm.interner.getKey(index).?,
+                self.manager.interner.getKey(index).?,
             ).asObj()),
             self.getLineNumber(),
         );
@@ -752,7 +766,7 @@ const Compiler = struct {
         const name = self.next().name;
         var structure = Obj.Structure.create(
             self.manager.vm,
-            Obj.String.copy(self.manager.vm, self.manager.vm.interner.getKey(name).?),
+            Obj.String.copy(self.manager.vm, self.manager.interner.getKey(name).?),
             data.fields_count,
             data.default_fields,
             &.{},
@@ -775,7 +789,7 @@ const Compiler = struct {
 
         for (0..data.func_count) |_| {
             const fn_data = self.next().fn_decl;
-            const fn_name = if (fn_data.name) |idx| self.manager.vm.interner.getKey(idx).? else "anonymus";
+            const fn_name = if (fn_data.name) |idx| self.manager.interner.getKey(idx).? else "anonymus";
             const func = try self.compileCallable(fn_name, &fn_data);
             funcs.appendAssumeCapacity(func);
         }

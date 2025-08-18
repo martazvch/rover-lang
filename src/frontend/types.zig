@@ -145,9 +145,12 @@ pub const Type = union(enum) {
             .module => unreachable,
             .structure => |ty| {
                 hasher.update(asBytes(&ty.name));
-                // for (ty.fields.values()) |f| {
-                //     f.type.hash(hasher);
-                // }
+                for (ty.fields.values()) |f| {
+                    f.type.hash(hasher);
+                }
+                // TODO: I think there is an infinite loop because first param is a struct
+                // and interning the struct interns the method, ...
+
                 // for (ty.functions.values()) |f| {
                 //     f.type.hash(hasher);
                 // }

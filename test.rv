@@ -1,9 +1,11 @@
-use .data.geom
-
+fn foo(a: int) {}
 
 fn main() {
-     
+    fn foo(b: bool) {}
+
+    foo(true)
 }
+
 
 
 // ---------- Runtime switch on functions

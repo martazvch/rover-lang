@@ -7,19 +7,14 @@ const options = @import("options");
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
-const Interner = @import("../Interner.zig");
-const Pipeline = @import("../Pipeline.zig");
-const Module = Pipeline.Module;
+const Module = @import("../Pipeline.zig").Module;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
-const Repl = @import("Repl.zig");
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 
-pipeline: Pipeline,
 gc: Gc,
-repl: Repl,
 start_module: Module,
 module: *Module,
 module_chain: std.ArrayListUnmanaged(*Module),
@@ -29,7 +24,6 @@ ip: [*]u8,
 allocator: Allocator,
 gc_alloc: Allocator,
 stdout: std.fs.File.Writer,
-interner: Interner,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
@@ -55,9 +49,6 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.gc = .init(self, allocator);
     self.gc_alloc = self.gc.allocator();
     self.stdout = std.io.getStdOut().writer();
-    self.interner = .init(allocator);
-    self.pipeline = undefined;
-    self.pipeline.init(self, config);
     self.stack.init();
     self.strings = .init(self.allocator);
     self.stack = .empty;
@@ -65,6 +56,8 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.frame_stack = .empty;
     self.objects = null;
     self.module_chain = .{};
+    self.symbols = &.{};
+    self.start_module = undefined;
 
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
@@ -73,20 +66,14 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     // it would be always true
     if (config.embedded) {
         self.frame_stack.count += 1;
-        self.repl = .init();
     }
 }
 
 pub fn deinit(self: *Self) void {
-    self.allocator.free(self.symbols);
-
     self.module_chain.deinit(self.allocator);
-    self.interner.deinit();
     self.gc.deinit();
     self.strings.deinit();
     self.freeObjects();
-    self.pipeline.deinit();
-    if (self.pipeline.config.embedded) self.repl.deinit(self.allocator);
 }
 
 fn freeObjects(self: *Self) void {
@@ -123,11 +110,8 @@ fn instructionNb(self: *const Self) usize {
     return addr1 - addr2;
 }
 
-pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
-    self.start_module = self.pipeline.run(filename, source) catch |e| switch (e) {
-        error.ExitOnPrint => return,
-        else => return e,
-    };
+pub fn run(self: *Self, module: Module) !void {
+    self.start_module = module;
     self.symbols = self.start_module.symbols;
 
     self.module = &self.start_module;
@@ -135,23 +119,6 @@ pub fn run(self: *Self, filename: []const u8, source: [:0]const u8) !void {
 
     // Init on dummy address to avoid nullable pointer (used only in print stack mode)
     try self.execute(self.module.function);
-}
-
-pub fn runRepl(self: *Self) !void {
-    try self.repl.logInfos();
-
-    while (true) {
-        const prompt = self.repl.getPrompt(self.allocator) catch |e| switch (e) {
-            error.Empty => continue,
-            error.EndOfFile => break,
-            else => {
-                std.debug.print("REPL error: {s}\n", .{@errorName(e)});
-                return;
-            },
-        };
-
-        try self.run("stdin", prompt);
-    }
 }
 
 fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {

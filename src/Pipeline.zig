@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const options = @import("options");
 
@@ -15,9 +16,10 @@ const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("frontend/RirRenderer.zig");
 const PathBuilder = @import("frontend/PathBuilder.zig");
+const RirRenderer = @import("frontend/RirRenderer.zig");
 const GenReporter = @import("reporter.zig").GenReporter;
+const Interner = @import("Interner.zig");
 const oom = @import("utils.zig").oom;
 const Obj = @import("runtime/Obj.zig");
 const Value = @import("runtime/values.zig").Value;
@@ -28,41 +30,48 @@ vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 config: Config,
+interner: Interner,
 analyzer: Analyzer,
 instr_count: usize,
 code_count: usize,
-is_sub: bool = false,
-globals: std.ArrayListUnmanaged(Value),
+is_sub: bool,
 path_builder: PathBuilder,
+modules: CompiledModules,
 
 const Self = @This();
 const Error = error{ExitOnPrint};
+pub const CompiledModules = AutoArrayHashMapUnmanaged(Interner.Index, Module);
 
 pub fn init(self: *Self, vm: *Vm, config: Config) void {
     self.vm = vm;
     self.arena = .init(vm.allocator);
     self.allocator = self.arena.allocator();
     self.config = config;
+    self.interner = .init(self.allocator);
+    self.modules = .{};
     self.analyzer = undefined;
-    self.analyzer.init(self.allocator, &self.vm.interner);
+    self.analyzer.init(self.allocator, &self.interner, &self.modules);
     self.instr_count = 0;
     self.code_count = 0;
-    self.globals = .{};
+    self.is_sub = false;
     self.path_builder = .init(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable);
 }
 
 pub fn deinit(self: *Self) void {
     self.arena.deinit();
-    self.globals.deinit(self.vm.allocator);
 }
 
-// // TODO: clean unused
 pub const Module = struct {
     name: []const u8,
     imports: []Module,
     function: *Obj.Function,
     globals: []Value,
     symbols: []Value,
+
+    pub fn deinit(self: *Module, allocator: Allocator) void {
+        allocator.free(self.globals);
+        allocator.free(self.symbols);
+    }
 };
 
 /// Runs the pipeline
@@ -87,7 +96,7 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
     var walker: Walker = undefined;
-    walker.init(self.allocator, &self.vm.interner, &ast);
+    walker.init(self.allocator, &self.interner, &ast);
     defer walker.deinit();
     walker.walk();
 
@@ -137,16 +146,16 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Compiler
     var compiler = CompilationManager.init(
         self.vm,
+        &self.interner,
         // undefined,
         if (options.test_mode and self.config.print_bytecode) .@"test" else if (self.config.print_bytecode) .normal else .none,
-        &self.globals,
         self.analyzer.scope.symbol_count,
         undefined,
     );
     defer compiler.deinit();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
-    const function = try compiler.compile(
+    const compiler_res = try compiler.compile(
         file_name,
         self.instr_count,
         self.analyzer.ir_builder.instructions.items(.data),
@@ -161,9 +170,9 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     } else .{
         .name = file_name,
         .imports = undefined,
-        .function = function,
-        .globals = self.globals.items,
-        .symbols = compiler.symbols,
+        .function = compiler_res.function,
+        .globals = compiler_res.globals,
+        .symbols = compiler_res.symbols,
     };
 }
 
@@ -177,7 +186,7 @@ pub fn createSubPipeline(self: *Self) Self {
     pipeline.arena = self.arena;
     pipeline.allocator = self.allocator;
     pipeline.config = sub_config;
-    pipeline.analyzer.init(self.allocator, self, &self.vm.interner, true);
+    pipeline.analyzer.init(self.allocator, self, &self.interner, true);
     pipeline.is_sub = true;
 
     return pipeline;
@@ -213,7 +222,7 @@ fn renderIr(
         analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
-        &self.vm.interner,
+        &self.interner,
         static,
     );
     defer rir_renderer.deinit();

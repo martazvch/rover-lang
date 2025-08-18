@@ -23,6 +23,7 @@ const TypeInterner = @import("types.zig").TypeInterner;
 const ScopeStack = @import("ScopeStack.zig");
 const Module = @import("Module.zig");
 const PathBuilder = @import("PathBuilder.zig");
+const CompiledModules = @import("../Pipeline.zig").CompiledModules;
 
 const Context = struct {
     fn_type: ?*const Type = null,
@@ -65,7 +66,6 @@ const Error = error{Err};
 const Result = Error!*const Type;
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
-// arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 interner: *Interner,
 errs: ArrayListUnmanaged(AnalyzerReport),
@@ -78,12 +78,11 @@ ir_builder: IrBuilder,
 main: ?usize = null,
 globals: ArrayListUnmanaged(usize),
 pb: *PathBuilder,
+compiled_modules: *CompiledModules,
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
-pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
-    // self.arena = std.heap.ArenaAllocator.init(allocator);
-    // self.allocator = self.arena.allocator();
+pub fn init(self: *Self, allocator: Allocator, interner: *Interner, compiled_modules: *CompiledModules) void {
     self.allocator = allocator;
     self.interner = interner;
     self.errs = .{};
@@ -94,6 +93,7 @@ pub fn init(self: *Self, allocator: Allocator, interner: *Interner) void {
     self.type_interner.cacheFrequentTypes();
     self.scope.initGlobalScope(allocator, interner, &self.type_interner);
     self.globals = .{};
+    self.compiled_modules = compiled_modules;
 
     self.cached_names = .{
         .empty = self.interner.intern(""),

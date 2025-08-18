@@ -4,6 +4,8 @@ const builtin = @import("builtin");
 
 const Terminal = @import("terminal/Terminal.zig");
 const WinTerm = @import("terminal/WinTerm.zig");
+const Pipeline = @import("../Pipeline.zig");
+const Vm = @import("Vm.zig");
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
@@ -24,29 +26,36 @@ const Vec2 = struct {
 terminal: Terminal,
 stdin: std.fs.File.Reader,
 stdout: std.fs.File.Writer,
-prompts: Prompts = .{},
-cursor_pos: Vec2 = .zero,
-indent_level: usize = 0,
+prompts: Prompts,
+cursor_pos: Vec2,
+indent_level: usize,
+allocator: Allocator,
+pipeline: Pipeline,
+vm: Vm,
 
-// TODO: forced to keep a reference?
-var win_term: @import("terminal/WinTerm.zig") = undefined;
-
-pub fn init() Self {
+pub fn init(self: *Self, allocator: Allocator, config: Vm.Config) void {
     var terminal = terminal: {
         if (builtin.os.tag == .windows) {
-            win_term = WinTerm.init() catch unreachable;
+            const term = WinTerm.init() catch unreachable;
 
-            break :terminal win_term.terminal();
+            break :terminal term.terminal();
         } else unreachable;
     };
-
     terminal.enableRawMode() catch unreachable;
 
-    return .{
-        .terminal = terminal,
-        .stdin = std.io.getStdIn().reader(),
-        .stdout = std.io.getStdOut().writer(),
-    };
+    self.terminal = terminal;
+    self.stdin = std.io.getStdIn().reader();
+    self.stdout = std.io.getStdOut().writer();
+    self.prompts = .{};
+    self.cursor_pos = .zero;
+    self.indent_level = 0;
+    self.allocator = allocator;
+    self.pipeline = undefined;
+    self.pipeline.init(&self.vm, config);
+    self.vm = undefined;
+    self.vm.init(allocator, config);
+
+    self.logInfos();
 }
 
 pub fn deinit(self: *Self, allocator: Allocator) void {
@@ -60,6 +69,25 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
 
 pub fn logInfos(self: *Self) Error!void {
     _ = self.stdout.write("\t\tRover language REPL\n  Type 'quit' or Ctrl+C to exit\n\n") catch return error.BadWrite;
+}
+
+pub fn run(self: *Self) !void {
+    while (true) {
+        const prompt = self.getPrompt(self.allocator) catch |e| switch (e) {
+            error.Empty => continue,
+            error.EndOfFile => break,
+            else => {
+                std.debug.print("REPL error: {s}\n", .{@errorName(e)});
+                return;
+            },
+        };
+
+        const module = self.pipeline.run("stdin", prompt) catch |e| switch (e) {
+            error.ExitOnPrint => return,
+            else => return e,
+        };
+        try self.vm.run(module);
+    }
 }
 
 pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
