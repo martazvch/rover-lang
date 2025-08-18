@@ -6,7 +6,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const options = @import("options");
 
 const Chunk = @import("../backend/Chunk.zig");
-const Module = @import("../Pipeline.zig").Module;
+const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
 const NativeFn = @import("../std/meta.zig").NativeFn;
 const oom = @import("../utils.zig").oom;
 const Value = @import("values.zig").Value;
@@ -552,11 +552,11 @@ pub const BoundImport = struct {
 
 pub const ObjModule = struct {
     obj: Obj,
-    module: *Module,
+    module: *CompiledModule,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, module: *Module) *Self {
+    pub fn create(vm: *Vm, module: *CompiledModule) *Self {
         const obj = Obj.allocate(vm, Self, .module);
         obj.module = module;
 

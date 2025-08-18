@@ -5,6 +5,7 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const options = @import("options");
 
 const Compiler = @import("backend/compiler.zig").Compiler;
+const CompiledModule = @import("backend/compiler.zig").CompiledModule;
 const CompilationManager = @import("backend/compiler.zig").CompilationManager;
 const Disassembler = @import("backend/Disassembler.zig");
 const Analyzer = @import("frontend/Analyzer.zig");
@@ -14,10 +15,12 @@ const AstRender = @import("frontend/AstRender.zig");
 const Walker = @import("frontend/AstWalker.zig");
 const Lexer = @import("frontend/Lexer.zig");
 const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
+const LexicalScope = @import("frontend/LexicalScope.zig");
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const PathBuilder = @import("frontend/PathBuilder.zig");
 const RirRenderer = @import("frontend/RirRenderer.zig");
+const TypeInterner = @import("frontend/types.zig").TypeInterner;
 const GenReporter = @import("reporter.zig").GenReporter;
 const Interner = @import("Interner.zig");
 const oom = @import("utils.zig").oom;
@@ -29,53 +32,63 @@ const Vm = @import("runtime/Vm.zig");
 vm: *Vm,
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
-config: Config,
-interner: Interner,
+ctx: *Context,
 analyzer: Analyzer,
 instr_count: usize,
 code_count: usize,
 is_sub: bool,
-path_builder: PathBuilder,
-modules: CompiledModules,
 
 const Self = @This();
 const Error = error{ExitOnPrint};
-pub const CompiledModules = AutoArrayHashMapUnmanaged(Interner.Index, Module);
+pub const CompiledModules = AutoArrayHashMapUnmanaged(Interner.Index, CompiledModule);
 
-pub fn init(self: *Self, vm: *Vm, config: Config) void {
-    self.vm = vm;
-    self.arena = .init(vm.allocator);
-    self.allocator = self.arena.allocator();
-    self.config = config;
-    self.interner = .init(self.allocator);
-    self.modules = .{};
-    self.analyzer = undefined;
-    self.analyzer.init(self.allocator, &self.interner, &self.modules);
-    self.instr_count = 0;
-    self.code_count = 0;
-    self.is_sub = false;
-    self.path_builder = .init(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch unreachable);
-}
+pub const Context = struct {
+    config: Config,
+    interner: Interner,
+    type_interner: TypeInterner,
+    path_builder: PathBuilder,
+    modules: CompiledModules,
 
-pub fn deinit(self: *Self) void {
-    self.arena.deinit();
-}
+    pub fn new(allocator: Allocator, config: Config) Context {
+        var ctx: Context = .{
+            .config = config,
+            .interner = .init(allocator),
+            .type_interner = .init(allocator),
+            .path_builder = .init(allocator, std.fs.cwd().realpathAlloc(allocator, ".") catch unreachable),
+            .modules = .{},
+        };
+        ctx.type_interner.cacheFrequentTypes();
 
-pub const Module = struct {
-    name: []const u8,
-    imports: []Module,
-    function: *Obj.Function,
-    globals: []Value,
-    symbols: []Value,
+        return ctx;
+    }
 
-    pub fn deinit(self: *Module, allocator: Allocator) void {
-        allocator.free(self.globals);
-        allocator.free(self.symbols);
+    pub fn deinit(self: *Context, allocator: Allocator) void {
+        self.interner.deinit();
+        self.type_interner.deinit();
+        self.path_builder.deinit();
+        self.modules.deinit(allocator);
     }
 };
 
+pub fn init(self: *Self, vm: *Vm, ctx: *Context) void {
+    self.vm = vm;
+    self.arena = .init(vm.allocator);
+    self.allocator = self.arena.allocator();
+    self.ctx = ctx;
+    self.analyzer = undefined;
+    self.analyzer.init(self.allocator, self);
+    self.instr_count = 0;
+    self.code_count = 0;
+    self.is_sub = false;
+}
+
+pub fn deinit(self: *Self) void {
+    self.ctx.deinit(self.allocator);
+    self.arena.deinit();
+}
+
 /// Runs the pipeline
-pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
+pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !struct { Analyzer.AnalyzedModule, CompiledModule } {
     // Lexer
     var lexer = Lexer.init(self.allocator);
     lexer.lex(source);
@@ -96,11 +109,12 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
     var walker: Walker = undefined;
-    walker.init(self.allocator, &self.interner, &ast);
+    // walker.init(self.allocator, &self.interner, &ast);
+    walker.init(self.allocator, &self.ctx.interner, &ast);
     defer walker.deinit();
     walker.walk();
 
-    if (options.test_mode and self.config.print_ast) {
+    if (options.test_mode and self.ctx.config.print_ast) {
         try printAst(self.allocator, &ast, &parser);
         return error.ExitOnPrint;
     }
@@ -109,13 +123,13 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
         var reporter = GenReporter(ParserMsg).init(source);
         try reporter.reportAll(file_name, parser.errs.items);
         return error.ExitOnPrint;
-    } else if (self.config.print_ast) try printAst(self.allocator, &ast, &parser);
+    } else if (self.ctx.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    self.analyzer.analyze(&ast, &self.path_builder);
+    const analyzed_module = self.analyzer.analyze(&ast, &self.ctx.path_builder);
 
     // Analyzed Ast printer
-    if (options.test_mode and self.config.print_ir) {
-        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+    if (options.test_mode and self.ctx.config.print_ir) {
+        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.ctx.config.static_analyzis);
 
         // If we are a sub-pipeline, we print and continue compile
         if (!self.is_sub) return error.ExitOnPrint;
@@ -131,13 +145,13 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
 
             self.instr_count = self.analyzer.ir_builder.count();
             return error.ExitOnPrint;
-        } else if (self.config.print_ir) {
-            try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.config.static_analyzis);
+        } else if (self.ctx.config.print_ir) {
+            try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.ctx.config.static_analyzis);
         }
     }
 
     // Analyzer warnings
-    if (self.config.static_analyzis and self.analyzer.warns.items.len > 0) {
+    if (self.ctx.config.static_analyzis and self.analyzer.warns.items.len > 0) {
         var reporter = GenReporter(AnalyzerMsg).init(source);
         try reporter.reportAll(file_name, self.analyzer.warns.items);
         return error.ExitOnPrint;
@@ -146,50 +160,49 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !Module {
     // Compiler
     var compiler = CompilationManager.init(
         self.vm,
-        &self.interner,
+        &self.ctx.interner,
         // undefined,
-        if (options.test_mode and self.config.print_bytecode) .@"test" else if (self.config.print_bytecode) .normal else .none,
+        if (options.test_mode and self.ctx.config.print_bytecode) .@"test" else if (self.ctx.config.print_bytecode) .normal else .none,
         self.analyzer.scope.symbol_count,
-        undefined,
+        // undefined,
     );
     defer compiler.deinit();
     errdefer compiler.globals.deinit(self.vm.allocator);
 
-    const compiler_res = try compiler.compile(
+    const compiled_module = try compiler.compile(
         file_name,
         self.instr_count,
         self.analyzer.ir_builder.instructions.items(.data),
         self.analyzer.ir_builder.computeLineFromOffsets(source),
-        if (self.config.embedded) 0 else self.analyzer.main.?,
-        self.config.embedded,
+        if (self.ctx.config.embedded) 0 else self.analyzer.main.?,
+        self.ctx.config.embedded,
     );
     self.instr_count = self.analyzer.ir_builder.count();
 
-    return if (options.test_mode and self.config.print_bytecode and !self.is_sub) {
+    return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub) {
         return error.ExitOnPrint;
-    } else .{
-        .name = file_name,
-        .imports = undefined,
-        .function = compiler_res.function,
-        .globals = compiler_res.globals,
-        .symbols = compiler_res.symbols,
-    };
+    } else .{ analyzed_module, compiled_module };
 }
 
 pub fn createSubPipeline(self: *Self) Self {
     var pipeline: Self = undefined;
-    var sub_config = self.config;
-    // FIX: To make 'main' function not mandatory
-    sub_config.embedded = true;
-
     pipeline.vm = self.vm;
     pipeline.arena = self.arena;
     pipeline.allocator = self.allocator;
-    pipeline.config = sub_config;
-    pipeline.analyzer.init(self.allocator, self, &self.interner, true);
+    pipeline.ctx = self.ctx;
+
+    pipeline.analyzer = undefined;
+    pipeline.analyzer.init(self.allocator, self);
+
+    pipeline.instr_count = 0;
+    pipeline.code_count = 0;
     pipeline.is_sub = true;
 
     return pipeline;
+}
+
+pub fn addModule(self: *Self, name: Interner.Index, module: CompiledModule) void {
+    self.ctx.modules.put(self.allocator, name, module) catch oom();
 }
 
 fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
@@ -222,7 +235,8 @@ fn renderIr(
         analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
-        &self.interner,
+        // &self.interner,
+        &self.ctx.interner,
         static,
     );
     defer rir_renderer.deinit();

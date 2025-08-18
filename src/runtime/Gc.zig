@@ -6,7 +6,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const options = @import("options");
 
-const Module = @import("../Pipeline.zig").Module;
+const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
 const oom = @import("../utils.zig").oom;
 const Obj = @import("Obj.zig");
 const Array = Obj.Array;
@@ -100,14 +100,14 @@ fn markRoots(self: *Self) Allocator.Error!void {
     }
 }
 
-fn markModule(self: *Self, module: *Module) Allocator.Error!void {
+fn markModule(self: *Self, module: *CompiledModule) Allocator.Error!void {
     // No need to mark the function, it's never gonna be called. We use only
     // the global symbols
     try self.markArray(module.globals);
 
-    for (module.imports) |*mod| {
-        try self.markModule(mod);
-    }
+    // for (module.imports) |*mod| {
+    //     try self.markModule(mod);
+    // }
 }
 
 fn traceRef(self: *Self) Allocator.Error!void {

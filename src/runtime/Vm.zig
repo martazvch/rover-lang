@@ -7,7 +7,7 @@ const options = @import("options");
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Disassembler = @import("../backend/Disassembler.zig");
-const Module = @import("../Pipeline.zig").Module;
+const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
@@ -15,9 +15,9 @@ const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 
 gc: Gc,
-start_module: Module,
-module: *Module,
-module_chain: std.ArrayListUnmanaged(*Module),
+start_module: CompiledModule,
+module: *CompiledModule,
+module_chain: std.ArrayListUnmanaged(*CompiledModule),
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
@@ -110,7 +110,7 @@ fn instructionNb(self: *const Self) usize {
     return addr1 - addr2;
 }
 
-pub fn run(self: *Self, module: Module) !void {
+pub fn run(self: *Self, module: CompiledModule) !void {
     self.start_module = module;
     self.symbols = self.start_module.symbols;
 
@@ -418,8 +418,9 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .push_module => {
                 const index = frame.readByte();
-                const module = &self.module.imports[index];
-                self.stack.push(Value.makeObj(Obj.ObjModule.create(self, module).asObj()));
+                _ = index; // autofix
+                // const module = &self.module.imports[index];
+                // self.stack.push(Value.makeObj(Obj.ObjModule.create(self, module).asObj()));
             },
             .@"return" => {
                 const result = self.stack.pop();
@@ -531,7 +532,7 @@ fn cow(self: *Self, obj: *Obj) *Obj {
 // frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
 // }
 
-pub fn updateModule(self: *Self, module: *Module) void {
+pub fn updateModule(self: *Self, module: *CompiledModule) void {
     self.module_chain.append(self.allocator, self.module) catch oom();
     self.module = module;
 }

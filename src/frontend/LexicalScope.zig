@@ -27,6 +27,11 @@ pub const Variable = struct {
     pub const Index = usize;
 };
 
+pub const Symbol = struct { type: *const Type, index: usize };
+
+pub const VariableMap = AutoHashMapUnmanaged(InternerIdx, Variable);
+pub const SymbolArrMap = AutoArrayHashMapUnmanaged(InternerIdx, Symbol);
+
 scopes: ArrayListUnmanaged(Scope) = .{},
 current: *Scope,
 builtins: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
@@ -35,16 +40,14 @@ symbol_count: usize = 0,
 pub const empty: Self = .{ .current = undefined };
 
 pub const Scope = struct {
-    variables: AutoHashMapUnmanaged(InternerIdx, Variable) = .{},
-    symbols: AutoArrayHashMapUnmanaged(InternerIdx, Symbol) = .{},
+    variables: VariableMap = .{},
+    symbols: SymbolArrMap = .{},
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
     offset: usize,
-
-    pub const Symbol = struct { type: *const Type, index: usize };
 };
 
-pub const Kind = enum { variable, symbol };
+pub const EntityKind = enum { variable, symbol };
 
 pub fn open(self: *Self, allocator: Allocator, offset_from_child: bool) void {
     const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
@@ -127,7 +130,7 @@ pub fn declareSymbol(self: *Self, allocator: Allocator, name: InternerIdx, ty: *
 }
 
 /// Forward declares a symbol without incrementing global symbol count
-pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx) *Scope.Symbol {
+pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx) *Symbol {
     self.current.symbols.put(allocator, name, .{ .type = undefined, .index = self.symbol_count }) catch oom();
     self.symbol_count += 1;
 
@@ -139,7 +142,7 @@ pub fn removeSymbol(self: *Self, name: InternerIdx) void {
     _ = self.current.symbols.fetchOrderedRemove(name);
 }
 
-pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Scope.Symbol {
+pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
     var i = self.scopes.items.len;
 
     while (i > 0) {
@@ -164,7 +167,7 @@ pub fn getType(self: *Self, name: InternerIdx) ?*const Type {
     return null;
 }
 
-pub fn isInScope(self: *const Self, name: InternerIdx, kind: Kind) bool {
+pub fn isInScope(self: *const Self, name: InternerIdx, kind: EntityKind) bool {
     return switch (kind) {
         .variable => self.current.variables.get(name) != null,
         .symbol => self.current.symbols.get(name) != null,

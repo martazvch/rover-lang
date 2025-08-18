@@ -8,7 +8,7 @@ const Disassembler = @import("../backend/Disassembler.zig");
 const rir = @import("../frontend/rir.zig");
 const Instruction = rir.Instruction;
 const Interner = @import("../Interner.zig");
-const Module = @import("../Pipeline.zig").Module;
+// const Module = @import("../Pipeline.zig").Module;
 const GenReport = @import("../reporter.zig").GenReport;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
@@ -19,10 +19,17 @@ const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
 
-const CompilerRes = struct {
+pub const CompiledModule = struct {
+    // TODO: useless?
+    name: []const u8,
     function: *Obj.Function,
     globals: []Value,
     symbols: []Value,
+
+    pub fn deinit(self: *CompiledModule, allocator: Allocator) void {
+        allocator.free(self.globals);
+        allocator.free(self.symbols);
+    }
 };
 
 pub const CompilationManager = struct {
@@ -37,7 +44,7 @@ pub const CompilationManager = struct {
     render_mode: Disassembler.RenderMode,
     globals: ArrayListUnmanaged(Value),
     symbols: []Value,
-    modules: []Module,
+    // modules: []Module,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -50,7 +57,7 @@ pub const CompilationManager = struct {
         // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
         symbol_count: usize,
-        modules: []Module,
+        // modules: []Module,
     ) Self {
         const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
 
@@ -66,7 +73,7 @@ pub const CompilationManager = struct {
             .render_mode = render_mode,
             .globals = .{},
             .symbols = symbols,
-            .modules = modules,
+            // .modules = modules,
         };
     }
 
@@ -82,7 +89,7 @@ pub const CompilationManager = struct {
         instr_lines: []const usize,
         main_index: ?usize,
         repl: bool,
-    ) !CompilerRes {
+    ) !CompiledModule {
         self.instr_idx = instr_start;
         self.instr_data = instr_data;
         self.instr_lines = instr_lines;
@@ -109,8 +116,10 @@ pub const CompilationManager = struct {
         }
 
         return .{
+            .name = file_name,
             .function = try self.compiler.end(),
             .globals = self.globals.toOwnedSlice(self.vm.allocator) catch oom(),
+            // .symbols = self.vm.allocator.dupe(Value, self.symbols) catch oom(),
             .symbols = self.symbols,
         };
     }
@@ -702,27 +711,31 @@ const Compiler = struct {
     }
 
     fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
-        const module_ref = &self.manager.modules[data.module_index];
-        const module = Obj.ObjModule.create(self.manager.vm, module_ref);
-        const value = Value.makeObj(Obj.BoundImport.create(
-            self.manager.vm,
-            module,
-            module_ref.globals[data.field_index].obj,
-        ).asObj());
-
-        if (data.scope == .global) {
-            _ = self.addGlobal(value);
-        } else {
-            try self.emitConstant(value, self.getLineNumber());
-        }
+        _ = self; // autofix
+        _ = data; // autofix
+        // const module_ref = &self.manager.modules[data.module_index];
+        // const module = Obj.ObjModule.create(self.manager.vm, module_ref);
+        // const value = Value.makeObj(Obj.BoundImport.create(
+        //     self.manager.vm,
+        //     module,
+        //     module_ref.globals[data.field_index].obj,
+        // ).asObj());
+        //
+        // if (data.scope == .global) {
+        //     _ = self.addGlobal(value);
+        // } else {
+        //     try self.emitConstant(value, self.getLineNumber());
+        // }
     }
 
     fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
-        if (data.scope == .global) {
-            _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
-        } else {
-            self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
-        }
+        _ = self; // autofix
+        _ = data; // autofix
+        // if (data.scope == .global) {
+        //     _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
+        // } else {
+        //     self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
+        // }
     }
 
     fn multipleVarDecl(self: *Self, count: usize) Error!void {

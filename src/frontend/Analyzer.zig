@@ -6,6 +6,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
+const Pipeline = @import("../Pipeline.zig");
 const GenReport = @import("../reporter.zig").GenReport;
 const oom = @import("../utils.zig").oom;
 const EnumFromStruct = @import("../utils.zig").EnumFromStruct;
@@ -14,16 +15,20 @@ const Ast = @import("Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
 const IrBuilder = @import("IrBuilder.zig");
+const LexicalScope = @import("LexicalScope.zig");
+const Importer = @import("Importer.zig");
+const PathBuilder = @import("PathBuilder.zig");
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
 const TokenTag = @import("Lexer.zig").Token.Tag;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
-const ScopeStack = @import("ScopeStack.zig");
-const Module = @import("Module.zig");
-const PathBuilder = @import("PathBuilder.zig");
-const CompiledModules = @import("../Pipeline.zig").CompiledModules;
+
+pub const AnalyzedModule = struct {
+    globals: LexicalScope.VariableMap,
+    symbols: LexicalScope.SymbolArrMap,
+};
 
 const Context = struct {
     fn_type: ?*const Type = null,
@@ -67,33 +72,33 @@ const Result = Error!*const Type;
 pub const AnalyzerReport = GenReport(AnalyzerMsg);
 
 allocator: Allocator,
+pipeline: *Pipeline,
 interner: *Interner,
+pb: *PathBuilder,
+
 errs: ArrayListUnmanaged(AnalyzerReport),
 warns: ArrayListUnmanaged(AnalyzerReport),
-
 ast: *const Ast,
-scope: ScopeStack,
-type_interner: TypeInterner,
+scope: LexicalScope,
+type_interner: *TypeInterner,
 ir_builder: IrBuilder,
 main: ?usize = null,
+// TODO: useless, we can have the last scope in scope
 globals: ArrayListUnmanaged(usize),
-pb: *PathBuilder,
-compiled_modules: *CompiledModules,
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
-pub fn init(self: *Self, allocator: Allocator, interner: *Interner, compiled_modules: *CompiledModules) void {
+pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline) void {
     self.allocator = allocator;
-    self.interner = interner;
+    self.pipeline = pipeline;
+    self.interner = &pipeline.ctx.interner;
     self.errs = .{};
     self.warns = .{};
     self.scope = .empty;
     self.ir_builder = .init(allocator);
-    self.type_interner = .init(allocator);
-    self.type_interner.cacheFrequentTypes();
-    self.scope.initGlobalScope(allocator, interner, &self.type_interner);
+    self.type_interner = &pipeline.ctx.type_interner;
+    self.scope.initGlobalScope(allocator, &pipeline.ctx.interner, self.type_interner);
     self.globals = .{};
-    self.compiled_modules = compiled_modules;
 
     self.cached_names = .{
         .empty = self.interner.intern(""),
@@ -118,7 +123,7 @@ fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrB
     self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
-pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) void {
+pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) AnalyzedModule {
     self.ast = ast;
     self.pb = pb;
     var ctx: Context = .{};
@@ -132,7 +137,7 @@ pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) void {
         }
     }
 
-    return;
+    return .{ .globals = self.scope.current.variables, .symbols = self.scope.current.symbols };
     // In REPL mode, no need for main function
     // if (self.repl)
     //     return
@@ -385,12 +390,12 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Contex
         if (deadcode_start == 0) final_type = ty;
 
         // If last expression produced a value and that it wasn't the last one and it wasn't a return, error
-        if (!self.isVoid(final_type) and i != len - 1 and !ctx.returns) {
+        if (i != len - 1 and !ctx.returns and !self.isVoid(final_type)) {
             self.err(.unused_value, self.ast.getSpan(n)) catch {};
         }
     }
 
-    // We strip unused instructions for them not to be compiled
+    // We strip unused instructions to not compile them
     if (deadcode_start > 0) {
         self.ir_builder.instructions.shrinkRetainingCapacity(deadcode_start);
     }
@@ -425,7 +430,7 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
 }
 
 fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
-    const result = Module.fetchImportedFile(self.allocator, self.ast, node.names, self.pb, self.interner);
+    const result = Importer.fetchImportedFile(self.allocator, self.ast, node.names, self.pb);
     const file_infos = switch (result) {
         .ok => |f| f,
         .err => |e| {
@@ -433,13 +438,32 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
             return error.Err;
         },
     };
+
+    // TODO: make the module interner (create one) responsible for freeing its entries
     defer {
         self.allocator.free(file_infos.name);
         self.allocator.free(file_infos.content);
+        self.allocator.free(file_infos.path);
     }
 
-    std.log.info("File name: {s}", .{file_infos.name});
-    std.log.info("File content: {s}", .{file_infos.content});
+    // std.log.info("File name: {s}", .{file_infos.name});
+    // std.log.info("File content: {s}", .{file_infos.content});
+
+    const interned = self.interner.intern(file_infos.path);
+    // if (self.pipeline.modules.get(interned)) |module| {
+    if (self.pipeline.ctx.modules.get(interned)) |module| {
+        _ = module;
+    } else {
+        var pipeline = self.pipeline.createSubPipeline();
+        // TODO: proper error handling, for now just print errors and exit
+        const analyzed_module, const compiled_module = pipeline.run(file_infos.name, file_infos.content) catch {
+            std.process.exit(0);
+        };
+        _ = analyzed_module; // autofix
+        self.pipeline.addModule(interned, compiled_module);
+
+        // std.log.info("Analyzed module: {any}", .{analyzed_module});
+    }
 
     // const module, const cached = try self.importModule(node);
     // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
@@ -564,6 +588,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
 
     const interned_struct = &interned_type.structure;
 
+    // BUG: interned type doesn't take into account fields
     try self.structureFields(node.fields, interned_struct, ctx);
     sym.type = interned_type;
 
@@ -571,6 +596,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
         const fn_name = self.interner.intern(self.ast.toSource(f.name));
         const fn_type = try self.fnDeclaration(f, ctx);
         interned_struct.functions.putAssumeCapacity(fn_name, .{ .type = fn_type });
+        // BUG: doesn't update anything
         sym.type = interned_type;
     }
 
@@ -1247,7 +1273,7 @@ fn identifier(
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
 }
 
-fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*ScopeStack.Variable {
+fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*LexicalScope.Variable {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
@@ -1259,7 +1285,7 @@ fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Conte
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*ScopeStack.Variable {
+fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*LexicalScope.Variable {
     _ = ctx; // autofix
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
@@ -1283,7 +1309,7 @@ fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context)
 }
 
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
-fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *const Context) error{BigSelfOutsideStruct}!?*ScopeStack.Scope.Symbol {
+fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *const Context) error{BigSelfOutsideStruct}!?*LexicalScope.Symbol {
     const sym_name = if (name == self.cached_names.Self) n: {
         if (ctx.struct_type) |ty| {
             break :n ty.structure.name;
@@ -1571,7 +1597,7 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
-fn internIfNotInScope(self: *Self, token: usize, kind: ScopeStack.Kind) Error!usize {
+fn internIfNotInScope(self: *Self, token: usize, kind: LexicalScope.EntityKind) Error!usize {
     const name = self.interner.intern(self.ast.toSource(token));
 
     if (self.scope.isInScope(name, kind)) return self.err(

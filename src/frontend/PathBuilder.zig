@@ -18,6 +18,9 @@ pub fn init(allocator: Allocator, folder: []const u8) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    for (self.chunks.items) |chunk| {
+        self.allocator.free(chunk);
+    }
     self.chunks.deinit(self.allocator);
 }
 
@@ -25,8 +28,9 @@ pub fn base(self: *const Self) []const u8 {
     return self.chunks.items[0];
 }
 
+/// Duplicates the string to own it
 pub fn cd(self: *Self, folder: []const u8) void {
-    self.chunks.append(self.allocator, folder) catch oom();
+    self.chunks.append(self.allocator, self.allocator.dupe(u8, folder) catch oom()) catch oom();
 }
 
 pub fn up(self: *Self) void {

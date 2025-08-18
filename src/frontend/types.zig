@@ -6,6 +6,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
+const LexicalScope = @import("LexicalScope.zig");
 const oom = @import("../utils.zig").oom;
 
 pub const Type = union(enum) {
@@ -84,8 +85,8 @@ pub const Type = union(enum) {
     };
 
     pub const Module = struct {
-        globals: []usize,
-        symbols: []const *Type,
+        globals: AutoHashMapUnmanaged(InternerIdx, LexicalScope.Variable),
+        symbols: AutoArrayHashMapUnmanaged(InternerIdx, LexicalScope.Symbol),
     };
 
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
@@ -187,14 +188,18 @@ pub const Type = union(enum) {
 };
 
 pub const TypeInterner = struct {
-    allocator: Allocator,
+    arena: std.heap.ArenaAllocator,
     interned: AutoHashMapUnmanaged(u64, *Type) = .{},
     cache: Cache,
 
     pub const Cache = CreateCache(&.{ .int, .float, .bool, .str, .null, .void });
 
     pub fn init(allocator: Allocator) TypeInterner {
-        return .{ .allocator = allocator, .cache = undefined };
+        return .{ .arena = std.heap.ArenaAllocator.init(allocator), .cache = undefined };
+    }
+
+    pub fn deinit(self: *TypeInterner) void {
+        self.arena.deinit();
     }
 
     pub fn CreateCache(comptime types: []const Type) type {
@@ -238,9 +243,9 @@ pub const TypeInterner = struct {
             return interned;
         }
 
-        const new_type = self.allocator.create(Type) catch oom();
+        const new_type = self.arena.allocator().create(Type) catch oom();
         new_type.* = ty;
-        self.interned.put(self.allocator, hash, new_type) catch oom();
+        self.interned.put(self.arena.allocator(), hash, new_type) catch oom();
 
         return new_type;
     }

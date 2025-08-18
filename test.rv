@@ -1,10 +1,50 @@
-fn foo(a: int) {}
+// use .data.geom
+//
+// fn main() {
+//     print "oui"
+// }
+
+
+
+struct Point {
+    x: int,
+    y: int,
+
+    fn move(self, amount: int) {
+        self.x = self.x + amount
+        self.y = self.y + amount
+    }
+
+    fn display(self) {
+        print self.x
+        print self.y
+    }
+}
+
+fn introduce() {
+    print "module for basic geometry"
+}
+
+struct Square {
+    side: float,
+    middle: Point,
+
+    fn moveCenter(self, pt: Point) -> Point {
+        self.middle.x = self.middle.x + pt.x
+        self.middle.y = self.middle.y + pt.y
+
+        self.middle
+    }
+}
 
 fn main() {
-    fn foo(b: bool) {}
+    var sq = Square{side=8, middle=Point{x=1, y=2}}
+    print sq.side
+    sq.middle.display()
 
-    foo(true)
+    print sq.moveCenter(Point{x=6, y=4}).y
 }
+
 
 
 

@@ -69,16 +69,19 @@ pub fn main() !void {
         defer allocator.free(buf);
         _ = try file.readAll(buf);
 
+        var ctx: Pipeline.Context = .new(allocator, config);
+
         var pipeline: Pipeline = undefined;
         defer pipeline.deinit();
-        pipeline.init(&vm, config);
-        var main_module = pipeline.run(f, buf) catch |e| switch (e) {
+        // pipeline.init(&vm, config);
+        pipeline.init(&vm, &ctx);
+        _, var compiled_module = pipeline.run(f, buf) catch |e| switch (e) {
             error.ExitOnPrint => return,
             else => return e,
         };
-        defer main_module.deinit(vm.allocator);
+        defer compiled_module.deinit(vm.allocator);
 
-        try vm.run(main_module);
+        try vm.run(compiled_module);
     } else {
         var repl: Repl = undefined;
         defer repl.deinit(allocator);
