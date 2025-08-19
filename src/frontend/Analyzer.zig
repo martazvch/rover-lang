@@ -17,7 +17,7 @@ const Expr = Ast.Expr;
 const IrBuilder = @import("IrBuilder.zig");
 const LexicalScope = @import("LexicalScope.zig");
 const Importer = @import("Importer.zig");
-const PathBuilder = @import("PathBuilder.zig");
+const PathBuilder = @import("../PathBuilder.zig");
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
@@ -99,6 +99,7 @@ pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline) void {
     self.type_interner = &pipeline.ctx.type_interner;
     self.scope.initGlobalScope(allocator, &pipeline.ctx.interner, self.type_interner);
     self.globals = .{};
+    self.main = null;
 
     self.cached_names = .{
         .empty = self.interner.intern(""),
@@ -123,7 +124,7 @@ fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrB
     self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
-pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) AnalyzedModule {
+pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder, expect_main: bool) AnalyzedModule {
     self.ast = ast;
     self.pb = pb;
     var ctx: Context = .{};
@@ -137,11 +138,11 @@ pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder) AnalyzedModule {
         }
     }
 
+    if (expect_main and self.main == null) {
+        self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
+    }
+
     return .{ .globals = self.scope.current.variables, .symbols = self.scope.current.symbols };
-    // In REPL mode, no need for main function
-    // if (self.repl)
-    //     return
-    // else if (self.main == null) self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
 }
 
 fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Result {
@@ -430,6 +431,14 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
 }
 
 fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
+    const name_token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
+    const module_name = self.interner.intern(self.ast.toSource(name_token));
+
+    // TODO: Error
+    if (self.scope.isInScope(module_name, .symbol)) {
+        @panic("Symbol already declared");
+    }
+
     const result = Importer.fetchImportedFile(self.allocator, self.ast, node.names, self.pb);
     const file_infos = switch (result) {
         .ok => |f| f,
@@ -446,24 +455,25 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
         self.allocator.free(file_infos.path);
     }
 
-    // std.log.info("File name: {s}", .{file_infos.name});
-    // std.log.info("File content: {s}", .{file_infos.content});
-
     const interned = self.interner.intern(file_infos.path);
-    // if (self.pipeline.modules.get(interned)) |module| {
-    if (self.pipeline.ctx.modules.get(interned)) |module| {
-        _ = module;
-    } else {
+    const module = if (self.pipeline.ctx.modules.get(interned)) |module|
+        module.analyzed
+    else b: {
         var pipeline = self.pipeline.createSubPipeline();
         // TODO: proper error handling, for now just print errors and exit
-        const analyzed_module, const compiled_module = pipeline.run(file_infos.name, file_infos.content) catch {
+        const module = pipeline.run(file_infos.name, file_infos.content) catch {
             std.process.exit(0);
         };
-        _ = analyzed_module; // autofix
-        self.pipeline.addModule(interned, compiled_module);
+        self.pipeline.ctx.modules.add(interned, module);
+        break :b module.analyzed;
+    };
 
-        // std.log.info("Analyzed module: {any}", .{analyzed_module});
-    }
+    self.scope.declareSymbol(self.allocator, module_name, self.type_interner.intern(.{ .module = module }));
+    self.makeInstruction(
+        .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
+        self.ast.getSpan(node).start,
+        .add,
+    );
 
     // const module, const cached = try self.importModule(node);
     // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];

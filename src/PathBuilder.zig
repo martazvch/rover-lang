@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
-const oom = @import("../utils.zig").oom;
+const oom = @import("utils.zig").oom;
 
 const Self = @This();
 const Chunks = ArrayListUnmanaged([]const u8);

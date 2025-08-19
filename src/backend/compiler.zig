@@ -8,7 +8,7 @@ const Disassembler = @import("../backend/Disassembler.zig");
 const rir = @import("../frontend/rir.zig");
 const Instruction = rir.Instruction;
 const Interner = @import("../Interner.zig");
-// const Module = @import("../Pipeline.zig").Module;
+const ModuleInterner = @import("../ModuleInterner.zig");
 const GenReport = @import("../reporter.zig").GenReport;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
@@ -44,7 +44,7 @@ pub const CompilationManager = struct {
     render_mode: Disassembler.RenderMode,
     globals: ArrayListUnmanaged(Value),
     symbols: []Value,
-    // modules: []Module,
+    module_interner: *const ModuleInterner,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
@@ -57,7 +57,7 @@ pub const CompilationManager = struct {
         // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
         symbol_count: usize,
-        // modules: []Module,
+        module_interner: *const ModuleInterner,
     ) Self {
         const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
 
@@ -73,7 +73,7 @@ pub const CompilationManager = struct {
             .render_mode = render_mode,
             .globals = .{},
             .symbols = symbols,
-            // .modules = modules,
+            .module_interner = module_interner,
         };
     }
 
@@ -88,7 +88,6 @@ pub const CompilationManager = struct {
         instr_data: []const Instruction.Data,
         instr_lines: []const usize,
         main_index: ?usize,
-        repl: bool,
     ) !CompiledModule {
         self.instr_idx = instr_start;
         self.instr_data = instr_data;
@@ -105,11 +104,10 @@ pub const CompilationManager = struct {
             try self.compiler.compileInstr();
         }
 
-        if (!repl) {
-            // Insert a call to main with arity of 0 for now
-            // self.compiler.writeOpAndByte(.get_global, self.main_index.?, 0);
+        if (main_index) |idx| {
             // TODO: protect
-            self.compiler.writeOpAndByte(.get_symbol, @intCast(main_index.?), 0);
+            std.log.info("Main index: {}", .{idx});
+            self.compiler.writeOpAndByte(.get_symbol, @intCast(idx), 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
@@ -325,9 +323,9 @@ const Compiler = struct {
             .identifier => |*data| self.identifier(data),
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
+            .import_module => |*data| self.importModule(data),
             .int => |data| self.intInstr(data),
             .item_import => |*data| self.itemImport(data),
-            .module_import => |*data| self.moduleImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
             .null => self.nullInstr(),
@@ -674,6 +672,13 @@ const Compiler = struct {
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
         self.emitGetVar(data, self.getLineNumber());
+    }
+
+    fn importModule(self: *Self, data: *const Instruction.ImportModule) Error!void {
+        self.addSymbol(
+            data.sym_idx,
+            Value.makeObj(Obj.Module.create(self.manager.vm, self.manager.module_interner.getKind(data.interned_key, .compiled).?).asObj()),
+        );
     }
 
     fn intInstr(self: *Self, value: isize) Error!void {

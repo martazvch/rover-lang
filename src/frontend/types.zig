@@ -7,6 +7,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const LexicalScope = @import("LexicalScope.zig");
+const Module = @import("Analyzer.zig").AnalyzedModule;
 const oom = @import("../utils.zig").oom;
 
 pub const Type = union(enum) {
@@ -84,11 +85,6 @@ pub const Type = union(enum) {
         }
     };
 
-    pub const Module = struct {
-        globals: AutoHashMapUnmanaged(InternerIdx, LexicalScope.Variable),
-        symbols: AutoArrayHashMapUnmanaged(InternerIdx, LexicalScope.Symbol),
-    };
-
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
     }
@@ -109,10 +105,7 @@ pub const Type = union(enum) {
     }
 
     pub fn canCastTo(self: *const Type, other: *const Type) bool {
-        return if (self.is(.int) and other.is(.float))
-            true
-        else
-            false;
+        return self.is(.int) and other.is(.float);
     }
 
     // TODO: maybe name + kind + scope index is enough?

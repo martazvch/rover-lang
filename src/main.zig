@@ -51,10 +51,6 @@ pub fn main() !void {
         .embedded = if (res.positionals[0] == null) true else false,
     };
 
-    var vm: Vm = undefined;
-    vm.init(allocator, config);
-    defer vm.deinit();
-
     if (res.positionals[0]) |f| {
         const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
             // TODO: Rover error
@@ -69,19 +65,23 @@ pub fn main() !void {
         defer allocator.free(buf);
         _ = try file.readAll(buf);
 
+        var vm: Vm = undefined;
+        vm.init(allocator, config);
+        defer vm.deinit();
+
         var ctx: Pipeline.Context = .new(allocator, config);
 
         var pipeline: Pipeline = undefined;
         defer pipeline.deinit();
-        // pipeline.init(&vm, config);
         pipeline.init(&vm, &ctx);
-        _, var compiled_module = pipeline.run(f, buf) catch |e| switch (e) {
+
+        var module = pipeline.run(f, buf) catch |e| switch (e) {
             error.ExitOnPrint => return,
             else => return e,
         };
-        defer compiled_module.deinit(vm.allocator);
+        defer module.compiled.deinit(vm.allocator);
 
-        try vm.run(compiled_module);
+        try vm.run(module.compiled);
     } else {
         var repl: Repl = undefined;
         defer repl.deinit(allocator);

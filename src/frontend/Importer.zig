@@ -4,7 +4,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Ast = @import("Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
-const PathBuilder = @import("PathBuilder.zig");
+const PathBuilder = @import("../PathBuilder.zig");
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();

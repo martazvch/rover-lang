@@ -82,11 +82,11 @@ pub fn run(self: *Self) !void {
             },
         };
 
-        _, const compiled_module = self.pipeline.run("stdin", prompt) catch |e| switch (e) {
+        const module = self.pipeline.run("stdin", prompt) catch |e| switch (e) {
             error.ExitOnPrint => return,
             else => return e,
         };
-        try self.vm.run(compiled_module);
+        try self.vm.run(module.compiled);
     }
 }
 

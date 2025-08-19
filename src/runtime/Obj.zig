@@ -71,7 +71,7 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
             const instance = self.as(Instance);
             instance.deinit(vm.gc_alloc);
         },
-        .module => self.as(ObjModule).deinit(vm.gc_alloc),
+        .module => self.as(Module).deinit(vm.gc_alloc),
         .native_fn => {
             const function = self.as(NativeFunction);
             function.deinit(vm.gc_alloc);
@@ -101,7 +101,7 @@ pub fn print(self: *Obj, writer: anytype) PrintError!void {
         .closure => self.as(Closure).print(writer),
         .function => self.as(Function).print(writer),
         .instance => writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
-        .module => writer.print("<module {s}>", .{self.as(ObjModule).module.name}),
+        .module => writer.print("<module {s}>", .{self.as(Module).module.name}),
         .native_fn => writer.print("<native fn>", .{}),
         .string => writer.print("{s}", .{self.as(String).chars}),
         .structure => writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
@@ -124,7 +124,7 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
         .bound_import => self.as(BoundImport).import.as(Structure).methods[index].default_values,
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
-        .module => self.as(ObjModule).module.globals[index].obj.as(Function).default_values,
+        .module => self.as(Module).module.globals[index].obj.as(Function).default_values,
         .structure => self.as(Structure).methods[index].default_values,
         else => unreachable,
     };
@@ -139,7 +139,7 @@ pub fn invoke(self: *Obj, vm: *Vm, index: usize) struct { *Function, bool } {
         },
         .instance => .{ self.as(Instance).parent.methods[index], false },
         .module => b: {
-            const module = self.as(ObjModule).module;
+            const module = self.as(Module).module;
             vm.updateModule(module);
             break :b .{ module.globals[index].obj.as(Function), true };
         },
@@ -522,12 +522,12 @@ pub const Instance = struct {
 
 pub const BoundImport = struct {
     obj: Obj,
-    module: *ObjModule,
+    module: *Module,
     import: *Obj,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, module: *ObjModule, import: *Obj) *Self {
+    pub fn create(vm: *Vm, module: *Module, import: *Obj) *Self {
         const obj = Obj.allocate(vm, Self, .bound_import);
 
         obj.module = module;
@@ -550,7 +550,7 @@ pub const BoundImport = struct {
     }
 };
 
-pub const ObjModule = struct {
+pub const Module = struct {
     obj: Obj,
     module: *CompiledModule,
 

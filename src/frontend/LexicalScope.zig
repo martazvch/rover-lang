@@ -32,12 +32,12 @@ pub const Symbol = struct { type: *const Type, index: usize };
 pub const VariableMap = AutoHashMapUnmanaged(InternerIdx, Variable);
 pub const SymbolArrMap = AutoArrayHashMapUnmanaged(InternerIdx, Symbol);
 
-scopes: ArrayListUnmanaged(Scope) = .{},
+scopes: ArrayListUnmanaged(Scope),
 current: *Scope,
-builtins: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
-symbol_count: usize = 0,
+builtins: AutoHashMapUnmanaged(InternerIdx, *const Type),
+symbol_count: usize,
 
-pub const empty: Self = .{ .current = undefined };
+pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{}, .symbol_count = 0 };
 
 pub const Scope = struct {
     variables: VariableMap = .{},

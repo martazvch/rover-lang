@@ -28,9 +28,9 @@ pub const Instruction = struct {
         @"if": If,
         // TODO: delete later
         imported: Imported,
+        import_module: ImportModule,
         int: i64,
         item_import: ItemImport,
-        module_import: ModuleImport,
         multiple_var_decl: usize,
         name: usize,
         null,
@@ -139,6 +139,7 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { then, @"else", none };
     };
     pub const Imported = struct { index: u64, variable: Variable };
+    pub const ImportModule = struct { interned_key: usize, sym_idx: usize };
     pub const ItemImport = struct {
         module_index: usize,
         field_index: usize,
@@ -151,7 +152,6 @@ pub const Instruction = struct {
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
-    pub const ModuleImport = struct { index: usize, scope: Scope };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { fields_count: u8, default_count: u8 };

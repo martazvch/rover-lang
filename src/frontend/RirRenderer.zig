@@ -130,9 +130,9 @@ fn parseInstr(self: *Self) void {
         .@"if" => |*data| self.ifInstr(data),
         // TODO: delete later
         .imported => unreachable,
+        .import_module => |*data| self.importModule(data),
         .int => |data| self.intInstr(data),
         .item_import => |*data| self.itemImport(data),
-        .module_import => |*data| self.moduleImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
         .null => unreachable,
@@ -437,8 +437,9 @@ fn itemImport(self: *Self, data: *const Instruction.ItemImport) void {
     );
 }
 
-fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) void {
-    self.indentAndPrintSlice("[Import module {}, scope {s}]", .{ data.index, @tagName(data.scope) });
+fn importModule(self: *Self, data: *const Instruction.ImportModule) void {
+    const name = self.interner.getKey(data.interned_key).?;
+    self.indentAndPrintSlice("[Import module {s}, index {}]", .{ name, data.sym_idx });
 }
 
 fn multipleVarDecl(self: *Self, count: usize) void {
