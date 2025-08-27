@@ -90,6 +90,7 @@ pub const CompilationManager = struct {
         instr_data: []const Instruction.Data,
         instr_lines: []const usize,
         main_index: ?usize,
+        module_index: usize,
     ) !CompiledModule {
         self.instr_idx = instr_start;
         self.instr_data = instr_data;
@@ -100,7 +101,7 @@ pub const CompilationManager = struct {
             try stdout.print("//---- {s} ----\n\n", .{self.module.name});
         }
 
-        self.compiler = Compiler.init(self, "global scope", 0);
+        self.compiler = Compiler.init(self, "global scope", 0, module_index);
 
         while (self.instr_idx < self.instr_data.len) {
             try self.compiler.compileInstr();
@@ -136,10 +137,15 @@ const Compiler = struct {
 
     const FnKind = enum { global, @"fn", method };
 
-    pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize) Self {
+    pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize, module_index: usize) Self {
         return .{
             .manager = manager,
-            .function = Obj.Function.create(manager.vm, Obj.String.copy(manager.vm, name), default_count),
+            .function = Obj.Function.create(
+                manager.vm,
+                Obj.String.copy(manager.vm, name),
+                default_count,
+                module_index,
+            ),
         };
     }
 
@@ -321,10 +327,7 @@ const Compiler = struct {
             .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
             .@"if" => |*data| self.ifInstr(data),
-            .imported => unreachable,
-            // .import_module => |*data| self.importModule(data),
             .int => |data| self.intInstr(data),
-            .item_import => |*data| self.itemImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
             .null => self.nullInstr(),
@@ -334,6 +337,7 @@ const Compiler = struct {
             .struct_decl => |*data| self.structDecl(data),
             .struct_literal => |*data| self.structLiteral(data),
             .symbol_id => |data| self.symbolId(data),
+            .symbol_import => |*data| self.symbolImport(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .value => unreachable,
@@ -625,7 +629,7 @@ const Compiler = struct {
     }
 
     fn compileCallable(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
-        var compiler = Compiler.init(self.manager, name, data.default_params);
+        var compiler = Compiler.init(self.manager, name, data.default_params, self.function.module_index);
 
         for (0..data.default_params) |i| {
             compiler.function.default_values[i] = try self.compileDefaultValue();
@@ -714,33 +718,15 @@ const Compiler = struct {
         try self.patchJump(else_jump);
     }
 
-    fn itemImport(self: *Self, data: *const Instruction.ItemImport) Error!void {
-        _ = self; // autofix
-        _ = data; // autofix
-        // const module_ref = &self.manager.modules[data.module_index];
-        // const module = Obj.ObjModule.create(self.manager.vm, module_ref);
-        // const value = Value.makeObj(Obj.BoundImport.create(
-        //     self.manager.vm,
-        //     module,
-        //     module_ref.globals[data.field_index].obj,
-        // ).asObj());
-        //
-        // if (data.scope == .global) {
-        //     _ = self.addGlobal(value);
-        // } else {
-        //     try self.emitConstant(value, self.getLineNumber());
-        // }
-    }
-
-    fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
-        _ = self; // autofix
-        _ = data; // autofix
-        // if (data.scope == .global) {
-        //     _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
-        // } else {
-        //     self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
-        // }
-    }
+    // fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
+    //     _ = self; // autofix
+    //     _ = data; // autofix
+    //     // if (data.scope == .global) {
+    //     //     _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
+    //     // } else {
+    //     //     self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
+    //     // }
+    // }
 
     fn multipleVarDecl(self: *Self, count: usize) Error!void {
         for (0..count) |_| {
@@ -827,6 +813,12 @@ const Compiler = struct {
 
     fn symbolId(self: *Self, index: u8) Error!void {
         self.writeOpAndByte(.get_symbol, index, self.getLineNumber());
+    }
+
+    // TODO: protect the casts
+    fn symbolImport(self: *Self, data: *const Instruction.SymbolImport) Error!void {
+        self.writeOpAndByte(.get_symbol_extern, @intCast(data.module_index), self.getLineNumber());
+        self.writeByte(@intCast(data.symbol_index), self.getLineNumber());
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {

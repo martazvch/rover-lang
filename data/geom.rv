@@ -17,6 +17,10 @@ fn introduce() {
     print "module for basic geometry"
 }
 
+fn createPoint(x, y: int) -> Point {
+    Point {x, y}
+}
+
 struct Square {
     side: float,
     middle: Point,

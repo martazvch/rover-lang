@@ -1,4 +1,4 @@
-use data.default_val
+use .data.default_val
 
 fn function(noval: str, arg1, arg2: int = 12, arg3 = 98.5) {
     print noval

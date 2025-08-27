@@ -1,4 +1,4 @@
-use data.math as m
+use .data.math as m
 
 fn main() {
     m.introduce()

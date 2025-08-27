@@ -26,11 +26,7 @@ pub const Instruction = struct {
         identifier: Variable,
         symbol_id: u8,
         @"if": If,
-        // TODO: delete later
-        imported: Imported,
-        // import_module: ImportModule,
         int: i64,
-        item_import: ItemImport,
         multiple_var_decl: usize,
         name: usize,
         null,
@@ -40,6 +36,7 @@ pub const Instruction = struct {
         struct_decl: StructDecl,
         default_value: usize,
         struct_literal: StructLiteral,
+        symbol_import: SymbolImport,
         unary: Unary,
         use: u64,
         value: Value,
@@ -138,23 +135,22 @@ pub const Instruction = struct {
 
         pub const Cast = enum(u2) { then, @"else", none };
     };
-    pub const Imported = struct { index: u64, variable: Variable };
-    // pub const ImportModule = struct { interned_key: usize, sym_idx: usize };
-    pub const ItemImport = struct {
-        module_index: usize,
-        field_index: usize,
-        scope: Scope,
-    };
     pub const Field = struct {
         index: usize,
         kind: Kind,
-        // rc_action: RcAction,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
     pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
+    pub const SymbolImport = struct {
+        module_index: usize,
+        symbol_index: usize,
+        kind: Kind,
+
+        pub const Kind = enum { function, structure, variable };
+    };
     pub const Value = struct {
         value_instr: usize,
         cast: bool,

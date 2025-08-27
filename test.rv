@@ -1,10 +1,73 @@
-use .data.geom
+use .data.math 
 
-fn main() {
-    print "oui"
-    geom.introduce()
+struct Foo {
+    function: fn(bool) -> int
 }
 
+struct Bar {
+    value = 10
+
+    fn static(b: bool) -> int { 3 }
+
+    fn method(self, b: bool) -> int {
+        self.value
+    }
+
+    fn importFuncFromMethod(self) -> fn(bool) -> int {
+        math.getInt2
+    }
+}
+
+fn copy(b: bool) -> int { 5 }
+
+fn argsCallConv(arg1: fn(bool)->int, arg2: fn(bool)->int, arg3: fn(bool)->int) {
+    print arg1(true)
+    print arg2(false)
+    print arg3(true)
+}
+
+fn main() {
+    var bar = Bar{}
+    var foo = Foo{function=copy}
+
+    argsCallConv(copy, math.getInt2, foo.function)
+    argsCallConv(Bar.static, bar.method, bar.importFuncFromMethod())
+}
+
+
+
+
+// ----------- Imports
+
+//use .data.geom
+//
+//struct Foo {
+//    a, b: int
+//
+//    fn add(self, nb: int) {
+//        self.a += nb
+//        print self.a
+//    }
+//}
+//
+//fn main() {
+//    var foo = Foo{a=12, b=34}
+//    foo.add(10)
+//    geom.introduce()
+//    var pt = geom.Point{ x=1, y=8 }
+//    pt.display()
+//
+//    pt = geom.createPoint(3, 14)
+//    pt.display()
+//
+//    foo = Foo{a=120, b=340}
+//    foo.add(-50)
+//
+//    var makePt = geom.createPoint
+//    pt = makePt(56, 78)
+//    pt.display()
+//}
+//
 
 
 

@@ -96,6 +96,7 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
         .get_method => self.indexInstruction("OP_GET_METHOD", offset, writer),
         .get_static_method => self.getMember("OP_GET_STATIC_METHOD", offset, writer),
         .get_symbol => self.indexInstruction("OP_GET_SYMBOL", offset, writer),
+        .get_symbol_extern => self.indexExternInstruction("GET_SYMBOL_EXTERN", offset, writer),
         .gt_float => self.simpleInstruction("OP_GREATER_FLOAT", offset, writer),
         .gt_int => self.simpleInstruction("OP_GREATER_INT", offset, writer),
         .incr_ref_count => self.simpleInstruction("OP_INCR_REF_COUNT", offset, writer),
@@ -162,6 +163,19 @@ fn indexInstruction(self: *const Self, name: []const u8, offset: usize, writer: 
     }
 
     return offset + 2;
+}
+
+fn indexExternInstruction(self: *const Self, name: []const u8, offset: usize, writer: anytype) !usize {
+    const index = self.chunk.code.items[offset + 1];
+    const module = self.chunk.code.items[offset + 2];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, module {}\n", .{ name, module, index });
+    } else {
+        try writer.print("{s:<24} index {:>4}, module {:>4}\n", .{ name, module, index });
+    }
+
+    return offset + 3;
 }
 
 fn getGlobal(self: *const Self, cow: bool, offset: usize, writer: anytype) !usize {

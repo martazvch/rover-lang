@@ -81,7 +81,7 @@ pub fn main() !void {
             else => return e,
         };
 
-        try vm.run(module.compiled);
+        try vm.run(module, ctx.module_interner.compiled.values());
     } else {
         // var repl: Repl = undefined;
         // defer repl.deinit(allocator);

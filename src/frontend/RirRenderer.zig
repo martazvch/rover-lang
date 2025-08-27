@@ -128,11 +128,7 @@ fn parseInstr(self: *Self) void {
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
         .@"if" => |*data| self.ifInstr(data),
-        // TODO: delete later
-        .imported => unreachable,
-        // .import_module => |*data| self.importModule(data),
         .int => |data| self.intInstr(data),
-        .item_import => |*data| self.itemImport(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
         .null => unreachable,
@@ -148,6 +144,7 @@ fn parseInstr(self: *Self) void {
         .default_value => unreachable,
         .struct_literal => |*data| self.structLiteral(data),
         .symbol_id => |data| self.symbolId(data),
+        .symbol_import => |*data| self.symbolImport(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
@@ -430,13 +427,6 @@ fn intInstr(self: *Self, data: isize) void {
     self.indentAndPrintSlice("[Int {}]", .{data});
 }
 
-fn itemImport(self: *Self, data: *const Instruction.ItemImport) void {
-    self.indentAndPrintSlice(
-        "[Import field {} of module {} to scope {s}]",
-        .{ data.field_index, data.module_index, @tagName(data.scope) },
-    );
-}
-
 // fn importModule(self: *Self, data: *const Instruction.ImportModule) void {
 //     const name = self.interner.getKey(data.interned_key).?;
 //     self.indentAndPrintSlice("[Import module {s}, index {}]", .{ name, data.sym_idx });
@@ -517,6 +507,13 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
 
 fn symbolId(self: *Self, data: u8) void {
     self.indentAndPrintSlice("[Symbol index: {}]", .{data});
+}
+
+fn symbolImport(self: *Self, data: *const Instruction.SymbolImport) void {
+    self.indentAndPrintSlice(
+        "[Import symbol {} of module {}]",
+        .{ data.symbol_index, data.module_index },
+    );
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

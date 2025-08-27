@@ -291,15 +291,17 @@ pub const Function = struct {
     // TODO: always has a name?
     name: ?*String,
     default_values: []Value,
+    module_index: usize,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: ?*String, default_count: usize) *Self {
+    pub fn create(vm: *Vm, name: ?*String, default_count: usize, module_index: usize) *Self {
         const obj = Obj.allocate(vm, Self, .function);
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
+        obj.module_index = module_index;
 
         if (options.log_gc) {
             const display_name = if (name) |n| n.chars else "";

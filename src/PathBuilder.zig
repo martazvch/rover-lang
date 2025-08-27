@@ -78,3 +78,16 @@ pub fn filePathAlloc(self: *const Self, allocator: Allocator, file: []const u8) 
 
     return path.toOwnedSlice(allocator) catch oom();
 }
+
+/// Get current count of path chunks
+pub fn len(self: *const Self) usize {
+    return self.chunks.items.len;
+}
+
+/// Shrinks the nomber of path chunks to `length`
+pub fn shrink(self: *Self, length: usize) void {
+    for (self.chunks.items[length..]) |chunk| {
+        self.allocator.free(chunk);
+    }
+    self.chunks.shrinkRetainingCapacity(length);
+}

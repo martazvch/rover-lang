@@ -4,6 +4,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
+const AnalyzedModule = @import("Analyzer.zig").AnalyzedModule;
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const Type = @import("types.zig").Type;
@@ -42,6 +43,8 @@ pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{},
 pub const Scope = struct {
     variables: VariableMap = .{},
     symbols: SymbolArrMap = .{},
+    /// First is the intered identifier and second is the interned module's path key of module interner
+    modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
     offset: usize,
@@ -151,6 +154,26 @@ pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
 
         if (scope.symbols.getPtr(name)) |sym| {
             return sym;
+        }
+    }
+
+    return null;
+}
+
+pub fn declareModule(self: *Self, allocator: Allocator, name: InternerIdx, ty: *const Type) void {
+    self.current.modules.put(allocator, name, ty) catch oom();
+}
+
+// TODO: merge all iterators in this file
+pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
+    var i = self.scopes.items.len;
+
+    while (i > 0) {
+        i -= 1;
+        const scope = &self.scopes.items[i];
+
+        if (scope.modules.get(name)) |ty| {
+            return ty;
         }
     }
 

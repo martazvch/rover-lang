@@ -185,13 +185,13 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
     const maybe_assigne_type = switch (node.assigne.*) {
         .literal => |*e| b: {
             if (e.tag != .identifier) break :b null;
-            var assigne = try self.expectVariableIdentifier(e.idx, ctx);
+            var assigne = try self.expectVariableIdentifier(e.idx);
             assigne.initialized = true;
             break :b assigne.type;
         },
         .field => |*e| b: {
             const field_result = try self.field(e, ctx);
-            break :b if (field_result.is_value) field_result.type else null;
+            break :b if (field_result.lhs_is_value) field_result.type else null;
         },
         else => try self.analyzeExpr(node.assigne, ctx),
     };
@@ -434,10 +434,13 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
     const name_token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
     const module_name = self.interner.intern(self.ast.toSource(name_token));
 
-    // TODO: Error
+    // TODO: Error and check for variable too
     if (self.scope.isInScope(module_name, .symbol)) {
         @panic("Symbol already declared");
     }
+
+    const old_path_length = self.pb.len();
+    defer self.pb.shrink(old_path_length);
 
     const result = Importer.fetchImportedFile(self.allocator, self.ast, node.names, self.pb);
     const file_infos = switch (result) {
@@ -457,7 +460,7 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
 
     const interned = self.interner.intern(file_infos.path);
 
-    if (!self.pipeline.ctx.modules.modules.contains(interned)) {
+    if (!self.pipeline.ctx.module_interner.analyzed.contains(interned)) {
         var pipeline = self.pipeline.createSubPipeline();
         // TODO: proper error handling, for now just print errors and exit
         // const module = pipeline.run(file_infos.name, interned, file_infos.content) catch {
@@ -466,7 +469,7 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
         };
     }
 
-    self.scope.declareSymbol(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
+    self.scope.declareModule(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
 
     // self.makeInstruction(
     //     .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
@@ -786,6 +789,7 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
 
     const index = self.ir_builder.reserveInstr();
     var final_type = self.type_interner.cache.void;
+    var len: usize = expr.nodes.len;
 
     for (expr.nodes, 0..) |*node, i| {
         final_type = try self.analyzeNode(node, ctx);
@@ -793,13 +797,18 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
         if (!self.isVoid(final_type) and i != expr.nodes.len - 1) {
             return self.err(.unused_value, expr.span);
         }
+
+        // Nothing to do at compile time for import statements
+        if (node.* == .use) {
+            len -= 1;
+        }
     }
 
     const count = self.scope.close();
     // TODO: protect cast
     self.makeInstruction(
         .{ .block = .{
-            .length = expr.nodes.len,
+            .length = len,
             .pop_count = @intCast(count),
             .is_expr = !self.isVoid(final_type),
         } },
@@ -1072,69 +1081,105 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
 
 const FieldResult = struct {
     type: *const Type,
-    is_value: bool,
+    lhs_is_value: bool,
+    is_method: bool,
 };
 
 /// Returns the type of the callee and if it's a value, not a type
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
     const span = self.ast.getSpan(expr.structure);
     const index = self.ir_builder.reserveInstr();
-    const field_result: FieldResult = switch (expr.structure.*) {
+    const struct_res: FieldResult = switch (expr.structure.*) {
         .field => |*e| try self.field(e, ctx),
         .literal => |e| b: {
             const ty, const kind = try self.identifier(e.idx, true, ctx);
-            break :b .{ .type = ty, .is_value = kind == .variable };
+            break :b .{ .type = ty, .lhs_is_value = kind == .variable, .is_method = false };
         },
-        else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .is_value = true },
+        else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .lhs_is_value = true, .is_method = false },
     };
 
-    const field_type, const field_index = switch (field_result.type.*) {
+    const field_res = switch (struct_res.type.*) {
+        .module => |ty| return self.moduleAccess(expr.field, ty, index),
         .structure => |*ty| try self.structureAccess(expr.field, ty),
-        .module => |ty| b: {
-            const text = self.ast.toSource(expr.field);
-            const field_name = self.interner.intern(text);
-            const module = self.pipeline.ctx.modules.get(ty).?;
-            const sym = module.analyzed.symbols.getPtr(field_name) orelse {
-                @panic("Module has not the expected symbol");
-            };
-            break :b .{ sym.type, module.analyzed.symbols.getIndex(field_name).? };
-        },
         else => return self.err(
-            .{ .non_struct_field_access = .{ .found = self.getTypeName(field_result.type) } },
+            .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_res.type) } },
             span,
         ),
     };
 
-    const kind: Instruction.Field.Kind = switch (field_type.*) {
+    const kind: Instruction.Field.Kind = switch (field_res.kind) {
         // TODO: create just a 'function'. For now we need this because we get static method from
         // symbols that are loaded on stack, not in register so we need a separate logic
-        .function => if (field_result.is_value) .method else .static_method,
+        .function => if (struct_res.lhs_is_value) .method else .static_method,
         else => .field,
     };
 
     if (kind == .method and !ctx.in_call) {
-        return self.boundMethod(field_type, field_index, span, index);
+        return self.boundMethod(field_res.type, field_res.index, span, index);
     }
 
     self.makeInstruction(
-        .{ .field = .{ .index = field_index, .kind = kind } },
+        .{ .field = .{ .index = field_res.index, .kind = kind } },
         span.start,
         .{ .set_at = index },
     );
 
-    return .{ .type = field_type, .is_value = field_result.is_value };
+    return .{
+        .type = field_res.type,
+        .lhs_is_value = struct_res.lhs_is_value,
+        .is_method = kind == .method,
+    };
 }
 
-fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, struct_type: *const Type.Structure) Error!struct { *const Type, usize } {
+const AccessResult = struct {
+    type: *const Type,
+    kind: enum { field, function },
+    index: usize,
+};
+
+fn structureAccess(
+    self: *Self,
+    field_tk: Ast.TokenIndex,
+    struct_type: *const Type.Structure,
+) Error!AccessResult {
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
 
     return if (struct_type.fields.getPtr(field_name)) |f|
-        .{ f.type, struct_type.fields.getIndex(field_name).? }
+        .{ .type = f.type, .kind = .field, .index = struct_type.fields.getIndex(field_name).? }
     else if (struct_type.functions.getPtr(field_name)) |f|
-        .{ f.type, struct_type.functions.getIndex(field_name).? }
+        .{ .type = f.type, .kind = .function, .index = struct_type.functions.getIndex(field_name).? }
     else
         self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
+}
+
+fn moduleAccess(
+    self: *Self,
+    field_tk: Ast.TokenIndex,
+    module_idx: InternerIdx,
+    instr_index: usize,
+) Error!FieldResult {
+    const text = self.ast.toSource(field_tk);
+    const field_name = self.interner.intern(text);
+    const module = self.pipeline.ctx.module_interner.getAnalyzed(module_idx).?;
+    // TODO: error
+    const sym = module.symbols.getPtr(field_name) orelse {
+        @panic("Module has not the expected symbol");
+    };
+    const index = self.pipeline.ctx.module_interner.analyzed.getIndex(module_idx).?;
+    const kind: Instruction.SymbolImport.Kind = switch (sym.type.*) {
+        .function => .function,
+        .structure => .structure,
+        else => .variable,
+    };
+
+    self.makeInstruction(
+        .{ .symbol_import = .{ .module_index = index, .symbol_index = sym.index, .kind = kind } },
+        self.ast.getSpan(field_tk).start,
+        .{ .set_at = instr_index },
+    );
+
+    return .{ .type = sym.type, .lhs_is_value = false, .is_method = false };
 }
 
 fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Span, instr_idx: usize) FieldResult {
@@ -1142,7 +1187,8 @@ fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Sp
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
-    return .{ .type = ty, .is_value = true };
+    // TODO: sure about is_method?
+    return .{ .type = ty, .lhs_is_value = true, .is_method = true };
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
@@ -1153,14 +1199,13 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     defer args.deinit(self.allocator);
 
     const ctx_call = ctx.setAndGetPrevious(.in_call, true);
-    defer ctx.in_call = ctx_call;
 
     // Implicit first argument
     const callee = switch (expr.callee.*) {
         .field => |*f| b: {
             const ty = try self.field(f, ctx);
 
-            if (ty.is_value) {
+            if (ty.lhs_is_value and ty.is_method) {
                 args.append(self.allocator, expr.callee.field.structure) catch oom();
             }
 
@@ -1175,6 +1220,8 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 
     args.appendSlice(self.allocator, expr.args) catch oom();
 
+    // Restore state before arguments analyzis
+    ctx.in_call = ctx_call;
     const arity, const default_count = try self.fnArgsList(args.items, &callee.function, span, ctx);
 
     // TODO: protect casts
@@ -1268,12 +1315,12 @@ fn identifier(
     token_name: Ast.TokenIndex,
     initialized: bool,
     ctx: *Context,
-) Error!struct { *const Type, enum { variable, symbol } } {
+) Error!struct { *const Type, enum { variable, symbol, module } } {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    if (self.variableIdentifier(name, span, ctx)) |variable| {
+    if (self.variableIdentifier(name, span)) |variable| {
         if (initialized and !variable.initialized) {
             return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
         }
@@ -1287,23 +1334,26 @@ fn identifier(
         return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
     }
 
+    if (self.scope.getModule(name)) |mod| {
+        return .{ mod, .module };
+    }
+
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
 }
 
-fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex, ctx: *Context) Error!*LexicalScope.Variable {
+fn expectVariableIdentifier(self: *Self, token_name: Ast.TokenIndex) Error!*LexicalScope.Variable {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
 
-    return self.variableIdentifier(name, span, ctx) orelse return self.err(
+    return self.variableIdentifier(name, span) orelse return self.err(
         .{ .undeclared_var = .{ .name = self.interner.getKey(name).? } },
         span,
     );
 }
 
 /// Tries to find a variable in scopes and returns it while emitting an instruction
-fn variableIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *Context) ?*LexicalScope.Variable {
-    _ = ctx; // autofix
+fn variableIdentifier(self: *Self, name: InternerIdx, span: Span) ?*LexicalScope.Variable {
     const variable, const scope_offset = self.scope.getVariable(name) orelse return null;
 
     // TODO: useless
@@ -1519,7 +1569,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
         const typ = if (fv.value) |val|
             try self.analyzeExpr(val, ctx)
         else // Syntax: { x } instead of { x = x }
-            (try self.expectVariableIdentifier(fv.name, ctx)).type;
+            (try self.expectVariableIdentifier(fv.name)).type;
 
         const value_span = if (fv.value) |val| self.ast.getSpan(val) else field_span;
         const coercion = try self.performTypeCoercion(f.type, typ, false, value_span);

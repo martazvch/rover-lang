@@ -15,8 +15,8 @@ const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 
 gc: Gc,
-start_module: CompiledModule,
-module: *CompiledModule,
+// start_module: CompiledModule,
+// module: *CompiledModule,
 // module_chain: std.ArrayListUnmanaged(*CompiledModule),
 stack: Stack,
 frame_stack: FrameStack,
@@ -27,7 +27,7 @@ stdout: std.fs.File.Writer,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
-symbols: []Value,
+modules: []const CompiledModule,
 
 /// Holds default variables of current call
 r3: []Value = undefined,
@@ -55,9 +55,6 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.stack.init();
     self.frame_stack = .empty;
     self.objects = null;
-    // self.module_chain = .{};
-    self.symbols = &.{};
-    self.start_module = undefined;
 
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
@@ -110,20 +107,17 @@ fn instructionNb(self: *const Self) usize {
     return addr1 - addr2;
 }
 
-pub fn run(self: *Self, module: CompiledModule) !void {
-    self.start_module = module;
-    self.symbols = self.start_module.symbols;
-
-    self.module = &self.start_module;
+pub fn run(self: *Self, module: CompiledModule, modules: []CompiledModule) !void {
     self.gc.active = true;
+    self.modules = modules;
 
     // Init on dummy address to avoid nullable pointer (used only in print stack mode)
-    try self.execute(self.module.function);
+    try self.execute(&module);
 }
 
-fn execute(self: *Self, entry_point: *Obj.Function) !void {
+fn execute(self: *Self, entry_module: *const CompiledModule) !void {
     var frame = try self.frame_stack.new();
-    frame.initCall(entry_point.asObj(), &self.stack, 0);
+    frame.initCall(entry_module.function.asObj(), &self.stack, 0, self.modules);
 
     while (true) {
         if (comptime options.print_stack) {
@@ -243,7 +237,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .call => {
                 const args_count = frame.readByte();
                 frame = try self.frame_stack.new();
-                frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count);
+                frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
             },
             .call_native => {
                 // const args_count = frame.readByte();
@@ -268,7 +262,8 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .constant => self.stack.push(frame.readConstant()),
             .define_global => {
                 const idx = frame.readByte();
-                self.module.globals[idx] = self.stack.pop();
+                // self.module.globals[idx] = self.stack.pop();
+                frame.globals[idx] = self.stack.pop();
             },
             .div_float => {
                 const rhs = self.stack.pop().float;
@@ -306,11 +301,13 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .get_global => {
                 const idx = frame.readByte();
-                self.stack.push(self.module.globals[idx]);
+                // self.stack.push(self.module.globals[idx]);
+                self.stack.push(frame.globals[idx]);
             },
             .get_global_cow => {
                 const idx = frame.readByte();
-                const value = &self.module.globals[idx];
+                // const value = &self.module.globals[idx];
+                const value = &frame.globals[idx];
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
@@ -333,7 +330,14 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .get_symbol => {
                 const symbol_idx = frame.readByte();
-                self.stack.push(self.symbols[symbol_idx]);
+                self.stack.push(frame.symbols[symbol_idx]);
+            },
+            .get_symbol_extern => {
+                const module_index = frame.readByte();
+                const symbol_index = frame.readByte();
+                const module = self.modules[module_index];
+                const symbol = module.symbols[symbol_index];
+                self.stack.push(symbol);
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
@@ -443,7 +447,8 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             },
             .set_global => {
                 const idx = frame.readByte();
-                self.module.globals[idx] = self.stack.pop();
+                // self.module.globals[idx] = self.stack.pop();
+                frame.globals[idx] = self.stack.pop();
             },
             .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
             .set_local_box => {
@@ -494,33 +499,6 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     }
 
     return obj;
-}
-
-// TODO: ArrayList?
-// fn call(self: *Self, frame: **CallFrame, callee: *Obj.Function, args_count: usize, imported: bool) Error!void {
-// fn call(self: *Self, frame: *CallFrame, args_count: usize) Error!void {
-// if (self.frame_stack.count == FrameStack.FRAMES_MAX) {
-//     return error.StackOverflow;
-// }
-
-// const new_frame = &self.frame_stack.frames[self.frame_stack.count];
-// self.frame_stack.count += 1;
-// new_frame.function = callee;
-// new_frame.ip = callee.chunk.code.items.ptr;
-// -1 for the function itself
-// new_frame.slots = self.stack.top - args_count - 1;
-// new_frame.slots = self.stack.top - args_count;
-// frame.slots = self.stack.top - args_count;
-// new_frame.imported = imported;
-// new_frame.imported = false;
-// frame.imported = false;
-
-// frame.* = &self.frame_stack.frames[self.frame_stack.count - 1];
-// }
-
-pub fn updateModule(self: *Self, module: *CompiledModule) void {
-    self.module_chain.append(self.allocator, self.module) catch oom();
-    self.module = module;
 }
 
 fn strConcat(self: *Self) void {
@@ -594,10 +572,10 @@ const Stack = struct {
 
 pub const CallFrame = struct {
     function: *Obj.Function,
+    globals: []Value,
+    symbols: []Value,
     ip: [*]u8,
     slots: [*]Value,
-    // TODO: useless?
-    imported: bool,
 
     pub fn readByte(self: *CallFrame) u8 {
         defer self.ip += 1;
@@ -616,9 +594,19 @@ pub const CallFrame = struct {
         return (@as(u16, part1) << 8) | part2;
     }
 
+    pub fn initModule(self: *CallFrame, module: *const CompiledModule) void {
+        self.globals = module.globals;
+        self.symbols = module.symbols;
+    }
+
     // PERF: preshot the closure or function?
-    pub fn initCall(self: *CallFrame, callee: *Obj, stack: *Stack, args_count: usize) void {
-        self.imported = false;
+    pub fn initCall(
+        self: *CallFrame,
+        callee: *Obj,
+        stack: *Stack,
+        args_count: usize,
+        modules: []const CompiledModule,
+    ) void {
         self.slots = stack.top - args_count;
 
         const function = switch (callee.kind) {
@@ -632,7 +620,13 @@ pub const CallFrame = struct {
 
                 break :b closure.function;
             },
-            .function => callee.as(Obj.Function),
+            .function => b: {
+                const function = callee.as(Obj.Function);
+                const module = modules[function.module_index];
+                self.globals = module.globals;
+                self.symbols = module.symbols;
+                break :b function;
+            },
             else => unreachable,
         };
 

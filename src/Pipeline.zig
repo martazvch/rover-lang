@@ -41,14 +41,13 @@ is_sub: bool,
 
 const Self = @This();
 const Error = error{ExitOnPrint};
-pub const CompiledModules = AutoArrayHashMapUnmanaged(Interner.Index, CompiledModule);
 
 pub const Context = struct {
     config: Config,
     interner: Interner,
     type_interner: TypeInterner,
     path_builder: PathBuilder,
-    modules: ModuleInterner,
+    module_interner: ModuleInterner,
 
     pub fn new(allocator: Allocator, config: Config) Context {
         var ctx: Context = .{
@@ -56,7 +55,7 @@ pub const Context = struct {
             .interner = .init(allocator),
             .type_interner = .init(allocator),
             .path_builder = .init(allocator, std.fs.cwd().realpathAlloc(allocator, ".") catch unreachable),
-            .modules = .init(allocator),
+            .module_interner = .init(allocator),
         };
         ctx.type_interner.cacheFrequentTypes();
 
@@ -67,7 +66,7 @@ pub const Context = struct {
         self.interner.deinit();
         self.type_interner.deinit();
         self.path_builder.deinit();
-        self.modules.deinit();
+        self.module_interner.deinit();
     }
 };
 
@@ -88,7 +87,7 @@ pub fn deinit(self: *Self) void {
 }
 
 /// Runs the pipeline
-pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !ModuleInterner.Module {
+pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
     // Lexer
     var lexer = Lexer.init(self.allocator);
     lexer.lex(source);
@@ -172,16 +171,17 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         self.analyzer.ir_builder.instructions.items(.data),
         self.analyzer.ir_builder.computeLineFromOffsets(source),
         self.analyzer.main,
+        self.ctx.module_interner.compiled.count(),
     );
     self.instr_count = self.analyzer.ir_builder.count();
 
     const path_interned = self.ctx.interner.intern(path);
-    self.ctx.modules.add(path_interned, .{ .analyzed = analyzed_module, .compiled = compiled_module });
+    self.ctx.module_interner.add(path_interned, analyzed_module, compiled_module);
 
     return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)
         return error.ExitOnPrint
     else
-        .{ .analyzed = analyzed_module, .compiled = compiled_module };
+        compiled_module;
 }
 
 pub fn createSubPipeline(self: *Self) Self {
