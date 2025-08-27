@@ -28,7 +28,7 @@ pub const Instruction = struct {
         @"if": If,
         // TODO: delete later
         imported: Imported,
-        import_module: ImportModule,
+        // import_module: ImportModule,
         int: i64,
         item_import: ItemImport,
         multiple_var_decl: usize,
@@ -139,7 +139,7 @@ pub const Instruction = struct {
         pub const Cast = enum(u2) { then, @"else", none };
     };
     pub const Imported = struct { index: u64, variable: Variable };
-    pub const ImportModule = struct { interned_key: usize, sym_idx: usize };
+    // pub const ImportModule = struct { interned_key: usize, sym_idx: usize };
     pub const ItemImport = struct {
         module_index: usize,
         field_index: usize,

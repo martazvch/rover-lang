@@ -95,9 +95,9 @@ fn markRoots(self: *Self) Allocator.Error!void {
 
     // TODO: see if we can do other manner
     try self.markModule(self.vm.module);
-    for (self.vm.module_chain.items) |mod| {
-        try self.markModule(mod);
-    }
+    // for (self.vm.module_chain.items) |mod| {
+    //     try self.markModule(mod);
+    // }
 }
 
 fn markModule(self: *Self, module: *CompiledModule) Allocator.Error!void {

@@ -9,19 +9,23 @@ const oom = @import("utils.zig").oom;
 const Self = @This();
 pub const Module = struct { analyzed: AnalyzedModule, compiled: CompiledModule };
 
-arena: std.heap.ArenaAllocator,
+allocator: Allocator,
 modules: std.AutoHashMapUnmanaged(InternerIndex, Module),
 
 pub fn init(allocator: Allocator) Self {
-    return .{ .arena = .init(allocator), .modules = .empty };
+    return .{ .allocator = allocator, .modules = .empty };
 }
 
 pub fn deinit(self: *Self) void {
-    self.arena.deinit();
+    var it = self.modules.valueIterator();
+    while (it.next()) |mod| {
+        mod.compiled.deinit(self.allocator);
+    }
+    self.modules.deinit(self.allocator);
 }
 
 pub fn add(self: *Self, name: InternerIndex, module: Module) void {
-    self.modules.put(self.arena.allocator(), name, module) catch oom();
+    self.modules.put(self.allocator, name, module) catch oom();
 }
 
 pub fn get(self: *const Self, name: InternerIndex) ?*Module {

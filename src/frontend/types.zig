@@ -7,7 +7,6 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const LexicalScope = @import("LexicalScope.zig");
-const Module = @import("Analyzer.zig").AnalyzedModule;
 const oom = @import("../utils.zig").oom;
 
 pub const Type = union(enum) {
@@ -19,7 +18,7 @@ pub const Type = union(enum) {
     null,
     array: *const Type,
     function: Function,
-    module: Module,
+    module: InternerIdx,
     structure: Structure,
 
     pub const Function = struct {
@@ -136,7 +135,7 @@ pub const Type = union(enum) {
                 ty.return_type.hash(hasher);
                 hasher.update(asBytes(&@intFromBool(ty.is_method)));
             },
-            .module => unreachable,
+            .module => |interned| hasher.update(asBytes(&interned)),
             .structure => |ty| {
                 hasher.update(asBytes(&ty.name));
                 for (ty.fields.values()) |f| {
@@ -172,7 +171,10 @@ pub const Type = union(enum) {
                 writer.writeAll(") -> ") catch oom();
                 writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
             },
-            .module => unreachable,
+            .module => |interned| {
+                const name = interner.getKey(interned).?;
+                writer.print("module: {s}", .{name}) catch oom();
+            },
             .structure => |ty| return interner.getKey(ty.name).?,
         }
 

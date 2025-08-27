@@ -84,12 +84,11 @@ pub fn init(self: *Self, vm: *Vm, ctx: *Context) void {
 }
 
 pub fn deinit(self: *Self) void {
-    self.ctx.deinit();
     self.arena.deinit();
 }
 
 /// Runs the pipeline
-pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !ModuleInterner.Module {
+pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !ModuleInterner.Module {
     // Lexer
     var lexer = Lexer.init(self.allocator);
     lexer.lex(source);
@@ -159,18 +158,16 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !ModuleInte
 
     // Compiler
     var compiler = CompilationManager.init(
+        file_name,
         self.vm,
         &self.ctx.interner,
-        // undefined,
         if (options.test_mode and self.ctx.config.print_bytecode) .@"test" else if (self.ctx.config.print_bytecode) .normal else .none,
+        self.analyzer.scope.current.variables.count(),
         self.analyzer.scope.symbol_count,
-        &self.ctx.modules,
     );
     defer compiler.deinit();
-    errdefer compiler.globals.deinit(self.vm.allocator);
 
     const compiled_module = try compiler.compile(
-        file_name,
         self.instr_count,
         self.analyzer.ir_builder.instructions.items(.data),
         self.analyzer.ir_builder.computeLineFromOffsets(source),
@@ -178,9 +175,13 @@ pub fn run(self: *Self, file_name: []const u8, source: [:0]const u8) !ModuleInte
     );
     self.instr_count = self.analyzer.ir_builder.count();
 
-    return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub) {
-        return error.ExitOnPrint;
-    } else .{ .analyzed = analyzed_module, .compiled = compiled_module };
+    const path_interned = self.ctx.interner.intern(path);
+    self.ctx.modules.add(path_interned, .{ .analyzed = analyzed_module, .compiled = compiled_module });
+
+    return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)
+        return error.ExitOnPrint
+    else
+        .{ .analyzed = analyzed_module, .compiled = compiled_module };
 }
 
 pub fn createSubPipeline(self: *Self) Self {

@@ -65,7 +65,11 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
             const buf = allocator.allocSentinel(u8, size, 0) catch oom();
             _ = file.readAll(buf) catch @panic("Rover internal error: error while reading imported file");
 
-            return .{ .ok = .{ .name = file_name, .path = allocator.dupe(u8, buf_written) catch oom(), .content = buf } };
+            return .{ .ok = .{
+                .name = file_name,
+                .path = allocator.dupe(u8, pb.filePathAlloc(allocator, file_name)) catch oom(),
+                .content = buf,
+            } };
         } else {
             cwd = cwd.openDir(name, .{}) catch return .{ .err = .err(.{ .unknown_module = .{ .name = name } }, ast.getSpan(part)) };
             pb.cd(name);

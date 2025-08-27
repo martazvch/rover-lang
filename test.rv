@@ -2,6 +2,7 @@ use .data.geom
 
 fn main() {
     print "oui"
+    geom.introduce()
 }
 
 

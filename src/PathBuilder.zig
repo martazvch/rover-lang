@@ -52,14 +52,29 @@ pub fn fullPath(self: *const Self, buf: []u8) []const u8 {
 }
 
 /// Caller owns the memory
-pub fn fullPathAlloc(self: *const Self, allocator: Allocator) ![]const u8 {
+pub fn fullPathAlloc(self: *const Self, allocator: Allocator) []const u8 {
     var path: ArrayListUnmanaged(u8) = .{};
     defer if (path.capacity != 0) path.deinit(allocator);
 
     for (self.chunks.items, 0..) |chunk, i| {
-        if (i != 0) try path.appendSlice(allocator, std.fs.path.sep_str);
-        try path.appendSlice(allocator, chunk);
+        if (i != 0) path.appendSlice(allocator, std.fs.path.sep_str) catch oom();
+        path.appendSlice(allocator, chunk) catch oom();
     }
 
-    return try path.toOwnedSlice(allocator);
+    return path.toOwnedSlice(allocator) catch oom();
+}
+
+/// Caller owns the memory
+pub fn filePathAlloc(self: *const Self, allocator: Allocator, file: []const u8) []const u8 {
+    var path: ArrayListUnmanaged(u8) = .{};
+    defer if (path.capacity != 0) path.deinit(allocator);
+
+    for (self.chunks.items, 0..) |chunk, i| {
+        if (i != 0) path.appendSlice(allocator, std.fs.path.sep_str) catch oom();
+        path.appendSlice(allocator, chunk) catch oom();
+    }
+    path.appendSlice(allocator, std.fs.path.sep_str) catch oom();
+    path.appendSlice(allocator, file) catch oom();
+
+    return path.toOwnedSlice(allocator) catch oom();
 }

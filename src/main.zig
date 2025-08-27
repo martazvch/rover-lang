@@ -70,22 +70,22 @@ pub fn main() !void {
         defer vm.deinit();
 
         var ctx: Pipeline.Context = .new(allocator, config);
+        defer ctx.deinit();
 
         var pipeline: Pipeline = undefined;
         defer pipeline.deinit();
         pipeline.init(&vm, &ctx);
 
-        var module = pipeline.run(f, buf) catch |e| switch (e) {
+        const module = pipeline.run(f, ".", buf) catch |e| switch (e) {
             error.ExitOnPrint => return,
             else => return e,
         };
-        defer module.compiled.deinit(vm.allocator);
 
         try vm.run(module.compiled);
     } else {
-        var repl: Repl = undefined;
-        defer repl.deinit(allocator);
-        repl.init(allocator, config);
-        try repl.run();
+        // var repl: Repl = undefined;
+        // defer repl.deinit(allocator);
+        // repl.init(allocator, config);
+        // try repl.run();
     }
 }

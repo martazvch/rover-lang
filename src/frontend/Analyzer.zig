@@ -450,30 +450,29 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
 
     // TODO: make the module interner (create one) responsible for freeing its entries
     defer {
-        self.allocator.free(file_infos.name);
-        self.allocator.free(file_infos.content);
-        self.allocator.free(file_infos.path);
+        // self.allocator.free(file_infos.name);
+        // self.allocator.free(file_infos.content);
+        // self.allocator.free(file_infos.path);
     }
 
     const interned = self.interner.intern(file_infos.path);
-    const module = if (self.pipeline.ctx.modules.get(interned)) |module|
-        module.analyzed
-    else b: {
+
+    if (!self.pipeline.ctx.modules.modules.contains(interned)) {
         var pipeline = self.pipeline.createSubPipeline();
         // TODO: proper error handling, for now just print errors and exit
-        const module = pipeline.run(file_infos.name, file_infos.content) catch {
+        // const module = pipeline.run(file_infos.name, interned, file_infos.content) catch {
+        _ = pipeline.run(file_infos.name, file_infos.path, file_infos.content) catch {
             std.process.exit(0);
         };
-        self.pipeline.ctx.modules.add(interned, module);
-        break :b module.analyzed;
-    };
+    }
 
-    self.scope.declareSymbol(self.allocator, module_name, self.type_interner.intern(.{ .module = module }));
-    self.makeInstruction(
-        .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
-        self.ast.getSpan(node).start,
-        .add,
-    );
+    self.scope.declareSymbol(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
+
+    // self.makeInstruction(
+    //     .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
+    //     self.ast.getSpan(node).start,
+    //     .add,
+    // );
 
     // const module, const cached = try self.importModule(node);
     // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
@@ -1090,8 +1089,16 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
     };
 
     const field_type, const field_index = switch (field_result.type.*) {
-        // .module => |ty| {},
         .structure => |*ty| try self.structureAccess(expr.field, ty),
+        .module => |ty| b: {
+            const text = self.ast.toSource(expr.field);
+            const field_name = self.interner.intern(text);
+            const module = self.pipeline.ctx.modules.get(ty).?;
+            const sym = module.analyzed.symbols.getPtr(field_name) orelse {
+                @panic("Module has not the expected symbol");
+            };
+            break :b .{ sym.type, module.analyzed.symbols.getIndex(field_name).? };
+        },
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.getTypeName(field_result.type) } },
             span,
@@ -1699,6 +1706,9 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
     const local_value = value;
 
     if (self.isVoid(value)) return self.err(.void_value, span);
+
+    // TODO: proper error handling
+    if (value.is(.module)) @panic("Can't use modules in expressions");
 
     if (self.isVoid(local_decl)) {
         local_decl = local_value;

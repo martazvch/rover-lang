@@ -26,6 +26,15 @@ pub const CompiledModule = struct {
     globals: []Value,
     symbols: []Value,
 
+    pub fn init(allocator: Allocator, name: []const u8, globals_count: usize, symbols_count: usize) CompiledModule {
+        return .{
+            .name = name,
+            .function = undefined,
+            .globals = allocator.alloc(Value, globals_count) catch oom(),
+            .symbols = allocator.alloc(Value, symbols_count) catch oom(),
+        };
+    }
+
     pub fn deinit(self: *CompiledModule, allocator: Allocator) void {
         allocator.free(self.globals);
         allocator.free(self.symbols);
@@ -42,25 +51,21 @@ pub const CompilationManager = struct {
     instr_lines: []const usize,
     instr_idx: usize,
     render_mode: Disassembler.RenderMode,
-    globals: ArrayListUnmanaged(Value),
-    symbols: []Value,
-    module_interner: *const ModuleInterner,
+    module: CompiledModule,
 
     const Self = @This();
     const Error = error{err} || Chunk.Error || std.posix.WriteError;
     const CompilerReport = GenReport(CompilerMsg);
 
-    // TODO: could know the size of globals in advance
     pub fn init(
+        name: []const u8,
         vm: *Vm,
         interner: *const Interner,
         // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
+        global_count: usize,
         symbol_count: usize,
-        module_interner: *const ModuleInterner,
     ) Self {
-        const symbols = vm.allocator.alloc(Value, symbol_count) catch oom();
-
         return .{
             .vm = vm,
             .interner = interner,
@@ -71,9 +76,7 @@ pub const CompilationManager = struct {
             .instr_data = undefined,
             .instr_lines = undefined,
             .render_mode = render_mode,
-            .globals = .{},
-            .symbols = symbols,
-            .module_interner = module_interner,
+            .module = .init(vm.allocator, name, global_count, symbol_count),
         };
     }
 
@@ -83,7 +86,6 @@ pub const CompilationManager = struct {
 
     pub fn compile(
         self: *Self,
-        file_name: []const u8,
         instr_start: usize,
         instr_data: []const Instruction.Data,
         instr_lines: []const usize,
@@ -95,7 +97,7 @@ pub const CompilationManager = struct {
 
         if (self.render_mode != .none) {
             const stdout = std.io.getStdOut().writer();
-            try stdout.print("//---- {s} ----\n\n", .{file_name});
+            try stdout.print("//---- {s} ----\n\n", .{self.module.name});
         }
 
         self.compiler = Compiler.init(self, "global scope", 0);
@@ -106,20 +108,14 @@ pub const CompilationManager = struct {
 
         if (main_index) |idx| {
             // TODO: protect
-            std.log.info("Main index: {}", .{idx});
             self.compiler.writeOpAndByte(.get_symbol, @intCast(idx), 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
         }
 
-        return .{
-            .name = file_name,
-            .function = try self.compiler.end(),
-            .globals = self.globals.toOwnedSlice(self.vm.allocator) catch oom(),
-            // .symbols = self.vm.allocator.dupe(Value, self.symbols) catch oom(),
-            .symbols = self.symbols,
-        };
+        self.module.function = try self.compiler.end();
+        return self.module;
     }
 };
 
@@ -208,14 +204,16 @@ const Compiler = struct {
         );
     }
 
-    fn addGlobal(self: *Self, global: Value) u8 {
-        self.manager.globals.append(self.manager.vm.allocator, global) catch oom();
+    fn addGlobal(self: *Self, index: usize, global: Value) u8 {
+        // self.manager.module.globals.append(self.manager.vm.allocator, global) catch oom();
+        self.manager.module.globals[index] = global;
         // TODO: protect
-        return @intCast(self.manager.globals.items.len - 1);
+        // return @intCast(self.manager.module.globals.items.len - 1);
+        return @intCast(index);
     }
 
     fn addSymbol(self: *Self, index: usize, symbol: Value) void {
-        self.manager.symbols[index] = symbol;
+        self.manager.module.symbols[index] = symbol;
     }
 
     /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
@@ -291,7 +289,8 @@ const Compiler = struct {
             var dis = Disassembler.init(
                 self.manager.vm.allocator,
                 &self.function.chunk,
-                self.manager.globals.items,
+                // self.manager.module.globals.items,
+                self.manager.module.globals,
                 self.manager.render_mode,
             );
             defer dis.deinit();
@@ -323,7 +322,7 @@ const Compiler = struct {
             .identifier => |*data| self.identifier(data),
             .@"if" => |*data| self.ifInstr(data),
             .imported => unreachable,
-            .import_module => |*data| self.importModule(data),
+            // .import_module => |*data| self.importModule(data),
             .int => |data| self.intInstr(data),
             .item_import => |*data| self.itemImport(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
@@ -674,12 +673,12 @@ const Compiler = struct {
         self.emitGetVar(data, self.getLineNumber());
     }
 
-    fn importModule(self: *Self, data: *const Instruction.ImportModule) Error!void {
-        self.addSymbol(
-            data.sym_idx,
-            Value.makeObj(Obj.Module.create(self.manager.vm, self.manager.module_interner.getKind(data.interned_key, .compiled).?).asObj()),
-        );
-    }
+    // fn importModule(self: *Self, data: *const Instruction.ImportModule) Error!void {
+    //     self.addSymbol(
+    //         data.sym_idx,
+    //         Value.makeObj(Obj.Module.create(self.manager.vm, self.manager.module_interner.getKind(data.interned_key, .compiled).?).asObj()),
+    //     );
+    // }
 
     fn intInstr(self: *Self, value: isize) Error!void {
         try self.emitConstant(Value.makeInt(value), self.getLineNumber());
@@ -881,7 +880,7 @@ const Compiler = struct {
         // If we are top level, value should be pure and compile time known
         // The purpose is to initialize the slot so when accessed like self.globals[idx] we don't segfault
         if (data.variable.scope == .global) {
-            _ = self.addGlobal(.null_);
+            _ = self.addGlobal(data.variable.index, .null_);
         } else if (data.box) {
             self.writeOp(.box, line);
         }

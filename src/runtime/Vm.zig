@@ -17,7 +17,7 @@ const Value = @import("values.zig").Value;
 gc: Gc,
 start_module: CompiledModule,
 module: *CompiledModule,
-module_chain: std.ArrayListUnmanaged(*CompiledModule),
+// module_chain: std.ArrayListUnmanaged(*CompiledModule),
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
@@ -55,7 +55,7 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.stack.init();
     self.frame_stack = .empty;
     self.objects = null;
-    self.module_chain = .{};
+    // self.module_chain = .{};
     self.symbols = &.{};
     self.start_module = undefined;
 
@@ -70,7 +70,7 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
 }
 
 pub fn deinit(self: *Self) void {
-    self.module_chain.deinit(self.allocator);
+    // self.module_chain.deinit(self.allocator);
     self.gc.deinit();
     self.strings.deinit();
     self.freeObjects();
@@ -119,20 +119,6 @@ pub fn run(self: *Self, module: CompiledModule) !void {
 
     // Init on dummy address to avoid nullable pointer (used only in print stack mode)
     try self.execute(self.module.function);
-}
-
-fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {
-    // TODO: runtime error desactivable with release fast mode
-    if (index > array.values.items.len - 1) @panic("Out of bound access");
-
-    return if (index >= 0)
-        @intCast(index)
-    else b: {
-        const tmp: usize = @abs(index);
-        if (tmp > array.values.items.len) @panic("Out of bound");
-
-        break :b array.values.items.len - tmp;
-    };
 }
 
 fn execute(self: *Self, entry_point: *Obj.Function) !void {
@@ -388,9 +374,9 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .naked_return => {
                 self.frame_stack.count -= 1;
 
-                if (frame.imported) {
-                    self.module = self.module_chain.pop().?;
-                }
+                // if (frame.imported) {
+                //     self.module = self.module_chain.pop().?;
+                // }
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
@@ -426,9 +412,9 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const result = self.stack.pop();
                 self.frame_stack.count -= 1;
 
-                if (frame.imported) {
-                    self.module = self.module_chain.pop().?;
-                }
+                // if (frame.imported) {
+                //     self.module = self.module_chain.pop().?;
+                // }
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
@@ -559,6 +545,20 @@ fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
 
     self.stack.peekRef(1).* = Value.makeObj(Obj.String.take(self, res).asObj());
     self.stack.top -= 1;
+}
+
+fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {
+    // TODO: runtime error desactivable with release fast mode
+    if (index > array.values.items.len - 1) @panic("Out of bound access");
+
+    return if (index >= 0)
+        @intCast(index)
+    else b: {
+        const tmp: usize = @abs(index);
+        if (tmp > array.values.items.len) @panic("Out of bound");
+
+        break :b array.values.items.len - tmp;
+    };
 }
 
 // PERF: inline methods?
