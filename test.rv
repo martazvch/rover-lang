@@ -1,37 +1,24 @@
-use .data.math 
-
-struct Foo {
-    function: fn(bool) -> int
-}
-
-struct Bar {
-    value = 10
-
-    fn static(b: bool) -> int { 3 }
-
-    fn method(self, b: bool) -> int {
-        self.value
-    }
-
-    fn importFuncFromMethod(self) -> fn(bool) -> int {
-        math.getInt2
-    }
-}
-
-fn copy(b: bool) -> int { 5 }
-
-fn argsCallConv(arg1: fn(bool)->int, arg2: fn(bool)->int, arg3: fn(bool)->int) {
-    print arg1(true)
-    print arg2(false)
-    print arg3(true)
-}
+use .data.math{Vec2, introduce}
+//use .data.math{Vec2}
+use .data.geom{ Point, Square }
 
 fn main() {
-    var bar = Bar{}
-    var foo = Foo{function=copy}
+    //var v = Vec2{ x = 3, y = 9 }
+    //print v.x
+    //print v.y
 
-    argsCallConv(copy, math.getInt2, foo.function)
-    argsCallConv(Bar.static, bar.method, bar.importFuncFromMethod())
+    var pt = Point{ x = 5, y = 8 }
+    print pt.x
+    print pt.y
+
+    {
+        use .data.math{Vec2 as Pipou}
+        var v = Pipou{ x = 55, y = 333 }
+        print v.x
+        print v.y
+    }
+
+    introduce()
 }
 
 

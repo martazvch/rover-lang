@@ -469,7 +469,32 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
         };
     }
 
-    self.scope.declareModule(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
+    if (node.items) |items| {
+        const mod = self.pipeline.ctx.module_interner.analyzed.get(interned).?;
+        const mod_index = self.pipeline.ctx.module_interner.analyzed.getIndex(interned).?;
+
+        for (items) |item| {
+            const item_name = self.interner.intern(self.ast.toSource(item.item));
+            var sym = mod.symbols.get(item_name) orelse return self.err(
+                .{ .missing_symbol_in_module = .{
+                    .module = self.ast.toSource(node.names[node.names.len - 1]),
+                    .symbol = self.ast.toSource(item.item),
+                } },
+                self.ast.getSpan(item.item),
+            );
+
+            // TODO: error
+            if (!sym.type.is(.structure) and !sym.type.is(.function)) {
+                @panic("Not supported yet");
+            }
+
+            const item_token = if (item.alias) |alias| alias else item.item;
+            const item_interned = self.interner.intern(self.ast.toSource(item_token));
+            self.scope.declareExternSymbol(self.allocator, item_interned, mod_index, sym);
+        }
+    } else {
+        self.scope.declareModule(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
+    }
 
     // self.makeInstruction(
     //     .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
@@ -1081,8 +1106,8 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
 
 const FieldResult = struct {
     type: *const Type,
-    lhs_is_value: bool,
-    is_method: bool,
+    lhs_is_value: bool = false,
+    is_method: bool = false,
 };
 
 /// Returns the type of the callee and if it's a value, not a type
@@ -1093,13 +1118,13 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
         .field => |*e| try self.field(e, ctx),
         .literal => |e| b: {
             const ty, const kind = try self.identifier(e.idx, true, ctx);
-            break :b .{ .type = ty, .lhs_is_value = kind == .variable, .is_method = false };
+            break :b .{ .type = ty, .lhs_is_value = kind == .variable };
         },
-        else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .lhs_is_value = true, .is_method = false },
+        else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .lhs_is_value = true },
     };
 
     const field_res = switch (struct_res.type.*) {
-        .module => |ty| return self.moduleAccess(expr.field, ty, index),
+        .module => |ty| return .{ .type = try self.moduleAccess(expr.field, ty, index) },
         .structure => |*ty| try self.structureAccess(expr.field, ty),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_res.type) } },
@@ -1158,7 +1183,7 @@ fn moduleAccess(
     field_tk: Ast.TokenIndex,
     module_idx: InternerIdx,
     instr_index: usize,
-) Error!FieldResult {
+) Error!*const Type {
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
     const module = self.pipeline.ctx.module_interner.getAnalyzed(module_idx).?;
@@ -1167,19 +1192,15 @@ fn moduleAccess(
         @panic("Module has not the expected symbol");
     };
     const index = self.pipeline.ctx.module_interner.analyzed.getIndex(module_idx).?;
-    const kind: Instruction.SymbolImport.Kind = switch (sym.type.*) {
-        .function => .function,
-        .structure => .structure,
-        else => .variable,
-    };
 
+    // TODO: protect the cast
     self.makeInstruction(
-        .{ .symbol_import = .{ .module_index = index, .symbol_index = sym.index, .kind = kind } },
+        .{ .load_symbol = .{ .module_index = index, .symbol_index = @intCast(sym.index) } },
         self.ast.getSpan(field_tk).start,
         .{ .set_at = instr_index },
     );
 
-    return .{ .type = sym.type, .lhs_is_value = false, .is_method = false };
+    return sym.type;
 }
 
 fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Span, instr_idx: usize) FieldResult {
@@ -1187,8 +1208,7 @@ fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Sp
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
-    // TODO: sure about is_method?
-    return .{ .type = ty, .lhs_is_value = true, .is_method = true };
+    return .{ .type = ty, .lhs_is_value = true, .is_method = false };
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
@@ -1328,10 +1348,17 @@ fn identifier(
         return .{ variable.type, .variable };
     }
 
-    if (self.symbolIdentifier(name, span, ctx)) |sym| {
-        if (sym) |s| return .{ s.type, .symbol };
-    } else |_| {
-        return self.err(.big_self_outside_struct, self.ast.getSpan(token_name));
+    const sym_name = if (name == self.cached_names.Self) b: {
+        const struct_type = ctx.struct_type orelse return self.err(.big_self_outside_struct, span);
+        break :b struct_type.structure.name;
+    } else name;
+
+    if (self.symbolIdentifier(sym_name, span)) |sym| {
+        return .{ sym.type, .symbol };
+    }
+
+    if (self.externSymbolIdentifier(sym_name, span)) |sym| {
+        return .{ sym.type, .symbol };
     }
 
     if (self.scope.getModule(name)) |mod| {
@@ -1376,18 +1403,29 @@ fn variableIdentifier(self: *Self, name: InternerIdx, span: Span) ?*LexicalScope
 }
 
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
-fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span, ctx: *const Context) error{BigSelfOutsideStruct}!?*LexicalScope.Symbol {
-    const sym_name = if (name == self.cached_names.Self) n: {
-        if (ctx.struct_type) |ty| {
-            break :n ty.structure.name;
-        } else return error.BigSelfOutsideStruct;
-    } else name;
-
-    const sym = self.scope.getSymbol(sym_name) orelse return null;
+fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?*LexicalScope.Symbol {
+    const sym = self.scope.getSymbol(name) orelse return null;
     // TODO: protect cast
-    self.makeInstruction(.{ .symbol_id = @intCast(sym.index) }, span.start, .add);
+    self.makeInstruction(
+        .{ .load_symbol = .{ .module_index = null, .symbol_index = @intCast(sym.index) } },
+        span.start,
+        .add,
+    );
 
     return sym;
+}
+
+/// Tries to find a symbol in scopes and returns it while emitting an instruction
+fn externSymbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?*LexicalScope.Symbol {
+    const ext = self.scope.getExternSymbol(name) orelse return null;
+    // TODO: protect cast
+    self.makeInstruction(
+        .{ .load_symbol = .{ .module_index = ext.module_index, .symbol_index = @intCast(ext.symbol.index) } },
+        span.start,
+        .add,
+    );
+
+    return &ext.symbol;
 }
 
 fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {

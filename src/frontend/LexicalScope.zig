@@ -29,9 +29,11 @@ pub const Variable = struct {
 };
 
 pub const Symbol = struct { type: *const Type, index: usize };
+pub const ExternSymbol = struct { module_index: usize, symbol: Symbol };
 
 pub const VariableMap = AutoHashMapUnmanaged(InternerIdx, Variable);
 pub const SymbolArrMap = AutoArrayHashMapUnmanaged(InternerIdx, Symbol);
+pub const ExternMap = AutoHashMapUnmanaged(InternerIdx, ExternSymbol);
 
 scopes: ArrayListUnmanaged(Scope),
 current: *Scope,
@@ -43,6 +45,7 @@ pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{},
 pub const Scope = struct {
     variables: VariableMap = .{},
     symbols: SymbolArrMap = .{},
+    extern_symbols: ExternMap = .{},
     /// First is the intered identifier and second is the interned module's path key of module interner
     modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
@@ -63,11 +66,6 @@ pub fn close(self: *Self) usize {
     self.updateCurrent();
     return popped.variables.count();
 }
-
-pub const ScopeCaptures = struct {
-    count: usize,
-    captured: []const usize,
-};
 
 pub fn initGlobalScope(self: *Self, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
     self.open(allocator, false);
@@ -154,6 +152,36 @@ pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
 
         if (scope.symbols.getPtr(name)) |sym| {
             return sym;
+        }
+    }
+
+    return null;
+}
+
+pub fn declareExternSymbol(
+    self: *Self,
+    allocator: Allocator,
+    name: InternerIdx,
+    module_index: usize,
+    symbol: Symbol,
+) void {
+    self.current.extern_symbols.put(
+        allocator,
+        name,
+        .{ .module_index = module_index, .symbol = symbol },
+    ) catch oom();
+    self.symbol_count += 1;
+}
+
+pub fn getExternSymbol(self: *const Self, name: InternerIdx) ?*ExternSymbol {
+    var i = self.scopes.items.len;
+
+    while (i > 0) {
+        i -= 1;
+        const scope = &self.scopes.items[i];
+
+        if (scope.extern_symbols.getPtr(name)) |ext| {
+            return ext;
         }
     }
 

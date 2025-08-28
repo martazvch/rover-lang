@@ -129,6 +129,7 @@ fn parseInstr(self: *Self) void {
         .identifier => |*data| self.identifier(data),
         .@"if" => |*data| self.ifInstr(data),
         .int => |data| self.intInstr(data),
+        .load_symbol => |*data| self.loadSymbol(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
         .null => unreachable,
@@ -143,8 +144,6 @@ fn parseInstr(self: *Self) void {
         .struct_decl => |*data| self.structDecl(data),
         .default_value => unreachable,
         .struct_literal => |*data| self.structLiteral(data),
-        .symbol_id => |data| self.symbolId(data),
-        .symbol_import => |*data| self.symbolImport(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
         .use => |data| self.use(data),
@@ -395,10 +394,6 @@ fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
         self.indentAndAppendSlice("[Cow]");
 }
 
-// fn identifierAbsolute(self: *Self, data: usize) void {
-//     self.indentAndPrintSlice("[Variable absolute index: {}]", .{data});
-// }
-
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
     self.indentAndPrintSlice("[If cast: {s}, has else: {}]", .{
         @tagName(data.cast),
@@ -427,10 +422,13 @@ fn intInstr(self: *Self, data: isize) void {
     self.indentAndPrintSlice("[Int {}]", .{data});
 }
 
-// fn importModule(self: *Self, data: *const Instruction.ImportModule) void {
-//     const name = self.interner.getKey(data.interned_key).?;
-//     self.indentAndPrintSlice("[Import module {s}, index {}]", .{ name, data.sym_idx });
-// }
+fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
+    if (data.module_index) |mod| {
+        self.indentAndPrintSlice("[Import symbol {} of module {}]", .{ data.symbol_index, mod });
+    } else {
+        self.indentAndPrintSlice("[Import symbol {}]", .{data.symbol_index});
+    }
+}
 
 fn multipleVarDecl(self: *Self, count: usize) void {
     for (0..count) |_| {
@@ -503,17 +501,6 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
-}
-
-fn symbolId(self: *Self, data: u8) void {
-    self.indentAndPrintSlice("[Symbol index: {}]", .{data});
-}
-
-fn symbolImport(self: *Self, data: *const Instruction.SymbolImport) void {
-    self.indentAndPrintSlice(
-        "[Import symbol {} of module {}]",
-        .{ data.symbol_index, data.module_index },
-    );
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

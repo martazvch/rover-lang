@@ -133,7 +133,6 @@ pub const Type = union(enum) {
                     param.type.hash(hasher);
                 }
                 ty.return_type.hash(hasher);
-                // hasher.update(asBytes(&@intFromBool(ty.is_method)));
             },
             .module => |interned| hasher.update(asBytes(&interned)),
             .structure => |ty| {

@@ -328,6 +328,7 @@ const Compiler = struct {
             .identifier => |*data| self.identifier(data),
             .@"if" => |*data| self.ifInstr(data),
             .int => |data| self.intInstr(data),
+            .load_symbol => |*data| self.loadSymbol(data),
             .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
             .null => self.nullInstr(),
@@ -336,8 +337,6 @@ const Compiler = struct {
             .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
             .struct_literal => |*data| self.structLiteral(data),
-            .symbol_id => |data| self.symbolId(data),
-            .symbol_import => |*data| self.symbolImport(data),
             .unary => |*data| self.unary(data),
             .use => |data| self.use(data),
             .value => unreachable,
@@ -677,13 +676,6 @@ const Compiler = struct {
         self.emitGetVar(data, self.getLineNumber());
     }
 
-    // fn importModule(self: *Self, data: *const Instruction.ImportModule) Error!void {
-    //     self.addSymbol(
-    //         data.sym_idx,
-    //         Value.makeObj(Obj.Module.create(self.manager.vm, self.manager.module_interner.getKind(data.interned_key, .compiled).?).asObj()),
-    //     );
-    // }
-
     fn intInstr(self: *Self, value: isize) Error!void {
         try self.emitConstant(Value.makeInt(value), self.getLineNumber());
     }
@@ -718,15 +710,16 @@ const Compiler = struct {
         try self.patchJump(else_jump);
     }
 
-    // fn moduleImport(self: *Self, data: *const Instruction.ModuleImport) Error!void {
-    //     _ = self; // autofix
-    //     _ = data; // autofix
-    //     // if (data.scope == .global) {
-    //     //     _ = self.addGlobal(Value.makeObj(Obj.ObjModule.create(self.manager.vm, &self.manager.modules[data.index]).asObj()));
-    //     // } else {
-    //     //     self.writeOpAndByte(.push_module, @intCast(data.index), self.getLineNumber());
-    //     // }
-    // }
+    // TODO: protect the casts
+    fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) Error!void {
+        const line = self.getLineNumber();
+        if (data.module_index) |mod| {
+            self.writeOpAndByte(.get_symbol_extern, @intCast(mod), line);
+            self.writeByte(data.symbol_index, line);
+        } else {
+            self.writeOpAndByte(.get_symbol, data.symbol_index, line);
+        }
+    }
 
     fn multipleVarDecl(self: *Self, count: usize) Error!void {
         for (0..count) |_| {
@@ -809,16 +802,6 @@ const Compiler = struct {
         if (data.default_count > 0) self.writeOp(.load_struct_def, line);
         try self.compileArgs(data.fields_count);
         self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), line);
-    }
-
-    fn symbolId(self: *Self, index: u8) Error!void {
-        self.writeOpAndByte(.get_symbol, index, self.getLineNumber());
-    }
-
-    // TODO: protect the casts
-    fn symbolImport(self: *Self, data: *const Instruction.SymbolImport) Error!void {
-        self.writeOpAndByte(.get_symbol_extern, @intCast(data.module_index), self.getLineNumber());
-        self.writeByte(@intCast(data.symbol_index), self.getLineNumber());
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
