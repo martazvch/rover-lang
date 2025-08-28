@@ -1,4 +1,4 @@
-use data.geom
+use .data.geom
 
 fn printPoint(p: geom.Point) {
     print p.x

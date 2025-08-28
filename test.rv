@@ -1,27 +1,14 @@
-use .data.math{Vec2, introduce}
-//use .data.math{Vec2}
-use .data.geom{ Point, Square }
+use .data.geom
 
-fn main() {
-    //var v = Vec2{ x = 3, y = 9 }
-    //print v.x
-    //print v.y
-
-    var pt = Point{ x = 5, y = 8 }
-    print pt.x
-    print pt.y
-
-    {
-        use .data.math{Vec2 as Pipou}
-        var v = Pipou{ x = 55, y = 333 }
-        print v.x
-        print v.y
-    }
-
-    introduce()
+fn printPoint(p: geom.Point) {
+    print p.x
 }
 
+fn main() {
+    var p: geom.Point = geom.Point { x = 1, y = 2 }
 
+    printPoint(p)
+}
 
 
 // ----------- Imports

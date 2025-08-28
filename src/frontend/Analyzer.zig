@@ -1334,7 +1334,7 @@ fn identifier(
     self: *Self,
     token_name: Ast.TokenIndex,
     initialized: bool,
-    ctx: *Context,
+    ctx: *const Context,
 ) Error!struct { *const Type, enum { variable, symbol, module } } {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
@@ -1726,29 +1726,32 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Resul
             return self.type_interner.intern(.{ .array = child });
         },
         .fields => |fields| {
-            _ = fields;
-            unreachable;
-            // var module: Pipeline.Module = undefined;
-            //
-            // for (fields[0 .. fields.len - 1]) |f| {
-            //     const module_variable = try self.resolveIdentifier(f, true);
-            //
-            //     if (module_variable.ty.getKind() != .module) return self.err(
-            //         .{ .dot_type_on_non_mod = .{ .found = self.getTypeName(module_variable.ty) } },
-            //         self.ast.getSpan(f),
-            //     );
-            //
-            //     const module_index = module_variable.ty.getValue();
-            //     module = self.modules.values()[module_index];
-            // }
-            //
-            // const name_token = fields[fields.len - 1];
-            // const name = self.interner.intern(self.ast.toSource(name_token));
-            // const final = module.symbols.get(name) orelse return self.err(
-            //     .{ .missing_symbol_in_module = .{ .module = module.name, .symbol = self.ast.toSource(name_token) } },
-            //     self.ast.getSpan(name_token),
-            // );
-            // return final.type;
+            if (fields.len > 2) @panic("Nested types are not supported yet");
+
+            const module_token = fields[0];
+            const module_infos = try self.identifier(module_token, true, ctx);
+            const module_type = module_infos.@"0";
+
+            if (!module_type.is(.module)) return self.err(
+                .{ .dot_type_on_non_mod = .{ .found = self.getTypeName(module_type) } },
+                self.ast.getSpan(module_token),
+            );
+
+            const module = self.pipeline.ctx.module_interner.getAnalyzed(module_type.module) orelse {
+                @panic("Non existing module");
+            };
+
+            const symbol_token = fields[1];
+            const symbol_name = self.interner.intern(self.ast.toSource(symbol_token));
+            const final = module.symbols.get(symbol_name) orelse return self.err(
+                .{ .missing_symbol_in_module = .{
+                    .module = self.ast.toSource(module_token),
+                    .symbol = self.ast.toSource(symbol_token),
+                } },
+                self.ast.getSpan(symbol_token),
+            );
+
+            return final.type;
         },
         .function => |func| {
             var params: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
