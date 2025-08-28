@@ -4,7 +4,6 @@ const oom = @import("../utils.zig").oom;
 pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
-    already_declared_struct: struct { name: []const u8 },
     already_imported_module: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
     assign_to_method,
@@ -86,7 +85,6 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
-            .already_declared_struct => |e| writer.print("type '{s}' is already declared", .{e.name}),
             .already_imported_module => |e| writer.print("module '{s}' as already been imported", .{e.name}),
             .array_elem_different_type => |e| writer.print(
                 "elements of an array must share the same type, found '{s}' and '{s}'",
@@ -160,7 +158,6 @@ pub const AnalyzerMsg = union(enum) {
     pub fn getHint(self: Self, writer: anytype) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
-            .already_declared_struct => writer.writeAll("this type"),
             .already_imported_module => writer.writeAll("this module"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
             .assign_to_method => writer.writeAll("this field is a method"),
@@ -220,7 +217,6 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared_field,
             .duplicate_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
-            .already_declared_struct => writer.writeAll("use another name"),
             .already_imported_module => writer.writeAll("remove the import"),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
             .assign_to_method => writer.writeAll("for safety reasons, it is not allowed to modify structures' methods at runtime"),

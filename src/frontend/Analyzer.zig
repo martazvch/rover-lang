@@ -230,7 +230,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     defer snapshot.restore();
 
     const span = self.ast.getSpan(node);
-    const name = try self.internIfNotInScope(node.name, .symbol);
+    const name = try self.internIfNotInCurrentScope(node.name);
     const fn_idx = self.ir_builder.reserveInstr();
 
     // Forward declaration in outer scope for recursion
@@ -334,7 +334,7 @@ fn fnParams(
             continue;
         }
 
-        if (self.scope.isInScope(param_name, .variable)) {
+        if (self.scope.isVarOrSymInCurrentScope(param_name)) {
             return self.err(
                 .{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } },
                 self.ast.getSpan(p.name),
@@ -434,9 +434,11 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
     const name_token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
     const module_name = self.interner.intern(self.ast.toSource(name_token));
 
-    // TODO: Error and check for variable too
-    if (self.scope.isInScope(module_name, .symbol)) {
-        @panic("Symbol already declared");
+    if (self.scope.isModuleImported(module_name)) {
+        return self.err(
+            .{ .already_declared = .{ .name = self.ast.toSource(name_token) } },
+            self.ast.getSpan(name_token),
+        );
     }
 
     const old_path_length = self.pb.len();
@@ -558,7 +560,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
     defer snapshot.restore();
 
     const span = self.ast.getSpan(node.name);
-    const name = try self.internIfNotInScope(node.name, .variable);
+    const name = try self.internIfNotInCurrentScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
     const index = self.ir_builder.reserveInstr();
 
@@ -603,7 +605,7 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error
 
 fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
     const span = self.ast.getSpan(node);
-    const name = try self.internIfNotInScope(node.name, .symbol);
+    const name = try self.internIfNotInCurrentScope(node.name);
     // We forward declare for self referencing
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
@@ -1702,10 +1704,10 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
-fn internIfNotInScope(self: *Self, token: usize, kind: LexicalScope.EntityKind) Error!usize {
+fn internIfNotInCurrentScope(self: *Self, token: usize) Error!usize {
     const name = self.interner.intern(self.ast.toSource(token));
 
-    if (self.scope.isInScope(name, kind)) return self.err(
+    if (self.scope.isVarOrSymInCurrentScope(name)) return self.err(
         .{ .already_declared = .{ .name = self.interner.getKey(name).? } },
         self.ast.getSpan(token),
     );
@@ -1797,6 +1799,9 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
     const local_value = value;
 
     if (self.isVoid(value)) return self.err(.void_value, span);
+    if (self.isVoid(decl) and value.* == .array and self.isVoid(value.array)) {
+        return self.err(.cant_infer_arary_type, span);
+    }
 
     // TODO: proper error handling
     if (value.is(.module)) @panic("Can't use modules in expressions");

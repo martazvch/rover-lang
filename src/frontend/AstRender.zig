@@ -165,7 +165,6 @@ fn renderFnDecl(self: *Self, name: []const u8, decl: *const Ast.FnDecl, comma: b
     }
 
     try self.pushKeyValue("return_type", if (decl.return_type) |ret| try self.renderType(ret) else "void", true);
-    try self.pushKeyValue("has_callable", if (decl.has_callable) "true" else "false", true);
     try self.renderBlock(&decl.body, false);
     try self.closeKey(.block, comma);
 }

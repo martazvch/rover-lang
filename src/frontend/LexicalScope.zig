@@ -53,8 +53,6 @@ pub const Scope = struct {
     offset: usize,
 };
 
-pub const EntityKind = enum { variable, symbol };
-
 pub fn open(self: *Self, allocator: Allocator, offset_from_child: bool) void {
     const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
     self.scopes.append(allocator, .{ .offset = offset }) catch oom();
@@ -218,9 +216,11 @@ pub fn getType(self: *Self, name: InternerIdx) ?*const Type {
     return null;
 }
 
-pub fn isInScope(self: *const Self, name: InternerIdx, kind: EntityKind) bool {
-    return switch (kind) {
-        .variable => self.current.variables.get(name) != null,
-        .symbol => self.current.symbols.get(name) != null,
-    };
+pub fn isVarOrSymInCurrentScope(self: *const Self, name: InternerIdx) bool {
+    return self.current.variables.get(name) != null or
+        self.current.symbols.get(name) != null;
+}
+
+pub fn isModuleImported(self: *const Self, name: InternerIdx) bool {
+    return self.getModule(name) != null;
 }

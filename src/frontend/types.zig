@@ -157,9 +157,8 @@ pub const Type = union(enum) {
         switch (self.*) {
             .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
-                writer.writeAll("[") catch oom();
+                writer.writeAll("[]") catch oom();
                 writer.writeAll(ty.toString(allocator, interner)) catch oom();
-                writer.writeAll("]") catch oom();
             },
             .function => |ty| {
                 writer.writeAll("fn (") catch oom();
