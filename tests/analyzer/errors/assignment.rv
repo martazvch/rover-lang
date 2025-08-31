@@ -5,7 +5,7 @@ fn add(a: int) {
 
 fn main() {
     add = 1
-    add() = 1
+    add(5) = 1
 
     var noval: int
     noval = 1.4

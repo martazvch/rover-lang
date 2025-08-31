@@ -187,12 +187,18 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) !void {
             if (e.tag != .identifier) break :b null;
             var assigne = try self.expectVariableIdentifier(e.idx);
             assigne.initialized = true;
+            if (assigne.constant) return self.err(
+                .{ .assign_to_constant = .{ .name = self.ast.toSource(e.idx) } },
+                span,
+            );
             break :b assigne.type;
         },
         .field => |*e| b: {
             const field_result = try self.field(e, ctx);
+            if (!field_result.mutable) return self.err(.assign_to_struct_fn, span);
             break :b if (field_result.lhs_is_value) field_result.type else null;
         },
+        .fn_call => return self.err(.invalid_assign_target, span),
         else => try self.analyzeExpr(node.assigne, ctx),
     };
     const assigne_type = maybe_assigne_type orelse return self.err(.invalid_assign_target, span);
@@ -265,7 +271,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         self.scope.removeSymbol(name);
     } else if (is_closure) {
         self.scope.removeSymbol(name);
-        _ = try self.declareVariable(name, interned_type, false, true, span);
+        _ = try self.declareVariable(name, interned_type, false, true, true, span);
     }
 
     if (name == self.cached_names.main and self.scope.isGlobal()) {
@@ -296,7 +302,7 @@ fn loadFunctionCaptures(self: *Self, captures: []InternerIdx) Error![]const Inst
     for (captures) |capt| {
         const variable_infos = self.scope.getVariable(capt) orelse unreachable;
         const variable = variable_infos.@"0";
-        _ = try self.declareVariable(capt, variable.type, true, true, .zero);
+        _ = try self.declareVariable(capt, variable.type, true, true, false, .zero);
 
         instructions.appendAssumeCapacity(.{ .identifier = .{ .index = variable.index, .scope = .local, .unbox = false } });
     }
@@ -329,7 +335,7 @@ fn fnParams(
                 @panic("Self outside of structure");
             };
 
-            _ = try self.declareVariable(param_name, struct_type, p.meta.captured, true, .zero);
+            _ = try self.declareVariable(param_name, struct_type, p.meta.captured, true, true, .zero);
             params_type.putAssumeCapacity(param_name, .{ .type = struct_type, .default = false });
             continue;
         }
@@ -351,7 +357,7 @@ fn fnParams(
             return self.err(.void_param, self.ast.getSpan(p.name));
         }
 
-        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, self.ast.getSpan(p.name));
+        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, self.ast.getSpan(p.name));
         params_type.putAssumeCapacity(param_name, .{
             .type = param_type,
             .default = p.value != null,
@@ -487,7 +493,7 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
 
             // TODO: error
             if (!sym.type.is(.structure) and !sym.type.is(.function)) {
-                @panic("Not supported yet");
+                @panic("Import not supported yet");
             }
 
             const item_token = if (item.alias) |alias| alias else item.item;
@@ -497,61 +503,28 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
     } else {
         self.scope.declareModule(self.allocator, module_name, self.type_interner.intern(.{ .module = interned }));
     }
+}
 
-    // self.makeInstruction(
-    //     .{ .import_module = .{ .interned_key = interned, .sym_idx = self.scope.symbol_count - 1 } },
-    //     self.ast.getSpan(node).start,
-    //     .add,
-    // );
+fn expectValue(self: *Self, expr: *const Ast.Expr, ctx: *Context) Error!*const Type {
+    const span = self.ast.getSpan(expr);
 
-    // const module, const cached = try self.importModule(node);
-    // const token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
-    // const module_name = self.interner.intern(self.ast.toSource(token));
-    //
-    // if (node.items) |items| {
-    //     const module_index = if (!cached) b: {
-    //         self.modules.put(self.allocator, module_name, module) catch oom();
-    //         break :b self.modules.count() - 1;
-    //     } else self.modules.getIndex(module_name).?;
-    //
-    //     for (items) |item| {
-    //         const item_name = self.interner.intern(self.ast.toSource(item.item));
-    //         var symbol = module.symbols.get(item_name) orelse return self.err(
-    //             .{ .missing_symbol_in_module = .{
-    //                 .module = self.ast.toSource(node.names[node.names.len - 1]),
-    //                 .symbol = self.ast.toSource(item.item),
-    //             } },
-    //             self.ast.getSpan(item.item),
-    //         );
-    //
-    //         // TODO: error
-    //         if (symbol.type.getKind() != .@"struct" and symbol.type.getKind() != .function) {
-    //             @panic("Not supported yet");
-    //         }
-    //
-    //         const item_token = if (item.alias) |alias| alias else item.item;
-    //         const alias_name = self.interner.intern(self.ast.toSource(item_token));
-    //         const variable = try self.declareVariable(alias_name, symbol.type, true, self.instructions.len, .decl, item_token);
-    //
-    //         self.addInstr(.{ .item_import = .{
-    //             .module_index = module_index,
-    //             .field_index = symbol.index,
-    //             .scope = variable.scope,
-    //         } });
-    //     }
-    // } else {
-    //     if (cached) return self.err(
-    //         .{ .already_imported_module = .{ .name = self.ast.toSource(node.names[node.names.len - 1]) } },
-    //         self.ast.getSpan(node.names[node.names.len - 1]),
-    //     );
-    //
-    //     // TODO: protect cast
-    //     const module_type = Type.create(.module, @intCast(self.modules.count()));
-    //     const variable = try self.declareVariable(module_name, module_type, true, self.instructions.len, .decl, token);
-    //     self.addInstr(.{ .module_import = .{ .index = self.modules.count(), .scope = variable.scope } });
-    //     self.modules.put(self.allocator, module_name, module) catch oom();
-    //     self.imports.append(self.allocator, variable) catch oom();
-    // }
+    const value_type = switch (expr.*) {
+        .literal => |*e| b: {
+            if (e.tag == .identifier) {
+                const value = self.identifier(e.idx, true, ctx) catch break :b null;
+                if (value.kind == .symbol and value.type.* != .function) break :b null;
+                break :b value.type;
+            } else break :b try self.literal(e, ctx);
+        },
+        .field => |*e| b: {
+            const field_result = try self.field(e, ctx);
+            // break :b if (!field_result.is_type) field_result.type else null;
+            break :b if (field_result.assignable) field_result.type else null;
+        },
+        else => try self.analyzeExpr(expr, ctx),
+    };
+
+    return value_type orelse self.err(.assign_type, span);
 }
 
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!void {
@@ -572,7 +545,8 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
         has_value = true;
         ctx.allow_partial = false;
 
-        const value_type = try self.analyzeExpr(value, ctx);
+        // const value_type = try self.analyzeExpr(value, ctx);
+        const value_type = try self.expectValue(value, ctx);
         incr_rc = value_type.isHeap() and !isHeapLiteral(value);
 
         const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
@@ -580,7 +554,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
         cast = coherence.cast;
     }
 
-    const decl_index = try self.declareVariable(name, checked_type, node.meta.captured, has_value, span);
+    const decl_index = try self.declareVariable(name, checked_type, node.meta.captured, has_value, false, span);
 
     self.makeInstruction(
         .{ .var_decl = .{
@@ -1108,8 +1082,15 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
 
 const FieldResult = struct {
     type: *const Type,
-    lhs_is_value: bool = false,
+    // TODO: remove when bug fix in implicit first arg
     is_method: bool = false,
+    // TODO: remove when bug fix in implicit first arg
+    lhs_is_value: bool = false,
+    // is_type: bool = false,
+    // is_field: bool = false,
+
+    assignable: bool = false,
+    mutable: bool = false,
 };
 
 /// Returns the type of the callee and if it's a value, not a type
@@ -1119,14 +1100,14 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
     const struct_res: FieldResult = switch (expr.structure.*) {
         .field => |*e| try self.field(e, ctx),
         .literal => |e| b: {
-            const ty, const kind = try self.identifier(e.idx, true, ctx);
-            break :b .{ .type = ty, .lhs_is_value = kind == .variable };
+            const ident = try self.identifier(e.idx, true, ctx);
+            break :b .{ .type = ident.type, .lhs_is_value = ident.kind == .variable };
         },
         else => .{ .type = try self.analyzeExpr(expr.structure, ctx), .lhs_is_value = true },
     };
 
     const field_res = switch (struct_res.type.*) {
-        .module => |ty| return .{ .type = try self.moduleAccess(expr.field, ty, index) },
+        .module => |ty| return self.moduleAccess(expr.field, ty, index),
         .structure => |*ty| try self.structureAccess(expr.field, ty),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_res.type) } },
@@ -1153,8 +1134,11 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
 
     return .{
         .type = field_res.type,
-        .lhs_is_value = struct_res.lhs_is_value,
         .is_method = kind == .method,
+        .lhs_is_value = struct_res.lhs_is_value,
+        // TODO: later we'll have nested declaration and this flag will have to be computed
+        .assignable = true,
+        .mutable = kind == .field,
     };
 }
 
@@ -1185,7 +1169,7 @@ fn moduleAccess(
     field_tk: Ast.TokenIndex,
     module_idx: InternerIdx,
     instr_index: usize,
-) Error!*const Type {
+) Error!FieldResult {
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
     const module = self.pipeline.ctx.module_interner.getAnalyzed(module_idx).?;
@@ -1202,7 +1186,8 @@ fn moduleAccess(
         .{ .set_at = instr_index },
     );
 
-    return sym.type;
+    const is_struct = sym.type.* == .structure;
+    return .{ .type = sym.type, .assignable = !is_struct, .mutable = !is_struct };
 }
 
 fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Span, instr_idx: usize) FieldResult {
@@ -1210,7 +1195,7 @@ fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Sp
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
-    return .{ .type = ty, .lhs_is_value = true, .is_method = false };
+    return .{ .type = ty, .is_method = false, .lhs_is_value = true, .assignable = true };
 }
 
 fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
@@ -1337,7 +1322,7 @@ fn identifier(
     token_name: Ast.TokenIndex,
     initialized: bool,
     ctx: *const Context,
-) Error!struct { *const Type, enum { variable, symbol, module } } {
+) Error!struct { type: *const Type, kind: enum { variable, symbol, module } } {
     const span = self.ast.getSpan(token_name);
     const text = self.ast.toSource(token_name);
     const name = self.interner.intern(text);
@@ -1347,7 +1332,7 @@ fn identifier(
             return self.err(.{ .use_uninit_var = .{ .name = text } }, self.ast.getSpan(token_name));
         }
 
-        return .{ variable.type, .variable };
+        return .{ .type = variable.type, .kind = .variable };
     }
 
     const sym_name = if (name == self.cached_names.Self) b: {
@@ -1356,15 +1341,15 @@ fn identifier(
     } else name;
 
     if (self.symbolIdentifier(sym_name, span)) |sym| {
-        return .{ sym.type, .symbol };
+        return .{ .type = sym.type, .kind = .symbol };
     }
 
     if (self.externSymbolIdentifier(sym_name, span)) |sym| {
-        return .{ sym.type, .symbol };
+        return .{ .type = sym.type, .kind = .symbol };
     }
 
     if (self.scope.getModule(name)) |mod| {
-        return .{ mod, .module };
+        return .{ .type = mod, .kind = .module };
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));
@@ -1512,7 +1497,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
             self.makeInstruction(.{ .bool = self.ast.token_tags[expr.idx] == .true }, span.start, .add);
             return self.type_interner.cache.bool;
         },
-        .identifier, .self => return (try self.identifier(expr.idx, true, ctx)).@"0",
+        .identifier, .self => return (try self.identifier(expr.idx, true, ctx)).type,
         .int => {
             const value = std.fmt.parseInt(isize, text, 10) catch blk: {
                 // TODO: error handling, only one possible it's invalid char
@@ -1732,7 +1717,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Resul
 
             const module_token = fields[0];
             const module_infos = try self.identifier(module_token, true, ctx);
-            const module_type = module_infos.@"0";
+            const module_type = module_infos.type;
 
             if (!module_type.is(.module)) return self.err(
                 .{ .dot_type_on_non_mod = .{ .found = self.getTypeName(module_type) } },
@@ -1840,8 +1825,23 @@ fn isHeapLiteral(expr: *const Expr) bool {
     };
 }
 
-fn declareVariable(self: *Self, name: InternerIdx, ty: *const Type, captured: bool, initialized: bool, span: Span) Error!usize {
-    return self.scope.declareVar(self.allocator, name, ty, captured, initialized) catch self.err(.too_many_locals, span);
+fn declareVariable(
+    self: *Self,
+    name: InternerIdx,
+    ty: *const Type,
+    captured: bool,
+    initialized: bool,
+    constant: bool,
+    span: Span,
+) Error!usize {
+    return self.scope.declareVar(
+        self.allocator,
+        name,
+        ty,
+        captured,
+        initialized,
+        constant,
+    ) catch self.err(.too_many_locals, span);
 }
 
 fn declareSymbol(self: *Self, name: InternerIdx, ty: *const Type) void {

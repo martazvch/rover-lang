@@ -1,6 +1,22 @@
-fn main() {
-    var voidArrVoidVal = []
+fn add(arg1: str) {}
+fn sub(arg1: float, args2: bool) {}
+
+struct Foo {
+    fn method(self, a: int) {}
 }
+
+fn main() {
+    add(1)
+    add(1, 2)
+    sub(4.5)
+    var a = add("hoy")
+
+    var foo = Foo{}
+    var bound = foo.method
+    bound()
+}
+
+
 
 
 // ----------- Imports

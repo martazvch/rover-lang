@@ -1,4 +1,4 @@
-invalid_assign_target
-invalid_assign_target
+assign_to_constant, a
+undeclared_var, add
 invalid_assign_target
 type_mismatch, int, float

@@ -14,16 +14,13 @@ const oom = @import("../utils.zig").oom;
 const Self = @This();
 
 pub const Variable = struct {
-    /// Variable's type
     type: *const Type,
-    /// Kind: global, local or captured
     kind: enum { local, global },
-    /// Is initialized
     initialized: bool,
     /// Index of declaration
     index: Index = 0,
-    /// Is captured
     captured: bool = false,
+    constant: bool,
 
     pub const Index = usize;
 };
@@ -46,7 +43,7 @@ pub const Scope = struct {
     variables: VariableMap = .{},
     symbols: SymbolArrMap = .{},
     extern_symbols: ExternMap = .{},
-    /// First is the intered identifier and second is the interned module's path key of module interner
+    /// First is the interned identifier and second is the interned module's path key of module interner
     modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
@@ -90,6 +87,7 @@ pub fn declareVar(
     ty: *const Type,
     captured: bool,
     initialized: bool,
+    constant: bool,
 ) error{TooManyLocals}!usize {
     if (self.current.variables.count() > 255 and !self.isGlobal()) {
         return error.TooManyLocals;
@@ -102,6 +100,7 @@ pub fn declareVar(
         .initialized = initialized,
         .index = index,
         .captured = captured,
+        .constant = constant,
     }) catch oom();
 
     return index;
