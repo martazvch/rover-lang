@@ -48,13 +48,7 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
             const file = cwd.openFile(file_name, .{}) catch {
                 const owned_name = allocator.dupe(u8, file_name) catch oom();
                 return .{ .err = .err(
-                    if (path_chunks.len > 1)
-                        .{ .missing_file_in_module = .{
-                            .file = owned_name,
-                            .module = ast.toSource(path_chunks[path_chunks.len - 2]),
-                        } }
-                    else
-                        .{ .missing_file_in_cwd = .{ .file = owned_name } },
+                    .{ .missing_file_in_module = .{ .file = owned_name } },
                     ast.getSpan(part),
                 ) };
             };

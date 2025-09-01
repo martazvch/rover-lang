@@ -2,6 +2,7 @@ fn add(arg1: str) {}
 fn sub(arg1: float, args2: bool) {}
 
 struct Foo {
+    fn staticFn(a: int) {}
     fn method(self, a=1) {}
 }
 
@@ -14,4 +15,7 @@ fn main() {
     var foo = Foo{}
     var bound = foo.method
     bound()
+
+    foo.staticFn(5)
+    Foo.method()
 }

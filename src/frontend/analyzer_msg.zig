@@ -10,6 +10,8 @@ pub const AnalyzerMsg = union(enum) {
     assign_to_struct_fn,
     assign_type,
     big_self_outside_struct,
+    call_method_on_type: struct { name: []const u8 },
+    call_static_on_instance: struct { name: []const u8 },
     cant_infer_arary_type,
     dead_code,
     default_value_type_mismatch: struct {
@@ -37,10 +39,8 @@ pub const AnalyzerMsg = union(enum) {
     missing_symbol_in_module: struct { symbol: []const u8, module: []const u8 },
     missing_else_clause: struct { if_type: []const u8 },
     missing_field_struct_literal: struct { name: []const u8 },
-    missing_file_in_cwd: struct { file: []const u8 },
-    missing_file_in_module: struct { file: []const u8, module: []const u8 },
+    missing_file_in_module: struct { file: []const u8 },
     missing_function_param: struct { name: []const u8 },
-    missing_self_method_call: struct { name: []const u8 },
     named_arg_in_bounded,
     non_array_indexing: struct { found: []const u8 },
     non_bool_cond: struct { what: []const u8, found: []const u8 },
@@ -95,6 +95,8 @@ pub const AnalyzerMsg = union(enum) {
             .assign_to_struct_fn => writer.writeAll("can't assign to structure's functions"),
             .assign_type => writer.writeAll("trying to assign a type"),
             .big_self_outside_struct => writer.writeAll("can't use 'Self' outside a structure"),
+            .call_method_on_type => |e| writer.print("method '{s}' called on a type", .{e.name}),
+            .call_static_on_instance => |e| writer.print("static function '{s}' called on an instance", .{e.name}),
             .cant_infer_arary_type => writer.writeAll("can't infer array type with empty array and not declared type"),
             .dead_code => writer.print("unreachable code", .{}),
             .default_value_type_mismatch => |e| writer.print(
@@ -117,10 +119,8 @@ pub const AnalyzerMsg = union(enum) {
             .missing_symbol_in_module => |e| writer.print("no symbol named '{s}' in module '{s}'", .{ e.symbol, e.module }),
             .missing_else_clause => writer.writeAll("'if' may be missing in 'else' clause"),
             .missing_field_struct_literal => |e| writer.print("missing field '{s}' in structure literal", .{e.name}),
-            .missing_file_in_cwd => |e| writer.print("missing file '{s}' in module current directory", .{e.file}),
-            .missing_file_in_module => |e| writer.print("missing file '{s}' in module '{s}'", .{ e.file, e.module }),
+            .missing_file_in_module => |e| writer.print("module doesn't contain file '{s}'", .{e.file}),
             .missing_function_param => |e| writer.print("missing argument '{s}'", .{e.name}),
-            .missing_self_method_call => |e| writer.print("method '{s}' is missing 'self' parameter", .{e.name}),
             .named_arg_in_bounded => writer.writeAll("named argument are not allowed with bounded functions"),
             // TODO: when there will be traits and index trait, change description
             .non_array_indexing => |e| writer.print("can only index arrays, found '{s}'", .{e.found}),
@@ -166,6 +166,7 @@ pub const AnalyzerMsg = union(enum) {
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
             .assign_type => writer.writeAll("This is a type, not a value"),
             .big_self_outside_struct => writer.writeAll("used outside a structure"),
+            .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
             .cant_infer_arary_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
@@ -184,9 +185,8 @@ pub const AnalyzerMsg = union(enum) {
             .missing_symbol_in_module => writer.writeAll("this symbol is unknown"),
             .missing_else_clause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .missing_field_struct_literal => writer.writeAll("non-exhaustive structure literal"),
-            .missing_file_in_cwd, .missing_file_in_module => writer.writeAll("this file wasn't found"),
+            .missing_file_in_module => writer.writeAll("no file matches this name"),
             .missing_function_param => writer.writeAll("this call"),
-            .missing_self_method_call => writer.writeAll("this method"),
             .named_arg_in_bounded => writer.writeAll("this named argument"),
             .non_array_indexing => writer.writeAll("this is not an index"),
             .non_integer_index => writer.writeAll("this is not an integer"),
@@ -228,6 +228,9 @@ pub const AnalyzerMsg = union(enum) {
             ),
             .assign_type => writer.writeAll("types aren't assignable to variables"),
             .big_self_outside_struct => writer.writeAll("'Self' can only be used in structure to refer to the current structure's type"),
+            .call_method_on_type, .call_static_on_instance => writer.writeAll(
+                "static functions can only be called on types and methods can only be called on instances",
+            ),
             .cant_infer_arary_type => writer.writeAll(
                 \\can't extract any type information from an empty array '[]'. you must either declare a type in variable's
                 \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
@@ -273,9 +276,8 @@ pub const AnalyzerMsg = union(enum) {
             .missing_field_struct_literal => writer.writeAll(
                 "structure literal expressions must provide an expression for all the fields that don't have a default value",
             ),
-            .missing_file_in_cwd, .missing_file_in_module => writer.writeAll("check if file is in the module or if there is a typo"),
+            .missing_file_in_module => writer.writeAll("check if the file is in the module or if there is a typo"),
             .missing_function_param => writer.writeAll("all non-default-value parameters must be given a value"),
-            .missing_self_method_call => writer.writeAll("methods can be invoked on instances only if it defines 'self' as first parameter"),
             .named_arg_in_bounded => writer.writeAll(
                 \\when bouding a function/method to a variable, you loose default values informations as the bounded function 
                 \\could depend on runtime logic.

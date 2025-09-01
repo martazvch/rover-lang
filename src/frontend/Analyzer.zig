@@ -241,17 +241,15 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     // Forward declaration in outer scope for recursion
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
-    var fn_type: Type.Function = .{
-        .return_type = undefined,
-        .is_method = ctx.struct_type != null,
-    };
+    var fn_type: Type.Function = .{ .return_type = undefined, .is_method = undefined };
 
     self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
     const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
-    const params, const default_count = try self.fnParams(node.params, ctx);
-    fn_type.params = params;
+    const param_res = try self.fnParams(node.params, ctx);
+    fn_type.params = param_res.params;
+    fn_type.is_method = param_res.is_method;
 
     const return_type = try self.checkAndGetType(node.return_type, ctx);
     fn_type.return_type = return_type;
@@ -284,7 +282,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
             .kind = if (is_closure) .closure else .{ .symbol = sym.index },
             .name = name,
             .body_len = len,
-            .default_params = @intCast(default_count),
+            .default_params = @intCast(param_res.default_count),
             .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(return_type)) .implicit_void else .implicit_value,
         } },
@@ -317,14 +315,20 @@ fn makeFunctionCapturesInstr(self: *Self, instrs: []const Instruction.Data, offs
     return instrs.len;
 }
 
+const Params = struct {
+    params: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter),
+    default_count: usize,
+    is_method: bool,
+};
 fn fnParams(
     self: *Self,
     params: []Ast.VarDecl,
     ctx: *Context,
-) Error!struct { AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter), usize } {
+) Error!Params {
     var params_type: AutoArrayHashMapUnmanaged(InternerIdx, Type.Parameter) = .{};
     params_type.ensureTotalCapacity(self.allocator, params.len) catch oom();
     var default_count: usize = 0;
+    var is_method = false;
 
     for (params, 0..) |*p, i| {
         const param_name = self.interner.intern(self.ast.toSource(p.name));
@@ -335,6 +339,7 @@ fn fnParams(
                 @panic("Self outside of structure");
             };
 
+            is_method = true;
             _ = try self.declareVariable(param_name, struct_type, p.meta.captured, true, true, .zero);
             params_type.putAssumeCapacity(param_name, .{ .type = struct_type, .default = false });
             continue;
@@ -347,6 +352,7 @@ fn fnParams(
             );
         }
 
+        // BUG: type coherence
         var param_type = try self.checkAndGetType(p.typ, ctx);
         if (p.value) |val| {
             default_count += 1;
@@ -365,7 +371,7 @@ fn fnParams(
         });
     }
 
-    return .{ params_type, default_count };
+    return .{ .params = params_type, .default_count = default_count, .is_method = is_method };
 }
 
 fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Context) Error!usize {
@@ -888,11 +894,11 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     defer _ = self.scope.close();
 
     const captures_instrs_data = try self.loadFunctionCaptures(expr.meta.captures.keys());
-    const params, const default_count = try self.fnParams(expr.params, ctx);
+    const param_res = try self.fnParams(expr.params, ctx);
 
     // Update type for resolution in function's body
     const closure_type: Type.Function = .{
-        .params = params,
+        .params = param_res.params,
         .return_type = try self.checkAndGetType(expr.return_type, ctx),
         .is_method = false,
     };
@@ -910,7 +916,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
             .kind = .closure,
             .name = null,
             .body_len = len,
-            .default_params = @intCast(default_count),
+            .default_params = @intCast(param_res.default_count),
             .captures_count = captures_count,
             .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
         } },
@@ -1108,7 +1114,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Error!FieldResult {
 
     const field_res = switch (struct_res.type.*) {
         .module => |ty| return self.moduleAccess(expr.field, ty, index),
-        .structure => |*ty| try self.structureAccess(expr.field, ty),
+        .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.lhs_is_value, ctx),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_res.type) } },
             span,
@@ -1152,16 +1158,28 @@ fn structureAccess(
     self: *Self,
     field_tk: Ast.TokenIndex,
     struct_type: *const Type.Structure,
+    is_value: bool,
+    ctx: *const Context,
 ) Error!AccessResult {
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
 
     return if (struct_type.fields.getPtr(field_name)) |f|
         .{ .type = f.type, .kind = .field, .index = struct_type.fields.getIndex(field_name).? }
-    else if (struct_type.functions.getPtr(field_name)) |f|
-        .{ .type = f.type, .kind = .function, .index = struct_type.functions.getIndex(field_name).? }
-    else
-        self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
+    else if (struct_type.functions.getPtr(field_name)) |f| b: {
+        const function = f.type.function;
+
+        check: {
+            if (!ctx.in_call) break :check;
+            if (is_value and !function.is_method) {
+                return self.err(.{ .call_static_on_instance = .{ .name = text } }, self.ast.getSpan(field_tk));
+            } else if (!is_value and function.is_method) {
+                return self.err(.{ .call_method_on_type = .{ .name = text } }, self.ast.getSpan(field_tk));
+            }
+        }
+
+        break :b .{ .type = f.type, .kind = .function, .index = struct_type.functions.getIndex(field_name).? };
+    } else self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
 }
 
 fn moduleAccess(
@@ -1195,6 +1213,7 @@ fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Sp
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
+    std.log.info("end of boundMethod call params: {any}", .{ty.function.params.values()});
     return .{ .type = ty, .is_method = false, .lhs_is_value = true, .assignable = true };
 }
 
@@ -1252,6 +1271,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
     var proto = ty.proto(self.allocator);
     var proto_values = proto.values();
+    std.log.info("proto values: {any}", .{proto_values});
     const start = self.ir_builder.count();
     self.ir_builder.ensureUnusedSize(param_count);
 
@@ -1475,10 +1495,10 @@ fn ifTypeCoherenceAndCast(
 
     if (else_type.canCastTo(then_type)) {
         instr.cast = .@"else";
-        self.warn(AnalyzerMsg.implicitCast("then branch", "float"), self.ast.getSpan(expr.then));
+        self.warn(AnalyzerMsg.implicitCast("else branch", "float"), self.ast.getSpan(expr.@"else".?));
     } else if (then_type.canCastTo(else_type)) {
         instr.cast = .then;
-        self.warn(AnalyzerMsg.implicitCast("else branch", "float"), self.ast.getSpan(expr.@"else".?));
+        self.warn(AnalyzerMsg.implicitCast("then branch", "float"), self.ast.getSpan(expr.then));
     } else return self.err(
         .{ .incompatible_if_type = .{
             .found1 = self.getTypeName(then_type),

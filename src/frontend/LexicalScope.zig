@@ -89,7 +89,7 @@ pub fn declareVar(
     initialized: bool,
     constant: bool,
 ) error{TooManyLocals}!usize {
-    if (self.current.variables.count() > 255 and !self.isGlobal()) {
+    if (self.current.variables.count() == 255 and !self.isGlobal()) {
         return error.TooManyLocals;
     }
 

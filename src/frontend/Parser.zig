@@ -827,7 +827,7 @@ fn block(self: *Self) Error!struct { *Expr, bool } {
     try self.expectOrErrAtToken(.right_brace, .unclosed_brace, openning_brace);
     expr.* = .{ .block = .{
         .nodes = exprs.toOwnedSlice(self.allocator) catch oom(),
-        .span = .{ .start = openning_brace, .end = self.prev(.span).start },
+        .span = .{ .start = self.token_spans[openning_brace].start, .end = self.prev(.span).start },
     } };
 
     return .{ expr, has_callable };

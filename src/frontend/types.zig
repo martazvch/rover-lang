@@ -32,6 +32,7 @@ pub const Type = union(enum) {
 
             var kv = self.params.iterator();
             while (kv.next()) |entry| {
+                std.log.info("putting entry: {}", .{entry.value_ptr.default});
                 res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
             }
 
@@ -42,6 +43,8 @@ pub const Type = union(enum) {
             var params = self.params.clone(allocator) catch oom();
             _ = params.orderedRemove(self_interned);
 
+            std.log.info("To bound?", .{});
+            std.log.info("Params after bound: {any}", .{params.values()});
             return .{
                 .params = params,
                 .return_type = self.return_type,
@@ -131,6 +134,9 @@ pub const Type = union(enum) {
             .function => |ty| {
                 for (ty.params.values()) |param| {
                     param.type.hash(hasher);
+                    // TODO: modify that, we can't share the default values, we have to intern type in another way
+                    // cf. previous todo
+                    // hasher.update(asBytes(&@intFromBool(param.default)));
                 }
                 ty.return_type.hash(hasher);
             },
