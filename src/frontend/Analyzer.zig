@@ -17,7 +17,7 @@ const Expr = Ast.Expr;
 const IrBuilder = @import("IrBuilder.zig");
 const LexicalScope = @import("LexicalScope.zig");
 const Importer = @import("Importer.zig");
-const PathBuilder = @import("../PathBuilder.zig");
+const Sb = @import("../StringBuilder.zig");
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Span = @import("Lexer.zig").Span;
@@ -26,6 +26,7 @@ const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
 
 pub const AnalyzedModule = struct {
+    name: []const u8,
     globals: LexicalScope.VariableMap,
     symbols: LexicalScope.SymbolArrMap,
 };
@@ -74,7 +75,8 @@ pub const AnalyzerReport = GenReport(AnalyzerMsg);
 allocator: Allocator,
 pipeline: *Pipeline,
 interner: *Interner,
-pb: *PathBuilder,
+path: *Sb,
+containers: Sb,
 
 errs: ArrayListUnmanaged(AnalyzerReport),
 warns: ArrayListUnmanaged(AnalyzerReport),
@@ -82,32 +84,36 @@ ast: *const Ast,
 scope: LexicalScope,
 type_interner: *TypeInterner,
 ir_builder: IrBuilder,
-main: ?usize = null,
-// TODO: useless, we can have the last scope in scope
+main: ?usize,
+// TODO: useless, we can have the last scope in scope?
 globals: ArrayListUnmanaged(usize),
 
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
-pub fn init(self: *Self, allocator: Allocator, pipeline: *Pipeline) void {
-    self.allocator = allocator;
-    self.pipeline = pipeline;
-    self.interner = &pipeline.ctx.interner;
-    self.errs = .{};
-    self.warns = .{};
-    self.scope = .empty;
-    self.ir_builder = .init(allocator);
-    self.type_interner = &pipeline.ctx.type_interner;
-    self.scope.initGlobalScope(allocator, &pipeline.ctx.interner, self.type_interner);
-    self.globals = .{};
-    self.main = null;
+pub fn init(allocator: Allocator, pipeline: *Pipeline) Self {
+    return .{
+        .allocator = allocator,
+        .pipeline = pipeline,
+        .interner = &pipeline.ctx.interner,
+        .path = &pipeline.ctx.path_builder,
+        .containers = .empty,
+        .type_interner = &pipeline.ctx.type_interner,
+        .ast = undefined,
+        .errs = .empty,
+        .warns = .empty,
+        .scope = .empty,
+        .ir_builder = .init(allocator),
+        .globals = .empty,
+        .main = null,
 
-    self.cached_names = .{
-        .empty = self.interner.intern(""),
-        .main = self.interner.intern("main"),
-        .std = self.interner.intern("std"),
-        .self = self.interner.intern("self"),
-        .Self = self.interner.intern("Self"),
-        .init = self.interner.intern("init"),
+        .cached_names = .{
+            .empty = pipeline.ctx.interner.intern(""),
+            .main = pipeline.ctx.interner.intern("main"),
+            .std = pipeline.ctx.interner.intern("std"),
+            .self = pipeline.ctx.interner.intern("self"),
+            .Self = pipeline.ctx.interner.intern("Self"),
+            .init = pipeline.ctx.interner.intern("init"),
+        },
     };
 }
 
@@ -124,9 +130,9 @@ fn makeInstruction(self: *Self, data: Instruction.Data, offset: usize, mode: IrB
     self.ir_builder.emit(.{ .data = data, .offset = offset }, mode);
 }
 
-pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder, expect_main: bool) AnalyzedModule {
+pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_main: bool) AnalyzedModule {
     self.ast = ast;
-    self.pb = pb;
+    self.scope.initGlobalScope(self.allocator, self.interner, self.type_interner);
     var ctx: Context = .{};
 
     for (ast.nodes) |*node| {
@@ -142,7 +148,7 @@ pub fn analyze(self: *Self, ast: *const Ast, pb: *PathBuilder, expect_main: bool
         self.err(.no_main, .{ .start = 0, .end = 0 }) catch {};
     }
 
-    return .{ .globals = self.scope.current.variables, .symbols = self.scope.current.symbols };
+    return .{ .name = module_name, .globals = self.scope.current.variables, .symbols = self.scope.current.symbols };
 }
 
 fn analyzeNode(self: *Self, node: *const Node, ctx: *Context) Result {
@@ -234,6 +240,9 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     // TODO: check if not useless
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
+
+    self.containers.append(self.allocator, self.ast.toSource(node.name));
+    defer _ = self.containers.pop();
 
     const span = self.ast.getSpan(node);
     const name = try self.internIfNotInCurrentScope(node.name);
@@ -331,13 +340,12 @@ fn fnParams(
     var is_method = false;
 
     for (params, 0..) |*p, i| {
+        const span = self.ast.getSpan(p.name);
         const param_name = self.interner.intern(self.ast.toSource(p.name));
 
         if (i == 0 and param_name == self.cached_names.self) {
             // TODO:
-            const struct_type = ctx.struct_type orelse {
-                @panic("Self outside of structure");
-            };
+            const struct_type = ctx.struct_type orelse @panic("Self outside of structure");
 
             is_method = true;
             _ = try self.declareVariable(param_name, struct_type, p.meta.captured, true, true, .zero);
@@ -346,24 +354,25 @@ fn fnParams(
         }
 
         if (self.scope.isVarOrSymInCurrentScope(param_name)) {
-            return self.err(
-                .{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } },
-                self.ast.getSpan(p.name),
-            );
+            return self.err(.{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } }, span);
         }
 
-        // BUG: type coherence
         var param_type = try self.checkAndGetType(p.typ, ctx);
         if (p.value) |val| {
+            // if (!self.isPure(value.*)) {
+            //     return self.err(.{ .unpure_default = .new(.param) }, self.ast.getSpan(value));
+            // }
+            const value_type = try self.defaultValue(param_type, val, ctx);
+            const coerce = try self.performTypeCoercion(param_type, value_type, true, span);
             default_count += 1;
-            param_type = try self.defaultValue(param_type, val, ctx);
+            param_type = coerce.type;
         }
 
         if (self.isVoid(param_type)) {
-            return self.err(.void_param, self.ast.getSpan(p.name));
+            return self.err(.void_param, span);
         }
 
-        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, self.ast.getSpan(p.name));
+        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, span);
         params_type.putAssumeCapacity(param_name, .{
             .type = param_type,
             .default = p.value != null,
@@ -453,10 +462,10 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
         );
     }
 
-    const old_path_length = self.pb.len();
-    defer self.pb.shrink(old_path_length);
+    const old_path_length = self.path.len();
+    defer self.path.shrink(self.allocator, old_path_length);
 
-    const result = Importer.fetchImportedFile(self.allocator, self.ast, node.names, self.pb);
+    const result = Importer.fetchImportedFile(self.allocator, self.ast, node.names, self.path);
     const file_infos = switch (result) {
         .ok => |f| f,
         .err => |e| {
@@ -464,13 +473,6 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
             return error.Err;
         },
     };
-
-    // TODO: make the module interner (create one) responsible for freeing its entries
-    defer {
-        // self.allocator.free(file_infos.name);
-        // self.allocator.free(file_infos.content);
-        // self.allocator.free(file_infos.path);
-    }
 
     const interned = self.interner.intern(file_infos.path);
 
@@ -524,7 +526,6 @@ fn expectValue(self: *Self, expr: *const Ast.Expr, ctx: *Context) Error!*const T
         },
         .field => |*e| b: {
             const field_result = try self.field(e, ctx);
-            // break :b if (!field_result.is_type) field_result.type else null;
             break :b if (field_result.assignable) field_result.type else null;
         },
         else => try self.analyzeExpr(expr, ctx),
@@ -551,7 +552,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
         has_value = true;
         ctx.allow_partial = false;
 
-        // const value_type = try self.analyzeExpr(value, ctx);
         const value_type = try self.expectValue(value, ctx);
         incr_rc = value_type.isHeap() and !isHeapLiteral(value);
 
@@ -596,7 +596,13 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
     self.scope.open(self.allocator, false);
     defer _ = self.scope.close();
 
-    var ty: Type.Structure = .{ .name = name };
+    self.containers.append(self.allocator, self.ast.toSource(node.name));
+    defer _ = self.containers.pop();
+
+    var buf: [1024]u8 = undefined;
+    const container_name = self.containers.renderWithSep(&buf, ".");
+
+    var ty: Type.Structure = .empty(name, self.interner.internKeepRef(self.allocator, container_name));
     ty.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
     ty.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
 
@@ -1092,8 +1098,6 @@ const FieldResult = struct {
     is_method: bool = false,
     // TODO: remove when bug fix in implicit first arg
     lhs_is_value: bool = false,
-    // is_type: bool = false,
-    // is_field: bool = false,
 
     assignable: bool = false,
     mutable: bool = false,
@@ -1188,19 +1192,22 @@ fn moduleAccess(
     module_idx: InternerIdx,
     instr_index: usize,
 ) Error!FieldResult {
+    const span = self.ast.getSpan(field_tk);
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
     const module = self.pipeline.ctx.module_interner.getAnalyzed(module_idx).?;
     // TODO: error
-    const sym = module.symbols.getPtr(field_name) orelse {
-        @panic("Module has not the expected symbol");
-    };
+    const sym = module.symbols.getPtr(field_name) orelse return self.err(
+        .{ .missing_symbol_in_module = .{ .module = module.name, .symbol = text } },
+        span,
+    );
+
     const index = self.pipeline.ctx.module_interner.analyzed.getIndex(module_idx).?;
 
     // TODO: protect the cast
     self.makeInstruction(
         .{ .load_symbol = .{ .module_index = index, .symbol_index = @intCast(sym.index) } },
-        self.ast.getSpan(field_tk).start,
+        span.start,
         .{ .set_at = instr_index },
     );
 
@@ -1213,7 +1220,6 @@ fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Sp
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
-    std.log.info("end of boundMethod call params: {any}", .{ty.function.params.values()});
     return .{ .type = ty, .is_method = false, .lhs_is_value = true, .assignable = true };
 }
 
@@ -1271,7 +1277,6 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
     var proto = ty.proto(self.allocator);
     var proto_values = proto.values();
-    std.log.info("proto values: {any}", .{proto_values});
     const start = self.ir_builder.count();
     self.ir_builder.ensureUnusedSize(param_count);
 
@@ -1357,7 +1362,7 @@ fn identifier(
 
     const sym_name = if (name == self.cached_names.Self) b: {
         const struct_type = ctx.struct_type orelse return self.err(.big_self_outside_struct, span);
-        break :b struct_type.structure.name;
+        break :b struct_type.structure.symbol.name;
     } else name;
 
     if (self.symbolIdentifier(sym_name, span)) |sym| {

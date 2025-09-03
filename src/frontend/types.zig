@@ -32,7 +32,6 @@ pub const Type = union(enum) {
 
             var kv = self.params.iterator();
             while (kv.next()) |entry| {
-                std.log.info("putting entry: {}", .{entry.value_ptr.default});
                 res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
             }
 
@@ -43,8 +42,6 @@ pub const Type = union(enum) {
             var params = self.params.clone(allocator) catch oom();
             _ = params.orderedRemove(self_interned);
 
-            std.log.info("To bound?", .{});
-            std.log.info("Params after bound: {any}", .{params.values()});
             return .{
                 .params = params,
                 .return_type = self.return_type,
@@ -60,7 +57,7 @@ pub const Type = union(enum) {
     };
 
     pub const Structure = struct {
-        name: InternerIdx,
+        symbol: Symbol,
         functions: AutoArrayHashMapUnmanaged(usize, Field) = .{},
         fields: AutoArrayHashMapUnmanaged(usize, Field) = .{},
         default_value_fields: usize = 0,
@@ -71,6 +68,10 @@ pub const Type = union(enum) {
             /// Has a default value
             default: bool = false,
         };
+
+        pub fn empty(name: InternerIdx, path: InternerIdx) Structure {
+            return .{ .symbol = .{ .name = name, .path = path } };
+        }
 
         pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
             var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
@@ -86,6 +87,8 @@ pub const Type = union(enum) {
             return res;
         }
     };
+
+    pub const Symbol = struct { name: InternerIdx, path: InternerIdx };
 
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
@@ -110,7 +113,6 @@ pub const Type = union(enum) {
         return self.is(.int) and other.is(.float);
     }
 
-    // TODO: maybe name + kind + scope index is enough?
     pub fn hash(self: Type, hasher: anytype) void {
         const asBytes = std.mem.asBytes;
 
@@ -141,18 +143,7 @@ pub const Type = union(enum) {
                 ty.return_type.hash(hasher);
             },
             .module => |interned| hasher.update(asBytes(&interned)),
-            .structure => |ty| {
-                hasher.update(asBytes(&ty.name));
-                for (ty.fields.values()) |f| {
-                    f.type.hash(hasher);
-                }
-                // TODO: I think there is an infinite loop because first param is a struct
-                // and interning the struct interns the method, ...
-
-                // for (ty.functions.values()) |f| {
-                //     f.type.hash(hasher);
-                // }
-            },
+            .structure => |ty| hasher.update(asBytes(&ty.symbol.path)),
         }
     }
 
@@ -179,7 +170,7 @@ pub const Type = union(enum) {
                 const name = interner.getKey(interned).?;
                 writer.print("module: {s}", .{name}) catch oom();
             },
-            .structure => |ty| return interner.getKey(ty.name).?,
+            .structure => |ty| return interner.getKey(ty.symbol.path).?,
         }
 
         return res.toOwnedSlice(allocator) catch oom();
@@ -233,6 +224,7 @@ pub const TypeInterner = struct {
         }
     }
 
+    // TODO: use getOrPut
     pub fn intern(self: *TypeInterner, ty: Type) *Type {
         var hasher = std.hash.Wyhash.init(0);
         ty.hash(&hasher);

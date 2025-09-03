@@ -5,5 +5,7 @@ use .data.trash.trash2
 fn main() {
     {
         use .data.math
+
+        math.missing_func()
     }
 }

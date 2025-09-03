@@ -1,7 +1,0 @@
-use data.math
-
-fn invalid(input: math.Triangle) {}
-
-fn main() {
-    var p = math.Rect {}
-}

@@ -42,6 +42,7 @@ pub const CompiledModule = struct {
 };
 
 pub const CompilationManager = struct {
+    allocator: Allocator,
     vm: *Vm,
     // natives: []const NativeFn,
     interner: *const Interner,
@@ -58,6 +59,7 @@ pub const CompilationManager = struct {
     const CompilerReport = GenReport(CompilerMsg);
 
     pub fn init(
+        allocator: Allocator,
         name: []const u8,
         vm: *Vm,
         interner: *const Interner,
@@ -67,16 +69,17 @@ pub const CompilationManager = struct {
         symbol_count: usize,
     ) Self {
         return .{
+            .allocator = allocator,
             .vm = vm,
             .interner = interner,
             // .natives = natives,
             .compiler = undefined,
-            .errs = .init(vm.allocator),
+            .errs = .init(allocator),
             .instr_idx = 0,
             .instr_data = undefined,
             .instr_lines = undefined,
             .render_mode = render_mode,
-            .module = .init(vm.allocator, name, global_count, symbol_count),
+            .module = .init(allocator, name, global_count, symbol_count),
         };
     }
 
@@ -211,7 +214,6 @@ const Compiler = struct {
     }
 
     fn addGlobal(self: *Self, index: usize, global: Value) u8 {
-        // self.manager.module.globals.append(self.manager.vm.allocator, global) catch oom();
         self.manager.module.globals[index] = global;
         // TODO: protect
         // return @intCast(self.manager.module.globals.items.len - 1);
@@ -293,9 +295,8 @@ const Compiler = struct {
     pub fn end(self: *Self) Error!*Obj.Function {
         if (self.manager.render_mode != .none) {
             var dis = Disassembler.init(
-                self.manager.vm.allocator,
+                self.manager.allocator,
                 &self.function.chunk,
-                // self.manager.module.globals.items,
                 self.manager.module.globals,
                 self.manager.render_mode,
             );

@@ -4,7 +4,7 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Ast = @import("Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
-const PathBuilder = @import("../PathBuilder.zig");
+const Sb = @import("../StringBuilder.zig");
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
@@ -24,17 +24,17 @@ pub const Result = union(enum) {
 /// - Last identifier is the file to import
 ///
 /// **Caller owns memory of result**
-pub fn fetchImportedFile(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast.TokenIndex, pb: *PathBuilder) Result {
+pub fn fetchImportedFile(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast.TokenIndex, sb: *Sb) Result {
     if (ast.token_tags[path_chunks[0]] == .dot) {
-        return fetchRelative(allocator, ast, path_chunks[1..], pb);
+        return fetchRelative(allocator, ast, path_chunks[1..], sb);
     }
 
-    unreachable;
+    @panic("Absolute imports not yet implemented");
 }
 
-fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast.TokenIndex, pb: *PathBuilder) Result {
+fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast.TokenIndex, sb: *Sb) Result {
     var buf_path: [std.fs.max_path_bytes]u8 = undefined;
-    const buf_written = pb.fullPath(&buf_path);
+    const buf_written = sb.render(&buf_path);
     var cwd = std.fs.openDirAbsolute(buf_written, .{}) catch unreachable;
 
     for (path_chunks, 0..) |part, i| {
@@ -59,14 +59,15 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
             const buf = allocator.allocSentinel(u8, size, 0) catch oom();
             _ = file.readAll(buf) catch @panic("Rover internal error: error while reading imported file");
 
-            return .{ .ok = .{
-                .name = file_name,
-                .path = allocator.dupe(u8, pb.filePathAlloc(allocator, file_name)) catch oom(),
-                .content = buf,
-            } };
+            sb.append(allocator, ".");
+            sb.append(allocator, file_name);
+            defer sb.popMany(2);
+
+            return .{ .ok = .{ .name = file_name, .path = sb.renderAlloc(allocator), .content = buf } };
         } else {
             cwd = cwd.openDir(name, .{}) catch return .{ .err = .err(.{ .unknown_module = .{ .name = name } }, ast.getSpan(part)) };
-            pb.cd(name);
+            sb.append(allocator, std.fs.path.sep_str);
+            sb.append(allocator, name);
         }
     }
 

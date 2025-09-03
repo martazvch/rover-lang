@@ -69,12 +69,12 @@ pub fn main() !void {
         vm.init(allocator, config);
         defer vm.deinit();
 
-        var ctx: Pipeline.Context = .new(allocator, config);
-        defer ctx.deinit();
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        const arena_alloc = arena.allocator();
+        defer arena.deinit();
 
-        var pipeline: Pipeline = undefined;
-        defer pipeline.deinit();
-        pipeline.init(&vm, &ctx);
+        var ctx: Pipeline.Context = .new(arena_alloc, config);
+        var pipeline: Pipeline = .init(arena_alloc, &vm, &ctx);
 
         const module = pipeline.run(f, ".", buf) catch |e| switch (e) {
             error.ExitOnPrint => return,

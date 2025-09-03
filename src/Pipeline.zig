@@ -18,7 +18,7 @@ const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
 const LexicalScope = @import("frontend/LexicalScope.zig");
 const Parser = @import("frontend/Parser.zig");
 const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const PathBuilder = @import("PathBuilder.zig");
+const Sb = @import("StringBuilder.zig");
 const RirRenderer = @import("frontend/RirRenderer.zig");
 const TypeInterner = @import("frontend/types.zig").TypeInterner;
 const GenReporter = @import("reporter.zig").GenReporter;
@@ -31,7 +31,6 @@ const Config = @import("runtime/Vm.zig").Config;
 const Vm = @import("runtime/Vm.zig");
 
 vm: *Vm,
-arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 ctx: *Context,
 analyzer: Analyzer,
@@ -46,7 +45,7 @@ pub const Context = struct {
     config: Config,
     interner: Interner,
     type_interner: TypeInterner,
-    path_builder: PathBuilder,
+    path_builder: Sb,
     module_interner: ModuleInterner,
 
     pub fn new(allocator: Allocator, config: Config) Context {
@@ -54,40 +53,33 @@ pub const Context = struct {
             .config = config,
             .interner = .init(allocator),
             .type_interner = .init(allocator),
-            .path_builder = .init(allocator, std.fs.cwd().realpathAlloc(allocator, ".") catch unreachable),
+            .path_builder = .empty,
             .module_interner = .init(allocator),
         };
         ctx.type_interner.cacheFrequentTypes();
 
         return ctx;
     }
-
-    pub fn deinit(self: *Context) void {
-        self.interner.deinit();
-        self.type_interner.deinit();
-        self.path_builder.deinit();
-        self.module_interner.deinit();
-    }
 };
 
-pub fn init(self: *Self, vm: *Vm, ctx: *Context) void {
-    self.vm = vm;
-    self.arena = .init(vm.allocator);
-    self.allocator = self.arena.allocator();
-    self.ctx = ctx;
-    self.analyzer = undefined;
-    self.analyzer.init(self.allocator, self);
-    self.instr_count = 0;
-    self.code_count = 0;
-    self.is_sub = false;
-}
-
-pub fn deinit(self: *Self) void {
-    self.arena.deinit();
+pub fn init(allocator: Allocator, vm: *Vm, ctx: *Context) Self {
+    return .{
+        .vm = vm,
+        .allocator = allocator,
+        .ctx = ctx,
+        .analyzer = undefined,
+        .instr_count = 0,
+        .code_count = 0,
+        .is_sub = false,
+    };
 }
 
 /// Runs the pipeline
 pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
+    self.analyzer = .init(self.allocator, self);
+    // Initiliaze the path builder
+    self.ctx.path_builder.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch oom());
+
     // Lexer
     var lexer = Lexer.init(self.allocator);
     lexer.lex(source);
@@ -123,7 +115,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         return error.ExitOnPrint;
     } else if (self.ctx.config.print_ast) try printAst(self.allocator, &ast, &parser);
 
-    const analyzed_module = self.analyzer.analyze(&ast, &self.ctx.path_builder, !self.is_sub);
+    const analyzed_module = self.analyzer.analyze(&ast, file_name, !self.is_sub);
 
     // Analyzed Ast printer
     if (options.test_mode and self.ctx.config.print_ir) {
@@ -157,6 +149,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
 
     // Compiler
     var compiler = CompilationManager.init(
+        self.allocator,
         file_name,
         self.vm,
         &self.ctx.interner,
@@ -185,19 +178,8 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
 }
 
 pub fn createSubPipeline(self: *Self) Self {
-    var pipeline: Self = undefined;
-    pipeline.vm = self.vm;
-    pipeline.arena = self.arena;
-    pipeline.allocator = self.allocator;
-    pipeline.ctx = self.ctx;
-
-    pipeline.analyzer = undefined;
-    pipeline.analyzer.init(self.allocator, self);
-
-    pipeline.instr_count = 0;
-    pipeline.code_count = 0;
+    var pipeline: Self = .init(self.allocator, self.vm, self.ctx);
     pipeline.is_sub = true;
-
     return pipeline;
 }
 
@@ -231,7 +213,6 @@ fn renderIr(
         analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.errs.items,
         analyzer.warns.items,
-        // &self.interner,
         &self.ctx.interner,
         static,
     );

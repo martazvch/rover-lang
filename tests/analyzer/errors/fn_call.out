@@ -3,6 +3,6 @@ too_many_fn_args, 1, 2
 missing_function_param, args2
 void_value
 
-wrong_fn_args_count, 1, 0
+missing_function_param, a
 call_static_on_instance, staticFn
 call_method_on_type, method

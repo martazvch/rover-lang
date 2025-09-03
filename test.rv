@@ -1,23 +1,15 @@
-// fn add(arg1: str) {}
-// fn sub(arg1: float, args2: bool) {}
+fn foo(a: int = 5.) {}
 
-struct Foo {
-    fn staticFn(a: int) {}
-    fn method(self, a=1) {}
+fn bar(a = 4.) {
+    var b: int = a
 }
 
+fn default(c: str, a, b = 7, d, e: bool=false) {}
+
+
 fn main() {
-    // add(1)
-    // add(1, 2)
-    // sub(4.5)
-    // var a = add("hoy")
-
-    var foo = Foo{}
-    var bound = foo.method
-    bound()
-
-    // foo.staticFn(5)
-    // Foo.method()
+    default(a=8, e=true)
+    default("blob", bad=6)
 }
 
 
