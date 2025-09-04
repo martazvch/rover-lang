@@ -1,5 +1,5 @@
-[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
-    [Variable declaration index: 1, scope: local]
+[Function declaration main, return kind: implicit_void]
+    [Variable declaration index: 0, scope: local]
         [If cast: then, has else: true]
         - condition:
             [Bool true]
@@ -7,7 +7,7 @@
             [Int 4]
         - else:
             [Float 5.6]
-    [Variable declaration index: 2, scope: local]
+    [Variable declaration index: 1, scope: local]
         [If cast: else, has else: true]
         - condition:
             [Bool true]
@@ -16,7 +16,7 @@
                 [Float 5.6]
         - else:
             [Int 4]
-    [Variable declaration index: 3, scope: local]
+    [Variable declaration index: 2, scope: local]
         [If cast: else, has else: true]
         - condition:
             [Bool true]
@@ -59,38 +59,35 @@
         - else:
             [Block pop count: 0, is_expr: true]
                 [Bool true]
-
     [Discard]
         [If cast: else, has else: true]
         - condition:
             [Bool true]
         - then:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 4, scope: local]
+                [Variable declaration index: 0, scope: local]
                     [Float 5.5]
-                [Variable declaration index: 5, scope: local]
+                [Variable declaration index: 1, scope: local]
                     [Float 8.7]
                 [Binop type: add_float, cast: none]
+                    [Variable index: 3, scope: local]
                     [Variable index: 4, scope: local]
-                    [Variable index: 5, scope: local]
         - else:
             [Int 4]
-
     [Discard]
         [If cast: else, has else: true]
         - condition:
             [Block pop count: 2, is_expr: true]
-                [Variable declaration index: 4, scope: local]
+                [Variable declaration index: 0, scope: local]
                     [Bool true]
-                [Variable declaration index: 5, scope: local]
+                [Variable declaration index: 1, scope: local]
                     [Int 1]
-                [Variable index: 4, scope: local]
+                [Variable index: 3, scope: local]
         - then:
             [Float 1.5]
         - else:
             [Block pop count: 0, is_expr: true]
                 [Int 4]
-
     [Discard]
         [If cast: then, has else: true]
         - condition:
@@ -107,8 +104,7 @@
         - else:
             [Block pop count: 0, is_expr: true]
                 [Float 4.5]
-
-    [Fn declaration add, index: 4, scope: local, return kind: implicit_value]
+    [Function declaration add, return kind: implicit_value]
         [If cast: none, has else: false]
         - condition:
             [Bool true]
@@ -117,5 +113,5 @@
                 [Int 1]
         [Int 2]
     [Discard]
-        [Fn call arity: 0, defaults: 0, invoke: false]
-            [Variable index: 4, scope: local]
+        [Fn call arity: 0, defaults: 0]
+            [Import symbol 1]

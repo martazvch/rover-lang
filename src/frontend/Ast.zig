@@ -167,6 +167,7 @@ pub const If = struct {
     condition: *Expr,
     then: Node,
     @"else": ?Node,
+    if_token: TokenIndex,
 };
 
 pub const Literal = struct {
@@ -266,7 +267,7 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
         },
         FnCall => self.getSpan(node.callee),
         Grouping => node.span,
-        If => self.getSpan(node.condition),
+        If => self.getSpan(node.if_token),
         Literal => self.token_spans[node.idx],
         NamedArg => .{
             .start = self.token_spans[node.name].start,

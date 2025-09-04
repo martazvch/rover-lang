@@ -1,78 +1,72 @@
-//-- array.rv --
-[Structure declaration Foo, index: 0, scope: global]
-[Fn declaration getIdx, index: 1, scope: global, return kind: implicit_value]
+[Structure declaration Foo]
+[Function declaration getIdx, return kind: implicit_value]
     [Int 2]
-[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
-    [Variable declaration index: 1, scope: local]
+[Function declaration main, return kind: implicit_void]
+    [Variable declaration index: 0, scope: local]
         [Array]
             [Int 1]
             [Int 2]
             [Int 3]
-    [Variable declaration index: 2, scope: local]
+    [Variable declaration index: 1, scope: local]
         [Array]
             [Int 1]
             [Int 2]
-    [Variable declaration index: 3, scope: local]
+    [Variable declaration index: 2, scope: local]
         [Structure literal, defaults: 0]
             - structure
-            [Variable index: 0, scope: global]
+            [Import symbol 0]
             - args
             [Array]
                 [Int 6]
                 [Int 7]
-                [Fn call arity: 0, defaults: 0, invoke: false]
-                    [Variable index: 1, scope: global]
+                [Fn call arity: 0, defaults: 0]
+                    [Import symbol 1]
     [Print]
         [Array access]
             - array
-            [Variable index: 1, scope: local]
+            [Variable index: 0, scope: local]
             - index
             [Int 1]
     [Print]
         [Array access]
             - array
-            [Variable index: 1, scope: local]
+            [Variable index: 0, scope: local]
             - index
             [Unary minus]
                 [Int 2]
     [Int 99]
     [Array assignment]
         - array
-        [Variable index: 1, scope: local]
+        [Variable index: 0, scope: local]
         - index
-        [Fn call arity: 0, defaults: 0, invoke: false]
-            [Variable index: 1, scope: global]
+        [Fn call arity: 0, defaults: 0]
+            [Import symbol 1]
     [Unary minus]
         [Int 9]
     [Array assignment]
         - array
         [Field access 0]
-            [Variable index: 3, scope: local]
+            [Variable index: 2, scope: local]
         - index
-        [Fn call arity: 0, defaults: 0, invoke: false]
-            [Variable index: 1, scope: global]
+        [Fn call arity: 0, defaults: 0]
+            [Import symbol 1]
     [Print]
         [Array access]
             - array
             [Field access 0]
-                [Variable index: 3, scope: local]
+                [Variable index: 2, scope: local]
             - index
-            [Fn call arity: 0, defaults: 0, invoke: false]
-                [Variable index: 1, scope: global]
-
-    // Infer
-    [Variable declaration index: 4, scope: local]
+            [Fn call arity: 0, defaults: 0]
+                [Import symbol 1]
+    [Variable declaration index: 3, scope: local]
         [Array]
-
-    [Variable declaration index: 5, scope: local]
+    [Variable declaration index: 4, scope: local]
         [Null]
     [Array]
-    [Assignment index: 5, scope: local]
-
-    [Variable declaration index: 6, scope: local]
+    [Assignment index: 4, scope: local, cow]
+    [Variable declaration index: 5, scope: local]
         [Structure literal, defaults: 0]
             - structure
-            [Variable index: 0, scope: global]
+            [Import symbol 0]
             - args
             [Array]
-

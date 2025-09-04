@@ -6,3 +6,4 @@ non_integer_index, bool
 non_integer_index, float
 void_array
 cant_infer_arary_type
+void_value

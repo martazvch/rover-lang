@@ -250,7 +250,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     // Forward declaration in outer scope for recursion
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
-    var fn_type: Type.Function = .{ .return_type = undefined, .is_method = undefined };
+    var fn_type: Type.Function = .{ .return_type = undefined, .kind = undefined };
 
     self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
@@ -258,7 +258,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
     const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
     const param_res = try self.fnParams(node.params, ctx);
     fn_type.params = param_res.params;
-    fn_type.is_method = param_res.is_method;
+    if (param_res.is_method) fn_type.kind = .method;
 
     const return_type = try self.checkAndGetType(node.return_type, ctx);
     fn_type.return_type = return_type;
@@ -344,8 +344,7 @@ fn fnParams(
         const param_name = self.interner.intern(self.ast.toSource(p.name));
 
         if (i == 0 and param_name == self.cached_names.self) {
-            // TODO:
-            const struct_type = ctx.struct_type orelse @panic("Self outside of structure");
+            const struct_type = ctx.struct_type orelse return self.err(.self_outside_struct, span);
 
             is_method = true;
             _ = try self.declareVariable(param_name, struct_type, p.meta.captured, true, true, .zero);
@@ -717,39 +716,40 @@ fn analyzeExpr(self: *Self, expr: *const Expr, ctx: *Context) Result {
 
 fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
-    var value_type = self.type_interner.cache.void;
-    var patch_casts = false;
+    var final_type = self.type_interner.cache.void;
+    var backpatched = false;
 
     var elems: ArrayListUnmanaged(Instruction.Array.Elem) = .{};
     elems.ensureUnusedCapacity(self.allocator, expr.values.len) catch oom();
 
     for (expr.values) |val| {
-        const span = self.ast.getSpan(val);
         var cast = false;
+        const span = self.ast.getSpan(val);
         var typ = try self.analyzeExpr(val, ctx);
 
-        // TODO: error
-        if (self.isVoid(typ)) @panic("Void value in array");
+        if (self.isVoid(typ)) return self.err(.void_value, span);
 
-        if (!self.isVoid(value_type) and value_type != typ) {
-            if (!value_type.canCastTo(typ)) return self.err(
-                .{ .array_elem_different_type = .{ .found1 = self.getTypeName(value_type), .found2 = self.getTypeName(typ) } },
-                span,
-            );
-
-            // Backtrack casts
-            if (!patch_casts) {
-                for (elems.items) |*e| {
-                    e.cast = true;
-                }
-                patch_casts = true;
+        if (!self.isVoid(final_type) and final_type != typ) {
+            // If new value can't be cast to current array type
+            if (!typ.canCastTo(final_type)) {
+                // If we didn't already changed array type based on new value (ex from []int to []float)
+                // and that the array type is castable to value type, change array type and backpatch casts
+                if (!backpatched and final_type.canCastTo(typ)) {
+                    for (elems.items) |*e| {
+                        e.cast = true;
+                    }
+                    backpatched = true;
+                } else return self.err(
+                    .{ .array_elem_different_type = .{ .found1 = self.getTypeName(final_type), .found2 = self.getTypeName(typ) } },
+                    span,
+                );
             } else {
                 cast = true;
+                typ = final_type;
             }
-            typ = value_type;
         }
 
-        value_type = typ;
+        final_type = typ;
         elems.appendAssumeCapacity(.{ .cast = cast, .incr_rc = typ.isHeap() and !isHeapLiteral(val) });
     }
 
@@ -759,7 +759,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
         .{ .set_at = index },
     );
 
-    return self.type_interner.intern(.{ .array = value_type });
+    return self.type_interner.intern(.{ .array = .{ .child = final_type } });
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result {
@@ -768,7 +768,7 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result 
     const arr = try self.analyzeExpr(expr.array, ctx);
 
     const type_value = switch (arr.*) {
-        .array => |child| child,
+        .array => |ty| ty.child,
         else => return self.err(
             .{ .non_array_indexing = .{ .found = self.getTypeName(arr) } },
             span,
@@ -906,7 +906,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     const closure_type: Type.Function = .{
         .params = param_res.params,
         .return_type = try self.checkAndGetType(expr.return_type, ctx),
-        .is_method = false,
+        .kind = .normal,
     };
     const interned_type = self.type_interner.intern(.{ .function = closure_type });
 
@@ -1175,9 +1175,9 @@ fn structureAccess(
 
         check: {
             if (!ctx.in_call) break :check;
-            if (is_value and !function.is_method) {
+            if (is_value and function.kind != .method) {
                 return self.err(.{ .call_static_on_instance = .{ .name = text } }, self.ast.getSpan(field_tk));
-            } else if (!is_value and function.is_method) {
+            } else if (!is_value and function.kind == .method) {
                 return self.err(.{ .call_method_on_type = .{ .name = text } }, self.ast.getSpan(field_tk));
             }
         }
@@ -1298,6 +1298,10 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
 
         switch (arg.*) {
             .named_arg => |na| {
+                if (ty.kind == .bound) {
+                    return self.err(.named_arg_in_bounded, self.ast.getSpan(na.name));
+                }
+
                 const name = self.interner.intern(self.ast.toSource(na.name));
                 proto.putAssumeCapacity(name, true);
                 param_index = proto.getIndex(name).?;
@@ -1735,7 +1739,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Resul
                 return self.err(.void_array, self.ast.getSpan(arr_type.child));
             }
 
-            return self.type_interner.intern(.{ .array = child });
+            return self.type_interner.intern(.{ .array = .{ .child = child } });
         },
         .fields => |fields| {
             if (fields.len > 2) @panic("Nested types are not supported yet");
@@ -1775,7 +1779,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Resul
             return self.type_interner.intern(.{ .function = .{
                 .params = params,
                 .return_type = try self.checkAndGetType(func.return_type, ctx),
-                .is_method = false,
+                .kind = .normal,
             } });
         },
         .scalar => {
@@ -1806,12 +1810,10 @@ const TypeCoherence = struct { type: *const Type, cast: bool = false };
 fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_cast: bool, span: Span) Error!TypeCoherence {
     var cast = false;
     var local_decl = decl;
-    const local_value = value;
+    var local_value = value;
 
     if (self.isVoid(value)) return self.err(.void_value, span);
-    if (self.isVoid(decl) and value.* == .array and self.isVoid(value.array)) {
-        return self.err(.cant_infer_arary_type, span);
-    }
+    if (value.is(.array)) local_value = try self.inferArrayType(decl, value, span);
 
     // TODO: proper error handling
     if (value.is(.module)) @panic("Can't use modules in expressions");
@@ -1832,6 +1834,20 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
     }
 
     return .{ .type = local_decl, .cast = cast };
+}
+
+/// Try to infer array value type from variable's declared type
+fn inferArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span) Error!*const Type {
+    // Get nested item's type from: [][][]int -> int
+    const child = value.array.getChild();
+
+    // Empty array like: []
+    if (self.isVoid(child)) {
+        // No type declared and empty array like: var a = [], else infer from declaration
+        return if (self.isVoid(decl)) self.err(.cant_infer_arary_type, span) else decl;
+    }
+
+    return value;
 }
 
 fn isVoid(self: *const Self, ty: *const Type) bool {

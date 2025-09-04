@@ -856,6 +856,7 @@ fn closure(self: *Self) Error!*Expr {
 }
 
 fn ifExpr(self: *Self) Error!*Expr {
+    const tk = self.token_idx - 1;
     const save = self.in_cond;
     self.in_cond = true;
     errdefer self.in_cond = save;
@@ -891,6 +892,7 @@ fn ifExpr(self: *Self) Error!*Expr {
         .condition = condition,
         .then = then,
         .@"else" = else_body,
+        .if_token = tk,
     } };
 
     return expr;

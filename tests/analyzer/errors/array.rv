@@ -12,4 +12,6 @@ fn main() {
 
     var voidArr: []void
     var voidArrVoidVal = []
+
+    var voidValueInArray = [1, {}]
 }

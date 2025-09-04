@@ -16,15 +16,31 @@ pub const Type = union(enum) {
     bool,
     str,
     null,
-    array: *const Type,
+    array: Array,
     function: Function,
     module: InternerIdx,
     structure: Structure,
 
+    pub const Array = struct {
+        child: *const Type,
+
+        pub fn getChild(self: *const Array) *const Type {
+            var child = self.child;
+
+            while (child.* == .array) {
+                child = child.array.child;
+            }
+
+            return child;
+        }
+    };
+
     pub const Function = struct {
         params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .{},
         return_type: *const Type,
-        is_method: bool,
+        kind: Kind,
+
+        pub const Kind = enum { normal, method, bound };
 
         pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
             var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
@@ -42,10 +58,14 @@ pub const Type = union(enum) {
             var params = self.params.clone(allocator) catch oom();
             _ = params.orderedRemove(self_interned);
 
+            for (params.values()) |*val| {
+                val.default = false;
+            }
+
             return .{
                 .params = params,
                 .return_type = self.return_type,
-                .is_method = false,
+                .kind = .bound,
             };
         }
     };
@@ -132,7 +152,7 @@ pub const Type = union(enum) {
         // name collision between modules
         switch (self) {
             .void, .int, .float, .bool, .str, .null => {},
-            .array => |ty| ty.hash(hasher),
+            .array => |ty| ty.child.hash(hasher),
             .function => |ty| {
                 for (ty.params.values()) |param| {
                     param.type.hash(hasher);
@@ -155,10 +175,10 @@ pub const Type = union(enum) {
             .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
                 writer.writeAll("[]") catch oom();
-                writer.writeAll(ty.toString(allocator, interner)) catch oom();
+                writer.writeAll(ty.child.toString(allocator, interner)) catch oom();
             },
             .function => |ty| {
-                writer.writeAll("fn (") catch oom();
+                writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
                     writer.writeAll(p.type.toString(allocator, interner)) catch oom();
                     if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();

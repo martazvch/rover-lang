@@ -1,5 +1,5 @@
 struct Foo {
-    fn method(self, a=1) {}
+    fn method(self, a=1) { }
 }
 
 fn main() {
