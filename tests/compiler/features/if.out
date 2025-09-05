@@ -1,82 +1,82 @@
 -- main --
-OP_TRUE
-OP_JUMP_IF_FALSE 1 -> 11
-OP_POP
-OP_CONSTANT index 0, value yes
-OP_PRINT
-OP_JUMP 8 -> 12
-OP_POP
+push_true
+jump_false 1 -> 11
+pop
+constant index 0, value yes
+print
+jump 8 -> 12
+pop
 
-OP_TRUE
-OP_JUMP_IF_FALSE 13 -> 18
-OP_POP
-OP_FALSE
-OP_JUMP_IF_FALSE 18 -> 28
-OP_POP
-OP_CONSTANT index 1, value yes
-OP_PRINT
-OP_JUMP 25 -> 29
-OP_POP
+push_true
+jump_false 13 -> 18
+pop
+push_false
+jump_false 18 -> 28
+pop
+constant index 1, value yes
+print
+jump 25 -> 29
+pop
 
-OP_TRUE
-OP_JUMP_IF_FALSE 30 -> 35
-OP_POP
-OP_FALSE
-OP_JUMP_IF_FALSE 35 -> 45
-OP_POP
-OP_CONSTANT index 2, value yes
-OP_PRINT
-OP_JUMP 42 -> 49
-OP_POP
-OP_CONSTANT index 3, value no
-OP_PRINT
+push_true
+jump_false 30 -> 35
+pop
+push_false
+jump_false 35 -> 45
+pop
+constant index 2, value yes
+print
+jump 42 -> 49
+pop
+constant index 3, value no
+print
 
-OP_TRUE
-OP_JUMP_IF_FALSE 50 -> 61
-OP_POP
-OP_CONSTANT index 4, value 1
-OP_SCOPE_RETURN index 0
-OP_JUMP 58 -> 66
-OP_POP
-OP_CONSTANT index 5, value 2
-OP_SCOPE_RETURN index 0
+push_true
+jump_false 50 -> 61
+pop
+constant index 4, value 1
+ret_scope index 0
+jump 58 -> 66
+pop
+constant index 5, value 2
+ret_scope index 0
 
-OP_TRUE
-OP_SCOPE_RETURN index 0
-OP_JUMP_IF_FALSE 69 -> 81
-OP_POP
-OP_CONSTANT index 6, value 5
-OP_CONSTANT index 7, value 6
-OP_ADD_INT
-OP_JUMP 78 -> 86
-OP_POP
-OP_CONSTANT index 8, value 1
-OP_SCOPE_RETURN index 0
+push_true
+ret_scope index 0
+jump_false 69 -> 81
+pop
+constant index 6, value 5
+constant index 7, value 6
+add_int
+jump 78 -> 86
+pop
+constant index 8, value 1
+ret_scope index 0
 
-OP_TRUE
-OP_NOT
-OP_SCOPE_RETURN index 0
-OP_JUMP_IF_FALSE 90 -> 104
-OP_POP
-OP_CONSTANT index 9, value 5
-OP_CONSTANT index 10, value 6
-OP_ADD_INT
-OP_SCOPE_RETURN index 0
-OP_JUMP 101 -> 124
-OP_POP
-OP_CONSTANT index 11, value 1
-OP_GET_LOCAL index 3
-OP_PRINT
-OP_CONSTANT index 12, value 5
-OP_SET_LOCAL index 3
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
-OP_ADD_INT
-OP_GET_LOCAL index 3
-OP_ADD_INT
-OP_SCOPE_RETURN index 1
-OP_NAKED_RETURN
+push_true
+not
+ret_scope index 0
+jump_false 90 -> 104
+pop
+constant index 9, value 5
+constant index 10, value 6
+add_int
+ret_scope index 0
+jump 101 -> 124
+pop
+constant index 11, value 1
+get_local index 2
+print
+constant index 12, value 5
+set_local index 2
+get_local index 0
+get_local index 1
+add_int
+get_local index 2
+add_int
+ret_scope index 1
+ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+load_sym index 0, <fn main>
+call index 0

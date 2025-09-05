@@ -5,36 +5,36 @@
 
 -- getPt --
 OP_GET_GLOBAL index 0, <structure Point>
-OP_CONSTANT index 0, value 9
+constant index 0, value 9
 OP_STRUCT_LIT index 1
 OP_RETURN
 
 -- getVec --
 OP_GET_GLOBAL index 1, <structure Vec2>
-OP_GET_LOCAL index 1
+get_local index 1
 OP_STRUCT_LIT index 1
 OP_RETURN
 
 -- main --
 OP_GET_GLOBAL index 1, <structure Vec2>
-OP_CONSTANT index 0, value 1
+constant index 0, value 1
 OP_STRUCT_LIT index 1
 
-OP_GET_LOCAL index 1
+get_local index 1
 OP_INVOKE arity 0, method index 0
 OP_REG_PUSH
 OP_GET_FIELD index 0
-OP_PRINT
+print
 
 OP_GET_GLOBAL index 2, <fn getVec>
-OP_CONSTANT index 1, value 5
-OP_CALL index 1
+constant index 1, value 5
+call index 1
 OP_REG_PUSH
 OP_GET_FIELD index 0
-OP_PRINT
+print
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 3, <fn main>
-OP_CALL index 0
+call index 0

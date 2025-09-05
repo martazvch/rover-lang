@@ -1,40 +1,40 @@
 -- speak --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- getOld --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL index 1
-OP_ADD_INT
-OP_GET_LOCAL_REG index 0
+get_local index 1
+add_int
+get_local_REG index 0
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
 OP_RETURN
 
 -- main --
 OP_GET_GLOBAL index 0, <structure Human>
-OP_CONSTANT index 0, value 5
-OP_CONSTANT index 1, value Tom
+constant index 0, value 5
+constant index 1, value Tom
 OP_STRUCT_LIT index 2
 OP_NULL
-OP_GET_LOCAL_REG index 1
+get_local_REG index 1
 OP_BOUND_METHOD index 0
 OP_NULL
-OP_GET_LOCAL_REG index 1
+get_local_REG index 1
 OP_BOUND_METHOD index 1
-OP_GET_LOCAL index 3
-OP_CALL index 0
-OP_GET_LOCAL index 5
-OP_CONSTANT index 2, value 10
-OP_CALL index 1
-OP_POP
-OP_NAKED_RETURN
+get_local index 3
+call index 0
+get_local index 5
+constant index 2, value 10
+call index 1
+pop
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 1, <fn main>
-OP_CALL index 0
+call index 0

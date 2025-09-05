@@ -1,38 +1,38 @@
 -- main --
-OP_CONSTANT index 0, value 5
-OP_SCOPE_RETURN index 0
-OP_POP
+constant index 0, value 5
+ret_scope index 0
+pop
 
-OP_CONSTANT index 1, value 5
-OP_POP
+constant index 1, value 5
+pop
 
 OP_NULL
-OP_POP
+pop
 
-OP_CONSTANT index 2, value 1
-OP_CONSTANT index 3, value 3
-OP_CONSTANT index 4, value 4
-OP_ADD_INT
-OP_POP
-OP_CONSTANT index 5, value 5
-OP_GET_LOCAL index 2
-OP_PRINT
-OP_POP
-OP_POP
+constant index 2, value 1
+constant index 3, value 3
+constant index 4, value 4
+add_int
+pop
+constant index 5, value 5
+get_local index 2
+print
+pop
+pop
 
-OP_CONSTANT index 6, value 7
-OP_GET_LOCAL index 1
-OP_SCOPE_RETURN index 1
+constant index 6, value 7
+get_local index 1
+ret_scope index 1
 
-OP_CONSTANT index 7, value 67
-OP_CONSTANT index 8, value just chillin
-OP_CONSTANT index 9, value 7
-OP_CONSTANT index 10, value 90
-OP_GET_LOCAL index 4
-OP_SCOPE_RETURN index 4
+constant index 7, value 67
+constant index 8, value just chillin
+constant index 9, value 7
+constant index 10, value 90
+get_local index 4
+ret_scope index 4
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

@@ -1,35 +1,35 @@
 -- main --
-OP_CONSTANT index 0, value 1
+constant index 0, value 1
 OP_NEGATE_INT
-OP_POP
+pop
 
-OP_CONSTANT index 1, value 1
+constant index 1, value 1
 OP_NEGATE_INT
 OP_NEGATE_INT
 OP_NEGATE_INT
 OP_NEGATE_INT
-OP_POP
+pop
 
-OP_CONSTANT index 2, value 65.82
+constant index 2, value 65.82
 OP_NEGATE_FLOAT
-OP_POP
+pop
 
-OP_TRUE
-OP_NOT
-OP_POP
+push_push_true
+not
+pop
 
-OP_FALSE
-OP_NOT
-OP_POP
+push_false
+not
+pop
 
-OP_TRUE
-OP_NOT
-OP_NOT
-OP_NOT
-OP_POP
+push_push_true
+not
+not
+not
+pop
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

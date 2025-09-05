@@ -1,10 +1,10 @@
 -- main --
-OP_CONSTANT index 0, value 3
-OP_CONSTANT index 1, value 4
-OP_ADD_INT
-OP_POP
-OP_NAKED_RETURN
+constant index 0, value 3
+constant index 1, value 4
+add_int
+pop
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

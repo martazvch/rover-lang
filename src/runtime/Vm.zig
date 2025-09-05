@@ -154,19 +154,19 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int += rhs;
             },
-            .array => {
+            .array_new => {
                 const len = frame.readByte();
                 const array = Obj.Array.create(self, (self.stack.top - len)[0..len]);
                 self.stack.top -= len;
                 self.stack.push(Value.makeObj(array.asObj()));
             },
-            .array_access => {
+            .array_get => {
                 const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
                 self.stack.push(array.values.items[final]);
             },
-            .array_access_cow => {
+            .array_get_cow => {
                 const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(Obj.Array);
                 const final = checkArrayIndex(array, index);
@@ -174,61 +174,16 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
-            // .array_access_reg_cow => {
-            //     const index = self.stack.pop().int;
-            //     const array = self.r1.obj.as(Obj.Array);
-            //     const final = checkArrayIndex(array, index);
-            //
-            //     self.r1 = &array.values.items[final];
-            //     self.r1.obj = self.cow(self.r1.obj);
-            // },
-            .array_access_chain => unreachable,
-            // .array_access_chain => {
-            //     const depth = frame.readByte();
-            //     var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
-            //
-            //     for (0..depth - 1) |_| {
-            //         const idx = checkArrayIndex(tmp, self.stack.pop().int);
-            //         tmp = tmp.values.items[idx].obj.as(Obj.Array);
-            //     }
-            //
-            //     const idx = checkArrayIndex(tmp, self.stack.pop().int);
-            //     self.stack.push(tmp.values.items[idx]);
-            // },
-            .array_assign => {
+            .array_get_chain => unreachable,
+            .array_set => {
                 const index = self.stack.pop().int;
-                // const array = self.stack.pop().obj.as(Obj.Array);
                 const array = self.stack.pop().obj.as(Obj.Array);
                 const value = self.stack.pop();
 
                 const final = checkArrayIndex(array, index);
                 array.values.items[final] = value;
             },
-            .array_assign_chain => unreachable,
-            // .array_assign_chain => {
-            //     const depth = frame.readByte();
-            //     var tmp: *Obj.Array = self.r1.obj.as(Obj.Array);
-            //     var last: **Obj.Array = &tmp;
-            //
-            //     for (0..depth - 1) |_| {
-            //         const idx = checkArrayIndex(last.*, self.stack.pop().int);
-            //         last = &last.*.values.items[idx].obj;
-            //         last.* = self.cow(last.*.asObj()).as(Obj.Array);
-            //     }
-            //
-            //     const idx = checkArrayIndex(last.*, self.stack.pop().int);
-            //     last.*.values.items[idx] = self.stack.pop();
-            // },
-            .bound_import => unreachable,
-            // .bound_import => {
-            //     const symbol_idx = frame.readByte();
-            //     const bound = Obj.BoundImport.create(
-            //         self,
-            //         self.r1.obj.as(Obj.ObjModule),
-            //         self.r1.obj.as(Obj.ObjModule).module.globals[symbol_idx].obj,
-            //     );
-            //     self.stack.push(Value.makeObj(bound.asObj()));
-            // },
+            .array_set_chain => unreachable,
             .box => {
                 const to_box = self.stack.pop();
                 const boxed = Value.makeObj(Obj.Box.create(self, to_box).asObj());
@@ -260,7 +215,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 self.stack.push(Value.makeObj(closure.asObj()));
             },
             .constant => self.stack.push(frame.readConstant()),
-            .define_global => {
+            .def_global => {
                 const idx = frame.readByte();
                 // self.module.globals[idx] = self.stack.pop();
                 frame.globals[idx] = self.stack.pop();
@@ -285,7 +240,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 self.frame_stack.count -= 1;
                 break;
             },
-            .false => self.stack.push(Value.false_),
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .get_default => self.stack.push(self.r3[frame.readByte()]),
@@ -328,29 +282,29 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const method = structure.methods[method_idx];
                 top.* = Value.makeObj(method.asObj());
             },
-            .get_symbol => {
-                const symbol_idx = frame.readByte();
-                self.stack.push(frame.symbols[symbol_idx]);
-            },
-            .get_symbol_extern => {
+            .load_extern_sym => {
                 const module_index = frame.readByte();
                 const symbol_index = frame.readByte();
                 const module = self.modules[module_index];
                 const symbol = module.symbols[symbol_index];
                 self.stack.push(symbol);
             },
+            .load_sym => {
+                const symbol_idx = frame.readByte();
+                self.stack.push(frame.symbols[symbol_idx]);
+            },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
-            .incr_ref_count => self.stack.peekRef(0).obj.ref_count += 1,
+            .incr_ref => self.stack.peekRef(0).obj.ref_count += 1,
             .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;
             },
-            .jump_if_false => {
+            .jump_false => {
                 const jump = frame.readShort();
                 if (!self.stack.peek(0).bool) frame.ip += jump;
             },
-            .jump_if_true => {
+            .jump_true => {
                 const jump = frame.readShort();
                 if (self.stack.peek(0).bool) frame.ip += jump;
             },
@@ -360,7 +314,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
 
             .load_fn_default => self.stack.peekRef(0).obj.loadDefaultValues(self, 0),
-            .load_invoke_default => self.stack.peekRef(0).obj.loadDefaultValues(self, frame.readByte()),
             .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Obj.Structure).default_values,
 
             .loop => {
@@ -375,24 +328,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int *= rhs;
             },
-            .naked_return => {
-                self.frame_stack.count -= 1;
-
-                // if (frame.imported) {
-                //     self.module = self.module_chain.pop().?;
-                // }
-
-                // The last standing frame is the artificial one created when we run
-                // the global scope at the very beginning
-                // TODO: avoid logic at runtime, just emit a special OpCode for `main` naked return
-                if (self.frame_stack.count == 1) {
-                    _ = self.stack.pop();
-                    break;
-                }
-
-                self.stack.top = frame.slots - 1;
-                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
-            },
             .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
@@ -400,19 +335,15 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .negate_float => self.stack.peekRef(0).float *= -1,
             .negate_int => self.stack.peekRef(0).int *= -1,
             .not => self.stack.peekRef(0).not(),
-            .null => self.stack.push(Value.null_),
             .pop => _ = self.stack.pop(),
             .print => {
                 try self.stack.pop().print(self.stdout);
                 _ = try self.stdout.write("\n");
             },
-            .push_module => {
-                const index = frame.readByte();
-                _ = index; // autofix
-                // const module = &self.module.imports[index];
-                // self.stack.push(Value.makeObj(Obj.ObjModule.create(self, module).asObj()));
-            },
-            .@"return" => {
+            .push_false => self.stack.push(Value.false_),
+            .push_null => self.stack.push(Value.null_),
+            .push_true => self.stack.push(Value.true_),
+            .ret => {
                 const result = self.stack.pop();
                 self.frame_stack.count -= 1;
 
@@ -433,7 +364,25 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
 
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
-            .scope_return => {
+            .ret_naked => {
+                self.frame_stack.count -= 1;
+
+                // if (frame.imported) {
+                //     self.module = self.module_chain.pop().?;
+                // }
+
+                // The last standing frame is the artificial one created when we run
+                // the global scope at the very beginning
+                // TODO: avoid logic at runtime, just emit a special OpCode for `main` naked return
+                if (self.frame_stack.count == 1) {
+                    _ = self.stack.pop();
+                    break;
+                }
+
+                self.stack.top = frame.slots - 1;
+                frame = &self.frame_stack.frames[self.frame_stack.count - 1];
+            },
+            .ret_scope => {
                 const locals_count = frame.readByte();
                 const res = self.stack.pop();
                 self.stack.top -= locals_count;
@@ -484,7 +433,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 a.* = b.*;
                 b.* = tmp;
             },
-            .true => self.stack.push(Value.true_),
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }
     }

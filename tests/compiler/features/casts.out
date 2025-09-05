@@ -1,16 +1,16 @@
 -- main --
 OP_NULL
-OP_CONSTANT index 0, value 1
+constant index 0, value 1
 OP_CAST_TO_FLOAT
-OP_SET_LOCAL index 1
+set_local index 1
 
-OP_CONSTANT index 1, value 1
-OP_CONSTANT index 2, value 6
-OP_ADD_INT
+constant index 1, value 1
+constant index 2, value 6
+add_int
 OP_CAST_TO_FLOAT
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

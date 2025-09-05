@@ -1,41 +1,41 @@
 -- add --
-OP_NAKED_RETURN
+ret_naked
 
 -- add1 --
-OP_NAKED_RETURN
+ret_naked
 
 -- add2 --
-OP_GET_LOCAL index 2
+get_local index 2
 OP_RETURN
 
 -- add3 --
-OP_GET_LOCAL index 1
+get_local index 1
 OP_RETURN
 
 -- add4 --
-OP_NAKED_RETURN
+ret_naked
 
 -- add5 --
-OP_CONSTANT index 0, value 1
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 3
-OP_ADD_INT
-OP_GET_LOCAL index 2
+constant index 0, value 1
+get_local index 1
+get_local index 3
+add_int
+get_local index 2
 OP_RETURN
 
 -- main --
 // Empty
 OP_GET_GLOBAL index 0, <fn add>
-OP_CALL index 0
+call index 0
 
 // With args
 OP_GET_GLOBAL index 1, <fn add1>
-OP_CONSTANT index 0, value 1
-OP_CONSTANT index 1, value 2.5
-OP_CALL index 2
+constant index 0, value 1
+constant index 1, value 2.5
+call index 2
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 6, <fn main>
-OP_CALL index 0
+call index 0

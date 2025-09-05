@@ -1,23 +1,23 @@
 -- main --
 OP_GET_GLOBAL index 0, <structure Pet>
-OP_CONSTANT index 0, value Vodka
-OP_FALSE
+constant index 0, value Vodka
+push_false
 OP_STRUCT_LIT index 2
 
 OP_GET_GLOBAL index 1, <structure Human>
-OP_CONSTANT index 1, value 5
-OP_CONSTANT index 2, value Tom
-OP_GET_LOCAL index 1
+constant index 1, value 5
+constant index 2, value Tom
+get_local index 1
 OP_INCR_REF_COUNT
 OP_STRUCT_LIT index 3
 
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 2
 OP_GET_FIELD index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 2, <fn main>
-OP_CALL index 0
+call index 0
 

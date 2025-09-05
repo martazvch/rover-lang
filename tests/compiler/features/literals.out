@@ -1,24 +1,24 @@
 -- main --
-OP_CONSTANT index 0, value 1
-OP_POP
+constant index 0, value 1
+pop
 
-OP_CONSTANT index 1, value 65.82
-OP_POP
+constant index 1, value 65.82
+pop
 
-OP_TRUE
-OP_POP
+push_push_true
+pop
 
-OP_FALSE
-OP_POP
+push_false
+pop
 
 OP_NULL
-OP_POP
+pop
 
-OP_CONSTANT index 2, value foo
-OP_POP
+constant index 2, value foo
+pop
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

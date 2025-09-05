@@ -1,31 +1,31 @@
 //---- math ----
 
 -- len --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_ADD_INT
+add_int
 OP_RETURN
 
 -- introduce --
-OP_CONSTANT index 0, value This is a mathematical module
-OP_PRINT
-OP_NAKED_RETURN
+constant index 0, value This is a mathematical module
+print
+ret_naked
 
 -- getVecFromPos --
 OP_GET_GLOBAL index 0, <structure Vec2>
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
+get_local index 1
+get_local index 2
 OP_STRUCT_LIT index 2
 OP_RETURN
 
 -- getInt --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- getIntDef --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- global scope --
@@ -34,16 +34,16 @@ OP_EXIT_REPL
 //---- test.rv ----
 
 -- static --
-OP_CONSTANT index 0, value 3
+constant index 0, value 3
 OP_RETURN
 
 -- method --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
 OP_RETURN
 
 -- copy --
-OP_CONSTANT index 0, value 5
+constant index 0, value 5
 OP_RETURN
 
 -- main --
@@ -54,39 +54,39 @@ OP_STRUCT_LIT index 1
 OP_GET_GLOBAL index 1, <structure Foo>
 OP_GET_GLOBAL index 3, <fn copy>
 OP_STRUCT_LIT index 1
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD index 0
-OP_CALL index 0
-OP_PRINT
+call index 0
+print
 OP_GET_GLOBAL_REG index 2, <structure Bar>
 OP_GET_STATIC_METHOD index 0
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD index 0
-OP_CALL index 0
-OP_PRINT
-OP_GET_LOCAL_REG index 1
+call index 0
+print
+get_local_REG index 1
 OP_BOUND_METHOD index 1
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD index 0
-OP_CALL index 0
-OP_PRINT
+call index 0
+print
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 3
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD index 0
-OP_CALL index 0
-OP_PRINT
-OP_NAKED_RETURN
+call index 0
+print
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 4, <fn main>
-OP_CALL index 0
+call index 0

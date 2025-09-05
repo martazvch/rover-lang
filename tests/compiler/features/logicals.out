@@ -1,16 +1,16 @@
 -- main --
-OP_TRUE
-OP_JUMP_IF_FALSE 1 -> 6
-OP_POP
-OP_FALSE
-OP_JUMP_IF_FALSE 6 -> 16
-OP_POP
-OP_CONSTANT index 0, value yes
-OP_PRINT
-OP_JUMP 13 -> 17
-OP_POP
-OP_NAKED_RETURN
+push_push_true
+jump_push_false 1 -> 6
+pop
+push_false
+jump_push_false 6 -> 16
+pop
+constant index 0, value yes
+print
+jump 13 -> 17
+pop
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

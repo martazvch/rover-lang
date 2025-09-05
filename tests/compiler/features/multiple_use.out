@@ -1,31 +1,31 @@
 //---- math ----
 
 -- len --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_ADD_INT
+add_int
 OP_RETURN
 
 -- introduce --
-OP_CONSTANT index 0, value This is a mathematical module
-OP_PRINT
-OP_NAKED_RETURN
+constant index 0, value This is a mathematical module
+print
+ret_naked
 
 -- getVecFromPos --
 OP_GET_GLOBAL index 0, <structure Vec2>
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
+get_local index 1
+get_local index 2
 OP_STRUCT_LIT index 2
 OP_RETURN
 
 -- getInt --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- getIntDef --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- global scope --
@@ -34,58 +34,58 @@ OP_EXIT_REPL
 //---- geom ----
 
 -- move --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL index 1
-OP_ADD_INT
-OP_GET_LOCAL_REG index 0
+get_local index 1
+add_int
+get_local_REG index 0
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_GET_LOCAL index 1
-OP_ADD_INT
-OP_GET_LOCAL_REG index 0
+get_local index 1
+add_int
+get_local_REG index 0
 OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
-OP_NAKED_RETURN
+ret_naked
 
 -- display --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_PRINT
-OP_GET_LOCAL_REG index 0
+print
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- introduce --
-OP_CONSTANT index 0, value module for basic geometry
-OP_PRINT
-OP_NAKED_RETURN
+constant index 0, value module for basic geometry
+print
+ret_naked
 
 -- moveCenter --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 0
-OP_GET_LOCAL_REG index 1
+get_local_REG index 1
 OP_GET_FIELD index 0
-OP_ADD_INT
-OP_GET_LOCAL_REG index 0
+add_int
+get_local_REG index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 1
-OP_GET_LOCAL_REG index 1
+get_local_REG index 1
 OP_GET_FIELD index 1
-OP_ADD_INT
-OP_GET_LOCAL_REG index 0
+add_int
+get_local_REG index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
 OP_RETURN
 
@@ -95,16 +95,16 @@ OP_EXIT_REPL
 //---- simple_str ----
 
 -- concat --
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
+get_local index 1
+get_local index 2
 OP_STRING_CONCAT
 OP_RETURN
 
 -- quote --
-OP_CONSTANT index 0, value '
-OP_GET_LOCAL index 1
+constant index 0, value '
+get_local index 1
 OP_STRING_CONCAT
-OP_CONSTANT index 1, value '
+constant index 1, value '
 OP_STRING_CONCAT
 OP_RETURN
 
@@ -116,71 +116,71 @@ OP_EXIT_REPL
 -- main --
 OP_GET_GLOBAL_REG index 1, <module geom>
 OP_BOUND_IMPORT index 0
-OP_CONSTANT index 0, value 1
-OP_CONSTANT index 1, value 90
+constant index 0, value 1
+constant index 1, value 90
 OP_STRUCT_LIT index 2
-OP_GET_LOCAL index 1
+get_local index 1
 OP_INVOKE arity 0, method index 1
 OP_GET_GLOBAL_REG index 1, <module geom>
 OP_BOUND_IMPORT index 2
-OP_CONSTANT index 2, value 10
+constant index 2, value 10
 OP_CAST_TO_FLOAT
-OP_GET_LOCAL index 1
+get_local index 1
 OP_INCR_REF_COUNT
 OP_STRUCT_LIT index 2
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 0
-OP_PRINT
-OP_GET_LOCAL_REG index 2
+print
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 1
-OP_PRINT
+print
 OP_GET_GLOBAL index 0, <module math>
 OP_INVOKE arity 0, method index 1
 OP_GET_GLOBAL index 0, <module math>
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 0
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 1
 OP_INVOKE arity 2, method index 2
-OP_GET_LOCAL_REG index 3
+get_local_REG index 3
 OP_GET_FIELD index 0
-OP_PRINT
-OP_GET_LOCAL_REG index 3
+print
+get_local_REG index 3
 OP_GET_FIELD index 1
-OP_PRINT
+print
 OP_PUSH_MODULE index 2
-OP_GET_LOCAL index 4
-OP_CONSTANT index 3, value local import
+get_local index 4
+constant index 3, value local import
 OP_INVOKE arity 1, method index 1
-OP_PRINT
-OP_GET_LOCAL index 1
+print
+get_local index 1
 OP_INVOKE arity 0, method index 1
-OP_GET_LOCAL index 4
-OP_CONSTANT index 4, value just 
-OP_CONSTANT index 5, value concaneted
+get_local index 4
+constant index 4, value just 
+constant index 5, value concaneted
 OP_INVOKE arity 2, method index 0
-OP_PRINT
-OP_POP
-OP_GET_LOCAL index 2
-OP_GET_LOCAL index 1
+print
+pop
+get_local index 2
+get_local index 1
 OP_INCR_REF_COUNT
 OP_INVOKE arity 1, method index 0
-OP_GET_LOCAL index 4
+get_local index 4
 OP_INVOKE arity 0, method index 1
-OP_GET_LOCAL_REG index 2
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 0
-OP_PRINT
-OP_GET_LOCAL_REG index 2
+print
+get_local_REG index 2
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 2, <fn main>
-OP_CALL index 0
+call index 0

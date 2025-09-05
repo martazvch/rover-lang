@@ -1,31 +1,31 @@
 //---- math ----
 
 -- len --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 1
-OP_ADD_INT
+add_int
 OP_RETURN
 
 -- introduce --
-OP_CONSTANT index 0, value This is a mathematical module
-OP_PRINT
-OP_NAKED_RETURN
+constant index 0, value This is a mathematical module
+print
+ret_naked
 
 -- getVecFromPos --
 OP_GET_GLOBAL index 0, <structure Vec2>
-OP_GET_LOCAL index 1
-OP_GET_LOCAL index 2
+get_local index 1
+get_local index 2
 OP_STRUCT_LIT index 2
 OP_RETURN
 
 -- getInt --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- getIntDef --
-OP_CONSTANT index 0, value 12
+constant index 0, value 12
 OP_RETURN
 
 -- global scope --
@@ -37,24 +37,24 @@ OP_EXIT_REPL
 OP_GET_GLOBAL index 0, <module math>
 OP_INVOKE arity 0, method index 1
 OP_GET_GLOBAL index 0, <module math>
-OP_CONSTANT index 0, value 1
-OP_CONSTANT index 1, value 2
+constant index 0, value 1
+constant index 1, value 2
 OP_INVOKE arity 2, method index 2
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 1
-OP_GET_LOCAL index 2
-OP_CALL index 0
+get_local index 2
+call index 0
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 2
-OP_GET_LOCAL index 3
-OP_CONSTANT index 2, value 6
-OP_CONSTANT index 3, value 89
-OP_CALL index 2
-OP_GET_LOCAL_REG index 4
+get_local index 3
+constant index 2, value 6
+constant index 3, value 89
+call index 2
+get_local_REG index 4
 OP_GET_FIELD index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 1, <fn main>
-OP_CALL index 0
+call index 0

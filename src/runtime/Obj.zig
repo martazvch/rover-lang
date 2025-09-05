@@ -468,6 +468,10 @@ pub const Structure = struct {
         return &self.obj;
     }
 
+    pub fn print(self: *const Self, writer: anytype) PrintError!void {
+        try writer.print("<struct {s}>", .{self.name.chars});
+    }
+
     // Functions are freed because they are on the main minked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {

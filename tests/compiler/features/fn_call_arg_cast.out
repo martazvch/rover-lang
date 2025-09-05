@@ -1,29 +1,29 @@
 -- sub --
-OP_NAKED_RETURN
+ret_naked
 
 -- add1 --
-OP_NAKED_RETURN
+ret_naked
 
 -- main --
-OP_CONSTANT index 0, value <fn add1>
-OP_GET_LOCAL index 1
-OP_CONSTANT index 1, value 1
-OP_CONSTANT index 2, value 2
+constant index 0, value <fn add1>
+get_local index 1
+constant index 1, value 1
+constant index 2, value 2
 OP_CAST_TO_FLOAT
-OP_CALL index 2
+call index 2
 
 // Call to sub
 OP_GET_GLOBAL index 0, <fn sub>
-OP_CONSTANT index 3, value 1
+constant index 3, value 1
 OP_CAST_TO_FLOAT
-OP_CONSTANT index 4, value 2
-OP_CONSTANT index 5, value 3
+constant index 4, value 2
+constant index 5, value 3
 OP_CAST_TO_FLOAT
-OP_CALL index 3
+call index 3
 
 // Implicit return of main
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 1, <fn main>
-OP_CALL index 0
+call index 0

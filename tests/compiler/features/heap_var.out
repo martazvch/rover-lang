@@ -1,17 +1,17 @@
 -- capture --
 OP_GET_HEAP index 0
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- main --
-OP_CONSTANT index 0, value 1
+constant index 0, value 1
 OP_DEFINE_HEAP_VAR index 0
 OP_NULL
-OP_CONSTANT index 1, value <fn capture>
-OP_CONSTANT index 2, value 2
+constant index 1, value <fn capture>
+constant index 2, value 2
 OP_SET_HEAP index 0
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

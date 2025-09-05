@@ -1,14 +1,14 @@
 -- main --
 OP_GET_GLOBAL index 0, <structure Person>
-OP_CONSTANT index 0, value Tom
+constant index 0, value Tom
 OP_STRUCT_LIT index 1
-OP_CONSTANT index 1, value Martin
-OP_GET_LOCAL_REG index 1
+constant index 1, value Martin
+get_local_REG index 1
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 1, <fn main>
-OP_CALL index 0
+call index 0
 

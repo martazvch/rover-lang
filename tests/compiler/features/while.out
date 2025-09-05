@@ -1,21 +1,21 @@
 -- main --
-OP_CONSTANT index 0, value 0
-OP_GET_LOCAL index 1
-OP_CONSTANT index 1, value 4
+constant index 0, value 0
+get_local index 1
+constant index 1, value 4
 OP_LESS_INT
-OP_JUMP_IF_FALSE 7 -> 24
-OP_POP
-OP_GET_LOCAL index 1
-OP_PRINT
-OP_GET_LOCAL index 1
-OP_CONSTANT index 2, value 1
-OP_ADD_INT
-OP_SET_LOCAL index 1
+jump_push_false 7 -> 24
+pop
+get_local index 1
+print
+get_local index 1
+constant index 2, value 1
+add_int
+set_local index 1
 OP_LOOP 21 -> 2
-OP_POP
+pop
 
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 0, <fn main>
-OP_CALL index 0
+call index 0

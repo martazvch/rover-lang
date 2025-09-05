@@ -112,7 +112,7 @@ pub const CompilationManager = struct {
 
         if (main_index) |idx| {
             // TODO: protect
-            self.compiler.writeOpAndByte(.get_symbol, @intCast(idx), 0);
+            self.compiler.writeOpAndByte(.load_sym, @intCast(idx), 0);
             self.compiler.writeOpAndByte(.call, 0, 0);
         } else {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
@@ -241,16 +241,13 @@ const Compiler = struct {
         if (variable.unbox) self.writeOp(.unbox, offset);
     }
 
-    /// Declare the variable based on informations coming from Analyzer. Declares
-    /// either in global scope or heap, as for local it's already living
-    /// on the stack
-    // TODO: rename as it can only act on global?
+    /// Define the variable with value on top of stack for global variables.
+    /// For locals, they are already sitting on top of stack
     fn defineVariable(self: *Self, infos: Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
-        if (infos.scope == .global)
-            self.writeOpAndByte(.define_global, @intCast(infos.index), offset);
-        // else if (infos.scope == .heap)
-        //     self.writeOpAndByte(.define_heap_var, @intCast(infos.index), offset);
+        if (infos.scope == .global) {
+            self.writeOpAndByte(.def_global, @intCast(infos.index), offset);
+        }
     }
 
     fn emitJump(self: *Self, kind: OpCode, offset: usize) usize {
@@ -297,7 +294,7 @@ const Compiler = struct {
             var dis = Disassembler.init(
                 self.manager.allocator,
                 &self.function.chunk,
-                self.manager.module.globals,
+                &self.manager.module,
                 self.manager.render_mode,
             );
             defer dis.deinit();
@@ -355,11 +352,11 @@ const Compiler = struct {
             if (elem.cast) {
                 self.writeOp(.cast_to_float, line);
             } else if (elem.incr_rc) {
-                self.writeOp(.incr_ref_count, line);
+                self.writeOp(.incr_ref, line);
             }
         }
         // TODO: protect cast
-        self.writeOpAndByte(.array, @intCast(data.elems.len), line);
+        self.writeOpAndByte(.array_new, @intCast(data.elems.len), line);
     }
 
     fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess) Error!void {
@@ -367,8 +364,8 @@ const Compiler = struct {
         // Variable
         try self.compileInstr();
         try self.compileInstr();
-        self.writeOp(if (self.state.cow) .array_access_cow else .array_access, line);
-        if (data.incr_ref) self.writeOp(.incr_ref_count, line);
+        self.writeOp(if (self.state.cow) .array_get_cow else .array_get, line);
+        if (data.incr_ref) self.writeOp(.incr_ref, line);
     }
 
     fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
@@ -379,7 +376,7 @@ const Compiler = struct {
 
         // Variable
         try self.compileInstr();
-        if (data.incr_ref) self.writeOp(.incr_ref_count, line);
+        if (data.incr_ref) self.writeOp(.incr_ref, line);
     }
 
     fn arrayAssign(self: *Self, line: usize) Error!void {
@@ -390,7 +387,7 @@ const Compiler = struct {
 
         // Index
         try self.compileInstr();
-        self.writeOp(.array_assign, line);
+        self.writeOp(.array_set, line);
     }
 
     fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
@@ -418,7 +415,7 @@ const Compiler = struct {
         if (data.cast) {
             self.writeOp(.cast_to_float, line);
         } else if (data.incr_rc) {
-            self.writeOp(.incr_ref_count, line);
+            self.writeOp(.incr_ref, line);
         }
 
         // TODO: no use of data.cow?
@@ -502,7 +499,7 @@ const Compiler = struct {
         switch (data.op) {
             .@"and" => {
                 try self.compileInstr();
-                const end_jump = self.emitJump(.jump_if_false, line);
+                const end_jump = self.emitJump(.jump_false, line);
                 // If true, pop the value, else the 'false' remains on top of stack
                 self.writeOp(.pop, line);
                 try self.compileInstr();
@@ -510,7 +507,7 @@ const Compiler = struct {
             },
             .@"or" => {
                 try self.compileInstr();
-                const else_jump = self.emitJump(.jump_if_true, line);
+                const else_jump = self.emitJump(.jump_true, line);
                 self.writeOp(.pop, line);
                 try self.compileInstr();
                 try self.patchJump(else_jump);
@@ -527,7 +524,7 @@ const Compiler = struct {
         }
 
         if (data.is_expr) {
-            self.writeOpAndByte(.scope_return, data.pop_count, line);
+            self.writeOpAndByte(.ret_scope, data.pop_count, line);
         } else {
             // PERF: horrible perf, just emit a stack.top -= count
             for (0..data.pop_count) |_| {
@@ -537,7 +534,7 @@ const Compiler = struct {
     }
 
     fn boolInstr(self: *Self, value: bool) Error!void {
-        const op: OpCode = if (value) .true else .false;
+        const op: OpCode = if (value) .push_true else .push_false;
         self.writeOp(op, self.getLineNumber());
     }
 
@@ -579,7 +576,7 @@ const Compiler = struct {
             if (data.kind == .field)
                 if (self.state.cow) .get_field_cow else .get_field
             else if (data.kind == .symbol)
-                .get_symbol
+                .load_sym
             else if (data.kind == .method)
                 .get_method
             else
@@ -640,9 +637,9 @@ const Compiler = struct {
         }
 
         if (data.return_kind == .implicit_value) {
-            compiler.writeOp(.@"return", self.getLineNumber());
+            compiler.writeOp(.ret, self.getLineNumber());
         } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(.naked_return, self.getLineNumber());
+            compiler.writeOp(.ret_naked, self.getLineNumber());
         }
 
         return compiler.end();
@@ -686,7 +683,7 @@ const Compiler = struct {
 
         // Condition
         try self.compileInstr();
-        const then_jump = self.emitJump(.jump_if_false, line);
+        const then_jump = self.emitJump(.jump_false, line);
         // Pops the condition, no longer needed
         self.writeOp(.pop, line);
 
@@ -715,10 +712,10 @@ const Compiler = struct {
     fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) Error!void {
         const line = self.getLineNumber();
         if (data.module_index) |mod| {
-            self.writeOpAndByte(.get_symbol_extern, @intCast(mod), line);
+            self.writeOpAndByte(.load_extern_sym, @intCast(mod), line);
             self.writeByte(data.symbol_index, line);
         } else {
-            self.writeOpAndByte(.get_symbol, data.symbol_index, line);
+            self.writeOpAndByte(.load_sym, data.symbol_index, line);
         }
     }
 
@@ -729,7 +726,7 @@ const Compiler = struct {
     }
 
     fn nullInstr(self: *Self) Error!void {
-        self.writeOp(.null, self.getLineNumber());
+        self.writeOp(.push_null, self.getLineNumber());
     }
 
     fn print(self: *Self) Error!void {
@@ -745,8 +742,8 @@ const Compiler = struct {
             try self.compileInstr();
             if (data.cast) try self.compileInstr();
 
-            self.writeOp(.@"return", line);
-        } else self.writeOp(.naked_return, line);
+            self.writeOp(.ret, line);
+        } else self.writeOp(.ret_naked, line);
     }
 
     fn stringInstr(self: *Self, index: usize) Error!void {
@@ -846,10 +843,10 @@ const Compiler = struct {
             if (data.cast) {
                 try self.compileInstr();
             } else if (data.incr_rc) {
-                self.writeOp(.incr_ref_count, line);
+                self.writeOp(.incr_ref, line);
             }
         } else {
-            self.writeOp(.null, line);
+            self.writeOp(.push_null, line);
         }
 
         // TODO: Fix this, just to avoid accessing an empty slot at runtime
@@ -871,7 +868,7 @@ const Compiler = struct {
         const loop_start = chunk.code.items.len;
 
         try self.compileInstr();
-        const exit_jump = self.emitJump(.jump_if_false, line);
+        const exit_jump = self.emitJump(.jump_false, line);
 
         // If true
         chunk.writeOp(.pop, line);
@@ -901,8 +898,8 @@ const Compiler = struct {
 
                 break :b val;
             },
-            .false => Value.false_,
-            .true => Value.true_,
+            .push_false => Value.false_,
+            .push_true => Value.true_,
             // Because we know it's pure
             else => unreachable,
         };

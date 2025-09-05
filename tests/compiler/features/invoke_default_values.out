@@ -1,13 +1,13 @@
 //---- invoke_default_values.rv ----
 
 -- boo --
-OP_NAKED_RETURN
+ret_naked
 
 -- len --
-OP_GET_LOCAL_REG index 0
+get_local_REG index 0
 OP_GET_FIELD index 0
-OP_GET_LOCAL index 1
-OP_ADD_INT
+get_local index 1
+add_int
 OP_RETURN
 
 -- main --
@@ -17,13 +17,13 @@ OP_GET_DEFAULT index 0
 OP_GET_DEFAULT index 1
 OP_STRUCT_LIT index 2
 
-OP_GET_LOCAL index 1
+get_local index 1
 OP_LOAD_INVOKE_DEF index 1
 OP_GET_DEFAULT index 0
 OP_INVOKE arity 1, method index 1
-OP_PRINT
-OP_NAKED_RETURN
+print
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 1, <fn main>
-OP_CALL index 0
+call index 0

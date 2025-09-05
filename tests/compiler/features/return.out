@@ -1,21 +1,21 @@
 -- add --
-OP_NAKED_RETURN
+ret_naked
 
 -- sub --
-OP_CONSTANT index 0, value 5
+constant index 0, value 5
 OP_RETURN
 
 -- mul --
-OP_GET_LOCAL index 1
+get_local index 1
 OP_GET_GLOBAL index 1, <fn sub>
-OP_CALL index 0
+call index 0
 OP_MULTIPLY_INT
 OP_CAST_TO_FLOAT
 OP_RETURN
 
 -- main --
-OP_NAKED_RETURN
+ret_naked
 
 -- global scope --
 OP_GET_GLOBAL index 3, <fn main>
-OP_CALL index 0
+call index 0
