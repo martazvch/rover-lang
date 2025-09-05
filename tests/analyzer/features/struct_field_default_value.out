@@ -1,25 +1,22 @@
-//-- test.rv --
-[Structure declaration Vec2, index: 0, scope: global]
+[Structure declaration Vec2]
     - default values
     [Int 8]
     [String yup]
     [String yup]
-
-[Fn declaration main, index: 1, scope: global, return kind: implicit_void]
-    [Variable declaration index: 1, scope: local]
+[Function declaration main, return kind: implicit_void]
+    [Variable declaration index: 0, scope: local]
         [Structure literal, defaults: 3]
             - structure
-            [Variable index: 0, scope: global]
+            [Load symbol 0]
             - args
             [Cast next value to float]
             [Int 1]
             [Cast next value to float]
             [Int 2]
             [Bool true]
-
     [Structure literal, defaults: 3]
         - structure
-        [Variable index: 0, scope: global]
+        [Load symbol 0]
         - args
         [Cast next value to float]
         [Int 3]
@@ -27,4 +24,4 @@
         [Int 99]
         [Int 7]
         [Bool false]
-    [Assignment index: 1, scope: local]
+    [Assignment index: 0, scope: local, cow]

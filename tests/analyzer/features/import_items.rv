@@ -1,12 +1,12 @@
-use data.math{Vec2, introduce}
-use data.geom{ Point, Square }
+use .data.math{Vec2, introduce}
+use .data.geom{ Point, Square }
 
 fn main() {
     var v = Vec2{ x = 3, y = 9 }
     var pt = Point{ x = 5, y = 8 }
 
     {
-        use data.math{Vec2 as Pipou,}
+        use .data.math{Vec2 as Pipou,}
         var v = Pipou{ x = 55, y = 333 }
     }
 

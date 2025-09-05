@@ -36,14 +36,14 @@ pub const Type = union(enum) {
     };
 
     pub const Function = struct {
-        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .{},
+        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .empty,
         return_type: *const Type,
         kind: Kind,
 
         pub const Kind = enum { normal, method, bound };
 
         pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
+            var res: AutoArrayHashMapUnmanaged(usize, bool) = .empty;
             res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
 
             var kv = self.params.iterator();
@@ -78,8 +78,8 @@ pub const Type = union(enum) {
 
     pub const Structure = struct {
         symbol: Symbol,
-        functions: AutoArrayHashMapUnmanaged(usize, Field) = .{},
-        fields: AutoArrayHashMapUnmanaged(usize, Field) = .{},
+        functions: AutoArrayHashMapUnmanaged(usize, Field) = .empty,
+        fields: AutoArrayHashMapUnmanaged(usize, Field) = .empty,
         default_value_fields: usize = 0,
 
         pub const Field = struct {
@@ -94,14 +94,12 @@ pub const Type = union(enum) {
         }
 
         pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .{};
-            res.ensureTotalCapacity(allocator, self.fields.count() - self.default_value_fields) catch oom();
+            var res: AutoArrayHashMapUnmanaged(usize, bool) = .empty;
+            res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
 
             var kv = self.fields.iterator();
             while (kv.next()) |entry| {
-                if (!entry.value_ptr.default) {
-                    res.putAssumeCapacity(entry.key_ptr.*, false);
-                }
+                res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
             }
 
             return res;

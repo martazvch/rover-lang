@@ -1,5 +1,5 @@
-[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
-    [Variable declaration index: 1, scope: local]
+[Function declaration main, return kind: implicit_void]
+    [Variable declaration index: 0, scope: local]
         [If cast: none, has else: true]
         - condition:
             [Bool true]
@@ -8,7 +8,7 @@
                 [Return expr: false, cast: false]
         - else:
             [Int 4]
-    [Variable declaration index: 2, scope: local]
+    [Variable declaration index: 1, scope: local]
         [If cast: none, has else: true]
         - condition:
             [Bool false]
@@ -16,7 +16,7 @@
             [Int 5]
         - else:
             [Return expr: false, cast: false]
-    [Fn declaration func, index: 3, scope: local, return kind: explicit]
+    [Function declaration func, return kind: explicit]
         [Print]
             [If cast: none, has else: true]
             - condition:
@@ -25,19 +25,19 @@
                 [String str]
             - else:
                 [Return expr: true, cast: false]
-                    [Variable index: 1, scope: local]
-        [Variable declaration index: 2, scope: local]
+                    [Variable index: 0, scope: local]
+        [Variable declaration index: 1, scope: local]
             [If cast: none, has else: true]
             - condition:
                 [Bool true]
             - then:
                 [Return expr: true, cast: false]
                     [Binop type: add_int, cast: none]
-                        [Variable index: 1, scope: local]
+                        [Variable index: 0, scope: local]
                         [Int 2]
             - else:
                 [Block pop count: 1, is_expr: true]
-                    [Variable declaration index: 2, scope: local]
+                    [Variable declaration index: 0, scope: local]
                         [Float 56.4]
                     [String champ]
         [If cast: none, has else: false]

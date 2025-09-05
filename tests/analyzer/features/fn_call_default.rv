@@ -1,7 +1,7 @@
 // All assignment should resolve to the same type and calling convention
 // should be transmitted
 
-use data.math 
+use .data.math 
 
 struct Foo {
     value = 8
@@ -31,6 +31,6 @@ fn main() {
 
     print foo.method()
 
-    print math.getIntDef()
+    print math.getIntDefault()
 }
 

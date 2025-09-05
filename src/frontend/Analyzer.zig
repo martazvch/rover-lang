@@ -399,7 +399,7 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, ctx: *Contex
 
         // If last statement, we don't allow partial anymore (for return)
         // Usefull for 'if' for example, in this case we want all the branches to return something
-        if (i == len - 1) ctx.allow_partial = false;
+        ctx.allow_partial = i < len - 1;
 
         // We try to analyze the whole body
         const ty = self.analyzeNode(n, ctx) catch {
@@ -1452,12 +1452,10 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
     const cond_type = try self.analyzeExpr(expr.condition, ctx);
 
     // We can continue to analyze if the condition isn't a bool
-    if (!cond_type.is(.bool)) {
-        self.err(
-            .{ .non_bool_cond = .{ .what = "if", .found = self.getTypeName(cond_type) } },
-            span,
-        ) catch {};
-    }
+    if (!cond_type.is(.bool)) self.err(
+        .{ .non_bool_cond = .{ .what = "if", .found = self.getTypeName(cond_type) } },
+        span,
+    ) catch {};
 
     // Analyze then branch
     const then_type = try self.analyzeNode(&expr.then, ctx);
@@ -1635,17 +1633,19 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Err
         );
     }
 
-    if (expr.fields.len != proto.count()) {
-        var kv = proto.iterator();
-        while (kv.next()) |entry| {
-            if (!entry.value_ptr.*) self.err(
+    var has_err = false;
+    var kv = proto.iterator();
+    while (kv.next()) |entry| {
+        if (!entry.value_ptr.*) {
+            has_err = true;
+            self.err(
                 .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
                 span,
             ) catch {};
         }
-
-        return error.Err;
     }
+
+    if (has_err) return error.Err;
 
     // TODO: implement an invoke strategy
     // TODO: protect cast

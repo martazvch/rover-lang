@@ -8,6 +8,6 @@
         [Binop type: mul_int, cast: none]
             [Variable index: 0, scope: local]
             [Fn call arity: 0, defaults: 0]
-                [Import symbol 1]
+                [Load symbol 1]
         [Cast to float]
 [Function declaration main, return kind: implicit_void]

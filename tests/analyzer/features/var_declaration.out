@@ -20,4 +20,4 @@
         [Float 4]
         [Int 3]
 
-[Fn declaration main, index: 6, scope: global, return kind: implicit_void]
+[Function declaration main, return kind: implicit_void]

@@ -1,90 +1,87 @@
-//-- math --
-[Structure declaration Vec2, index: 0, scope: global]
-    [Fn declaration len, index: 0, scope: local, return kind: implicit_value]
+[Structure declaration Vec2]
+    [Function declaration len, return kind: implicit_value]
         [Binop type: add_int, cast: none]
             [Field access 0]
                 [Variable index: 0, scope: local]
             [Field access 1]
                 [Variable index: 0, scope: local]
-[Fn declaration introduce, index: 1, scope: global, return kind: implicit_void]
+[Function declaration introduce, return kind: implicit_void]
     [Print]
         [String This is a mathematical module]
-[Fn declaration getVecFromPos, index: 2, scope: global, return kind: implicit_value]
+[Function declaration getVecFromPos, return kind: implicit_value]
     [Structure literal, defaults: 0]
         - structure
-        [Variable index: 0, scope: global]
+        [Load symbol 0]
         - args
+        [Variable index: 0, scope: local]
         [Variable index: 1, scope: local]
-        [Variable index: 2, scope: local]
-[Fn declaration getInt, index: 3, scope: global, return kind: implicit_value]
+[Function declaration getInt, return kind: implicit_value]
     [Int 12]
-[Fn declaration getIntDef, index: 4, scope: global, return kind: implicit_value]
+[Function declaration getIntDefault, return kind: implicit_value]
     - default params
     [Int 9]
     - body
-    [Variable index: 1, scope: local]
+    [Variable index: 0, scope: local]
 
-//-- test.rv --
-[Import module 0, scope global]
-[Structure declaration Foo, index: 1, scope: global]
+// -- main.rv
+[Structure declaration Foo]
     - default values
     [Int 8]
-    [Fn declaration static, index: 0, scope: local, return kind: implicit_value]
+    [Function declaration static, return kind: implicit_value]
         - default params
         [Int 5]
         - body
         [Int 3]
-    [Fn declaration method, index: 1, scope: local, return kind: implicit_value]
+    [Function declaration method, return kind: implicit_value]
         - default params
         [Int 5]
         - body
         [Field access 0]
             [Variable index: 0, scope: local]
-[Fn declaration copy, index: 2, scope: global, return kind: implicit_value]
+[Function declaration copy, return kind: implicit_value]
     - default params
     [Int 5]
     - body
     [Int 5]
-[Fn declaration default, index: 3, scope: global, return kind: implicit_void]
+[Function declaration default, return kind: implicit_void]
     - default params
     [Int 7]
     [Int 7]
     [Bool false]
     [Bool false]
-[Fn declaration main, index: 4, scope: global, return kind: implicit_void]
-    [Fn call arity: 5, defaults: 4, invoke: false]
-        [Variable index: 3, scope: global]
+[Function declaration main, return kind: implicit_void]
+    [Fn call arity: 5, defaults: 4]
+        [Load symbol 4]
         - args:
         [String abcd]
         [Int 8]
-    [Fn call arity: 5, defaults: 4, invoke: false]
-        [Variable index: 3, scope: global]
+    [Fn call arity: 5, defaults: 4]
+        [Load symbol 4]
         - args:
         [String abcd]
         [Int 8]
         [Bool true]
-    [Variable declaration index: 1, scope: local]
+    [Variable declaration index: 0, scope: local]
         [Structure literal, defaults: 1]
             - structure
-            [Variable index: 1, scope: global]
+            [Load symbol 0]
             - args
     [Print]
-        [Fn call arity: 1, defaults: 1, invoke: true]
+        [Fn call arity: 1, defaults: 1]
             [Method access 0]
-                [Variable index: 1, scope: global]
+                [Load symbol 0]
             - args:
     [Print]
-        [Fn call arity: 1, defaults: 1, invoke: false]
-            [Variable index: 2, scope: global]
+        [Fn call arity: 1, defaults: 1]
+            [Load symbol 3]
             - args:
     [Print]
-        [Fn call arity: 1, defaults: 1, invoke: true]
+        [Fn call arity: 2, defaults: 1]
             [Method access 1]
-                [Variable index: 1, scope: local]
+                [Variable index: 0, scope: local]
             - args:
+            [Variable index: 0, scope: local]
     [Print]
-        [Fn call arity: 1, defaults: 1, invoke: true]
-            [Method access 4]
-                [Variable index: 0, scope: global]
+        [Fn call arity: 1, defaults: 1]
+            [Load symbol 5 of module 0]
             - args:
-

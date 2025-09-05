@@ -18,3 +18,4 @@ fn getVecFromPos(x: int, y: int) -> Vec2 {
 fn getInt() -> int { 12 }
 fn getInt2(a: bool) -> int { 12 }
 
+fn getIntDefault(a = 9) -> int { a }

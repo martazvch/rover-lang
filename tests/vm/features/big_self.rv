@@ -1,0 +1,32 @@
+struct Foo {
+    x, y = 5
+
+    fn init() -> Self {
+        Self{} 
+    }
+}
+
+struct Bar {
+    a: []bool
+
+    fn init() -> Self {
+        Self {a=[true]}
+    }
+}
+
+fn main() {
+    print Bar.init().a
+
+    struct Baz {
+        flag = true
+        
+        fn init() -> Self {
+            Self {flag=false}
+        }
+    }
+
+    var foo = Foo.init()
+    print foo.y
+    print Baz.init().flag
+}
+

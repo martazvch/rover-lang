@@ -1,30 +1,27 @@
-// -- big_self.rv --
-[Structure declaration Foo, index: 0, scope: global]
+[Structure declaration Foo]
     - default values
     [Int 0]
     [Int 0]
-    [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
+    [Function declaration init, return kind: implicit_value]
         [Structure literal, defaults: 2]
             - structure
-            [Variable index: 0, scope: global]
+            [Load symbol 0]
             - args
-
-[Structure declaration Bar, index: 1, scope: global]
-    [Fn declaration init, index: 0, scope: local, return kind: implicit_value]
+[Structure declaration Bar]
+    [Function declaration init, return kind: implicit_value]
         [Structure literal, defaults: 0]
             - structure
-            [Variable index: 1, scope: global]
+            [Load symbol 2]
             - args
             [Array]
                 [Bool true]
-
-[Fn declaration main, index: 2, scope: global, return kind: implicit_void]
-    [Structure declaration Baz, index: 1, scope: local]
+[Function declaration main, return kind: implicit_void]
+    [Structure declaration Baz]
         - default values
         [Bool true]
-        [Fn declaration init, index: 2, scope: local, return kind: implicit_value]
+        [Function declaration init, return kind: implicit_value]
             [Structure literal, defaults: 1]
                 - structure
-                [Variable absolute index: 1]
+                [Load symbol 5]
                 - args
                 [Bool false]

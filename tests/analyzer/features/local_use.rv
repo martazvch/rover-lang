@@ -1,6 +1,6 @@
 fn main() {
     {
-        use data.math
+        use .data.math
         // No args
         math.introduce()
         // Args + assignment

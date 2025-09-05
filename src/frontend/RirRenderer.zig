@@ -424,9 +424,9 @@ fn intInstr(self: *Self, data: isize) void {
 
 fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
     if (data.module_index) |mod| {
-        self.indentAndPrintSlice("[Import symbol {} of module {}]", .{ data.symbol_index, mod });
+        self.indentAndPrintSlice("[Load symbol {} of module {}]", .{ data.symbol_index, mod });
     } else {
-        self.indentAndPrintSlice("[Import symbol {}]", .{data.symbol_index});
+        self.indentAndPrintSlice("[Load symbol {}]", .{data.symbol_index});
     }
 }
 

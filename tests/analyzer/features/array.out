@@ -14,13 +14,13 @@
     [Variable declaration index: 2, scope: local]
         [Structure literal, defaults: 0]
             - structure
-            [Import symbol 0]
+            [Load symbol 0]
             - args
             [Array]
                 [Int 6]
                 [Int 7]
                 [Fn call arity: 0, defaults: 0]
-                    [Import symbol 1]
+                    [Load symbol 1]
     [Print]
         [Array access]
             - array
@@ -40,7 +40,7 @@
         [Variable index: 0, scope: local]
         - index
         [Fn call arity: 0, defaults: 0]
-            [Import symbol 1]
+            [Load symbol 1]
     [Unary minus]
         [Int 9]
     [Array assignment]
@@ -49,7 +49,7 @@
             [Variable index: 2, scope: local]
         - index
         [Fn call arity: 0, defaults: 0]
-            [Import symbol 1]
+            [Load symbol 1]
     [Print]
         [Array access]
             - array
@@ -57,7 +57,7 @@
                 [Variable index: 2, scope: local]
             - index
             [Fn call arity: 0, defaults: 0]
-                [Import symbol 1]
+                [Load symbol 1]
     [Variable declaration index: 3, scope: local]
         [Array]
     [Variable declaration index: 4, scope: local]
@@ -67,6 +67,6 @@
     [Variable declaration index: 5, scope: local]
         [Structure literal, defaults: 0]
             - structure
-            [Import symbol 0]
+            [Load symbol 0]
             - args
             [Array]

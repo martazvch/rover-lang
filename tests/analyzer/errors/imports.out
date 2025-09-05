@@ -6,7 +6,7 @@
 [Function declaration getVecFromPos, return kind: implicit_value]
     [Structure literal, defaults: 0]
         - structure
-        [Import symbol 0]
+        [Load symbol 0]
         - args
         [Variable index: 0, scope: local]
         [Variable index: 1, scope: local]

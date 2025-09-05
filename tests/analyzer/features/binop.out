@@ -1,4 +1,4 @@
-[Fn declaration main, index: 0, scope: global, return kind: implicit_void]
+[Function declaration main, return kind: implicit_void]
     [Discard]
         [Binop type: add_float, cast: lhs]
             [Int 1]
