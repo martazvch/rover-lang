@@ -146,7 +146,6 @@ fn parseInstr(self: *Self) void {
         .struct_literal => |*data| self.structLiteral(data),
         .value => unreachable,
         .unary => |*data| self.unary(data),
-        .use => |data| self.use(data),
         .var_decl => |*data| self.varDecl(data),
         .@"while" => self.whileInstr(),
     }
@@ -508,18 +507,6 @@ fn unary(self: *Self, data: *const Instruction.Unary) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr();
-}
-
-fn use(self: *Self, count: u64) void {
-    // NOTE: For now, skips the first 'Null' placed by the analyzer
-    // Needs a rework
-    self.instr_idx += 1;
-    self.indentAndPrintSlice("[Use count: {}]", .{count});
-    self.instr_idx += 1;
-
-    for (0..count) |_| {
-        self.instr_idx += 1;
-    }
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {

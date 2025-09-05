@@ -2,7 +2,7 @@
 
 -- getIdx --
 constant index 0, value 2
-OP_RETURN
+ret
 
 -- main --
 constant index 0, value 1
@@ -25,10 +25,10 @@ constant index 11, value 55
 OP_ARRAY index 3
 OP_ARRAY index 2
 
-OP_GET_GLOBAL index 0, <structure Foo>
+get_global index 0, <structure Foo>
 constant index 12, value 6
 constant index 13, value 7
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
 OP_ARRAY index 3
 constant index 14, value 8
@@ -38,11 +38,11 @@ add_int
 constant index 17, value 11
 OP_ARRAY index 3
 OP_ARRAY index 2
-OP_STRUCT_LIT index 1
+struct_lit index 1
 
 constant index 18, value 2
 constant index 19, value 1
-get_local_REG index 1
+get_local index 1
 OP_ARRAY_ACCESS_CHAIN index 2
 print
 
@@ -50,46 +50,46 @@ constant index 20, value 1
 OP_NEGATE_INT
 constant index 21, value 2
 OP_NEGATE_INT
-get_local_REG index 1
+get_local index 1
 OP_ARRAY_ACCESS_CHAIN index 2
 print
 
 constant index 22, value 99
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
 constant index 23, value 1
 OP_NEGATE_INT
-get_local_REG index 1
+get_local index 1
 OP_ARRAY_ASSIGN_CHAIN index 2
 
 constant index 24, value 1
 OP_ARRAY index 1
-get_local_REG index 3
+get_local index 3
 OP_GET_FIELD_REG index 0
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
 OP_ARRAY_ASSIGN
 
 constant index 25, value 9
 OP_NEGATE_INT
 constant index 26, value 1
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
-get_local_REG index 3
+get_local index 3
 OP_GET_FIELD_REG index 0
 OP_ARRAY_ASSIGN_CHAIN index 2
 
-get_local_REG index 3
+get_local index 3
 OP_GET_FIELD_REG index 0
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
 OP_ARRAY_ACCESS
 print
 
 constant index 27, value 1
-OP_GET_GLOBAL index 1, <fn getIdx>
+get_global index 1, <fn getIdx>
 call index 0
-get_local_REG index 3
+get_local index 3
 OP_GET_FIELD_REG index 0
 OP_ARRAY_ACCESS_CHAIN index 2
 print
@@ -97,5 +97,5 @@ print
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 2, <fn main>
+get_global index 2, <fn main>
 call index 0

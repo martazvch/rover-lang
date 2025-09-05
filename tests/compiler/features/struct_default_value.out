@@ -1,7 +1,7 @@
 //---- test.rv ----
 
 -- main --
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 OP_LOAD_STRUCT_DEF
 constant index 0, value 1
 OP_CAST_TO_FLOAT
@@ -11,9 +11,9 @@ OP_GET_DEFAULT index 0
 push_push_true
 OP_GET_DEFAULT index 1
 OP_GET_DEFAULT index 2
-OP_STRUCT_LIT index 6
+struct_lit index 6
 
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 OP_LOAD_STRUCT_DEF
 constant index 2, value 3
 OP_CAST_TO_FLOAT
@@ -23,10 +23,10 @@ constant index 4, value 7
 push_false
 OP_GET_DEFAULT index 1
 constant index 5, value Tom
-OP_STRUCT_LIT index 6
+struct_lit index 6
 set_local index 1
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 1, <fn main>
+get_global index 1, <fn main>
 call index 0

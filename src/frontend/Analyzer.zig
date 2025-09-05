@@ -250,15 +250,18 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
 
     // Forward declaration in outer scope for recursion
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
-    var fn_type: Type.Function = .{ .return_type = undefined, .kind = undefined };
 
     self.scope.open(self.allocator, false);
     errdefer _ = self.scope.close();
 
+    var fn_type: Type.Function = .{ .return_type = undefined, .kind = .normal, .params = .empty };
     const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
     const param_res = try self.fnParams(node.params, ctx);
     fn_type.params = param_res.params;
     if (param_res.is_method) fn_type.kind = .method;
+
+    std.log.info("Fn {s}", .{self.ast.toSource(node.name)});
+    std.log.info("is method: {}", .{fn_type.kind == .method});
 
     const return_type = try self.checkAndGetType(node.return_type, ctx);
     fn_type.return_type = return_type;
@@ -299,6 +302,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!*con
         .{ .set_at = fn_idx },
     );
 
+    // std.log.info("Endinf fn decl: {}", .{interned_type.function});
     return interned_type;
 }
 
@@ -621,7 +625,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) !void {
         const fn_type = try self.fnDeclaration(f, ctx);
         interned_struct.functions.putAssumeCapacity(fn_name, .{ .type = fn_type });
         // BUG: doesn't update anything
-        sym.type = interned_type;
+        // sym.type = interned_type;
     }
 
     self.makeInstruction(
@@ -1173,8 +1177,7 @@ fn structureAccess(
     else if (struct_type.functions.getPtr(field_name)) |f| b: {
         const function = f.type.function;
 
-        check: {
-            if (!ctx.in_call) break :check;
+        if (ctx.in_call) {
             if (is_value and function.kind != .method) {
                 return self.err(.{ .call_static_on_instance = .{ .name = text } }, self.ast.getSpan(field_tk));
             } else if (!is_value and function.kind == .method) {
@@ -1216,7 +1219,7 @@ fn moduleAccess(
 }
 
 fn boundMethod(self: *Self, func_type: *const Type, field_index: usize, span: Span, instr_idx: usize) FieldResult {
-    const bounded_type = func_type.function.toBoundMethod(self.cached_names.self, self.allocator);
+    const bounded_type = func_type.function.toBoundMethod(self.allocator);
     const ty = self.type_interner.intern(.{ .function = bounded_type });
     self.makeInstruction(.{ .bound_method = field_index }, span.start, .{ .set_at = instr_idx });
 
@@ -1227,38 +1230,46 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     const span = self.ast.getSpan(expr);
     const index = self.ir_builder.reserveInstr();
 
-    var args: ArrayListUnmanaged(*const Expr) = .{};
-    defer args.deinit(self.allocator);
+    // var args: ArrayListUnmanaged(*const Expr) = .{};
+    // defer args.deinit(self.allocator);
 
     const ctx_call = ctx.setAndGetPrevious(.in_call, true);
 
     // Implicit first argument
-    const callee = switch (expr.callee.*) {
-        .field => |*f| b: {
-            const ty = try self.field(f, ctx);
+    // const callee = switch (expr.callee.*) {
+    //     .field => |*f| b: {
+    //         const ty = try self.field(f, ctx);
+    //
+    //         if (ty.lhs_is_value and ty.is_method) {
+    //             args.append(self.allocator, expr.callee.field.structure) catch oom();
+    //         }
+    //
+    //         break :b ty.type;
+    //     },
+    //     else => try self.analyzeExpr(expr.callee, ctx),
+    // };
 
-            if (ty.lhs_is_value and ty.is_method) {
-                args.append(self.allocator, expr.callee.field.structure) catch oom();
-            }
-
-            break :b ty.type;
-        },
-        else => try self.analyzeExpr(expr.callee, ctx),
-    };
+    // std.log.info("Calling: {s}", .{self.ast.toSource(expr.callee.literal.idx)});
+    const callee = try self.analyzeExpr(expr.callee, ctx);
 
     if (!callee.is(.function)) {
         return self.err(.invalid_call_target, span);
     }
 
-    args.appendSlice(self.allocator, expr.args) catch oom();
+    // args.appendSlice(self.allocator, expr.args) catch oom();
 
     // Restore state before arguments analyzis
     ctx.in_call = ctx_call;
-    const arity, const default_count = try self.fnArgsList(args.items, &callee.function, span, ctx);
+    // const arity, const default_count = try self.fnArgsList(args.items, &callee.function, span, ctx);
+    const arity, const default_count = try self.fnArgsList(expr.args, &callee.function, span, ctx);
 
     // TODO: protect casts
     self.makeInstruction(
-        .{ .call = .{ .arity = @intCast(arity), .default_count = @intCast(default_count) } },
+        .{ .call = .{
+            .arity = @intCast(arity),
+            .default_count = @intCast(default_count),
+            .implicit_first = callee.function.kind == .method,
+        } },
         span.start,
         .{ .set_at = index },
     );
@@ -1267,15 +1278,17 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 }
 
 // TODO: rewrite
-fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error!struct { usize, usize } {
-    const param_count = ty.params.count();
+fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error!struct { usize, usize } {
+    // std.log.info("Params: {any}", .{ty.params.values()});
+    var proto = ty.proto(self.allocator);
+    const param_count = proto.count();
+    // std.log.info("Proto count: {}", .{param_count});
 
     if (args.len > param_count) return self.err(
         AnalyzerMsg.tooManyFnArgs(param_count, args.len),
         err_span,
     );
 
-    var proto = ty.proto(self.allocator);
     var proto_values = proto.values();
     const start = self.ir_builder.count();
     self.ir_builder.ensureUnusedSize(param_count);
@@ -1284,9 +1297,9 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
     // the form of 'default_value' but we check for all real param default to mark their index (order
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
-    for (ty.params.values()) |*f| {
+    for (proto_values) |default| {
         self.makeInstruction(.{ .default_value = default_count }, err_span.start, .add_no_alloc);
-        if (f.default) default_count += 1;
+        if (default) default_count += 1;
     }
 
     for (args, 0..) |arg, i| {
@@ -1318,7 +1331,7 @@ fn fnArgsList(self: *Self, args: []*const Expr, ty: *const Type.Function, err_sp
             else => {
                 value_instr = self.ir_builder.count();
                 const value_type = try self.analyzeExpr(arg, ctx);
-                param_info = &ty.params.values()[i];
+                param_info = &ty.params.values()[i + @intFromBool(ty.kind == .method)];
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
                 proto_values[i] = true;
                 param_index = i;

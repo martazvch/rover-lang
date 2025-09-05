@@ -6,7 +6,7 @@ pop
 constant index 1, value 5
 pop
 
-OP_NULL
+push_null
 pop
 
 constant index 2, value 1
@@ -34,5 +34,5 @@ ret_scope index 4
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+get_global index 0, <fn main>
 call index 0

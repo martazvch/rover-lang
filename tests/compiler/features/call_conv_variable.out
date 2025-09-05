@@ -1,12 +1,12 @@
 //---- math ----
 
 -- len --
-get_local_REG index 0
-OP_GET_FIELD index 0
-get_local_REG index 0
-OP_GET_FIELD index 1
+get_local index 0
+get_field index 0
+get_local index 0
+get_field index 1
 add_int
-OP_RETURN
+ret
 
 -- introduce --
 constant index 0, value This is a mathematical module
@@ -14,19 +14,19 @@ print
 ret_naked
 
 -- getVecFromPos --
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 get_local index 1
 get_local index 2
-OP_STRUCT_LIT index 2
-OP_RETURN
+struct_lit index 2
+ret
 
 -- getInt --
 constant index 0, value 12
-OP_RETURN
+ret
 
 -- getIntDef --
 constant index 0, value 12
-OP_RETURN
+ret
 
 -- global scope --
 OP_EXIT_REPL
@@ -35,39 +35,39 @@ OP_EXIT_REPL
 
 -- static --
 constant index 0, value 3
-OP_RETURN
+ret
 
 -- method --
-get_local_REG index 0
-OP_GET_FIELD index 0
-OP_RETURN
+get_local index 0
+get_field index 0
+ret
 
 -- importFuncFromMethod --
 OP_GET_GLOBAL_REG index 0, <module math>
 OP_BOUND_IMPORT index 3
-OP_RETURN
+ret
 
 -- copy --
 constant index 0, value 5
-OP_RETURN
+ret
 
 -- main --
-OP_GET_GLOBAL index 1, <structure Foo>
+get_global index 1, <structure Foo>
 OP_LOAD_STRUCT_DEF
 OP_GET_DEFAULT index 0
-OP_STRUCT_LIT index 1
+struct_lit index 1
 OP_GET_GLOBAL_REG index 1, <structure Foo>
 OP_GET_STATIC_METHOD index 0
 get_local index 2
 call index 0
 print
-OP_GET_GLOBAL index 2, <fn copy>
+get_global index 2, <fn copy>
 set_local index 2
 get_local index 2
 call index 0
 print
-get_local_REG index 1
-OP_BOUND_METHOD index 1
+get_local index 1
+bound_method index 1
 set_local index 2
 get_local index 2
 call index 0
@@ -78,8 +78,8 @@ set_local index 2
 get_local index 2
 call index 0
 print
-get_local_REG index 1
-OP_BOUND_METHOD index 2
+get_local index 1
+bound_method index 2
 get_local index 3
 call index 0
 print
@@ -92,5 +92,5 @@ print
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

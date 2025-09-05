@@ -4,37 +4,37 @@
 //---- test.rv ----
 
 -- getPt --
-OP_GET_GLOBAL index 0, <structure Point>
+get_global index 0, <structure Point>
 constant index 0, value 9
-OP_STRUCT_LIT index 1
-OP_RETURN
+struct_lit index 1
+ret
 
 -- getVec --
-OP_GET_GLOBAL index 1, <structure Vec2>
+get_global index 1, <structure Vec2>
 get_local index 1
-OP_STRUCT_LIT index 1
-OP_RETURN
+struct_lit index 1
+ret
 
 -- main --
-OP_GET_GLOBAL index 1, <structure Vec2>
+get_global index 1, <structure Vec2>
 constant index 0, value 1
-OP_STRUCT_LIT index 1
+struct_lit index 1
 
 get_local index 1
 OP_INVOKE arity 0, method index 0
 OP_REG_PUSH
-OP_GET_FIELD index 0
+get_field index 0
 print
 
-OP_GET_GLOBAL index 2, <fn getVec>
+get_global index 2, <fn getVec>
 constant index 1, value 5
 call index 1
 OP_REG_PUSH
-OP_GET_FIELD index 0
+get_field index 0
 print
 
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

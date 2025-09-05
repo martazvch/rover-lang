@@ -1,19 +1,19 @@
 -- add --
 constant index 0, value 5
-OP_RETURN
+ret
 
 -- main --
-OP_NULL
-OP_NULL
-OP_NULL
+push_null
+push_null
+push_null
 constant index 0, value 1
 constant index 1, value 1
 constant index 2, value 1
 constant index 3, value 5
 constant index 4, value 6
 constant index 5, value 7
-OP_NULL
-OP_NULL
+push_null
+push_null
 constant index 6, value 5
 OP_CAST_TO_FLOAT
 constant index 7, value 6
@@ -26,11 +26,11 @@ constant index 10, value 56
 constant index 11, value 2
 OP_SUBTRACT_INT
 OP_MULTIPLY_INT
-OP_GET_GLOBAL index 0, <fn add>
+get_global index 0, <fn add>
 call index 0
 
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 1, <fn main>
+get_global index 1, <fn main>
 call index 0

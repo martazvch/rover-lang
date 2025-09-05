@@ -1,5 +1,5 @@
 -- main --
-OP_NULL
+push_null
 constant index 0, value 1
 OP_CAST_TO_FLOAT
 set_local index 1
@@ -12,5 +12,5 @@ OP_CAST_TO_FLOAT
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+get_global index 0, <fn main>
 call index 0

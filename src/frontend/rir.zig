@@ -37,7 +37,6 @@ pub const Instruction = struct {
         default_value: usize,
         struct_literal: StructLiteral,
         unary: Unary,
-        use: u64,
         value: Value,
         var_decl: VarDecl,
         @"while",
@@ -117,7 +116,7 @@ pub const Instruction = struct {
         incr_rc: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, default_count: u8 };
+    pub const Call = struct { arity: u8, default_count: u8, implicit_first: bool };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,

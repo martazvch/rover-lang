@@ -336,7 +336,6 @@ const Compiler = struct {
             .struct_decl => |*data| self.structDecl(data),
             .struct_literal => |*data| self.structLiteral(data),
             .unary => |*data| self.unary(data),
-            .use => |data| self.use(data),
             .value => unreachable,
             .var_decl => |*data| self.varDecl(data),
             .@"while" => self.whileInstr(),
@@ -543,9 +542,8 @@ const Compiler = struct {
         const line = self.getLineNumber();
         // Variable
         try self.compileInstr();
-        self.writeOp(.dup, line);
+        // Get method duplicates instance on top of stack and it's used by closure
         self.writeOpAndByte(.get_method, @intCast(field_index), line);
-        self.writeOp(.swap, line);
         self.writeOpAndByte(.closure, 1, line);
     }
 
@@ -597,7 +595,7 @@ const Compiler = struct {
         if (data.default_count > 0) self.writeOp(.load_fn_default, line);
         try self.compileArgs(data.arity);
 
-        self.writeOpAndByte(.call, data.arity, line);
+        self.writeOpAndByte(.call, data.arity + @intFromBool(data.implicit_first), line);
     }
 
     fn compileArgs(self: *Self, arity: usize) Error!void {
@@ -799,7 +797,7 @@ const Compiler = struct {
         try self.compileInstr();
         if (data.default_count > 0) self.writeOp(.load_struct_def, line);
         try self.compileArgs(data.fields_count);
-        self.writeOpAndByte(.struct_literal, @intCast(data.fields_count), line);
+        self.writeOpAndByte(.struct_lit, @intCast(data.fields_count), line);
     }
 
     fn unary(self: *Self, data: *const Instruction.Unary) Error!void {
@@ -812,27 +810,6 @@ const Compiler = struct {
                 line,
             );
         } else self.writeOp(.not, line);
-    }
-
-    fn use(self: *Self, count: usize) Error!void {
-        _ = count; // autofix
-        // NOTE: For now, analyzer places an empty import
-        // to skip "std" by placing a Null instruction. Needs a rework
-        self.manager.instr_idx += 1;
-
-        // for (0..count) |_| {
-        //     const line = self.getLineNumber();
-        //     const imported = self.next().imported;
-        //
-        //     try self.emitConstant(
-        //         Value.makeObj(Obj.NativeFunction.create(
-        //             self.manager.vm,
-        //             self.manager.natives[imported.index],
-        //         ).asObj()),
-        //         line,
-        //     );
-        //     self.defineVariable(imported.variable, line);
-        // }
     }
 
     fn varDecl(self: *Self, data: *const Instruction.VarDecl) Error!void {

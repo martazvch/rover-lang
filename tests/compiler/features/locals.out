@@ -18,5 +18,5 @@ ret_naked
 -- global scope --
 constant index 0, value sneaky
 OP_DEFINE_GLOBAL index 0
-OP_GET_GLOBAL index 1, <fn main>
+get_global index 1, <fn main>
 call index 0

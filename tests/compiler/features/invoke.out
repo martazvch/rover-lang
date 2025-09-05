@@ -1,28 +1,28 @@
 -- speak --
-get_local_REG index 0
-OP_GET_FIELD index 1
+get_local index 0
+get_field index 1
 print
 ret_naked
 
 -- getOld --
-get_local_REG index 0
-OP_GET_FIELD index 0
+get_local index 0
+get_field index 0
 get_local index 1
 add_int
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-get_local_REG index 0
-OP_GET_FIELD index 0
-OP_RETURN
+get_local index 0
+get_field index 0
+ret
 
 -- main --
-OP_GET_GLOBAL index 0, <structure Human>
+get_global index 0, <structure Human>
 constant index 0, value 5
 constant index 1, value Tom
-OP_STRUCT_LIT index 2
+struct_lit index 2
 
-OP_NULL
+push_null
 get_local index 1
 OP_INVOKE arity 0, method index 0
 get_local index 1
@@ -32,6 +32,6 @@ pop
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 1, <fn main>
+get_global index 1, <fn main>
 call index 0
 

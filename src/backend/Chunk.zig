@@ -125,7 +125,7 @@ pub const OpCode = enum(u8) {
     str_cat,
     str_mul_l,
     str_mul_r,
-    struct_literal,
+    struct_lit,
     sub_float,
     sub_int,
     swap,

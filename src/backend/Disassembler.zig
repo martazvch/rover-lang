@@ -133,7 +133,7 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
         .str_cat => self.simpleInstruction("str_cat", offset, writer),
         .str_mul_l => self.simpleInstruction("str_mul_l", offset, writer),
         .str_mul_r => self.simpleInstruction("str_mul_r", offset, writer),
-        .struct_literal => self.indexInstruction("struct_literal", offset, writer),
+        .struct_lit => self.indexInstruction("struct_lit", offset, writer),
         .sub_float => self.simpleInstruction("sub_float", offset, writer),
         .sub_int => self.simpleInstruction("sub_int", offset, writer),
         .swap => self.simpleInstruction("swap", offset, writer),

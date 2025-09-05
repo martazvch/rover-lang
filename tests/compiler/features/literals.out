@@ -11,7 +11,7 @@ pop
 push_false
 pop
 
-OP_NULL
+push_null
 pop
 
 constant index 2, value foo
@@ -20,5 +20,5 @@ pop
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+get_global index 0, <fn main>
 call index 0

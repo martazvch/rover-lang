@@ -20,5 +20,5 @@ OP_SET_GLOBAL index 1
 constant index 5, value Best software
 OP_SET_GLOBAL index 2
 
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

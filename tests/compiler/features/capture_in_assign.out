@@ -11,7 +11,7 @@ ret_naked
 -- set_vars --
 constant index 0, value init
 OP_DEFINE_HEAP_VAR index 0
-OP_NULL
+push_null
 constant index 1, value <fn set>
 constant index 2, value <fn get>
 get_local index 2
@@ -21,18 +21,18 @@ OP_SET_GLOBAL index 1
 ret_naked
 
 -- main --
-OP_GET_GLOBAL index 2, <fn set_vars>
+get_global index 2, <fn set_vars>
 call index 0
-OP_GET_GLOBAL index 0
+get_global index 0
 call index 0
-OP_GET_GLOBAL index 1
+get_global index 1
 call index 0
 ret_naked
 
 -- global scope --
-OP_NULL
+push_null
 OP_DEFINE_GLOBAL index 0
-OP_NULL
+push_null
 OP_DEFINE_GLOBAL index 1
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

@@ -6,12 +6,12 @@ ret_naked
 -- main --
 constant index 0, value 1
 OP_DEFINE_HEAP_VAR index 0
-OP_NULL
+push_null
 constant index 1, value <fn capture>
 constant index 2, value 2
 OP_SET_HEAP index 0
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+get_global index 0, <fn main>
 call index 0

@@ -6,7 +6,7 @@ ret_naked
 
 -- sub --
 constant index 0, value 5
-OP_RETURN
+ret
 
 -- div --
 ret_naked
@@ -17,5 +17,5 @@ pop
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

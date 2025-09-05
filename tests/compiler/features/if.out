@@ -78,5 +78,5 @@ ret_scope index 1
 ret_naked
 
 -- global scope --
-load_sym index 0, <fn main>
+load_sym index 0, <function main>
 call index 0

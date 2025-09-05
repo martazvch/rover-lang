@@ -4,18 +4,18 @@
 ret_naked
 
 -- len --
-get_local_REG index 0
-OP_GET_FIELD index 0
+get_local index 0
+get_field index 0
 get_local index 1
 add_int
-OP_RETURN
+ret
 
 -- main --
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 OP_LOAD_STRUCT_DEF
 OP_GET_DEFAULT index 0
 OP_GET_DEFAULT index 1
-OP_STRUCT_LIT index 2
+struct_lit index 2
 
 get_local index 1
 OP_LOAD_INVOKE_DEF index 1
@@ -25,5 +25,5 @@ print
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 1, <fn main>
+get_global index 1, <fn main>
 call index 0

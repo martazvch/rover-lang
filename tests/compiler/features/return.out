@@ -3,19 +3,19 @@ ret_naked
 
 -- sub --
 constant index 0, value 5
-OP_RETURN
+ret
 
 -- mul --
 get_local index 1
-OP_GET_GLOBAL index 1, <fn sub>
+get_global index 1, <fn sub>
 call index 0
 OP_MULTIPLY_INT
 OP_CAST_TO_FLOAT
-OP_RETURN
+ret
 
 -- main --
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

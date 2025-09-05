@@ -1,12 +1,12 @@
 //---- math ----
 
 -- len --
-get_local_REG index 0
-OP_GET_FIELD index 0
-get_local_REG index 0
-OP_GET_FIELD index 1
+get_local index 0
+get_field index 0
+get_local index 0
+get_field index 1
 add_int
-OP_RETURN
+ret
 
 -- introduce --
 constant index 0, value This is a mathematical module
@@ -14,19 +14,19 @@ print
 ret_naked
 
 -- getVecFromPos --
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 get_local index 1
 get_local index 2
-OP_STRUCT_LIT index 2
-OP_RETURN
+struct_lit index 2
+ret
 
 -- getInt --
 constant index 0, value 12
-OP_RETURN
+ret
 
 -- getIntDef --
 constant index 0, value 12
-OP_RETURN
+ret
 
 -- global scope --
 OP_EXIT_REPL
@@ -34,28 +34,28 @@ OP_EXIT_REPL
 //---- geom ----
 
 -- move --
-get_local_REG index 0
-OP_GET_FIELD index 0
+get_local index 0
+get_field index 0
 get_local index 1
 add_int
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-get_local_REG index 0
-OP_GET_FIELD index 1
+get_local index 0
+get_field index 1
 get_local index 1
 add_int
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
 ret_naked
 
 -- display --
-get_local_REG index 0
-OP_GET_FIELD index 0
+get_local index 0
+get_field index 0
 print
-get_local_REG index 0
-OP_GET_FIELD index 1
+get_local index 0
+get_field index 1
 print
 ret_naked
 
@@ -65,29 +65,29 @@ print
 ret_naked
 
 -- moveCenter --
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 1
-OP_GET_FIELD index 0
-get_local_REG index 1
-OP_GET_FIELD index 0
+get_field index 0
+get_local index 1
+get_field index 0
 add_int
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD_REG index 0
 OP_REG_ASSIGN
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 1
-OP_GET_FIELD index 1
-get_local_REG index 1
-OP_GET_FIELD index 1
+get_field index 1
+get_local index 1
+get_field index 1
 add_int
-get_local_REG index 0
+get_local index 0
 OP_GET_FIELD_REG index 1
 OP_GET_FIELD_REG index 1
 OP_REG_ASSIGN
-get_local_REG index 0
-OP_GET_FIELD index 1
-OP_RETURN
+get_local index 0
+get_field index 1
+ret
 
 -- global scope --
 OP_EXIT_REPL
@@ -95,23 +95,23 @@ OP_EXIT_REPL
 //---- test.rv ----
 
 -- main --
-OP_GET_GLOBAL index 0, <structure Vec2>
+get_global index 0, <structure Vec2>
 constant index 0, value 3
 constant index 1, value 9
-OP_STRUCT_LIT index 2
-OP_GET_GLOBAL index 1, <structure Point>
+struct_lit index 2
+get_global index 1, <structure Point>
 constant index 2, value 5
 constant index 3, value 8
-OP_STRUCT_LIT index 2
+struct_lit index 2
 constant index 4, value <structure Vec2>
 get_local index 3
 constant index 5, value 55
 constant index 6, value 333
-OP_STRUCT_LIT index 2
+struct_lit index 2
 pop
 pop
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 3, <fn main>
+get_global index 3, <fn main>
 call index 0

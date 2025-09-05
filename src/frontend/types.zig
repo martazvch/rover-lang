@@ -36,27 +36,37 @@ pub const Type = union(enum) {
     };
 
     pub const Function = struct {
-        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter) = .empty,
+        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter),
         return_type: *const Type,
         kind: Kind,
 
         pub const Kind = enum { normal, method, bound };
 
-        pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .empty;
+        pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(InternerIdx, bool) {
+            var res: AutoArrayHashMapUnmanaged(InternerIdx, bool) = .empty;
             res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
 
+            // std.log.info("Generating proto for: {}", .{self.kind});
+
+            var first = true;
             var kv = self.params.iterator();
             while (kv.next()) |entry| {
+                if (first and self.kind == .method) {
+                    first = false;
+                    continue;
+                }
+
                 res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
             }
 
             return res;
         }
 
-        pub fn toBoundMethod(self: *const Function, self_interned: InternerIdx, allocator: Allocator) Function {
+        pub fn toBoundMethod(self: *const Function, allocator: Allocator) Function {
             var params = self.params.clone(allocator) catch oom();
-            _ = params.orderedRemove(self_interned);
+            // std.log.info("Params: {any}", .{params.values()});
+            params.orderedRemoveAt(0);
+            // std.log.info("Params: {any}", .{params.values()});
 
             for (params.values()) |*val| {
                 val.default = false;
@@ -154,9 +164,6 @@ pub const Type = union(enum) {
             .function => |ty| {
                 for (ty.params.values()) |param| {
                     param.type.hash(hasher);
-                    // TODO: modify that, we can't share the default values, we have to intern type in another way
-                    // cf. previous todo
-                    // hasher.update(asBytes(&@intFromBool(param.default)));
                 }
                 ty.return_type.hash(hasher);
             },

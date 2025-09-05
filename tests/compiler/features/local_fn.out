@@ -4,7 +4,7 @@ get_local index 1
 get_local index 3
 add_int
 get_local index 2
-OP_RETURN
+ret
 
 -- main --
 constant index 0, value <fn add1>
@@ -16,5 +16,5 @@ pop
 ret_naked
 
 -- global scope --
-OP_GET_GLOBAL index 0, <fn main>
+get_global index 0, <fn main>
 call index 0

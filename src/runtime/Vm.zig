@@ -6,8 +6,8 @@ const options = @import("options");
 
 const Chunk = @import("../backend/Chunk.zig");
 const OpCode = Chunk.OpCode;
-const Disassembler = @import("../backend/Disassembler.zig");
 const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
+const Disassembler = @import("../backend/Disassembler.zig");
 const oom = @import("../utils.zig").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
@@ -27,7 +27,7 @@ stdout: std.fs.File.Writer,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
-modules: []const CompiledModule,
+modules: []CompiledModule,
 
 /// Holds default variables of current call
 r3: []Value = undefined,
@@ -136,7 +136,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.init(self.allocator, &frame.function.chunk, self.module.globals, .normal);
+            var dis = Disassembler.init(self.allocator, &frame.function.chunk, frame.module, .normal);
             defer dis.deinit();
             const instr_nb = self.instructionNb();
             _ = try dis.disInstruction(instr_nb, self.stdout);
@@ -218,7 +218,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .def_global => {
                 const idx = frame.readByte();
                 // self.module.globals[idx] = self.stack.pop();
-                frame.globals[idx] = self.stack.pop();
+                frame.module.globals[idx] = self.stack.pop();
             },
             .div_float => {
                 const rhs = self.stack.pop().float;
@@ -256,12 +256,12 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .get_global => {
                 const idx = frame.readByte();
                 // self.stack.push(self.module.globals[idx]);
-                self.stack.push(frame.globals[idx]);
+                self.stack.push(frame.module.globals[idx]);
             },
             .get_global_cow => {
                 const idx = frame.readByte();
                 // const value = &self.module.globals[idx];
-                const value = &frame.globals[idx];
+                const value = &frame.module.globals[idx];
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
@@ -273,7 +273,11 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
-            .get_method => self.stack.peekRef(0).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[frame.readByte()].asObj()),
+            .get_method => {
+                const index = frame.readByte();
+                self.stack.push(self.stack.peek(0));
+                self.stack.peekRef(1).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[index].asObj());
+            },
             // TODO: same as above
             .get_static_method => {
                 const method_idx = frame.readByte();
@@ -291,7 +295,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .load_sym => {
                 const symbol_idx = frame.readByte();
-                self.stack.push(frame.symbols[symbol_idx]);
+                self.stack.push(frame.module.symbols[symbol_idx]);
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
@@ -396,8 +400,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .set_global => {
                 const idx = frame.readByte();
-                // self.module.globals[idx] = self.stack.pop();
-                frame.globals[idx] = self.stack.pop();
+                frame.module.globals[idx] = self.stack.pop();
             },
             .set_local => frame.slots[frame.readByte()] = self.stack.pop(),
             .set_local_box => {
@@ -407,7 +410,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .str_cat => self.strConcat(),
             .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
-            .struct_literal => {
+            .struct_lit => {
                 const arity = frame.readByte();
                 var instance = self.stack.peekRef(arity).obj.structLiteral(self);
 
@@ -520,8 +523,7 @@ const Stack = struct {
 
 pub const CallFrame = struct {
     function: *Obj.Function,
-    globals: []Value,
-    symbols: []Value,
+    module: *CompiledModule,
     ip: [*]u8,
     slots: [*]Value,
 
@@ -553,7 +555,7 @@ pub const CallFrame = struct {
         callee: *Obj,
         stack: *Stack,
         args_count: usize,
-        modules: []const CompiledModule,
+        modules: []CompiledModule,
     ) void {
         self.slots = stack.top - args_count;
 
@@ -570,9 +572,7 @@ pub const CallFrame = struct {
             },
             .function => b: {
                 const function = callee.as(Obj.Function);
-                const module = modules[function.module_index];
-                self.globals = module.globals;
-                self.symbols = module.symbols;
+                self.module = &modules[function.module_index];
                 break :b function;
             },
             else => unreachable,

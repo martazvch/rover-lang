@@ -317,9 +317,9 @@ pub const Function = struct {
 
     pub fn print(self: *const Self, writer: anytype) PrintError!void {
         if (self.name) |n| {
-            try writer.print("<fn {s}>", .{n.chars});
+            try writer.print("<function {s}>", .{n.chars});
         } else {
-            try writer.print("<fn script>", .{});
+            try writer.print("<function script>", .{});
         }
     }
 
@@ -469,7 +469,7 @@ pub const Structure = struct {
     }
 
     pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        try writer.print("<struct {s}>", .{self.name.chars});
+        try writer.print("<structure {s}>", .{self.name.chars});
     }
 
     // Functions are freed because they are on the main minked list of objects in the VM
