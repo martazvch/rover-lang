@@ -3,13 +3,13 @@
     [Int 0]
     [Int 0]
     [Function declaration init, return kind: implicit_value]
-        [Structure literal, defaults: 2]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
 [Structure declaration Bar]
     [Function declaration init, return kind: implicit_value]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 2]
             - args
@@ -20,7 +20,7 @@
         - default values
         [Bool true]
         [Function declaration init, return kind: implicit_value]
-            [Structure literal, defaults: 1]
+            [Structure literal]
                 - structure
                 [Load symbol 5]
                 - args

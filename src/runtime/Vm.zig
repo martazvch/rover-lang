@@ -15,9 +15,6 @@ const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 
 gc: Gc,
-// start_module: CompiledModule,
-// module: *CompiledModule,
-// module_chain: std.ArrayListUnmanaged(*CompiledModule),
 stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
@@ -30,6 +27,7 @@ objects: ?*Obj,
 modules: []CompiledModule,
 
 /// Holds default variables of current call
+// TODO: put inside the frame too
 r3: []Value = undefined,
 
 const Self = @This();
@@ -67,7 +65,6 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
 }
 
 pub fn deinit(self: *Self) void {
-    // self.module_chain.deinit(self.allocator);
     self.gc.deinit();
     self.strings.deinit();
     self.freeObjects();
@@ -191,7 +188,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .call => {
                 const args_count = frame.readByte();
-                frame = try self.frame_stack.new();
+                frame = try self.frame_stack.newKeepMod();
                 frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
             },
             .call_native => {
@@ -217,7 +214,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .constant => self.stack.push(frame.readConstant()),
             .def_global => {
                 const idx = frame.readByte();
-                // self.module.globals[idx] = self.stack.pop();
                 frame.module.globals[idx] = self.stack.pop();
             },
             .div_float => {
@@ -255,12 +251,10 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .get_global => {
                 const idx = frame.readByte();
-                // self.stack.push(self.module.globals[idx]);
                 self.stack.push(frame.module.globals[idx]);
             },
             .get_global_cow => {
                 const idx = frame.readByte();
-                // const value = &self.module.globals[idx];
                 const value = &frame.module.globals[idx];
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
@@ -277,6 +271,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const index = frame.readByte();
                 self.stack.push(self.stack.peek(0));
                 self.stack.peekRef(1).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[index].asObj());
+                self.stack.peekRef(1).obj.loadDefaultValues(self, 0);
             },
             // TODO: same as above
             .get_static_method => {
@@ -285,17 +280,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const structure = top.obj.as(Obj.Structure);
                 const method = structure.methods[method_idx];
                 top.* = Value.makeObj(method.asObj());
-            },
-            .load_extern_sym => {
-                const module_index = frame.readByte();
-                const symbol_index = frame.readByte();
-                const module = self.modules[module_index];
-                const symbol = module.symbols[symbol_index];
-                self.stack.push(symbol);
-            },
-            .load_sym => {
-                const symbol_idx = frame.readByte();
-                self.stack.push(frame.module.symbols[symbol_idx]);
+                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
@@ -317,8 +302,19 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .le_float => self.stack.push(Value.makeBool(self.stack.pop().float >= self.stack.pop().float)),
             .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
 
-            .load_fn_default => self.stack.peekRef(0).obj.loadDefaultValues(self, 0),
-            .load_struct_def => self.r3 = self.stack.peekRef(0).obj.as(Obj.Structure).default_values,
+            .load_extern_sym => {
+                const module_index = frame.readByte();
+                const symbol_index = frame.readByte();
+                const module = self.modules[module_index];
+                const symbol = module.symbols[symbol_index];
+                self.stack.push(symbol);
+                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
+            },
+            .load_sym => {
+                const symbol_idx = frame.readByte();
+                self.stack.push(frame.module.symbols[symbol_idx]);
+                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
+            },
 
             .loop => {
                 const jump = frame.readShort();
@@ -351,10 +347,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const result = self.stack.pop();
                 self.frame_stack.count -= 1;
 
-                // if (frame.imported) {
-                //     self.module = self.module_chain.pop().?;
-                // }
-
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
                 // TODO: avoid logic at runtime, just emit a special OpCode for `main` return
@@ -370,10 +362,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .ret_naked => {
                 self.frame_stack.count -= 1;
-
-                // if (frame.imported) {
-                //     self.module = self.module_chain.pop().?;
-                // }
 
                 // The last standing frame is the artificial one created when we run
                 // the global scope at the very beginning
@@ -597,6 +585,18 @@ const FrameStack = struct {
         }
 
         const new_frame = &self.frames[self.count];
+        self.count += 1;
+
+        return new_frame;
+    }
+
+    pub fn newKeepMod(self: *FrameStack) Error!*CallFrame {
+        if (self.count == FRAMES_MAX) {
+            return error.StackOverflow;
+        }
+
+        const new_frame = &self.frames[self.count];
+        new_frame.module = self.frames[self.count - 1].module;
         self.count += 1;
 
         return new_frame;

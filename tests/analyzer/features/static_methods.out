@@ -1,6 +1,6 @@
 [Structure declaration Vec1]
     [Function declaration new, return kind: implicit_value]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -9,14 +9,14 @@
     [Structure declaration Point]
     [Structure declaration Vec2]
         [Function declaration new, return kind: implicit_value]
-            [Structure literal, defaults: 0]
+            [Structure literal]
                 - structure
                 [Load symbol 4]
                 - args
                 [Variable index: 0, scope: local]
                 [Variable index: 1, scope: local]
     [Variable declaration index: 0, scope: local, incr_rc]
-        [Fn call arity: 1, defaults: 0]
+        [Fn call arity: 1]
             [Method access 0]
                 [Load symbol 0]
             - args:
@@ -24,14 +24,14 @@
     [Variable declaration index: 1, scope: local]
         [Method access 0]
             [Load symbol 0]
-    [Fn call arity: 1, defaults: 0]
+    [Fn call arity: 1]
         [Variable index: 1, scope: local]
         - args:
         [Int 65]
     [Incr ref count]
     [Assignment index: 0, scope: local, cow]
     [Variable declaration index: 2, scope: local, incr_rc]
-        [Fn call arity: 2, defaults: 0]
+        [Fn call arity: 2]
             [Method access 0]
                 [Load symbol 4]
             - args:
@@ -40,7 +40,7 @@
     [Variable declaration index: 3, scope: local]
         [Method access 0]
             [Load symbol 4]
-    [Fn call arity: 2, defaults: 0]
+    [Fn call arity: 2]
         [Variable index: 3, scope: local]
         - args:
         [Int 56]

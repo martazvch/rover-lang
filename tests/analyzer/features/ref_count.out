@@ -12,11 +12,11 @@
             [String ]
 [Structure declaration Poly]
     [Function declaration clone, return kind: implicit_value]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 2]
             - args
-            [Structure literal, defaults: 0]
+            [Structure literal]
                 - structure
                 [Load symbol 0]
                 - args
@@ -26,20 +26,20 @@
 [Function declaration testFn, return kind: implicit_void]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
             [Int 2]
             [Int 6]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 2]
             - args
             [Variable index: 0, scope: local]
     [Variable declaration index: 2, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 4]
             - args
@@ -94,33 +94,24 @@
                     [Variable index: 2, scope: local]
             [Increment ref count]
     [Variable declaration index: 12, scope: local, incr_rc]
-        [Fn call arity: 1, defaults: 0]
+        [Fn call arity: 0]
             [Method access 0]
                 [Field access 0]
                     [Variable index: 2, scope: local]
-            - args:
-            [Field access 0]
-                [Variable index: 2, scope: local]
     [Variable declaration index: 13, scope: local, incr_rc]
         [Field access 0]
-            [Fn call arity: 1, defaults: 0]
+            [Fn call arity: 0]
                 [Method access 0]
                     [Field access 0]
                         [Variable index: 2, scope: local]
-                - args:
-                [Field access 0]
-                    [Variable index: 2, scope: local]
     [Variable declaration index: 14, scope: local]
         [Field access 0]
             [Field access 0]
-                [Fn call arity: 1, defaults: 0]
+                [Fn call arity: 0]
                     [Method access 0]
                         [Field access 0]
                             [Variable index: 2, scope: local]
-                    - args:
-                    [Field access 0]
-                        [Variable index: 2, scope: local]
-    [Fn call arity: 3, defaults: 0]
+    [Fn call arity: 3]
         [Load symbol 5]
         - args:
         [Variable index: 0, scope: local]

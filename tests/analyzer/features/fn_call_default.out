@@ -9,7 +9,7 @@
     [Print]
         [String This is a mathematical module]
 [Function declaration getVecFromPos, return kind: implicit_value]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
@@ -50,38 +50,37 @@
     [Bool false]
     [Bool false]
 [Function declaration main, return kind: implicit_void]
-    [Fn call arity: 5, defaults: 4]
+    [Fn call arity: 5]
         [Load symbol 4]
         - args:
         [String abcd]
         [Int 8]
-    [Fn call arity: 5, defaults: 4]
+    [Fn call arity: 5]
         [Load symbol 4]
         - args:
         [String abcd]
         [Int 8]
         [Bool true]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 1]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
     [Print]
-        [Fn call arity: 1, defaults: 1]
+        [Fn call arity: 1]
             [Method access 0]
                 [Load symbol 0]
             - args:
     [Print]
-        [Fn call arity: 1, defaults: 1]
+        [Fn call arity: 1]
             [Load symbol 3]
             - args:
     [Print]
-        [Fn call arity: 2, defaults: 1]
+        [Fn call arity: 1]
             [Method access 1]
                 [Variable index: 0, scope: local]
             - args:
-            [Variable index: 0, scope: local]
     [Print]
-        [Fn call arity: 1, defaults: 1]
+        [Fn call arity: 1]
             [Load symbol 5 of module 0]
             - args:

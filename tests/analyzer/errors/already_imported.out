@@ -4,7 +4,7 @@
     [Print]
         [String This is a mathematical module]
 [Function declaration getVecFromPos, return kind: implicit_value]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args

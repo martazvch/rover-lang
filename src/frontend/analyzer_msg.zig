@@ -28,7 +28,6 @@ pub const AnalyzerMsg = union(enum) {
     float_equal,
     float_equal_cast,
     incompatible_if_type: struct { found1: []const u8, found2: []const u8 },
-    incompatible_fn_type: struct { expect: []const u8, found: []const u8 },
     invalid_arithmetic: struct { found: []const u8 },
     invalid_assign_target,
     invalid_call_target,
@@ -106,7 +105,6 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
             .float_equal_cast => writer.writeAll("unsafe floating-point values comparison"),
-            .incompatible_fn_type => |e| writer.print("function declared as returning '{s}' type but found '{s}'", .{ e.expect, e.found }),
             .incompatible_if_type => |e| writer.print("'if' and 'else' have incompatible types, found '{s}'  and '{s}'", .{ e.found1, e.found2 }),
             .invalid_arithmetic => writer.writeAll("invalid arithmetic operation"),
             .invalid_assign_target => writer.writeAll("invalid assignment target"),
@@ -171,7 +169,6 @@ pub const AnalyzerMsg = union(enum) {
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .float_equal_cast => writer.writeAll("this expression is implicitly casted to 'float'"),
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
-            .incompatible_fn_type => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .incompatible_if_type, .unpure_in_global, .unpure_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
@@ -252,10 +249,6 @@ pub const AnalyzerMsg = union(enum) {
                 \\   This results in an unsafe floating-point comparison. To avoid this, explicitly
                 \\   cast the expression to 'float' and compare against an Epsilon (like 1e-5)
                 ,
-            ),
-            .incompatible_fn_type => |e| writer.print(
-                "modify function's body to match '{s}' type or change function's definition",
-                .{e.expect},
             ),
             .incompatible_if_type => writer.writeAll("make both paths return the same type"),
             .invalid_arithmetic => |e| writer.print("expect a numeric type, found '{s}'", .{e.found}),

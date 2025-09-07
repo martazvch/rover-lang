@@ -8,11 +8,11 @@ const oom = @import("../utils.zig").oom;
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
 const Ast = @import("Ast.zig");
 const Node = @import("Ast.zig").Node;
-const Span = @import("Lexer.zig").Span;
-const Token = @import("Lexer.zig").Token;
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Type = rir.Type;
+const Span = @import("Lexer.zig").Span;
+const Token = @import("Lexer.zig").Token;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 
@@ -283,9 +283,7 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}, defaults: {}]", .{
-        data.arity, data.default_count,
-    });
+    self.indentAndPrintSlice("[Fn call arity: {}]", .{data.arity});
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
@@ -314,7 +312,10 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
                     self.instr_idx = save;
                 },
                 .default_value => {},
-                else => unreachable,
+                else => |eee| {
+                    std.log.debug("Found: {any}", .{eee});
+                    unreachable;
+                },
             }
         }
 
@@ -469,7 +470,7 @@ fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
 }
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
-    self.indentAndPrintSlice("[Structure literal, defaults: {}]", .{data.default_count});
+    self.indentAndAppendSlice("[Structure literal]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
     // Variable containing type
@@ -519,11 +520,7 @@ fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    if (data.has_value)
-        self.parseInstr()
-    else {
-        self.indentAndAppendSlice("[Null]");
-    }
+    if (data.has_value) self.parseInstr() else self.indentAndAppendSlice("[Null]");
 
     if (data.cast) self.parseInstr();
 }

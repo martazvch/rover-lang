@@ -13,3 +13,5 @@ struct Def {
         print d
     }
 }
+
+fn getInt(a=56) -> int { a }

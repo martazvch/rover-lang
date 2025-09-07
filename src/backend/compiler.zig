@@ -133,10 +133,7 @@ const Compiler = struct {
 
     const CompilerReport = GenReport(CompilerMsg);
 
-    const State = struct {
-        /// Triggers a cow
-        cow: bool = false,
-    };
+    const State = struct { cow: bool = false };
 
     const FnKind = enum { global, @"fn", method };
 
@@ -590,11 +587,9 @@ const Compiler = struct {
 
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         const line = self.getLineNumber();
-
+        // Callee
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOp(.load_fn_default, line);
         try self.compileArgs(data.arity);
-
         self.writeOpAndByte(.call, data.arity + @intFromBool(data.implicit_first), line);
     }
 
@@ -793,9 +788,8 @@ const Compiler = struct {
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
         const line = self.getLineNumber();
-        // Compile structure
+        // Structure
         try self.compileInstr();
-        if (data.default_count > 0) self.writeOp(.load_struct_def, line);
         try self.compileArgs(data.fields_count);
         self.writeOpAndByte(.struct_lit, @intCast(data.fields_count), line);
     }

@@ -1,17 +1,17 @@
-incompatible_fn_type, void, int
-incompatible_fn_type, void, str
+type_mismatch, void, int
+type_mismatch, void, str
 
 // Partial if
 missing_else_clause, int
 
 // func return
-incompatible_fn_type, int, float
+type_mismatch, int, float
 
 // Partial if for tmp
 missing_else_clause, str
 
 // Nested if
-incompatible_fn_type, int, float
+type_mismatch, int, float
 
 // Func 2, very nested type error
-incompatible_fn_type, int, float
+type_mismatch, int, float

@@ -5,7 +5,7 @@
     [String yup]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 3]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -14,7 +14,7 @@
             [Cast next value to float]
             [Int 2]
             [Bool true]
-    [Structure literal, defaults: 3]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args

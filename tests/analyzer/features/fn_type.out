@@ -17,6 +17,6 @@
     [Return expr: true, cast: false]
         [Variable index: 1, scope: local]
 [Function declaration factory3, return kind: implicit_value]
-    [Fn call arity: 0, defaults: 0]
+    [Fn call arity: 0]
         [Variable index: 0, scope: local]
 [Function declaration main, return kind: implicit_void]

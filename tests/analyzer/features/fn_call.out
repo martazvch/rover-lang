@@ -1,17 +1,17 @@
 [Function declaration add, return kind: implicit_void]
 [Function declaration mul, return kind: implicit_void]
 [Function declaration main, return kind: implicit_void]
-    [Fn call arity: 1, defaults: 0]
+    [Fn call arity: 1]
         [Load symbol 0]
         - args:
         [Int 2]
     [Function declaration sub, return kind: implicit_void]
-    [Fn call arity: 1, defaults: 0]
+    [Fn call arity: 1]
         [Load symbol 3]
         - args:
         [Int 2]
     [Function declaration div, return kind: implicit_void]
-    [Fn call arity: 5, defaults: 0]
+    [Fn call arity: 5]
         [Load symbol 4]
         - args:
         [Cast next value to float]
@@ -21,7 +21,7 @@
         [Int 45]
         [Float 67]
         [String yup]
-    [Fn call arity: 5, defaults: 0]
+    [Fn call arity: 5]
         [Load symbol 1]
         - args:
         [Int 2]

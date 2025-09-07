@@ -12,14 +12,14 @@
             [Int 1]
             [Int 2]
     [Variable declaration index: 2, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
             [Array]
                 [Int 6]
                 [Int 7]
-                [Fn call arity: 0, defaults: 0]
+                [Fn call arity: 0]
                     [Load symbol 1]
     [Print]
         [Array access]
@@ -39,7 +39,7 @@
         - array
         [Variable index: 0, scope: local]
         - index
-        [Fn call arity: 0, defaults: 0]
+        [Fn call arity: 0]
             [Load symbol 1]
     [Unary minus]
         [Int 9]
@@ -48,7 +48,7 @@
         [Field access 0]
             [Variable index: 2, scope: local]
         - index
-        [Fn call arity: 0, defaults: 0]
+        [Fn call arity: 0]
             [Load symbol 1]
     [Print]
         [Array access]
@@ -56,7 +56,7 @@
             [Field access 0]
                 [Variable index: 2, scope: local]
             - index
-            [Fn call arity: 0, defaults: 0]
+            [Fn call arity: 0]
                 [Load symbol 1]
     [Variable declaration index: 3, scope: local]
         [Array]
@@ -65,7 +65,7 @@
     [Array]
     [Assignment index: 4, scope: local, cow]
     [Variable declaration index: 5, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args

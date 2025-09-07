@@ -125,7 +125,8 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
         .module => self.as(Module).module.globals[index].obj.as(Function).default_values,
-        .structure => self.as(Structure).methods[index].default_values,
+        // .structure => self.as(Structure).methods[index].default_values,
+        .structure => self.as(Structure).default_values,
         else => unreachable,
     };
 }

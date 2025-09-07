@@ -5,7 +5,7 @@
     [String object]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -19,7 +19,7 @@
                     [Int 3]
                     [Int 4]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -33,7 +33,7 @@
                     [Int 9]
                     [Int 10]
     [Variable declaration index: 2, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -47,7 +47,7 @@
                     [Int 15]
                     [Int 16]
     [Variable declaration index: 3, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -61,7 +61,7 @@
                     [Int 21]
                     [Int 22]
     [Variable declaration index: 4, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 1]
             - args
@@ -77,7 +77,7 @@
                     [Variable index: 3, scope: local]
                     [Increment ref count]
     [Variable declaration index: 5, scope: local]
-        [Structure literal, defaults: 1]
+        [Structure literal]
             - structure
             [Load symbol 2]
             - args

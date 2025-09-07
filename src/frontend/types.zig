@@ -7,6 +7,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const LexicalScope = @import("LexicalScope.zig");
+const ModuleInterner = @import("../ModuleInterner.zig");
 const oom = @import("../utils.zig").oom;
 
 pub const Type = union(enum) {
@@ -35,18 +36,21 @@ pub const Type = union(enum) {
         }
     };
 
+    pub const Loc = struct { name: InternerIdx, container: InternerIdx };
+
     pub const Function = struct {
+        loc: ?Loc,
         params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter),
         return_type: *const Type,
         kind: Kind,
 
         pub const Kind = enum { normal, method, bound };
+        pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
+        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, bool);
 
-        pub fn proto(self: *const Function, allocator: Allocator) AutoArrayHashMapUnmanaged(InternerIdx, bool) {
-            var res: AutoArrayHashMapUnmanaged(InternerIdx, bool) = .empty;
+        pub fn proto(self: *const Function, allocator: Allocator) Proto {
+            var res: Proto = .empty;
             res.ensureTotalCapacity(allocator, self.params.count()) catch oom();
-
-            // std.log.info("Generating proto for: {}", .{self.kind});
 
             var first = true;
             var kv = self.params.iterator();
@@ -64,47 +68,41 @@ pub const Type = union(enum) {
 
         pub fn toBoundMethod(self: *const Function, allocator: Allocator) Function {
             var params = self.params.clone(allocator) catch oom();
-            // std.log.info("Params: {any}", .{params.values()});
             params.orderedRemoveAt(0);
-            // std.log.info("Params: {any}", .{params.values()});
 
             for (params.values()) |*val| {
                 val.default = false;
+                val.captured = false;
             }
 
-            return .{
-                .params = params,
-                .return_type = self.return_type,
-                .kind = .bound,
-            };
+            return .{ .loc = null, .params = params, .return_type = self.return_type, .kind = .bound };
         }
-    };
 
-    pub const Parameter = struct {
-        type: *const Type,
-        default: bool = false,
-        captured: bool = false,
+        pub fn toAnon(self: *const Function, allocator: Allocator) Function {
+            var params = self.params.clone(allocator) catch oom();
+
+            for (params.values()) |*val| {
+                val.default = false;
+                val.captured = false;
+            }
+
+            return .{ .loc = null, .params = params, .return_type = self.return_type, .kind = .normal };
+        }
     };
 
     pub const Structure = struct {
-        symbol: Symbol,
-        functions: AutoArrayHashMapUnmanaged(usize, Field) = .empty,
-        fields: AutoArrayHashMapUnmanaged(usize, Field) = .empty,
-        default_value_fields: usize = 0,
+        loc: ?Loc,
+        functions: AutoArrayHashMapUnmanaged(InternerIdx, *const Type),
+        fields: AutoArrayHashMapUnmanaged(InternerIdx, Field),
+        defaults: usize,
 
         pub const Field = struct {
-            /// Field's type
             type: *const Type,
-            /// Has a default value
-            default: bool = false,
+            default: bool,
         };
 
-        pub fn empty(name: InternerIdx, path: InternerIdx) Structure {
-            return .{ .symbol = .{ .name = name, .path = path } };
-        }
-
-        pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(usize, bool) {
-            var res: AutoArrayHashMapUnmanaged(usize, bool) = .empty;
+        pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(InternerIdx, bool) {
+            var res: AutoArrayHashMapUnmanaged(InternerIdx, bool) = .empty;
             res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
 
             var kv = self.fields.iterator();
@@ -115,8 +113,6 @@ pub const Type = union(enum) {
             return res;
         }
     };
-
-    pub const Symbol = struct { name: InternerIdx, path: InternerIdx };
 
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
@@ -156,23 +152,42 @@ pub const Type = union(enum) {
 
         hasher.update(asBytes(&@intFromEnum(self)));
 
-        // TODO: we could use only name but relative to the base of the project to avoid
-        // name collision between modules
         switch (self) {
             .void, .int, .float, .bool, .str, .null => {},
             .array => |ty| ty.child.hash(hasher),
             .function => |ty| {
-                for (ty.params.values()) |param| {
-                    param.type.hash(hasher);
+                if (ty.loc) |loc| {
+                    hasher.update(asBytes(&loc.name));
+                    hasher.update(asBytes(&loc.container));
+                } else {
+                    for (ty.params.values()) |param| {
+                        param.type.hash(hasher);
+                    }
+                    ty.return_type.hash(hasher);
                 }
-                ty.return_type.hash(hasher);
             },
             .module => |interned| hasher.update(asBytes(&interned)),
-            .structure => |ty| hasher.update(asBytes(&ty.symbol.path)),
+            .structure => |ty| {
+                if (ty.loc) |loc| {
+                    hasher.update(asBytes(&loc.name));
+                    hasher.update(asBytes(&loc.container));
+                } else {
+                    for (ty.fields.values()) |f| {
+                        f.type.hash(hasher);
+                    }
+                }
+            },
         }
     }
 
-    pub fn toString(self: *const Type, allocator: Allocator, interner: *const Interner) []const u8 {
+    pub fn toString(
+        self: *const Type,
+        allocator: Allocator,
+        scope: *const LexicalScope,
+        current_mod: usize,
+        interner: *const Interner,
+        module_interner: *const ModuleInterner,
+    ) []const u8 {
         var res: std.ArrayListUnmanaged(u8) = .{};
         var writer = res.writer(allocator);
 
@@ -180,22 +195,37 @@ pub const Type = union(enum) {
             .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
                 writer.writeAll("[]") catch oom();
-                writer.writeAll(ty.child.toString(allocator, interner)) catch oom();
+                writer.writeAll(ty.child.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
             },
             .function => |ty| {
                 writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
-                    writer.writeAll(p.type.toString(allocator, interner)) catch oom();
+                    writer.writeAll(p.type.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
                     if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();
                 }
                 writer.writeAll(") -> ") catch oom();
-                writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
+                writer.writeAll(ty.return_type.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
             },
             .module => |interned| {
                 const name = interner.getKey(interned).?;
                 writer.print("module: {s}", .{name}) catch oom();
             },
-            .structure => |ty| return interner.getKey(ty.symbol.path).?,
+            .structure => |ty| {
+                if (ty.loc) |loc| {
+                    writer.print("{s}.{s}", .{ interner.getKey(loc.container).?, interner.getKey(loc.name).? }) catch oom();
+                } else {
+                    writer.writeAll("struct {") catch oom();
+
+                    for (ty.fields.keys(), ty.fields.values(), 0..) |k, v, i| {
+                        writer.print("{s}: {s}{s}", .{
+                            interner.getKey(k).?,
+                            v.type.toString(allocator, scope, current_mod, interner, module_interner),
+                            if (i < ty.fields.count() - 1) ", " else "",
+                        }) catch oom();
+                    }
+                    writer.writeAll("}") catch oom();
+                }
+            },
         }
 
         return res.toOwnedSlice(allocator) catch oom();

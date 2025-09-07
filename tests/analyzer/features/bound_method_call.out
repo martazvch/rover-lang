@@ -15,7 +15,7 @@
             [Variable index: 0, scope: local]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -31,10 +31,10 @@
     [Variable declaration index: 4, scope: local]
         [Bound method, method index: 1]
             [Variable index: 0, scope: local]
-    [Fn call arity: 0, defaults: 0]
+    [Fn call arity: 0]
         [Variable index: 2, scope: local]
     [Discard]
-        [Fn call arity: 1, defaults: 0]
+        [Fn call arity: 1]
             [Variable index: 4, scope: local]
             - args:
             [Int 10]

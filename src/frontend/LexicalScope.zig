@@ -17,7 +17,6 @@ pub const Variable = struct {
     type: *const Type,
     kind: enum { local, global },
     initialized: bool,
-    /// Index of declaration
     index: Index = 0,
     captured: bool = false,
     constant: bool,
@@ -122,11 +121,6 @@ pub fn getVariable(self: *const Self, name: InternerIdx) ?struct { *Variable, us
     return null;
 }
 
-pub fn declareSymbol(self: *Self, allocator: Allocator, name: InternerIdx, ty: *const Type) void {
-    self.current.symbols.put(allocator, name, .{ .type = ty, .index = self.symbol_count }) catch oom();
-    self.symbol_count += 1;
-}
-
 /// Forward declares a symbol without incrementing global symbol count
 pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx) *Symbol {
     self.current.symbols.put(allocator, name, .{ .type = undefined, .index = self.symbol_count }) catch oom();
@@ -136,8 +130,9 @@ pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx
 }
 
 /// Removes symbol name from **current** scope
-pub fn removeSymbol(self: *Self, name: InternerIdx) void {
-    _ = self.current.symbols.fetchOrderedRemove(name);
+pub fn removeSymbolFromScope(self: *Self, name: InternerIdx) ?Symbol {
+    const sym = self.current.symbols.fetchOrderedRemove(name) orelse return null;
+    return sym.value;
 }
 
 pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
@@ -167,7 +162,6 @@ pub fn declareExternSymbol(
         name,
         .{ .module_index = module_index, .symbol = symbol },
     ) catch oom();
-    self.symbol_count += 1;
 }
 
 pub fn getExternSymbol(self: *const Self, name: InternerIdx) ?*ExternSymbol {

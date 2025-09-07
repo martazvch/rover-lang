@@ -55,7 +55,7 @@
             [Variable index: 0, scope: local]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0 of module 0]
             - args

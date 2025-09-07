@@ -15,7 +15,7 @@
             [Variable index: 0, scope: local]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
@@ -23,15 +23,12 @@
             [String Tom]
     [Variable declaration index: 1, scope: local]
         [Null]
-    [Fn call arity: 1, defaults: 0]
+    [Fn call arity: 0]
         [Method access 0]
             [Variable index: 0, scope: local]
-        - args:
-        [Variable index: 0, scope: local]
     [Discard]
-        [Fn call arity: 2, defaults: 0]
+        [Fn call arity: 1]
             [Method access 1]
                 [Variable index: 0, scope: local]
             - args:
-            [Variable index: 0, scope: local]
             [Int 10]

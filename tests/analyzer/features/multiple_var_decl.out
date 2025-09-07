@@ -39,5 +39,5 @@
                 [Int 56]
                 [Int 2]
     [Variable declaration index: 15, scope: local]
-        [Fn call arity: 0, defaults: 0]
+        [Fn call arity: 0]
             [Load symbol 0]

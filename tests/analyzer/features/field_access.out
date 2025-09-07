@@ -2,14 +2,14 @@
 [Structure declaration Human]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
             [String Vodka]
             [Bool false]
     [Variable declaration index: 1, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 1]
             - args

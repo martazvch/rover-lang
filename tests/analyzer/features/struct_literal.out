@@ -3,13 +3,13 @@
     [Int 42]
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 0]
             - args
             [Int 5]
             [String Tom]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
@@ -18,7 +18,7 @@
     [Assignment index: 0, scope: local, cow]
     [Variable declaration index: 1, scope: local]
         [Int 95]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
@@ -27,21 +27,21 @@
     [Assignment index: 0, scope: local, cow]
     [Variable declaration index: 2, scope: local]
         [String Tom]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
         [Int 6]
         [Variable index: 2, scope: local]
     [Assignment index: 0, scope: local, cow]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
         [Variable index: 1, scope: local]
         [Variable index: 2, scope: local]
     [Assignment index: 0, scope: local, cow]
-    [Structure literal, defaults: 0]
+    [Structure literal]
         - structure
         [Load symbol 0]
         - args
@@ -50,7 +50,7 @@
     [Assignment index: 0, scope: local, cow]
     [Structure declaration Local]
     [Variable declaration index: 3, scope: local]
-        [Structure literal, defaults: 0]
+        [Structure literal]
             - structure
             [Load symbol 2]
             - args

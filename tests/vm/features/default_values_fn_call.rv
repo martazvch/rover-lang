@@ -82,6 +82,9 @@ fn main() {
     foo.bar.method(arg2=true, arg3=-360.9, arg1=false, noval="seventh")
 
     // Static on import
+    print default_val.getInt()
+
+    // Static on nested import
     default_val.Def.staticFn("imported static")
     default_val.Def.staticFn("imported static", c=true, b=90)
 

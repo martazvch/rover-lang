@@ -16,7 +16,7 @@
         [Unary bang]
             [Variable index: 2, scope: global]
     [Variable declaration index: 0, scope: local]
-        [Fn call arity: 0, defaults: 0]
+        [Fn call arity: 0]
             [Load symbol 0]
     [Print]
         [Unary bang]

@@ -1,5 +1,5 @@
 void_param
 duplicate_param, arg1
-incompatible_fn_type, int, bool
-incompatible_fn_type, void, int
+type_mismatch, int, bool
+type_mismatch, void, int
 already_declared, bis

@@ -13,7 +13,7 @@
                 [Variable index: 0, scope: local]
             [String yes]
         [Discard]
-            [Fn call arity: 1, defaults: 0]
+            [Fn call arity: 1]
                 [Load symbol 4]
                 - args:
                 [Int 1]

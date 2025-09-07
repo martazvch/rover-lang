@@ -116,7 +116,8 @@ pub const Instruction = struct {
         incr_rc: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, default_count: u8, implicit_first: bool };
+    // pub const Call = struct { arity: u8, default_count: u8, implicit_first: bool };
+    pub const Call = struct { arity: u8, implicit_first: bool };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
@@ -145,7 +146,7 @@ pub const Instruction = struct {
     };
     pub const Return = struct { value: bool, cast: bool };
     pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { fields_count: u8, default_count: u8 };
+    pub const StructLiteral = struct { fields_count: u8 };
     pub const Value = struct {
         value_instr: usize,
         cast: bool,
