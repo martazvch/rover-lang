@@ -277,7 +277,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
     self.containers.append(self.allocator, self.ast.toSource(node.name));
     defer _ = self.containers.pop();
 
-    const captures_instrs_data = try self.loadFunctionCaptures(node.meta.captures.keys());
+    std.log.info("Doing function: {s}", .{self.ast.toSource(node.name)});
+    const captures_instrs_data = try self.loadFunctionCaptures(&node.meta.captures);
     const param_res = try self.fnParams(node.params, ctx);
 
     var fn_type: Type.Function = .{
@@ -297,7 +298,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 
     // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
     const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, span.start);
-    const is_closure = captures_count > 0;
+    const is_closure = (node.has_callable or captures_count > 0) and !self.scope.isGlobal();
 
     if (is_closure) {
         _ = self.scope.removeSymbolFromScope(name);
@@ -323,16 +324,18 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
     );
 }
 
-fn loadFunctionCaptures(self: *Self, captures: []InternerIdx) Error![]const Instruction.Data {
+fn loadFunctionCaptures(self: *Self, captures: *const Ast.FnDecl.Meta.Captures) Error![]const Instruction.Data {
     var instructions: ArrayListUnmanaged(Instruction.Data) = .{};
-    instructions.ensureTotalCapacity(self.allocator, captures.len) catch oom();
+    instructions.ensureTotalCapacity(self.allocator, captures.count()) catch oom();
 
-    for (captures) |capt| {
-        const variable_infos = self.scope.getVariable(capt) orelse unreachable;
-        const variable = variable_infos.@"0";
-        _ = try self.declareVariable(capt, variable.type, true, true, false, .zero);
-
-        instructions.appendAssumeCapacity(.{ .identifier = .{ .index = variable.index, .scope = .local, .unbox = false } });
+    var it = captures.iterator();
+    while (it.next()) |capt| {
+        const name = capt.key_ptr.*;
+        const capt_infos = capt.value_ptr.*;
+        std.log.info("Name: {s}", .{self.interner.getKey(name).?});
+        const variable, _ = self.scope.getVariable(name) orelse unreachable;
+        _ = try self.declareVariable(name, variable.type, true, true, false, .zero);
+        instructions.appendAssumeCapacity(.{ .capture = .{ .index = capt_infos.index, .is_local = capt_infos.is_local } });
     }
 
     return instructions.toOwnedSlice(self.allocator) catch oom();
@@ -936,7 +939,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) TypeResult {
     self.scope.open(self.allocator, false);
     defer _ = self.scope.close();
 
-    const captures_instrs_data = try self.loadFunctionCaptures(expr.meta.captures.keys());
+    const captures_instrs_data = try self.loadFunctionCaptures(&expr.meta.captures);
     const param_res = try self.fnParams(expr.params, ctx);
 
     // Update type for resolution in function's body

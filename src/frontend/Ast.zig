@@ -40,12 +40,15 @@ pub const FnDecl = struct {
     is_closure: bool,
 
     /// Meta data gathered by the Ast walker
-    meta: Meta = .{},
+    meta: Meta = .empty,
 
     pub const Meta = struct {
-        captures: Captures = .{},
+        captures: Captures = .empty,
+        is_closure: bool,
 
-        pub const Captures = AutoArrayHashMapUnmanaged(InternerIndex, void);
+        pub const empty: Meta = .{ .captures = .empty, .is_closure = false };
+        pub const Captures = AutoArrayHashMapUnmanaged(InternerIndex, Capture);
+        pub const Capture = struct { index: usize, is_local: bool };
     };
 };
 

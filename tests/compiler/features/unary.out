@@ -1,20 +1,20 @@
 -- main --
 constant index 0, value 1
-OP_NEGATE_INT
+neg_int
 pop
 
 constant index 1, value 1
-OP_NEGATE_INT
-OP_NEGATE_INT
-OP_NEGATE_INT
-OP_NEGATE_INT
+neg_int
+neg_int
+neg_int
+neg_int
 pop
 
 constant index 2, value 65.82
-OP_NEGATE_FLOAT
+neg_float
 pop
 
-push_push_true
+push_true
 not
 pop
 
@@ -22,7 +22,7 @@ push_false
 not
 pop
 
-push_push_true
+push_true
 not
 not
 not
@@ -31,5 +31,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 0, <fn main>
+load_sym index 0, <function main>
 call index 0

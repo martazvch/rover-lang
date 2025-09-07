@@ -12,20 +12,7 @@ fn set_vars() {
     globalGet = get
 }
 
-fn outer() -> fn() -> void {
-    var x = "outside"
-
-    fn inner() {
-        print x
-    }
-
-    return inner
-}
-
 fn main() {
-    var closure = outer()
-    closure()
-
     set_vars()
 
     globalSet()

@@ -61,7 +61,7 @@ OP_GET_STATIC_METHOD index 0
 get_local index 2
 call index 0
 print
-get_global index 2, <fn copy>
+get_global index 2, <function copy>
 set_local index 2
 get_local index 2
 call index 0
@@ -92,5 +92,5 @@ print
 ret_naked
 
 -- global scope --
-get_global index 3, <fn main>
+get_global index 3, <function main>
 call index 0

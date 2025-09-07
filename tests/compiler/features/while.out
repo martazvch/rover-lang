@@ -2,7 +2,7 @@
 constant index 0, value 0
 get_local index 1
 constant index 1, value 4
-OP_LESS_INT
+lt_int
 jump_push_false 7 -> 24
 pop
 get_local index 1
@@ -17,5 +17,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 0, <fn main>
+get_global index 0, <function main>
 call index 0

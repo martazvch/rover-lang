@@ -314,6 +314,7 @@ const Compiler = struct {
             .bool => |data| self.boolInstr(data),
             .bound_method => |data| self.boundMethod(data),
             .call => |*data| self.fnCall(data),
+            .capture => |*data| self.capture(data),
             .cast => |data| self.cast(data),
             .default_value => unreachable,
             .discard => self.discard(),
@@ -548,6 +549,15 @@ const Compiler = struct {
         self.writeOp(.box, self.getLineNumber());
     }
 
+    // TODO: protect cast
+    fn capture(self: *Self, data: *const Instruction.Capture) Error!void {
+        self.writeOpAndByte(
+            if (data.is_local) .get_capt_local else .get_capt_frame,
+            @intCast(data.index),
+            self.getLineNumber(),
+        );
+    }
+
     fn cast(self: *Self, typ: rir.Type) Error!void {
         switch (typ) {
             .float => self.writeOp(.cast_to_float, self.getLineNumber()),
@@ -657,7 +667,8 @@ const Compiler = struct {
         try self.emitConstant(Value.makeObj(func.asObj()), line);
 
         for (0..data.captures_count) |_| {
-            self.emitGetVar(&self.next().identifier, line);
+            // self.emitGetVar(&self.next().identifier, line);
+            try self.compileInstr();
         }
 
         self.writeOpAndByte(.closure, @intCast(data.captures_count), line);
@@ -800,7 +811,7 @@ const Compiler = struct {
 
         if (data.op == .minus) {
             self.writeOp(
-                if (data.typ == .int) .negate_int else .negate_float,
+                if (data.typ == .int) .neg_int else .neg_float,
                 line,
             );
         } else self.writeOp(.not, line);

@@ -3,22 +3,22 @@ ret_naked
 
 -- global scope --
 constant index 0, value 15.6
-OP_DEFINE_GLOBAL index 0
+def_global index 0
 
 constant index 1, value 15.6
 constant index 2, value 0.6
-OP_ADD_FLOAT
-OP_DEFINE_GLOBAL index 1
+add_float
+def_global index 1
 
 constant index 3, value Blender
-OP_DEFINE_GLOBAL index 2
+def_global index 2
 
 constant index 4, value 90
-OP_CAST_TO_FLOAT
-OP_SET_GLOBAL index 1
+cast_to_float
+set_global index 1
 
 constant index 5, value Best software
-OP_SET_GLOBAL index 2
+set_global index 2
 
-get_global index 3, <fn main>
+get_global index 3, <function main>
 call index 0

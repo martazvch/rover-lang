@@ -1,7 +1,0 @@
-fn main() {
-    var a = 1
-
-    fn capture() { print a }
-
-    a = 2
-}

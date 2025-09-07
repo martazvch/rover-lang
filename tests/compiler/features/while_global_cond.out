@@ -1,7 +1,7 @@
 -- main --
 get_global index 0
 constant index 0, value 4
-OP_LESS_INT
+lt_int
 jump_push_false 5 -> 22
 pop
 get_global index 0
@@ -9,7 +9,7 @@ print
 get_global index 0
 constant index 1, value 1
 add_int
-OP_SET_GLOBAL index 0
+set_global index 0
 OP_LOOP 19 -> 0
 pop
 
@@ -17,7 +17,7 @@ ret_naked
 
 -- global scope --
 constant index 0, value 0
-OP_DEFINE_GLOBAL index 0
+def_global index 0
 
-get_global index 1, <fn main>
+get_global index 1, <function main>
 call index 0

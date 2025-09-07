@@ -45,6 +45,6 @@ set_local index 1
 ret_naked
 
 -- global scope --
-get_global index 1, <fn main>
+get_global index 1, <function main>
 call index 0
 

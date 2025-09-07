@@ -23,9 +23,9 @@ ret
 -- main --
 constant index 0, value <structure Point>
 constant index 1, value <structure Vec2>
-constant index 2, value <fn local>
+constant index 2, value <function local>
 ret_naked
 
 -- global scope --
-get_global index 0, <fn main>
+get_global index 0, <function main>
 call index 0

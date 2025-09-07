@@ -113,5 +113,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 3, <fn main>
+get_global index 3, <function main>
 call index 0

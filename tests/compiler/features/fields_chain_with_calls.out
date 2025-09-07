@@ -26,7 +26,7 @@ OP_REG_PUSH
 get_field index 0
 print
 
-get_global index 2, <fn getVec>
+get_global index 2, <function getVec>
 constant index 1, value 5
 call index 1
 OP_REG_PUSH
@@ -36,5 +36,5 @@ print
 ret_naked
 
 -- global scope --
-get_global index 3, <fn main>
+get_global index 3, <function main>
 call index 0

@@ -18,6 +18,6 @@ print
 ret_naked
 
 -- global scope --
-get_global index 2, <fn main>
+get_global index 2, <function main>
 call index 0
 

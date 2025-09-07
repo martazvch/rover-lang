@@ -25,11 +25,11 @@ ret
 
 -- main --
 // Empty
-get_global index 0, <fn add>
+get_global index 0, <function add>
 call index 0
 
 // With args
-get_global index 1, <fn add1>
+get_global index 1, <function add1>
 constant index 0, value 1
 constant index 1, value 2.5
 call index 2
@@ -37,5 +37,5 @@ call index 2
 ret_naked
 
 -- global scope --
-get_global index 6, <fn main>
+get_global index 6, <function main>
 call index 0

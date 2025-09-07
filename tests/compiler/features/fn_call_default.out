@@ -56,7 +56,7 @@ OP_LOAD_INVOKE_DEF index 0
 OP_GET_DEFAULT index 0
 OP_INVOKE arity 1, method index 0
 print
-get_global index 2, <fn copy>
+get_global index 2, <function copy>
 OP_LOAD_FN_DEF
 OP_GET_DEFAULT index 0
 call index 1
@@ -72,5 +72,5 @@ print
 ret_naked
 
 -- global scope --
-get_global index 3, <fn main>
+get_global index 3, <function main>
 call index 0

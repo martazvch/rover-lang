@@ -1,15 +1,3 @@
-// fn main() {
-//     // Near scope capture
-//     var a: int = 3
-//     fn block() {
-//         fn capture() { a += 5 }
-//         capture()
-//     }
-//     block()
-//     print a
-// }
-
-
 fn main() {
     // Near scope capture
     var a: int = 3

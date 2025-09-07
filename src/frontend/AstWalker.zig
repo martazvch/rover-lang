@@ -4,10 +4,10 @@ const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const Ast = @import("Ast.zig");
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const oom = @import("../utils.zig").oom;
+const Ast = @import("Ast.zig");
 
 arena: std.heap.ArenaAllocator,
 allocator: Allocator,
@@ -24,11 +24,17 @@ const CaptureCtx = struct {
     const Scope = struct {
         locals: AutoArrayHashMapUnmanaged(InternerIdx, VarDecl) = .{},
         captures: Ast.FnDecl.Meta.Captures = .{},
+
+        pub fn addCapture(self: *Scope, allocator: Allocator, name: InternerIdx, index: usize, is_local: bool) usize {
+            self.captures.put(allocator, name, .{ .index = index, .is_local = is_local }) catch oom();
+            return self.captures.count() - 1;
+        }
     };
     const VarDecl = struct {
         name: InternerIdx,
         depth: usize = 0,
-        node: *Ast.VarDecl,
+        index: usize,
+        node: ?*Ast.VarDecl,
     };
 
     pub const empty: CaptureCtx = .{ .current = undefined };
@@ -50,10 +56,11 @@ const CaptureCtx = struct {
         self.current = &self.stack.items[self.stack.items.len - 1];
     }
 
-    pub fn declareLocal(self: *CaptureCtx, allocator: Allocator, name: InternerIdx, node: *Ast.VarDecl) void {
+    pub fn declareLocal(self: *CaptureCtx, allocator: Allocator, name: InternerIdx, node: ?*Ast.VarDecl) void {
         self.current.locals.put(allocator, name, .{
             .name = name,
             .depth = self.depth,
+            .index = self.current.locals.count(),
             .node = node,
         }) catch oom();
     }
@@ -72,6 +79,34 @@ const CaptureCtx = struct {
         }
 
         return null;
+    }
+
+    pub fn resolveCapture(self: *CaptureCtx, allocator: Allocator, name: InternerIdx) void {
+        _ = self.resolveCaptureInScope(allocator, name, self.stack.items.len - 1);
+    }
+
+    pub fn resolveCaptureInScope(self: *CaptureCtx, allocator: Allocator, name: InternerIdx, scope_index: usize) ?usize {
+        if (scope_index == 1) return null;
+
+        const current = &self.stack.items[scope_index];
+        const enclosing = &self.stack.items[scope_index - 1];
+
+        if (enclosing.locals.getPtr(name)) |local| {
+            // TODO: Can't close over another closure?
+            local.node.?.meta.captured = true;
+            return current.addCapture(allocator, name, local.index, true);
+        } else {
+            if (self.resolveCaptureInScope(allocator, name, scope_index - 1)) |capt_index| {
+                return current.addCapture(allocator, name, capt_index, false);
+            }
+        }
+
+        return null;
+    }
+
+    fn resolveLocal(self: *CaptureCtx, name: InternerIdx) ?usize {
+        const local = self.current.locals.getPtr(name) orelse return null;
+        return local.index;
     }
 };
 
@@ -111,6 +146,11 @@ fn functionCaptures(self: *Self, node: *Ast.FnDecl, ctx: *CaptureCtx) void {
 
     const scope = ctx.close();
     node.meta.captures = scope.captures;
+    std.log.info("Function: {s},\n  Captures: {any}", .{ self.ast.toSource(node.name), scope.captures.values() });
+
+    if (scope.captures.count() > 0) {
+        ctx.declareLocal(self.allocator, self.interner.intern(self.ast.toSource(node.name)), null);
+    }
 }
 
 fn captureFromNode(self: *Self, node: *Ast.Node, ctx: *CaptureCtx) void {
@@ -190,14 +230,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             if (e.tag != .identifier) return;
 
             const interned = self.interner.intern(self.ast.toSource(e.idx));
-            // If there is no variable associated with this name, it must be a symbol
-            // so we don't care
-            const variable = ctx.getVariable(interned) orelse return;
-
-            if (variable.depth < ctx.depth) {
-                variable.node.meta.captured = true;
-                ctx.current.captures.put(self.allocator, interned, {}) catch oom();
-            }
+            ctx.resolveCapture(self.allocator, interned);
         },
         .named_arg => |e| self.captureFromExpr(e.value, ctx),
         .@"return" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),

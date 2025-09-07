@@ -15,24 +15,24 @@ constant index 4, value 4
 add_int
 pop
 constant index 5, value 5
-get_local index 2
+get_local index 1
 print
 pop
 pop
 
 constant index 6, value 7
-get_local index 1
+get_local index 0
 ret_scope index 1
 
 constant index 7, value 67
 constant index 8, value just chillin
 constant index 9, value 7
 constant index 10, value 90
-get_local index 4
+get_local index 3
 ret_scope index 4
 
 ret_naked
 
 -- global scope --
-get_global index 0, <fn main>
+load_sym index 0, <function main>
 call index 0

@@ -238,6 +238,15 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
+            .get_capt_frame => {
+                const index = frame.readByte();
+                self.stack.push(frame.captures[index]);
+            },
+            .get_capt_local => {
+                const index = frame.readByte();
+                // self.stack.push(self.stack.peek(index));
+                self.stack.push((frame.slots + index)[0]);
+            },
             .get_default => self.stack.push(self.r3[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
@@ -332,8 +341,8 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
             .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) != self.stack.pop().obj.as(Obj.String))),
-            .negate_float => self.stack.peekRef(0).float *= -1,
-            .negate_int => self.stack.peekRef(0).int *= -1,
+            .neg_float => self.stack.peekRef(0).float *= -1,
+            .neg_int => self.stack.peekRef(0).int *= -1,
             .not => self.stack.peekRef(0).not(),
             .pop => _ = self.stack.pop(),
             .print => {
@@ -514,6 +523,7 @@ pub const CallFrame = struct {
     module: *CompiledModule,
     ip: [*]u8,
     slots: [*]Value,
+    captures: []Value,
 
     pub fn readByte(self: *CallFrame) u8 {
         defer self.ip += 1;
@@ -556,6 +566,7 @@ pub const CallFrame = struct {
                 @memcpy(self.slots, closure.captures);
                 stack.top += capt_len;
 
+                self.captures = closure.captures;
                 break :b closure.function;
             },
             .function => b: {

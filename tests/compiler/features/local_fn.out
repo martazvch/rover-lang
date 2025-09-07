@@ -7,7 +7,7 @@ get_local index 2
 ret
 
 -- main --
-constant index 0, value <fn add1>
+constant index 0, value <function add1>
 get_local index 1
 constant index 1, value 1
 constant index 2, value 2
@@ -16,5 +16,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 0, <fn main>
+get_global index 0, <function main>
 call index 0

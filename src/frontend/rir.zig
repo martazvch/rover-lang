@@ -18,6 +18,7 @@ pub const Instruction = struct {
         bool: bool,
         bound_method: usize,
         call: Call,
+        capture: Capture,
         cast: Type,
         discard,
         field: Field,
@@ -109,6 +110,7 @@ pub const Instruction = struct {
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
     pub const Call = struct { arity: u8, implicit_first: bool };
+    pub const Capture = struct { index: usize, is_local: bool };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,

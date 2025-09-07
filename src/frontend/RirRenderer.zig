@@ -121,6 +121,7 @@ fn parseInstr(self: *Self) void {
         .bool => |data| self.boolInstr(data),
         .bound_method => |data| self.boundMethod(data),
         .call => |*data| self.fnCall(data),
+        .capture => |*data| self.capture(data),
         .cast => |data| self.cast(data),
         .discard => self.discard(),
         .field => |*data| self.getField(data, false),
@@ -321,6 +322,10 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
 
         if (last > self.instr_idx) self.instr_idx = last;
     }
+}
+
+fn capture(self: *Self, data: *const Instruction.Capture) void {
+    self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.is_local });
 }
 
 fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {

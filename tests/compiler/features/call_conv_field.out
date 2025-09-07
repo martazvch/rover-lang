@@ -52,7 +52,7 @@ OP_LOAD_STRUCT_DEF
 OP_GET_DEFAULT index 0
 struct_lit index 1
 get_global index 1, <structure Foo>
-get_global index 3, <fn copy>
+get_global index 3, <function copy>
 struct_lit index 1
 get_local index 2
 get_field index 0
@@ -88,5 +88,5 @@ print
 ret_naked
 
 -- global scope --
-get_global index 4, <fn main>
+get_global index 4, <function main>
 call index 0
