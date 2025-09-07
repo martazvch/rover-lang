@@ -94,8 +94,6 @@ scope: LexScope,
 type_interner: *TypeInterner,
 ir_builder: IrBuilder,
 main: ?usize,
-// TODO: useless, we can have the last scope in scope?
-globals: ArrayListUnmanaged(usize),
 
 module_name: InternerIdx,
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
@@ -113,7 +111,6 @@ pub fn init(allocator: Allocator, pipeline: *Pipeline, module_name: InternerIdx)
         .warns = .empty,
         .scope = .empty,
         .ir_builder = .init(allocator),
-        .globals = .empty,
         .main = null,
 
         .module_name = module_name,
@@ -277,7 +274,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
     self.containers.append(self.allocator, self.ast.toSource(node.name));
     defer _ = self.containers.pop();
 
-    std.log.info("Doing function: {s}", .{self.ast.toSource(node.name)});
     const captures_instrs_data = try self.loadFunctionCaptures(&node.meta.captures);
     const param_res = try self.fnParams(node.params, ctx);
 
@@ -298,7 +294,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 
     // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
     const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, span.start);
-    const is_closure = (node.has_callable or captures_count > 0) and !self.scope.isGlobal();
+    const is_closure = captures_count > 0 and !self.scope.isGlobal();
 
     if (is_closure) {
         _ = self.scope.removeSymbolFromScope(name);
@@ -332,7 +328,6 @@ fn loadFunctionCaptures(self: *Self, captures: *const Ast.FnDecl.Meta.Captures) 
     while (it.next()) |capt| {
         const name = capt.key_ptr.*;
         const capt_infos = capt.value_ptr.*;
-        std.log.info("Name: {s}", .{self.interner.getKey(name).?});
         const variable, _ = self.scope.getVariable(name) orelse unreachable;
         _ = try self.declareVariable(name, variable.type, true, true, false, .zero);
         instructions.appendAssumeCapacity(.{ .capture = .{ .index = capt_infos.index, .is_local = capt_infos.is_local } });
@@ -353,11 +348,7 @@ const Params = struct {
     default_count: usize,
     is_method: bool,
 };
-fn fnParams(
-    self: *Self,
-    params: []Ast.VarDecl,
-    ctx: *Context,
-) Error!Params {
+fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
     var decls: AutoArrayHashMapUnmanaged(InternerIdx, Type.Function.Parameter) = .empty;
     decls.ensureTotalCapacity(self.allocator, params.len) catch oom();
 
@@ -569,10 +560,6 @@ fn expectValue(self: *Self, expr: *const Ast.Expr, ctx: *Context) Error!*const T
 }
 
 fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!void {
-    // TODO: check if not useless
-    const snapshot = ctx.snapshot();
-    defer snapshot.restore();
-
     const span = self.ast.getSpan(node.name);
     const name = try self.internIfNotInCurrentScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
@@ -620,11 +607,9 @@ fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) Error
 fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) Error!void {
     const span = self.ast.getSpan(node);
     const name = try self.internIfNotInCurrentScope(node.name);
-    // We forward declare for self referencing
     var buf: [1024]u8 = undefined;
     const container_name = self.interner.internKeepRef(self.allocator, self.containers.renderWithSep(&buf, "."));
 
-    // We forward declare for self referencing
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
     var ty: Type.Structure = .{
         .loc = .{ .name = name, .container = container_name },
@@ -851,9 +836,7 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) TypeResult {
         }
 
         // Nothing to do at compile time for import statements
-        if (node.* == .use) {
-            len -= 1;
-        }
+        if (node.* == .use) len -= 1;
     }
 
     const count = self.scope.close();
@@ -930,10 +913,6 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) TypeResult {
 }
 
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) TypeResult {
-    // TODO: check if not useless
-    const snapshot = ctx.snapshot();
-    defer snapshot.restore();
-
     const closure_idx = self.ir_builder.reserveInstr();
 
     self.scope.open(self.allocator, false);

@@ -17,13 +17,15 @@ ast: *Ast,
 const Self = @This();
 
 const CaptureCtx = struct {
-    stack: ArrayListUnmanaged(Scope) = .{},
+    stack: ArrayListUnmanaged(Scope),
     current: *Scope,
-    depth: usize = 0,
+    depth: usize,
 
     const Scope = struct {
-        locals: AutoArrayHashMapUnmanaged(InternerIdx, VarDecl) = .{},
-        captures: Ast.FnDecl.Meta.Captures = .{},
+        locals: AutoArrayHashMapUnmanaged(InternerIdx, VarDecl),
+        captures: Ast.FnDecl.Meta.Captures,
+
+        pub const empty: Scope = .{ .locals = .empty, .captures = .empty };
 
         pub fn addCapture(self: *Scope, allocator: Allocator, name: InternerIdx, index: usize, is_local: bool) usize {
             self.captures.put(allocator, name, .{ .index = index, .is_local = is_local }) catch oom();
@@ -32,22 +34,22 @@ const CaptureCtx = struct {
     };
     const VarDecl = struct {
         name: InternerIdx,
-        depth: usize = 0,
+        depth: usize,
         index: usize,
         node: ?*Ast.VarDecl,
     };
 
-    pub const empty: CaptureCtx = .{ .current = undefined };
+    pub const empty: CaptureCtx = .{ .stack = .empty, .current = undefined, .depth = 0 };
 
     pub fn open(self: *CaptureCtx, allocator: Allocator) void {
         self.depth += 1;
-        self.stack.append(allocator, .{}) catch oom();
+        self.stack.append(allocator, .empty) catch oom();
         self.updateCurrent();
     }
 
     pub fn close(self: *CaptureCtx) Scope {
         self.depth -= 1;
-        const popped = self.stack.pop() orelse unreachable;
+        const popped = self.stack.pop().?;
         if (self.stack.items.len > 0) self.updateCurrent();
         return popped;
     }
@@ -89,6 +91,8 @@ const CaptureCtx = struct {
         if (scope_index == 1) return null;
 
         const current = &self.stack.items[scope_index];
+        if (current.locals.get(name) != null) return null;
+
         const enclosing = &self.stack.items[scope_index - 1];
 
         if (enclosing.locals.getPtr(name)) |local| {
@@ -146,7 +150,6 @@ fn functionCaptures(self: *Self, node: *Ast.FnDecl, ctx: *CaptureCtx) void {
 
     const scope = ctx.close();
     node.meta.captures = scope.captures;
-    std.log.info("Function: {s},\n  Captures: {any}", .{ self.ast.toSource(node.name), scope.captures.values() });
 
     if (scope.captures.count() > 0) {
         ctx.declareLocal(self.allocator, self.interner.intern(self.ast.toSource(node.name)), null);

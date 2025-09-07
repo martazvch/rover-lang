@@ -9,12 +9,12 @@
         [String updated]
         [Assignment index: 0, scope: local]
         - captures
-        [Variable index: 0, scope: local]
+        [Capture index: 0, is_local: true]
     [Closure declaration get, return kind: implicit_void]
         [Print]
             [Variable index: 0, scope: local]
         - captures
-        [Variable index: 0, scope: local]
+        [Capture index: 0, is_local: true]
     [Variable index: 1, scope: local]
     [Assignment index: 0, scope: global]
     [Variable index: 2, scope: local]

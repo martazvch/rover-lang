@@ -244,7 +244,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .get_capt_local => {
                 const index = frame.readByte();
-                // self.stack.push(self.stack.peek(index));
                 self.stack.push((frame.slots + index)[0]);
             },
             .get_default => self.stack.push(self.r3[frame.readByte()]),

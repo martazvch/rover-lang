@@ -13,7 +13,7 @@
         [Return expr: true, cast: false]
             [Variable index: 0, scope: local]
         - captures
-        [Variable index: 0, scope: local]
+        [Capture index: 0, is_local: true]
     [Return expr: true, cast: false]
         [Variable index: 1, scope: local]
 [Function declaration factory3, return kind: implicit_value]
