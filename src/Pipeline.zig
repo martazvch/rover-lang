@@ -77,8 +77,6 @@ pub fn init(allocator: Allocator, vm: *Vm, ctx: *Context) Self {
 /// Runs the pipeline
 // TODO: could only need full path
 pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
-    // const module_index = self.ctx.module_interner.reserve(self.ctx.interner.intern(path));
-    // self.analyzer = .init(self.allocator, self, module_index);
     const path_interned = self.ctx.interner.intern(path);
     self.analyzer = .init(self.allocator, self, path_interned);
     // Initiliaze the path builder
@@ -160,7 +158,6 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         if (options.test_mode and self.ctx.config.print_bytecode) .@"test" else if (self.ctx.config.print_bytecode) .normal else .none,
         self.analyzer.scope.current.variables.count(),
         self.analyzer.scope.symbol_count,
-        // self.analyzer.scope.sym_decls.items.len,
     );
     defer compiler.deinit();
 
@@ -173,8 +170,6 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     );
     self.instr_count = self.analyzer.ir_builder.count();
 
-    // self.ctx.module_interner.setAt(module_index, analyzed_module, compiled_module);
-    // const path_interned = self.ctx.interner.intern(path);
     self.ctx.module_interner.add(path_interned, analyzed_module, compiled_module);
 
     return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)

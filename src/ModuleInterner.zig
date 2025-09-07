@@ -24,21 +24,10 @@ pub fn deinit(self: *Self) void {
     self.compiled.deinit(self.allocator);
 }
 
-// pub fn reserve(self: *Self, name: InternerIndex) usize {
-//     self.analyzed.put(self.allocator, name, undefined) catch oom();
-//     self.compiled.put(self.allocator, name, undefined) catch oom();
-//     return self.analyzed.count();
-// }
-
 pub fn add(self: *Self, name: InternerIndex, analyzed: AnalyzedModule, compiled: CompiledModule) void {
     self.analyzed.put(self.allocator, name, analyzed) catch oom();
     self.compiled.put(self.allocator, name, compiled) catch oom();
 }
-
-// pub fn setAt(self: *Self, index: usize, analyzed: AnalyzedModule, compiled: CompiledModule) void {
-//     self.analyzed.values()[index] = analyzed;
-//     self.compiled.values()[index] = compiled;
-// }
 
 pub fn getAnalyzed(self: *const Self, name: InternerIndex) ?*AnalyzedModule {
     return self.analyzed.getPtr(name);

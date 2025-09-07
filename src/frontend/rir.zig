@@ -80,14 +80,6 @@ pub const Instruction = struct {
     };
 
     pub const Array = struct {
-        // /// Number of expressions
-        // len: usize,
-        // /// Number of casts after the cast_until field
-        // cast_count: usize,
-        // /// Cast all element until this one. Used for cases where we discover later in the
-        // /// array analysis that all previous expressions should be casted like in this case:
-        // /// [1, 3, 4.5]. Here, we need to backtrack all the casts
-        // cast_until: usize,
         elems: []const Elem,
 
         pub const Elem = struct { cast: bool, incr_rc: bool };
@@ -116,7 +108,6 @@ pub const Instruction = struct {
         incr_rc: bool,
     };
     pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    // pub const Call = struct { arity: u8, default_count: u8, implicit_first: bool };
     pub const Call = struct { arity: u8, implicit_first: bool };
     pub const FnDecl = struct {
         kind: Kind,
@@ -172,18 +163,3 @@ pub const Instruction = struct {
         unbox: bool,
     };
 };
-
-comptime {
-    // @compileLog(@sizeOf(Instruction));
-    // @compileLog(@sizeOf(Instruction.Data));
-    // @compileLog(@sizeOf(Instruction.Tag));
-    // @compileLog(@sizeOf(Instruction.Binop));
-    // @compileLog(@sizeOf(Instruction.Block));
-    // @compileLog(@sizeOf(Instruction.call));
-    // @compileLog(@sizeOf(Instruction.FnDecl));
-    // @compileLog(@sizeOf(Instruction.@"if"));
-    // @compileLog(@sizeOf(Instruction.Imported));
-    // @compileLog(@sizeOf(Instruction.unary));
-    // @compileLog(@sizeOf(Instruction.Variable));
-    // @compileLog(@sizeOf(Instruction.VarDecl));
-}

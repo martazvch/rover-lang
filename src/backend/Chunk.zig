@@ -97,8 +97,6 @@ pub const OpCode = enum(u8) {
     lt_int,
     lt_float,
     load_extern_sym,
-    // load_fn_default,
-    // load_struct_def,
     load_sym,
     loop,
     mul_float,
