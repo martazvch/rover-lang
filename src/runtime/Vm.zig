@@ -225,7 +225,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const lhs = self.stack.pop().int;
                 self.stack.push(Value.makeInt(@divTrunc(lhs, rhs)));
             },
-            .dup => self.stack.push(self.stack.peek(0)),
             .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
             .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
@@ -424,13 +423,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .sub_int => {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
-            },
-            .swap => {
-                const a = self.stack.peekRef(0);
-                const b = self.stack.peekRef(1);
-                const tmp = a.*;
-                a.* = b.*;
-                b.* = tmp;
             },
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }

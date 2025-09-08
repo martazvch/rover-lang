@@ -77,7 +77,6 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
         .def_global => self.indexInstruction("def_global", offset, writer),
         .div_float => self.simpleInstruction("div_float", offset, writer),
         .div_int => self.simpleInstruction("div_int", offset, writer),
-        .dup => self.simpleInstruction("dup", offset, writer),
         .eq_bool => self.simpleInstruction("eq_bool", offset, writer),
         .eq_float => self.simpleInstruction("eq_float", offset, writer),
         .eq_int => self.simpleInstruction("eq_int", offset, writer),
@@ -136,7 +135,6 @@ pub fn disInstruction(self: *Self, offset: usize, writer: anytype) (Allocator.Er
         .struct_lit => self.indexInstruction("struct_lit", offset, writer),
         .sub_float => self.simpleInstruction("sub_float", offset, writer),
         .sub_int => self.simpleInstruction("sub_int", offset, writer),
-        .swap => self.simpleInstruction("swap", offset, writer),
         .unbox => self.simpleInstruction("unbox", offset, writer),
     };
 }
