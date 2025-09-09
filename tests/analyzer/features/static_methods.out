@@ -28,7 +28,7 @@
         [Variable index: 1, scope: local]
         - args:
         [Int 65]
-    [Incr ref count]
+    [Increment ref count]
     [Assignment index: 0, scope: local, cow]
     [Variable declaration index: 2, scope: local, incr_rc]
         [Fn call arity: 2]
@@ -45,5 +45,5 @@
         - args:
         [Int 56]
         [Int 78]
-    [Incr ref count]
+    [Increment ref count]
     [Assignment index: 2, scope: local, cow]

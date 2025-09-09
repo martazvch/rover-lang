@@ -230,7 +230,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) Error!voi
         .{ .assignment = .{
             .cast = coherence.cast,
             .cow = assigne_type.isHeap(),
-            .incr_rc = value_type.isHeap() and !isHeapLiteral(node.value),
+            .incr_rc = shouldIncrRc(value_type, node.value),
         } },
         span.start,
         .{ .set_at = index },
@@ -574,7 +574,7 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
         ctx.allow_partial = false;
 
         const value_type = try self.expectValue(value, ctx);
-        incr_rc = value_type.isHeap() and !isHeapLiteral(value);
+        incr_rc = shouldIncrRc(value_type, value);
 
         const coherence = try self.performTypeCoercion(checked_type, value_type, true, self.ast.getSpan(value));
         checked_type = coherence.type;
@@ -774,7 +774,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) TypeResult {
         }
 
         final_type = typ;
-        elems.appendAssumeCapacity(.{ .cast = cast, .incr_rc = typ.isHeap() and !isHeapLiteral(val) });
+        elems.appendAssumeCapacity(.{ .cast = cast, .incr_rc = shouldIncrRc(typ, val) });
     }
 
     self.makeInstruction(
@@ -1582,21 +1582,19 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Typ
         const value_instr = self.ir_builder.count();
         proto.putAssumeCapacity(field_name, true);
 
-        const typ = if (fv.value) |val|
-            try self.analyzeExpr(val, ctx)
-        else // Syntax: { x } instead of { x = x }
-            (try self.expectVariableIdentifier(fv.name)).type;
+        const typ, const incr_rc = if (fv.value) |value|
+            .{ try self.analyzeExpr(value, ctx), false }
+        else b: {
+            // Syntax: { x } instead of { x = x }
+            const value_type = (try self.expectVariableIdentifier(fv.name)).type;
+            break :b .{ value_type, value_type.isHeap() };
+        };
 
         const value_span = if (fv.value) |val| self.ast.getSpan(val) else field_span;
         const coercion = try self.performTypeCoercion(f.type, typ, false, value_span);
 
         self.makeInstruction(
-            .{ .value = .{
-                .value_instr = value_instr,
-                .cast = coercion.cast,
-                .box = false,
-                .incr_rc = typ.isHeap(),
-            } },
+            .{ .value = .{ .value_instr = value_instr, .cast = coercion.cast, .box = false, .incr_rc = incr_rc } },
             field_span.start,
             .{ .set_at = start + field_index },
         );
@@ -1861,6 +1859,12 @@ fn isVoid(self: *const Self, ty: *const Type) bool {
 
 fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
     return ty.toString(self.allocator, &self.scope, self.module_name, self.interner, &self.pipeline.ctx.module_interner);
+}
+
+/// Checks if it should increment the reference count of the expression based on its type
+/// on the type of expression. All non-literal heap variables will be incremented
+fn shouldIncrRc(ty: *const Type, expr: *const Expr) bool {
+    return ty.isHeap() and !isHeapLiteral(expr);
 }
 
 /// Checks if the expression is a literal generating a heap object

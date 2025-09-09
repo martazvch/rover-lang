@@ -16,6 +16,7 @@
             [Int 5]
             [String Tom]
             [Variable index: 0, scope: local]
+            [Increment ref count]
     [Print]
         [Field access 1]
             [Field access 2]

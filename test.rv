@@ -1,13 +1,16 @@
 struct Foo {
     a: int
 }
+struct Bar {
+    foo: Foo
+}
 
 fn main() {
-    var arr = [Foo{a=6}]
-    arr[0].a = 9
-    print arr[0].a
+    var foo = Foo{a=6}
+    var bar = Bar{foo}
 
-    var ref = arr[0]
+    bar.foo.a = 56
+    print foo.a
 }
 
 // fn main() {

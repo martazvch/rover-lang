@@ -82,6 +82,7 @@
             [Load symbol 2]
             - args
             [Variable index: 4, scope: local]
+            [Increment ref count]
     [Print]
         [Array access]
             - array

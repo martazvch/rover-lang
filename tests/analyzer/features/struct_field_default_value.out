@@ -9,19 +9,19 @@
             - structure
             [Load symbol 0]
             - args
-            [Cast next value to float]
             [Int 1]
-            [Cast next value to float]
+            [Cast to float]
             [Int 2]
+            [Cast to float]
             [Bool true]
     [Structure literal]
         - structure
         [Load symbol 0]
         - args
-        [Cast next value to float]
         [Int 3]
-        [Cast next value to float]
+        [Cast to float]
         [Int 99]
+        [Cast to float]
         [Int 7]
         [Bool false]
     [Assignment index: 0, scope: local, cow]

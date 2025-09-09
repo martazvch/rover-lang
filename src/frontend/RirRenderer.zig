@@ -160,15 +160,12 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     for (data.elems) |elem| {
         self.parseInstr();
 
-        if (elem.cast) {
-            self.indentAndAppendSlice("[Cast to float]");
-        } else if (elem.incr_rc) {
-            self.indentAndAppendSlice("[Increment ref count]");
-        }
+        if (elem.cast) self.indentAndAppendSlice("[Cast to float]");
+        self.checkInrcRc(elem.incr_rc);
     }
 }
 
-fn arrayAccess(self: *Self, depth: usize, incr_ref: bool, cow: bool, is_assign: bool) void {
+fn arrayAccess(self: *Self, depth: usize, incr_rc: bool, cow: bool, is_assign: bool) void {
     if (is_assign)
         self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]")
     else
@@ -176,7 +173,7 @@ fn arrayAccess(self: *Self, depth: usize, incr_ref: bool, cow: bool, is_assign: 
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    if (incr_ref) self.indentAndAppendSlice("[Increment reference count]");
+    self.checkInrcRc(incr_rc);
     if (cow) self.indentAndAppendSlice("[Cow]");
 
     if (depth > 1) {
@@ -198,9 +195,8 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
 
     if (data.cast) {
         self.indentAndAppendSlice("[Cast to float]");
-    } else if (data.incr_rc) {
-        self.indentAndAppendSlice("[Incr ref count]");
     }
+    self.checkInrcRc(data.incr_rc);
 
     const variable_data = switch (self.next()) {
         .array_access => return self.arrayAccess(1, false, data.cow, true),
@@ -387,18 +383,6 @@ fn identifier(self: *Self, data: *const Instruction.Variable) void {
     });
 }
 
-fn identifierId(self: *Self, data: *const Instruction.IdentifierId) void {
-    const variable_data = self.instrs[data.index].var_decl.variable;
-    self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
-        variable_data.index, @tagName(variable_data.scope),
-    });
-
-    if (data.rc_action == .increment)
-        self.indentAndAppendSlice("[Increment reference count]")
-    else if (data.rc_action == .cow)
-        self.indentAndAppendSlice("[Cow]");
-}
-
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
     self.indentAndPrintSlice("[If cast: {s}, has else: {}]", .{
         @tagName(data.cast),
@@ -489,14 +473,13 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
         for (0..data.fields_count) |_| {
             switch (self.next()) {
                 .value => |value_data| {
-                    if (value_data.cast) {
-                        self.indentAndAppendSlice("[Cast next value to float]");
-                    }
                     const save = self.instr_idx;
                     self.instr_idx = value_data.value_instr;
                     self.parseInstr();
-                    last = @max(last, self.instr_idx);
+                    if (value_data.cast) self.indentAndAppendSlice("[Cast to float]");
+                    self.checkInrcRc(value_data.incr_rc);
 
+                    last = @max(last, self.instr_idx);
                     self.instr_idx = save;
                 },
                 .default_value => {},
@@ -553,4 +536,8 @@ fn indentAndPrintSlice(self: *Self, comptime fmt: []const u8, args: anytype) voi
     self.indent();
     self.writer.print(fmt, args) catch oom();
     self.tree.appendSlice("\n") catch oom();
+}
+
+fn checkInrcRc(self: *Self, incr_rc: bool) void {
+    if (incr_rc) self.indentAndAppendSlice("[Increment ref count]");
 }

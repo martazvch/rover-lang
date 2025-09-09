@@ -619,8 +619,10 @@ const Compiler = struct {
                     // resolving the first value during the last iteration
                     last = @max(last, self.manager.instr_idx);
 
+                    // TODO: maybe define an union, because it can't be several at the same time
                     if (data.cast) self.writeOp(.cast_to_float, line);
                     if (data.box) self.writeOp(.box, line);
+                    if (data.incr_rc) self.writeOp(.incr_ref, line);
                 },
                 .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), line),
                 else => unreachable,

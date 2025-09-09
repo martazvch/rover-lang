@@ -1,3 +1,4 @@
+// math
 [Structure declaration Vec2]
     [Function declaration len, return kind: implicit_value]
         [Binop type: add_int, cast: none]
@@ -22,6 +23,8 @@
     [Int 9]
     - body
     [Variable index: 0, scope: local]
+
+// geom
 [Structure declaration Point]
     [Function declaration move, return kind: implicit_void]
         [Binop type: add_int, cast: none]
@@ -83,6 +86,7 @@
             [Variable index: 0, scope: local]
         [String ']
 
+// test
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
@@ -99,9 +103,10 @@
             - structure
             [Load symbol 4 of module 1]
             - args
-            [Cast next value to float]
             [Int 10]
+            [Cast to float]
             [Variable index: 0, scope: local]
+            [Increment ref count]
     [Print]
         [Field access 0]
             [Field access 1]

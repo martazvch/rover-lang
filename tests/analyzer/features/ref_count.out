@@ -38,12 +38,14 @@
             [Load symbol 2]
             - args
             [Variable index: 0, scope: local]
+            [Increment ref count]
     [Variable declaration index: 2, scope: local]
         [Structure literal]
             - structure
             [Load symbol 4]
             - args
             [Variable index: 1, scope: local]
+            [Increment ref count]
             [Array]
                 [Variable index: 1, scope: local]
                 [Increment ref count]
