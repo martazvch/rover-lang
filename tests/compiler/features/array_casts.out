@@ -30,6 +30,6 @@ array_new index 4
 ret_naked
 
 -- global scope --
-get_global index 0, <function main>
+load_sym index 0, <function main>
 call index 0
 

@@ -1,8 +1,6 @@
-//---- array_chain.rv ----
-
 -- main --
 constant index 0, value 1
-get_global index 0, <structure Point>
+load_sym index 0, <structure Point>
 constant index 1, value 1
 constant index 2, value 2
 constant index 3, value 1
@@ -14,7 +12,7 @@ array_new index 2
 array_new index 2
 struct_lit index 3
 
-get_global index 0, <structure Point>
+load_sym index 0, <structure Point>
 constant index 7, value 5
 constant index 8, value 6
 constant index 9, value 7
@@ -26,7 +24,7 @@ array_new index 2
 array_new index 2
 struct_lit index 3
 
-get_global index 0, <structure Point>
+load_sym index 0, <structure Point>
 constant index 13, value 11
 constant index 14, value 12
 constant index 15, value 13
@@ -38,7 +36,7 @@ array_new index 2
 array_new index 2
 struct_lit index 3
 
-get_global index 0, <structure Point>
+load_sym index 0, <structure Point>
 constant index 19, value 17
 constant index 20, value 18
 constant index 21, value 19
@@ -50,82 +48,86 @@ array_new index 2
 array_new index 2
 struct_lit index 3
 
-get_global index 1, <structure Poly>
+load_sym index 1, <structure Poly>
+get_local index 1
+incr_ref
 get_local index 2
-OP_INCR_REF_COUNT
-get_local index 3
-OP_INCR_REF_COUNT
+incr_ref
 array_new index 2
+get_local index 3
+incr_ref
 get_local index 4
-OP_INCR_REF_COUNT
-get_local index 5
-OP_INCR_REF_COUNT
+incr_ref
 array_new index 2
 array_new index 2
 struct_lit index 1
 
-get_global index 2, <structure Object>
-OP_LOAD_STRUCT_DEF
-get_local index 6
-OP_INCR_REF_COUNT
-OP_GET_DEFAULT index 0
+load_sym index 2, <structure Object>
+get_local index 5
+incr_ref
+get_default index 0
 struct_lit index 2
 
-constant index 25, value 0
-constant index 26, value 1
-get_local index 7
-OP_GET_FIELD_REG index 0
-OP_GET_FIELD_REG index 0
-OP_ARRAY_ACCESS_CHAIN index 2
+get_local index 6
+get_field index 0
+get_field index 0
+constant index 25, value 1
+array_get
+constant index 26, value 0
+array_get
 print
 
+get_local index 6
+get_field index 0
+get_field index 0
+get_local index 0
+array_get
 constant index 27, value 0
-get_local index 1
-get_local index 7
-OP_GET_FIELD_REG index 0
-OP_GET_FIELD_REG index 0
-OP_ARRAY_ACCESS_CHAIN_REG index 2
+array_get
 get_field index 0
 print
 
-constant index 28, value 0
-constant index 29, value 1
-get_local index 7
-OP_GET_FIELD_REG index 0
-OP_GET_FIELD_REG index 0
-OP_ARRAY_ACCESS_CHAIN_REG index 2
-OP_GET_FIELD_REG index 2
+get_local index 6
+get_field index 0
+get_field index 0
+constant index 28, value 1
+array_get
+constant index 29, value 0
+array_get
+get_field index 2
 constant index 30, value 0
 array_get
 print
 
+get_local index 6
+get_field index 0
+get_field index 0
 constant index 31, value 1
-get_local index 1
+array_get
 constant index 32, value 0
+array_get
+get_field index 2
+get_local index 0
+array_get
 constant index 33, value 1
-get_local index 7
-OP_GET_FIELD_REG index 0
-OP_GET_FIELD_REG index 0
-OP_ARRAY_ACCESS_CHAIN_REG index 2
-OP_GET_FIELD_REG index 2
-OP_ARRAY_ACCESS_CHAIN index 2
+array_get
 print
 
 constant index 34, value 55
 constant index 35, value 66
 array_new index 2
-constant index 36, value 0
-constant index 37, value 1
-get_local index 7
-OP_GET_FIELD_REG index 0
-OP_GET_FIELD_REG index 0
-OP_ARRAY_ACCESS_CHAIN_REG index 2
-OP_GET_FIELD_REG index 2
+get_local_cow index 6
+get_field_cow index 0
+get_field_cow index 0
+constant index 36, value 1
+array_get_cow
+constant index 37, value 0
+array_get_cow
+get_field_cow index 2
 constant index 38, value 0
 array_set
-
 ret_naked
 
 -- global scope --
-get_global index 3, <function main>
+load_sym index 3, <function main>
 call index 0

@@ -10,7 +10,7 @@ pub const Instruction = struct {
 
     pub const Data = union(enum) {
         array: Array,
-        array_access: ArrayAccess,
+        array_access,
         array_access_chain: ArrayAccessChain,
         assignment: Assignment,
         binop: Binop,
@@ -85,18 +85,13 @@ pub const Instruction = struct {
 
         pub const Elem = struct { cast: bool, incr_rc: bool };
     };
-    pub const ArrayAccess = struct {
-        /// Cow for the array identifier
-        cow: bool,
-        /// Increment RC for accessed array element
-        incr_ref: bool,
-    };
+    // TODO: see if cow/rc actually used
     pub const ArrayAccessChain = struct {
         depth: usize,
         /// Cow for the array identifier
         cow: bool,
         /// Increment RC for accessed array element
-        incr_ref: bool,
+        incr_rc: bool,
     };
     pub const Assignment = struct {
         /// Casts to float the value before assignment
@@ -144,6 +139,7 @@ pub const Instruction = struct {
         value_instr: usize,
         cast: bool,
         box: bool,
+        incr_rc: bool,
     };
     pub const Unary = struct {
         op: Op,

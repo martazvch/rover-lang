@@ -1,10 +1,42 @@
+-- set --
+constant index 0, value updated
+set_local_box index 0
+ret_naked
+
+-- get --
+get_local index 0
+unbox
+print
+ret_naked
+
+-- set_vars --
+constant index 0, value init
+box
+constant index 1, value <function set>
+get_capt_local index 0
+closure index 1
+constant index 2, value <function get>
+get_capt_local index 0
+closure index 1
+get_local index 1
+set_global index 0
+get_local index 2
+set_global index 1
+ret_naked
+
 -- main --
-constant index 0, value 3
-constant index 1, value 4
-add_int
-pop
+load_sym index 0, <function set_vars>
+call index 0
+get_global index 0
+call index 0
+get_global index 1
+call index 0
 ret_naked
 
 -- global scope --
-load_sym index 0, <function main>
+push_null
+def_global index 0
+push_null
+def_global index 1
+load_sym index 3, <function main>
 call index 0

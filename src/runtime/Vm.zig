@@ -592,6 +592,8 @@ const FrameStack = struct {
         return new_frame;
     }
 
+    /// Opens a new frame while keeping the same module at the one before
+    /// Assumes that there is one before
     pub fn newKeepMod(self: *FrameStack) Error!*CallFrame {
         if (self.count == FRAMES_MAX) {
             return error.StackOverflow;

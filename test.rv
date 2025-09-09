@@ -1,31 +1,55 @@
-// global
-fn add(a: int) {}
-
-fn main() {
-    // local
-    {
-        fn another_bool(a: int, b: str) -> bool {
-            var tmp = 5
-            true or false
-        }
-    }
-
-    // Nested
-    fn add1(a:int, b:float) {
-        fn sub(a:int) -> str {
-            print a
-            "yes"
-        }
-
-        _ = sub(1)
-    }
+struct Foo {
+    a: int
 }
 
-// Return kinds
-fn add1() { return }
-fn add2() -> int { 5 }
-fn add3()  {  }
-fn add4() -> int { return 5 }
+fn main() {
+    var arr = [Foo{a=6}]
+    arr[0].a = 9
+    print arr[0].a
 
-// Default param
-fn default(c: str, a, b = 7, d, e: bool=false) {}
+    var ref = arr[0]
+}
+
+// fn main() {
+//     // Near scope capture
+//     var a: int = 3
+//     var b: int = 3
+//
+//     fn block() {
+//         print a
+//         print b
+//     }
+//     var j: int
+// }
+
+// fn main() {
+//     // Near scope capture
+//     var a: int = 3
+//
+//     fn capture() { print a }
+//
+//     // Far scope capture
+//     var first = 1
+//     var c: int = 3
+//     var b = true
+//     var last = 9
+//
+//     fn nested() {
+//         var mach: int
+//         var mach2 = c
+//
+//         fn nested2() {
+//             var mach3: int
+//
+//             fn capture1() { print b }
+//         }
+//     }
+//
+//     // Assignment
+//     var d = 1
+//
+//     fn capture2() { print d }
+//
+//     d = 2
+// }
+//

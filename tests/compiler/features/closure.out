@@ -14,11 +14,11 @@ constant index 0, value init
 box
 
 constant index 1, value <function set>
-get_local index 0
+get_capt_local index 0
 closure index 1
 
 constant index 2, value <function get>
-get_local index 0
+get_capt_local index 0
 closure index 1
 
 get_local index 1

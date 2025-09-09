@@ -66,11 +66,22 @@ pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
 
     for (source, 0..) |c, i| {
         if (c == '\n') {
-            for (offsets[offset_index..offsets.len]) |o| {
-                if (o <= i) {
-                    offset_index += 1;
+            var prev: usize = 0;
+
+            for (offsets[offset_index..]) |offset| {
+                // If offset is lower than previous, it means it has been added manually
+                // after some instructions. We append 0 so when it's rendered in debug mode,
+                // as 0 will be lower than previous line it will just render '|'
+                if (prev != 0 and offset < prev) {
+                    list.appendAssumeCapacity(0);
+                } else if (offset <= i) {
                     list.appendAssumeCapacity(line);
+                } else {
+                    break;
                 }
+
+                prev = offset;
+                offset_index += 1;
             }
 
             line += 1;

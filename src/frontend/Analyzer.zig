@@ -788,7 +788,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) TypeResult {
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) TypeResult {
     const span = self.ast.getSpan(expr.array);
-    const index = self.ir_builder.reserveInstr();
+    self.makeInstruction(.array_access, span.start, .add);
     const arr = try self.analyzeExpr(expr.array, ctx);
 
     const type_value = switch (arr.*) {
@@ -798,13 +798,7 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) TypeRes
             span,
         ),
     };
-
     try self.expectArrayIndex(expr.index, ctx);
-    self.makeInstruction(
-        .{ .array_access = .{ .cow = false, .incr_ref = false } },
-        span.start,
-        .{ .set_at = index },
-    );
 
     return type_value;
 }
@@ -1013,9 +1007,7 @@ fn getArithmeticOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type
 }
 
 fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, expr: *const Ast.Binop) Error!ArithmeticResult {
-    var instr = Instruction.Binop{ .op = undefined };
-
-    instr.op = switch (op) {
+    var instr = Instruction.Binop{ .op = switch (op) {
         .equal_equal => switch (lhs.*) {
             .bool => .eq_bool,
             .int => .eq_int,
@@ -1031,7 +1023,7 @@ fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, 
             else => .ne_str,
         },
         else => unreachable,
-    };
+    } };
 
     if (lhs != rhs) {
         if ((lhs.is(.int) and rhs.is(.float)) or (lhs.is(.float) and rhs.is(.int))) {
@@ -1299,8 +1291,14 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
             },
         }
 
+        // TODO: implement incr_rc
         self.makeInstruction(
-            .{ .value = .{ .value_instr = value_instr, .cast = cast, .box = param_info.captured } },
+            .{ .value = .{
+                .value_instr = value_instr,
+                .cast = cast,
+                .box = param_info.captured,
+                .incr_rc = false,
+            } },
             span_start,
             .{ .set_at = start + param_index },
         );
@@ -1593,7 +1591,12 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Typ
         const coercion = try self.performTypeCoercion(f.type, typ, false, value_span);
 
         self.makeInstruction(
-            .{ .value = .{ .value_instr = value_instr, .cast = coercion.cast, .box = false } },
+            .{ .value = .{
+                .value_instr = value_instr,
+                .cast = coercion.cast,
+                .box = false,
+                .incr_rc = typ.isHeap(),
+            } },
             field_span.start,
             .{ .set_at = start + field_index },
         );

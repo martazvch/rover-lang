@@ -113,8 +113,8 @@ fn next(self: *Self) Instruction.Data {
 fn parseInstr(self: *Self) void {
     switch (self.next()) {
         .array => |*data| self.array(data),
-        .array_access => |*data| self.arrayAccess(1, data.incr_ref, data.cow, false),
-        .array_access_chain => |*data| self.arrayAccess(data.depth, data.incr_ref, data.cow, false),
+        .array_access => self.arrayAccess(1, false, false, false),
+        .array_access_chain => |*data| self.arrayAccess(data.depth, data.incr_rc, data.cow, false),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),

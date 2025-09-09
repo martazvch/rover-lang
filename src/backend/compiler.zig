@@ -133,6 +133,7 @@ const Compiler = struct {
 
     const CompilerReport = GenReport(CompilerMsg);
 
+    // const State = struct { fn_line: usize = 0, cow: bool = false };
     const State = struct { cow: bool = false };
 
     const FnKind = enum { global, @"fn", method };
@@ -306,7 +307,7 @@ const Compiler = struct {
     fn compileInstr(self: *Self) Error!void {
         try switch (self.next()) {
             .array => |*data| self.array(data),
-            .array_access => |*data| self.arrayAccess(data),
+            .array_access => self.arrayAccess(),
             .array_access_chain => |*data| self.arrayAccessChain(data, self.getLineNumber()),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
@@ -314,7 +315,7 @@ const Compiler = struct {
             .bool => |data| self.boolInstr(data),
             .bound_method => |data| self.boundMethod(data),
             .call => |*data| self.fnCall(data),
-            .capture => |*data| self.capture(data),
+            .capture => unreachable,
             .cast => |data| self.cast(data),
             .default_value => unreachable,
             .discard => self.discard(),
@@ -356,13 +357,12 @@ const Compiler = struct {
         self.writeOpAndByte(.array_new, @intCast(data.elems.len), line);
     }
 
-    fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess) Error!void {
+    fn arrayAccess(self: *Self) Error!void {
         const line = self.getLineNumber();
         // Variable
         try self.compileInstr();
         try self.compileInstr();
         self.writeOp(if (self.state.cow) .array_get_cow else .array_get, line);
-        if (data.incr_ref) self.writeOp(.incr_ref, line);
     }
 
     fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
@@ -373,7 +373,7 @@ const Compiler = struct {
 
         // Variable
         try self.compileInstr();
-        if (data.incr_ref) self.writeOp(.incr_ref, line);
+        if (data.incr_rc) self.writeOp(.incr_ref, line);
     }
 
     fn arrayAssign(self: *Self, line: usize) Error!void {
@@ -550,11 +550,13 @@ const Compiler = struct {
     }
 
     // TODO: protect cast
-    fn capture(self: *Self, data: *const Instruction.Capture) Error!void {
+    // fn capture(self: *Self, data: *const Instruction.Capture) Error!void {
+    fn capture(self: *Self, data: *const Instruction.Capture, line: usize) Error!void {
         self.writeOpAndByte(
             if (data.is_local) .get_capt_local else .get_capt_frame,
             @intCast(data.index),
-            self.getLineNumber(),
+            // self.getLineNumber(),
+            line,
         );
     }
 
@@ -639,10 +641,11 @@ const Compiler = struct {
             try compiler.compileInstr();
         }
 
+        // Giving line 0 won't print any number as it will be less than current line as if it were on last line
         if (data.return_kind == .implicit_value) {
-            compiler.writeOp(.ret, self.getLineNumber());
+            compiler.writeOp(.ret, 0);
         } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(.ret_naked, self.getLineNumber());
+            compiler.writeOp(.ret_naked, 0);
         }
 
         return compiler.end();
@@ -667,8 +670,7 @@ const Compiler = struct {
         try self.emitConstant(Value.makeObj(func.asObj()), line);
 
         for (0..data.captures_count) |_| {
-            // self.emitGetVar(&self.next().identifier, line);
-            try self.compileInstr();
+            try self.capture(&self.next().capture, line);
         }
 
         self.writeOpAndByte(.closure, @intCast(data.captures_count), line);
