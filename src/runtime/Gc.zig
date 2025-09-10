@@ -2,7 +2,7 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 const options = @import("options");
 
@@ -13,19 +13,17 @@ const Array = Obj.Array;
 const Function = Obj.Function;
 const Structure = Obj.Structure;
 const Instance = Obj.Instance;
-const BoundMethod = Obj.BoundMethod;
-const BoundImport = Obj.BoundImport;
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
 
 vm: *Vm,
 parent_allocator: Allocator,
-grays: std.ArrayList(*Obj),
+grays: ArrayList(*Obj),
 bytes_allocated: usize,
 next_gc: usize,
 active: bool,
-tmp_roots: ArrayListUnmanaged(*Obj) = .{},
+tmp_roots: ArrayList(*Obj),
 
 const Self = @This();
 const GROW_FACTOR = 2;
@@ -34,15 +32,16 @@ pub fn init(vm: *Vm, parent_allocator: Allocator) Self {
     return .{
         .vm = vm,
         .parent_allocator = parent_allocator,
-        .grays = std.ArrayList(*Obj).init(parent_allocator),
+        .grays = .empty,
         .bytes_allocated = 0,
         .next_gc = 1024 * 1024,
         .active = false,
+        .tmp_roots = .empty,
     };
 }
 
 pub fn deinit(self: *Self) void {
-    self.grays.deinit();
+    self.grays.deinit(self.parent_allocator);
     self.tmp_roots.deinit(self.vm.allocator);
 }
 
@@ -129,11 +128,6 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             const array = obj.as(Array);
             try self.markArray(array.values.items);
         },
-        .bound_import => {
-            const bound = obj.as(BoundImport);
-            try self.markModule(bound.module.module);
-            try self.markObject(bound.import);
-        },
         .box => try self.markValue(&obj.as(Obj.Box).value),
         .closure => {
             const closure = obj.as(Obj.Closure);
@@ -142,9 +136,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         },
         .function => {
             const function = obj.as(Function);
-            if (function.name) |name| {
-                try self.markObject(name.asObj());
-            }
+            try self.markObject(function.name.asObj());
             try self.markArray(&function.chunk.constants);
         },
         .instance => {
@@ -220,7 +212,7 @@ fn markObject(self: *Self, obj: ?*Obj) Allocator.Error!void {
 
         o.is_marked = true;
 
-        try self.grays.append(o);
+        try self.grays.append(self.parent_allocator, o);
     }
 }
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
@@ -31,7 +31,7 @@ pub const VariableMap = AutoHashMapUnmanaged(InternerIdx, Variable);
 pub const SymbolArrMap = AutoArrayHashMapUnmanaged(InternerIdx, Symbol);
 pub const ExternMap = AutoHashMapUnmanaged(InternerIdx, ExternSymbol);
 
-scopes: ArrayListUnmanaged(Scope),
+scopes: ArrayList(Scope),
 current: *Scope,
 builtins: AutoHashMapUnmanaged(InternerIdx, *const Type),
 symbol_count: usize,
@@ -39,11 +39,11 @@ symbol_count: usize,
 pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{}, .symbol_count = 0 };
 
 pub const Scope = struct {
-    variables: VariableMap = .{},
-    symbols: SymbolArrMap = .{},
-    extern_symbols: ExternMap = .{},
+    variables: VariableMap = .empty,
+    symbols: SymbolArrMap = .empty,
+    extern_symbols: ExternMap = .empty,
     /// First is the interned identifier and second is the interned module's path key of module interner
-    modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .{},
+    modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .empty,
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
     offset: usize,

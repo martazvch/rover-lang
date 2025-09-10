@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
@@ -188,7 +187,7 @@ pub const Type = union(enum) {
         interner: *const Interner,
         module_interner: *const ModuleInterner,
     ) []const u8 {
-        var res: std.ArrayListUnmanaged(u8) = .{};
+        var res: std.ArrayList(u8) = .empty;
         var writer = res.writer(allocator);
 
         switch (self.*) {

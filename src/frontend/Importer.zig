@@ -1,6 +1,5 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Ast = @import("Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;

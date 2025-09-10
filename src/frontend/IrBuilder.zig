@@ -16,7 +16,7 @@ allocator: Allocator,
 instructions: MultiArrayList(Instruction),
 
 pub fn init(allocator: Allocator) Self {
-    return .{ .allocator = allocator, .instructions = .{} };
+    return .{ .allocator = allocator, .instructions = .empty };
 }
 
 /// Reserves an empty slot and returns its index
@@ -58,7 +58,7 @@ fn setInstr(self: *Self, index: usize, instr: Instruction) void {
 /// Converts instructions offsets to line numbers
 pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
     const offsets = self.instructions.items(.offset);
-    var list: std.ArrayListUnmanaged(usize) = .{};
+    var list: std.ArrayList(usize) = .empty;
     list.ensureUnusedCapacity(self.allocator, offsets.len) catch oom();
 
     var line: usize = 1;

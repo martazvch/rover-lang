@@ -1,16 +1,3 @@
-//-- math.rv --
-[Structure declaration Vec2]
-[Function declaration introduce, return kind: implicit_void]
-    [Print]
-        [String This is a mathematical module]
-[Function declaration getVecFromPos, return kind: implicit_value]
-    [Structure literal]
-        - structure
-        [Load symbol 0]
-        - args
-        [Variable index: 0, scope: local]
-        [Variable index: 1, scope: local]
-
 missing_file_in_module, pipou.rv
 missing_file_in_module, mathh.rv
 unknown_module, trash

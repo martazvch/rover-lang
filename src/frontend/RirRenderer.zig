@@ -16,16 +16,17 @@ const Token = @import("Lexer.zig").Token;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 
-source: []const u8,
+allocator: Allocator,
+// source: []const u8,
 instrs: []const Instruction.Data,
-errs: []const AnalyzerReport,
-warns: []const AnalyzerReport,
+// errs: []const AnalyzerReport,
+// warns: []const AnalyzerReport,
 interner: *const Interner,
-static_analyzis: bool,
-indent_level: u8 = 0,
+// static_analyzis: bool,
+indent_level: u8,
 tree: ArrayList(u8),
 writer: std.ArrayList(u8).Writer,
-instr_idx: usize = 0,
+instr_idx: usize,
 
 const indent_size: u8 = 4;
 const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -35,66 +36,73 @@ const Self = @This();
 
 pub fn init(
     allocator: Allocator,
-    source: []const u8,
+    // source: []const u8,
     instrs: []const Instruction.Data,
-    errs: []const AnalyzerReport,
-    warns: []const AnalyzerReport,
+    // errs: []const AnalyzerReport,
+    // warns: []const AnalyzerReport,
     interner: *const Interner,
-    static_analyzis: bool,
+    // static_analyzis: bool,
 ) Self {
     return .{
-        .source = source,
+        .allocator = allocator,
+        // .source = source,
         .instrs = instrs,
-        .errs = errs,
-        .warns = warns,
+        // .errs = errs,
+        // .warns = warns,
         .interner = interner,
-        .static_analyzis = static_analyzis,
-        .tree = ArrayList(u8).init(allocator),
+        // .static_analyzis = static_analyzis,
+        .tree = .empty,
         .writer = undefined,
+        .instr_idx = 0,
+        .indent_level = 0,
     };
 }
 
-pub fn deinit(self: *Self) void {
-    self.tree.deinit();
-}
+// pub fn deinit(self: *Self) void {
+//     self.tree.deinit();
+// }
 
-pub fn display(self: *const Self) !void {
-    var stdout = std.io.getStdOut().writer();
-    try stdout.writeAll(self.tree.items);
-}
+// pub fn display(self: *const Self) !void {
+//     var stdout = std.io.getStdOut().writer();
+//     try stdout.writeAll(self.tree.items);
+// }
 
 fn indent(self: *Self) void {
-    self.tree.appendSlice(Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
+    self.tree.appendSlice(self.allocator, Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
 }
 
-pub fn parseIr(self: *Self, file_name: []const u8) !void {
-    self.writer = self.tree.writer();
+pub fn renderIr(self: *Self, file_name: []const u8) Error![]const u8 {
+    self.writer = self.tree.writer(self.allocator);
     // TODO: remove the comment
     try self.writer.print("//-- {s} --\n", .{file_name});
 
-    if (self.errs.len > 0)
-        try self.parseErrs()
-    else if (self.static_analyzis and self.warns.len > 0)
-        try self.parseErrs()
-    else while (self.instr_idx < self.instrs.len)
+    // if (self.errs.len > 0)
+    //     try self.parseErrs()
+    // else if (self.static_analyzis and self.warns.len > 0)
+    //     try self.parseErrs()
+    // else while (self.instr_idx < self.instrs.len)
+    while (self.instr_idx < self.instrs.len) {
         self.parseInstr();
+    }
 
     try self.writer.writeAll("\n");
+
+    return self.tree.items;
 }
 
-fn parseErrs(self: *Self) !void {
-    const stdout = std.io.getStdOut().writer();
-
-    for (self.errs) |err| {
-        try err.toStr(stdout);
-        try stdout.writeAll("\n");
-    }
-
-    for (self.warns) |warn| {
-        try warn.toStr(stdout);
-        try stdout.writeAll("\n");
-    }
-}
+// fn parseErrs(self: *Self) !void {
+//     const stdout = std.io.getStdOut().writer();
+//
+//     for (self.errs) |err| {
+//         try err.toStr(stdout);
+//         try stdout.writeAll("\n");
+//     }
+//
+//     for (self.warns) |warn| {
+//         try warn.toStr(stdout);
+//         try stdout.writeAll("\n");
+//     }
+// }
 
 fn at(self: *const Self) *const Instruction.Data {
     return &self.instrs[self.instr_idx];
@@ -528,14 +536,14 @@ fn whileInstr(self: *Self) void {
 
 fn indentAndAppendSlice(self: *Self, text: []const u8) void {
     self.indent();
-    self.tree.appendSlice(text) catch oom();
-    self.tree.appendSlice("\n") catch oom();
+    self.tree.appendSlice(self.allocator, text) catch oom();
+    self.tree.appendSlice(self.allocator, "\n") catch oom();
 }
 
 fn indentAndPrintSlice(self: *Self, comptime fmt: []const u8, args: anytype) void {
     self.indent();
     self.writer.print(fmt, args) catch oom();
-    self.tree.appendSlice("\n") catch oom();
+    self.tree.appendSlice(self.allocator, "\n") catch oom();
 }
 
 fn checkInrcRc(self: *Self, incr_rc: bool) void {

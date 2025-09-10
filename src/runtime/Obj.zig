@@ -1,7 +1,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
+const Writer = std.Io.Writer;
 
 const options = @import("options");
 
@@ -21,7 +22,6 @@ const Obj = @This();
 
 const Kind = enum {
     array,
-    bound_import,
     box,
     closure,
     function,
@@ -53,14 +53,13 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .array => self.as(Array).deepCopy(vm).asObj(),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .bound_import, .box, .closure, .function, .module, .native_fn, .string, .structure => self,
+        .box, .closure, .function, .module, .native_fn, .string, .structure => self,
     };
 }
 
 pub fn destroy(self: *Obj, vm: *Vm) void {
     switch (self.kind) {
         .array => self.as(Array).deinit(vm),
-        .bound_import => self.as(BoundImport).deinit(vm.allocator),
         .box => self.as(Box).deinit(vm),
         .closure => self.as(Closure).deinit(vm),
         .function => {
@@ -90,29 +89,51 @@ pub inline fn as(self: *Obj, comptime T: type) *T {
     return @alignCast(@fieldParentPtr("obj", self));
 }
 
-// Used in Disassembler with a buffer and so Allocator errors
-pub const PrintError = std.fs.File.WriteError || std.mem.Allocator.Error;
+pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
+    switch (self.kind) {
+        .array => {
+            const array = self.as(Array);
+            try writer.writeAll("[");
+            for (array.values.items, 0..) |val, i| {
+                val.print(writer);
+                if (i < array.values.items.len - 1) try writer.writeAll(", ");
+            }
+            try writer.writeAll("]");
+        },
+        .box => {
+            const box = self.as(Box);
+            try writer.writeAll("Box ");
+            box.value.print(writer);
+        },
+        .closure => {
+            const closure = self.as(Closure);
 
-pub fn print(self: *Obj, writer: anytype) PrintError!void {
-    try switch (self.kind) {
-        .array => self.as(Array).print(writer),
-        .bound_import => self.as(BoundImport).import.print(writer),
-        .box => self.as(Box).print(writer),
-        .closure => self.as(Closure).print(writer),
-        .function => self.as(Function).print(writer),
-        .instance => writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
-        .module => writer.print("<module {s}>", .{self.as(Module).module.name}),
-        .native_fn => writer.print("<native fn>", .{}),
-        .string => writer.print("{s}", .{self.as(String).chars}),
-        .structure => writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
-    };
+            if (comptime @import("builtin").mode == .Debug) {
+                try writer.print("<closure {s}>", .{closure.function.name.chars});
+            } else {
+                try writer.print("<fn {s}>", .{closure.function.name.chars});
+            }
+        },
+        .function => {
+            const function = self.as(Function);
+            try writer.print("<function {s}>", .{function.name.chars});
+        },
+        .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
+        .module => try writer.print("<module {s}>", .{self.as(Module).module.name}),
+        .native_fn => try writer.print("<native fn>", .{}),
+        .string => try writer.print("{s}", .{self.as(String).chars}),
+        .structure => try writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
+    }
 }
 
 pub fn log(self: *Obj) void {
     switch (self.kind) {
         .array => std.debug.print("<array>", .{}),
-        .function => self.as(Function).log(),
+        .box => std.debug.print("box", .{}),
+        .closure => std.debug.print("<closure {s}>", .{self.as(Closure).function.name.chars}),
+        .function => std.debug.print("<fn {s}>", .{self.as(Function).name.chars}),
         .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
+        .module => std.debug.print("<module {s}>", .{self.as(Module).module.name}),
         .native_fn => std.debug.print("<native fn>", .{}),
         .string => std.debug.print("{s}", .{self.as(String).chars}),
         .structure => std.debug.print("<structure {s}>", .{self.as(Structure).name.chars}),
@@ -121,11 +142,9 @@ pub fn log(self: *Obj) void {
 
 pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
-        .bound_import => self.as(BoundImport).import.as(Structure).methods[index].default_values,
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
         .module => self.as(Module).module.globals[index].obj.as(Function).default_values,
-        // .structure => self.as(Structure).methods[index].default_values,
         .structure => self.as(Structure).default_values,
         else => unreachable,
     };
@@ -133,11 +152,6 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
 
 pub fn invoke(self: *Obj, vm: *Vm, index: usize) struct { *Function, bool } {
     return switch (self.kind) {
-        .bound_import => b: {
-            const bound = self.as(BoundImport);
-            vm.updateModule(bound.module.module);
-            break :b .{ bound.import.as(Structure).methods[index], true };
-        },
         .instance => .{ self.as(Instance).parent.methods[index], false },
         .module => b: {
             const module = self.as(Module).module;
@@ -152,14 +166,13 @@ pub fn invoke(self: *Obj, vm: *Vm, index: usize) struct { *Function, bool } {
 pub fn structLiteral(self: *Obj, vm: *Vm) *Instance {
     return switch (self.kind) {
         .structure => Instance.create(vm, self.as(Structure)),
-        .bound_import => Instance.create(vm, self.as(BoundImport).import.as(Structure)),
         else => unreachable,
     };
 }
 
 pub const Array = struct {
     obj: Obj,
-    values: ArrayListUnmanaged(Value),
+    values: ArrayList(Value),
 
     const Self = @This();
 
@@ -174,9 +187,7 @@ pub const Array = struct {
             obj.values.appendAssumeCapacity(val);
         }
 
-        if (options.log_gc) {
-            std.debug.print("<array>\n", .{});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
@@ -187,15 +198,6 @@ pub const Array = struct {
 
     pub fn deepCopy(self: *const Self, vm: *Vm) *Self {
         return Self.create(vm, self.values.items);
-    }
-
-    pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        try writer.writeAll("[");
-        for (self.values.items, 0..) |val, i| {
-            try val.print(writer);
-            if (i < self.values.items.len - 1) try writer.writeAll(", ");
-        }
-        try writer.writeAll("]");
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
@@ -225,9 +227,7 @@ pub const String = struct {
         defer vm.gc.popTmpRoot();
         _ = vm.strings.set(obj, Value.null_);
 
-        if (options.log_gc) {
-            std.debug.print("{s}\n", .{str});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
@@ -289,14 +289,13 @@ pub const Function = struct {
     obj: Obj,
     arity: u8,
     chunk: Chunk,
-    // TODO: always has a name?
-    name: ?*String,
+    name: *String,
     default_values: []Value,
     module_index: usize,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: ?*String, default_count: usize, module_index: usize) *Self {
+    pub fn create(vm: *Vm, name: *String, default_count: usize, module_index: usize) *Self {
         const obj = Obj.allocate(vm, Self, .function);
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
@@ -304,10 +303,7 @@ pub const Function = struct {
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.module_index = module_index;
 
-        if (options.log_gc) {
-            const display_name = if (name) |n| n.chars else "";
-            std.debug.print("{s}\n", .{display_name});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
@@ -316,28 +312,12 @@ pub const Function = struct {
         return &self.obj;
     }
 
-    pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        if (self.name) |n| {
-            try writer.print("<function {s}>", .{n.chars});
-        } else {
-            try writer.print("<function script>", .{});
-        }
-    }
-
-    pub fn log(self: *const Self) void {
-        std.debug.print("<fn {s}>", .{if (self.name) |n| n.chars else "script"});
-    }
-
     pub fn deinit(self: *Self, vm: *Vm) void {
-        self.chunk.deinit();
+        self.chunk.deinit(vm.allocator);
         vm.allocator.free(self.default_values);
 
         // Name already in the linked list, don't free manually
         vm.gc_alloc.destroy(self);
-    }
-
-    pub fn initCall(self: *Self, _: *Vm, _: usize) *Self {
-        return self;
     }
 };
 
@@ -354,27 +334,13 @@ pub const Closure = struct {
         obj.captures = vm.gc_alloc.alloc(Value, captures.len) catch oom();
         @memcpy(obj.captures, captures);
 
-        if (options.log_gc) {
-            std.debug.print("closure for: {s}\n", .{function.name.?});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
 
     pub fn asObj(self: *Self) *Obj {
         return &self.obj;
-    }
-
-    pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        if (comptime @import("builtin").mode == .Debug) {
-            try writer.print("<closure {s}>", .{self.function.name.?.chars});
-        } else {
-            try writer.print("<fn {s}>", .{self.function.name.?.chars});
-        }
-    }
-
-    pub fn log(self: *const Self) void {
-        std.debug.print("<closure {s}>", .{self.function.name.?.chars});
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
@@ -393,24 +359,13 @@ pub const Box = struct {
         const obj = Obj.allocate(vm, Self, .box);
         obj.value = value;
 
-        if (options.log_gc) {
-            std.debug.print("box", .{});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
 
     pub fn asObj(self: *Self) *Obj {
         return &self.obj;
-    }
-
-    pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        try writer.writeAll("Box ");
-        try self.value.print(writer);
-    }
-
-    pub fn log(_: *const Self) void {
-        std.debug.print("box", .{});
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {
@@ -460,17 +415,13 @@ pub const Structure = struct {
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.methods = methods;
 
-        if (options.log_gc) std.debug.print("<struct {s}>\n", .{name.chars});
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
 
     pub fn asObj(self: *Self) *Obj {
         return &self.obj;
-    }
-
-    pub fn print(self: *const Self, writer: anytype) PrintError!void {
-        try writer.print("<structure {s}>", .{self.name.chars});
     }
 
     // Functions are freed because they are on the main minked list of objects in the VM
@@ -498,9 +449,7 @@ pub const Instance = struct {
         obj.parent = parent;
         obj.fields = alloc_fields;
 
-        if (options.log_gc) {
-            std.debug.print("<instance of {s}>\n", .{parent.name.chars});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
@@ -527,36 +476,6 @@ pub const Instance = struct {
     }
 };
 
-pub const BoundImport = struct {
-    obj: Obj,
-    module: *Module,
-    import: *Obj,
-
-    const Self = @This();
-
-    pub fn create(vm: *Vm, module: *Module, import: *Obj) *Self {
-        const obj = Obj.allocate(vm, Self, .bound_import);
-
-        obj.module = module;
-        obj.import = import;
-
-        if (options.log_gc) {
-            std.debug.print("Bound import:\n", .{});
-            import.log();
-        }
-
-        return obj;
-    }
-
-    pub fn asObj(self: *Self) *Obj {
-        return &self.obj;
-    }
-
-    pub fn deinit(self: *Self, allocator: Allocator) void {
-        allocator.destroy(self);
-    }
-};
-
 pub const Module = struct {
     obj: Obj,
     module: *CompiledModule,
@@ -567,9 +486,7 @@ pub const Module = struct {
         const obj = Obj.allocate(vm, Self, .module);
         obj.module = module;
 
-        if (options.log_gc) {
-            std.debug.print("<module {s}>\n", .{module.name});
-        }
+        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }

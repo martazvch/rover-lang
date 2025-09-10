@@ -1,12 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 
 const oom = @import("utils.zig").oom;
 
 const Self = @This();
 
-string: ArrayListUnmanaged([]const u8),
+string: ArrayList([]const u8),
 
 pub const empty: Self = .{ .string = .empty };
 
@@ -48,7 +48,7 @@ pub fn render(self: *const Self, buf: []u8) []const u8 {
 
 /// Caller owns the memory
 pub fn renderAlloc(self: *const Self, allocator: Allocator) []const u8 {
-    var path: ArrayListUnmanaged(u8) = .empty;
+    var path: ArrayList(u8) = .empty;
 
     for (self.string.items) |s| {
         path.appendSlice(allocator, s) catch oom();
@@ -70,7 +70,7 @@ pub fn renderWithSep(self: *const Self, buf: []u8, sep: []const u8) []const u8 {
 }
 
 pub fn renderWithSepAlloc(self: *const Self, allocator: Allocator, sep: []const u8) []const u8 {
-    var buf: ArrayListUnmanaged(u8) = .empty;
+    var buf: ArrayList(u8) = .empty;
 
     for (self.string.items, 0..) |s, i| {
         if (i != 0) buf.appendSlice(allocator, sep) catch oom();

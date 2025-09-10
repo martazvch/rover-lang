@@ -2,7 +2,7 @@ fn main() {
     _ = if {
         var tmp = 62
         tmp
-    } do 1.5 else {4}
+    } do 1.5 else {4.}
 
     var res = if true {1}
     var res2 = if true do -5.5
@@ -24,6 +24,7 @@ fn main() {
     if true do 1 else 2 
     if false {5.1} else 4.2
 
-    var res = if true {1} else {5.6}
-    var res1 = if true {1.5} else {5*2}
+    var res = if true {1.2} else {5.6}
+    var res1 = if true {5} else {5*2}
 }
+

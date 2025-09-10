@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
@@ -9,7 +9,6 @@ const InternerIdx = Interner.Index;
 const oom = @import("../utils.zig").oom;
 const Ast = @import("Ast.zig");
 
-arena: std.heap.ArenaAllocator,
 allocator: Allocator,
 interner: *Interner,
 ast: *Ast,
@@ -17,7 +16,7 @@ ast: *Ast,
 const Self = @This();
 
 const CaptureCtx = struct {
-    stack: ArrayListUnmanaged(Scope),
+    stack: ArrayList(Scope),
     current: *Scope,
     depth: usize,
 
@@ -114,15 +113,8 @@ const CaptureCtx = struct {
     }
 };
 
-pub fn init(self: *Self, allocator: Allocator, interner: *Interner, ast: *Ast) void {
-    self.arena = std.heap.ArenaAllocator.init(allocator);
-    self.allocator = self.arena.allocator();
-    self.interner = interner;
-    self.ast = ast;
-}
-
-pub fn deinit(self: *Self) void {
-    self.arena.deinit();
+pub fn init(allocator: Allocator, interner: *Interner, ast: *Ast) Self {
+    return .{ .allocator = allocator, .ast = ast, .interner = interner };
 }
 
 pub fn walk(self: *Self) void {

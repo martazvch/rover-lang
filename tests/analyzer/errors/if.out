@@ -7,6 +7,3 @@ incompatible_if_type, float, str
 incompatible_if_type, int, str
 unused_value
 unused_value
-implicit_cast, else branch, float
-implicit_cast, then branch, float
-implicit_cast, else branch, float

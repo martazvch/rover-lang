@@ -7,7 +7,23 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
-const Stage = enum { all, parser, analyzer, compiler, vm, standalone };
+const Stage = enum {
+    all,
+    parser,
+    analyzer,
+    compiler,
+    vm,
+    standalone,
+
+    pub fn toOpt(self: Stage) []const u8 {
+        return switch (self) {
+            .parser => "--print-ast",
+            .analyzer => "--print-ir",
+            .compiler => "--print-bytecode",
+            else => unreachable,
+        };
+    }
+};
 const Config = struct {
     stage: Stage = .all,
     show_diff: bool = false,
@@ -40,13 +56,13 @@ pub fn main() !u8 {
         .diagnostic = &clap_diag,
         .allocator = allocator,
     }) catch |err| {
-        clap_diag.report(std.io.getStdErr().writer(), err) catch {};
+        clap_diag.reportToFile(std.fs.File.stderr(), err) catch {};
         std.process.exit(0);
     };
     defer res.deinit();
 
     if (res.args.help != 0) {
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+        try clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
         return 0;
     }
 
@@ -103,7 +119,7 @@ const Tester = struct {
     pub fn init(allocator: Allocator, exe_path: []const u8, config: Config) Self {
         return .{
             .allocator = allocator,
-            .diags = ArrayList(Diagnostic).init(allocator),
+            .diags = .empty,
             .exe_path = exe_path,
             .config = config,
         };
@@ -111,14 +127,13 @@ const Tester = struct {
 
     pub fn deinit(self: *Self) void {
         self.clearDiags();
-        self.diags.deinit();
+        self.diags.deinit(self.allocator);
     }
 
     fn clearDiags(self: *Self) void {
         for (self.diags.items) |*diag| {
             diag.deinit(self.allocator);
         }
-
         self.diags.clearRetainingCapacity();
     }
 
@@ -161,7 +176,7 @@ const Tester = struct {
 
     fn report(self: *const Self, stage: Stage) bool {
         if (self.diags.items.len > 0) {
-            print("Error in stage {s}:\n", .{@tagName(stage)});
+            print("Error in stage {t}:\n", .{stage});
 
             for (self.diags.items) |diag| {
                 print("    category {s:<10} ", .{diag.category});
@@ -250,7 +265,7 @@ const Tester = struct {
     fn testFile(self: *Self, dir: *std.fs.Dir, stage: Stage, file_name: []const u8, category: []const u8) !void {
         var no_ext = std.mem.splitScalar(u8, file_name, '.');
         const name = no_ext.next().?;
-        var output_file = try self.allocator.alloc(u8, name.len + 4);
+        var output_file = self.allocator.alloc(u8, name.len + 4) catch oom();
         defer self.allocator.free(output_file);
         @memcpy(output_file[0..name.len], name);
         @memcpy(output_file[name.len..], ".out");
@@ -258,9 +273,9 @@ const Tester = struct {
         const argv = if (stage == .vm or stage == .standalone)
             &[_][]const u8{ self.exe_path, file_name }
         else if (eql(u8, category, "warnings"))
-            &[_][]const u8{ self.exe_path, file_name, stage_to_opt(stage), "-s" }
+            &[_][]const u8{ self.exe_path, file_name, stage.toOpt(), "-s" }
         else
-            &[_][]const u8{ self.exe_path, file_name, stage_to_opt(stage) };
+            &[_][]const u8{ self.exe_path, file_name, stage.toOpt() };
 
         var buf: [std.fs.max_path_bytes]u8 = undefined;
         const path = try std.os.getFdPath(dir.fd, &buf);
@@ -270,43 +285,44 @@ const Tester = struct {
             .cwd = path,
             .argv = argv,
         }) catch |e| {
-            print("Error launching rover process: {s}, argv: {s}\n", .{ @errorName(e), argv });
+            print("Error launching rover process: {t}, with args:\n", .{e});
+            for (argv) |arg| print("\t{s}\n", .{arg});
             return e;
         };
         defer self.allocator.free(res.stdout);
         defer self.allocator.free(res.stderr);
 
-        const got = try self.cleanText(res.stdout);
+        const got = self.cleanText(if (eql(u8, category, "features")) res.stdout else res.stderr) catch oom();
         defer self.allocator.free(got);
 
         const file = dir.openFile(output_file, .{ .mode = .read_only }) catch |err| {
-            print("Error: {s}, unable to open file at: {s}\n", .{ @errorName(err), output_file });
+            print("Error: {t}, unable to open file at: {s}\n", .{ err, output_file });
             std.process.exit(0);
         };
         defer file.close();
 
         // The file has a new line inserted by default
         const size = try file.getEndPos();
-        const expect: []u8 = try self.allocator.alloc(u8, size);
+        const expect: []u8 = self.allocator.alloc(u8, size) catch oom();
         defer self.allocator.free(expect);
 
         _ = try file.readAll(expect);
-        const clean_expect = try self.cleanText(expect);
+        const clean_expect = self.cleanText(expect) catch oom();
         defer self.allocator.free(clean_expect);
 
         std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), std.mem.trimRight(u8, clean_expect, "\n"))) catch |e| {
-            try self.diags.append(.{
+            try self.diags.append(self.allocator, .{
                 .category = category,
-                .file_name = try self.allocator.dupe(u8, file_name),
-                .diff = try self.colorizedDiff(clean_expect, got),
-                .got = try self.allocator.dupe(u8, std.mem.trimRight(u8, got, "\n")),
+                .file_name = self.allocator.dupe(u8, file_name) catch oom(),
+                .diff = self.colorizedDiff(clean_expect, got) catch oom(),
+                .got = self.allocator.dupe(u8, std.mem.trimRight(u8, got, "\n")) catch oom(),
             });
             return e;
         };
     }
 
-    fn cleanText(self: *const Self, text: []const u8) ![]const u8 {
-        var res = std.ArrayList(u8).init(self.allocator);
+    fn cleanText(self: *const Self, text: []const u8) Allocator.Error![]const u8 {
+        var res: ArrayList(u8) = .empty;
         var lines = std.mem.splitScalar(u8, text, '\n');
 
         while (lines.next()) |line| {
@@ -317,43 +333,39 @@ const Tester = struct {
             const trimmed = std.mem.trimRight(u8, line, "\r");
             if (std.mem.trimRight(u8, trimmed, " ").len == 0) continue;
 
-            try res.appendSlice(trimmed);
-            try res.append('\n');
+            try res.appendSlice(self.allocator, trimmed);
+            try res.append(self.allocator, '\n');
         }
 
-        return res.toOwnedSlice();
+        return res.toOwnedSlice(self.allocator);
     }
 
-    fn colorizedDiff(self: *Self, expect: []const u8, got: []const u8) ![]const u8 {
+    fn colorizedDiff(self: *Self, expect: []const u8, got: []const u8) Allocator.Error![]const u8 {
         const RED = "\x1b[31m";
         const NORMAL = "\x1b[0m";
 
         var err = false;
-        var res = std.ArrayList(u8).init(self.allocator);
+        var res: ArrayList(u8) = .empty;
 
         // If we got nothing, we put everything in red
         if (got.len == 0)
-            try res.appendSlice(RED);
+            try res.appendSlice(self.allocator, RED);
 
         for (expect, 0..) |c, i| {
             if (i < got.len and c != got[i] and !err) {
                 err = true;
-                try res.appendSlice(RED);
+                try res.appendSlice(self.allocator, RED);
             }
 
-            try res.append(c);
+            try res.append(self.allocator, c);
         }
-        try res.appendSlice(NORMAL);
+        try res.appendSlice(self.allocator, NORMAL);
 
-        return res.toOwnedSlice();
+        return res.toOwnedSlice(self.allocator);
     }
 };
 
-fn stage_to_opt(stage: Stage) []const u8 {
-    return switch (stage) {
-        .parser => "--print-ast",
-        .analyzer => "--print-ir",
-        .compiler => "--print-bytecode",
-        else => unreachable,
-    };
+pub fn oom() noreturn {
+    std.debug.print("out of memory\n", .{});
+    std.process.exit(1);
 }

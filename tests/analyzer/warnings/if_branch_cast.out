@@ -1,0 +1,4 @@
+implicit_cast, else branch, float
+implicit_cast, then branch, float
+implicit_cast, else branch, float
+

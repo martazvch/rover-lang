@@ -1,9 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const print = std.debug.print;
+const Writer = std.Io.Writer;
 
 const Obj = @import("Obj.zig");
 const Vm = @import("Vm.zig");
+const oom = @import("../utils.zig").oom;
 
 pub const Value = union(enum) {
     bool: bool,
@@ -52,13 +53,13 @@ pub const Value = union(enum) {
         };
     }
 
-    pub fn print(self: *const Self, writer: anytype) Obj.PrintError!void {
-        try switch (self.*) {
-            .bool => |v| writer.print("{}", .{v}),
-            .float => |v| writer.print("{d}", .{v}),
-            .int => |v| writer.print("{}", .{v}),
-            .null => writer.print("null", .{}),
-            .obj => |v| v.print(writer),
-        };
+    pub fn print(self: *const Self, writer: *Writer) void {
+        switch (self.*) {
+            .bool => |v| writer.print("{}", .{v}) catch oom(),
+            .float => |v| writer.print("{d}", .{v}) catch oom(),
+            .int => |v| writer.print("{}", .{v}) catch oom(),
+            .null => writer.print("null", .{}) catch oom(),
+            .obj => |v| v.print(writer) catch oom(),
+        }
     }
 };

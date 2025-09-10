@@ -1,6 +1,5 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 
@@ -74,17 +73,13 @@ pub const CompilationManager = struct {
             .interner = interner,
             // .natives = natives,
             .compiler = undefined,
-            .errs = .init(allocator),
+            .errs = .empty,
             .instr_idx = 0,
             .instr_data = undefined,
             .instr_lines = undefined,
             .render_mode = render_mode,
             .module = .init(allocator, name, global_count, symbol_count),
         };
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.errs.deinit();
     }
 
     pub fn compile(
@@ -100,8 +95,10 @@ pub const CompilationManager = struct {
         self.instr_lines = instr_lines;
 
         if (self.render_mode != .none) {
-            const stdout = std.io.getStdOut().writer();
-            try stdout.print("//---- {s} ----\n\n", .{self.module.name});
+            var buf: [256]u8 = undefined;
+            var stdout = std.fs.File.stdout().writer(&buf);
+            stdout.interface.print("//---- {s} ----\n\n", .{self.module.name}) catch oom();
+            stdout.interface.flush() catch oom();
         }
 
         self.compiler = Compiler.init(self, "global scope", 0, module_index);
@@ -132,10 +129,7 @@ const Compiler = struct {
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
-
-    // const State = struct { fn_line: usize = 0, cow: bool = false };
     const State = struct { cow: bool = false };
-
     const FnKind = enum { global, @"fn", method };
 
     pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize, module_index: usize) Self {
@@ -289,16 +283,22 @@ const Compiler = struct {
 
     pub fn end(self: *Self) Error!*Obj.Function {
         if (self.manager.render_mode != .none) {
+            var alloc_writer: std.Io.Writer.Allocating = .init(self.manager.allocator);
+            defer alloc_writer.deinit();
+
             var dis = Disassembler.init(
-                self.manager.allocator,
                 &self.function.chunk,
                 &self.manager.module,
                 self.manager.render_mode,
             );
-            defer dis.deinit();
-            dis.disChunk(if (self.function.name) |n| n.chars else "Script") catch oom();
-            const stdout = std.io.getStdOut().writer();
-            stdout.print("{s}\n", .{dis.disassembled.items}) catch oom();
+
+            dis.disChunk(&alloc_writer.writer, self.function.name.chars);
+            var buf: [1024]u8 = undefined;
+            var stdout_writer = std.fs.File.stdout().writer(&buf);
+            const stdout = &stdout_writer.interface;
+
+            stdout.print("{s}\n", .{alloc_writer.writer.buffered()}) catch oom();
+            stdout.flush() catch oom();
         }
 
         return self.function;
@@ -654,7 +654,7 @@ const Compiler = struct {
     }
 
     fn compileFn(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        const fn_name = if (data.name) |idx| self.manager.interner.getKey(idx).? else "anonymus";
+        const fn_name = if (data.name) |idx| self.manager.interner.getKey(idx).? else "Script";
 
         const index = switch (data.kind) {
             .symbol => |idx| idx,
@@ -786,7 +786,7 @@ const Compiler = struct {
             structure.default_values[i] = try self.compileDefaultValue();
         }
 
-        var funcs: ArrayListUnmanaged(*Obj.Function) = .{};
+        var funcs: ArrayList(*Obj.Function) = .empty;
         funcs.ensureTotalCapacity(self.manager.vm.allocator, data.func_count) catch oom();
 
         for (0..data.func_count) |_| {

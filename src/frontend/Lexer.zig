@@ -163,14 +163,14 @@ pub fn init(allocator: Allocator) Self {
         .source = undefined,
         .index = 0,
         .tokens = .{},
-        .errs = .init(allocator),
+        .errs = .empty,
         .allocator = allocator,
     };
 }
 
 pub fn deinit(self: *Self) void {
     self.tokens.deinit(self.allocator);
-    self.errs.deinit();
+    self.errs.deinit(self.allocator);
 }
 
 pub fn lex(self: *Self, source: [:0]const u8) void {
@@ -194,7 +194,7 @@ pub fn lex(self: *Self, source: [:0]const u8) void {
 
 fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) void {
     const report = LexerReport.err(tag, token.span);
-    self.errs.append(report) catch oom();
+    self.errs.append(self.allocator, report) catch oom();
 }
 
 pub fn next(self: *Self) Token {

@@ -21,7 +21,7 @@ const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
 const Sb = @import("StringBuilder.zig");
 const RirRenderer = @import("frontend/RirRenderer.zig");
 const TypeInterner = @import("frontend/types.zig").TypeInterner;
-const GenReporter = @import("reporter.zig").GenReporter;
+const reportAll = @import("reporter.zig").reportAll;
 const Interner = @import("Interner.zig");
 const ModuleInterner = @import("ModuleInterner.zig");
 const oom = @import("utils.zig").oom;
@@ -88,65 +88,40 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     defer lexer.deinit();
 
     if (lexer.errs.items.len > 0) {
-        var reporter = GenReporter(LexerMsg).init(source);
-        try reporter.reportAll(file_name, lexer.errs.items);
+        try reportAll(LexerMsg, lexer.errs.items, !options.test_mode, file_name, source);
         return error.ExitOnPrint;
     }
 
     // Parser
-    var parser: Parser = .empty;
-    parser.init(self.allocator);
-    defer parser.deinit();
-
     const token_slice = lexer.tokens.toOwnedSlice();
+    var parser: Parser = .init(self.allocator);
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
-    var walker: Walker = undefined;
-    walker.init(self.allocator, &self.ctx.interner, &ast);
-    defer walker.deinit();
+    var walker: Walker = .init(self.allocator, &self.ctx.interner, &ast);
     walker.walk();
 
-    if (options.test_mode and self.ctx.config.print_ast) {
-        try printAst(self.allocator, &ast, &parser);
-        return error.ExitOnPrint;
-    }
-
     if (parser.errs.items.len > 0) {
-        var reporter = GenReporter(ParserMsg).init(source);
-        try reporter.reportAll(file_name, parser.errs.items);
+        try reportAll(ParserMsg, parser.errs.items, !options.test_mode, file_name, source);
         return error.ExitOnPrint;
-    } else if (self.ctx.config.print_ast) try printAst(self.allocator, &ast, &parser);
+    } else if (self.ctx.config.print_ast) {
+        try printAst(self.allocator, &ast);
+        if (options.test_mode) return error.ExitOnPrint;
+    }
 
     const analyzed_module = self.analyzer.analyze(&ast, file_name, !self.is_sub);
 
     // Analyzed Ast printer
-    if (options.test_mode and self.ctx.config.print_ir) {
-        try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.ctx.config.static_analyzis);
-
-        // If we are a sub-pipeline, we print and continue compile
-        if (!self.is_sub) return error.ExitOnPrint;
-    } else {
-        if (self.analyzer.errs.items.len > 0) {
-            var reporter = GenReporter(AnalyzerMsg).init(source);
-            try reporter.reportAll(file_name, self.analyzer.errs.items);
-
-            if (self.analyzer.warns.items.len > 0) {
-                reporter = GenReporter(AnalyzerMsg).init(source);
-                try reporter.reportAll(file_name, self.analyzer.warns.items);
-            }
-
-            self.instr_count = self.analyzer.ir_builder.count();
-            return error.ExitOnPrint;
-        } else if (self.ctx.config.print_ir) {
-            try self.renderIr(self.allocator, file_name, source, &self.analyzer, self.instr_count, self.ctx.config.static_analyzis);
-        }
+    if (self.analyzer.warns.items.len > 0) {
+        try reportAll(AnalyzerMsg, self.analyzer.warns.items, !options.test_mode, file_name, source);
     }
-
-    // Analyzer warnings
-    if (self.ctx.config.static_analyzis and self.analyzer.warns.items.len > 0) {
-        var reporter = GenReporter(AnalyzerMsg).init(source);
-        try reporter.reportAll(file_name, self.analyzer.warns.items);
+    if (self.analyzer.errs.items.len > 0) {
+        try reportAll(AnalyzerMsg, self.analyzer.errs.items, !options.test_mode, file_name, source);
+        self.instr_count = self.analyzer.ir_builder.count();
         return error.ExitOnPrint;
+    }
+    if (self.ctx.config.print_ir) {
+        try self.printIr(self.allocator, file_name, &self.analyzer, self.instr_count);
+        if (options.test_mode and !self.is_sub) return error.ExitOnPrint;
     }
 
     // Compiler
@@ -155,11 +130,10 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         file_name,
         self.vm,
         &self.ctx.interner,
-        if (options.test_mode and self.ctx.config.print_bytecode) .@"test" else if (self.ctx.config.print_bytecode) .normal else .none,
+        if (!self.ctx.config.print_bytecode) .none else if (options.test_mode) .@"test" else .normal,
         self.analyzer.scope.current.variables.count(),
         self.analyzer.scope.symbol_count,
     );
-    defer compiler.deinit();
 
     const compiled_module = try compiler.compile(
         self.instr_count,
@@ -168,8 +142,8 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         self.analyzer.main,
         self.ctx.module_interner.compiled.count(),
     );
-    self.instr_count = self.analyzer.ir_builder.count();
 
+    self.instr_count = self.analyzer.ir_builder.count();
     self.ctx.module_interner.add(path_interned, analyzed_module, compiled_module);
 
     return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)
@@ -184,41 +158,26 @@ pub fn createSubPipeline(self: *Self) Self {
     return pipeline;
 }
 
-fn printAst(allocator: Allocator, ast: *const Ast, parser: *const Parser) !void {
-    var stdout = std.io.getStdOut().writer();
+fn printAst(allocator: Allocator, ast: *const Ast) !void {
+    var buf: [2048]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buf);
+    const stdout = &stdout_writer.interface;
+    defer stdout.flush() catch unreachable;
 
-    if (parser.errs.items.len > 0) {
-        for (parser.errs.items) |err| {
-            try err.toStr(stdout);
-            try stdout.writeAll("\n");
-        }
-    } else {
-        var renderer: AstRender = .init(allocator, ast);
-        try renderer.render();
-        try stdout.writeAll(renderer.output.items);
-    }
+    var renderer: AstRender = .init(allocator, ast);
+    try stdout.writeAll(try renderer.render());
 }
 
-fn renderIr(
-    self: *Self,
-    allocator: Allocator,
-    file_name: []const u8,
-    source: [:0]const u8,
-    analyzer: *const Analyzer,
-    start: usize,
-    static: bool,
-) !void {
+fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *const Analyzer, start: usize) !void {
+    var buf: [2048]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buf);
+    const stdout = &stdout_writer.interface;
+    defer stdout.flush() catch unreachable;
+
     var rir_renderer = RirRenderer.init(
         allocator,
-        source,
         analyzer.ir_builder.instructions.items(.data)[start..],
-        analyzer.errs.items,
-        analyzer.warns.items,
         &self.ctx.interner,
-        static,
     );
-    defer rir_renderer.deinit();
-
-    try rir_renderer.parseIr(file_name);
-    try rir_renderer.display();
+    try stdout.writeAll(try rir_renderer.renderIr(file_name));
 }

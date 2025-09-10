@@ -1,6 +1,6 @@
 const std = @import("std");
-const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;
 
 const options = @import("options");
 
@@ -20,7 +20,6 @@ frame_stack: FrameStack,
 ip: [*]u8,
 allocator: Allocator,
 gc_alloc: Allocator,
-stdout: std.fs.File.Writer,
 // TODO: not Zig's hashmap?
 strings: Table,
 objects: ?*Obj,
@@ -46,7 +45,6 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     // TODO: pass an ObjectPoolAlloc?
     self.gc = .init(self, allocator);
     self.gc_alloc = self.gc.allocator();
-    self.stdout = std.io.getStdOut().writer();
     self.stack.init();
     self.strings = .init(self.allocator);
     self.stack = .empty;
@@ -85,13 +83,18 @@ fn err(self: *Self, kind: Error) Error {
         const idx = self.frame_stack.count - i - 1;
         const frame = self.frame_stack.frames[idx];
         const function = frame.function;
-
         const instr = self.instructionNb();
-        self.stdout.print("[line {}] in ", .{function.chunk.offsets.items[instr]});
+
+        var buf: [1024]u8 = undefined;
+        var stderr_writer = std.fs.File.stderr().writer(&buf);
+        const stderr = &stderr_writer.interface;
+        defer stderr.flush() catch oom();
+
+        stderr.print("[line {}] in ", .{function.chunk.offsets.items[instr]});
 
         if (function.name) |name| {
-            print("{s}()\n", .{name});
-        } else print("script\n", .{});
+            stderr.print("{s}()\n", .{name});
+        } else stderr.print("script\n", .{});
     }
 
     return kind;
@@ -107,36 +110,27 @@ fn instructionNb(self: *const Self) usize {
 pub fn run(self: *Self, module: CompiledModule, modules: []CompiledModule) !void {
     self.gc.active = true;
     self.modules = modules;
-
-    // Init on dummy address to avoid nullable pointer (used only in print stack mode)
     try self.execute(&module);
 }
 
 fn execute(self: *Self, entry_module: *const CompiledModule) !void {
+    var buf: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&buf);
+    const stdout = &stdout_writer.interface;
+
     var frame = try self.frame_stack.new();
     frame.initCall(entry_module.function.asObj(), &self.stack, 0, self.modules);
 
     while (true) {
         if (comptime options.print_stack) {
-            print("          ", .{});
-            var value = self.stack.values[0..].ptr;
-
-            while (value != self.stack.top) : (value += 1) {
-                // Start of call frame
-                if (value == frame.slots - 1) print(">", .{});
-
-                print("[", .{});
-                try value[0].print(self.stdout);
-                print("] ", .{});
-            }
-            print("\n", .{});
+            // TODO: return an internal error?
+            self.stack.print(stdout, frame) catch oom();
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.init(self.allocator, &frame.function.chunk, frame.module, .normal);
-            defer dis.deinit();
+            var dis = Disassembler.init(&frame.function.chunk, frame.module, .normal);
             const instr_nb = self.instructionNb();
-            _ = try dis.disInstruction(instr_nb, self.stdout);
+            _ = dis.disInstruction(stdout, instr_nb);
         }
 
         const instruction = frame.readByte();
@@ -344,8 +338,9 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .not => self.stack.peekRef(0).not(),
             .pop => _ = self.stack.pop(),
             .print => {
-                try self.stack.pop().print(self.stdout);
-                _ = try self.stdout.write("\n");
+                self.stack.pop().print(stdout);
+                stdout.writeAll("\n") catch oom();
+                stdout.flush() catch oom();
             },
             .push_false => self.stack.push(Value.false_),
             .push_null => self.stack.push(Value.null_),
@@ -506,6 +501,22 @@ const Stack = struct {
 
     pub fn peekRef(self: *Stack, distance: usize) *Value {
         return &(self.top - 1 - distance)[0];
+    }
+
+    pub fn print(self: *const Stack, writer: *Writer, frame: *CallFrame) Writer.Error!void {
+        try writer.writeAll("          ");
+        var value = self.values[0..].ptr;
+
+        while (value != self.top) : (value += 1) {
+            // Start of call frame
+            if (value == frame.slots - 1) try writer.writeAll(">");
+
+            try writer.writeAll("[");
+            value[0].print(writer);
+            try writer.writeAll("] ");
+        }
+        try writer.writeAll("\n");
+        try writer.flush();
     }
 };
 

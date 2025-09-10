@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const builtin = @import("builtin");
 
 const Terminal = @import("terminal/Terminal.zig");
@@ -9,7 +10,7 @@ const Vm = @import("Vm.zig");
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
-const Prompts = std.ArrayListUnmanaged([:0]const u8);
+const Prompts = ArrayList([:0]const u8);
 const Error = error{ BadRead, BadWrite, TooManyIndents, Empty, EndOfFile } || std.fs.File.Writer.Error;
 
 const MAX_IDENT = 64;
@@ -91,7 +92,7 @@ pub fn run(self: *Self) !void {
 }
 
 pub fn getPrompt(self: *Self, allocator: Allocator) Error![:0]const u8 {
-    var input: std.ArrayListUnmanaged(u8) = .{};
+    var input: ArrayList(u8) = .{};
     errdefer input.deinit(allocator);
 
     var line_offset: usize = 0;
@@ -224,7 +225,7 @@ fn printPs1(self: *Self) void {
     _ = self.stdout.write(if (self.indent_level == 0) "> " else "| ") catch unreachable;
 }
 
-fn indent(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8)) usize {
+fn indent(self: *Self, allocator: Allocator, line: *ArrayList(u8)) usize {
     const indent_len = self.indent_level * INDENT_SIZE;
     const indent_chars = SPACES[0..indent_len];
     line.appendSlice(allocator, indent_chars) catch oom();
@@ -252,7 +253,7 @@ fn clearLineMoveStartOfLine(self: *Self) void {
     self.stdout.writeAll("\x1b[2K\r") catch unreachable;
 }
 
-fn lineReturn(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8), write: bool) void {
+fn lineReturn(self: *Self, allocator: Allocator, line: *ArrayList(u8), write: bool) void {
     self.moveCursorEndOfLine(line.items.len);
     self.stdout.writeAll("\n") catch unreachable;
 
@@ -261,7 +262,7 @@ fn lineReturn(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u
     }
 }
 
-fn lineReturnContinue(self: *Self, allocator: Allocator, line: *std.ArrayListUnmanaged(u8)) usize {
+fn lineReturnContinue(self: *Self, allocator: Allocator, line: *ArrayList(u8)) usize {
     self.moveCursorEndOfLine(line.items.len);
     line.appendSlice(allocator, "\n") catch oom();
     _ = self.stdout.writeAll("\n") catch unreachable;
@@ -289,7 +290,7 @@ fn checkIndent(self: *Self, input: []const u8) Error!void {
     if (self.indent_level > MAX_IDENT) return error.TooManyIndents;
 }
 
-fn restoreHistory(self: *Self, allocator: Allocator, index: usize, line: *std.ArrayListUnmanaged(u8), offset: usize) usize {
+fn restoreHistory(self: *Self, allocator: Allocator, index: usize, line: *ArrayList(u8), offset: usize) usize {
     self.resetLine(line, offset);
     const prev = self.prompts.items[index];
     const prev_no_return = prev[0 .. prev.len - 1];
@@ -302,7 +303,7 @@ fn restoreHistory(self: *Self, allocator: Allocator, index: usize, line: *std.Ar
 }
 
 /// Resets the line by erasing content from console and line buffer and prints Ps1 back
-fn resetLine(self: *Self, line: *std.ArrayListUnmanaged(u8), offset: usize) void {
+fn resetLine(self: *Self, line: *ArrayList(u8), offset: usize) void {
     if (line.items.len != offset) {
         const line_count = std.mem.count(u8, line.items, "\n");
 

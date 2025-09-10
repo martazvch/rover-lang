@@ -1,27 +1,33 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const assert = std.debug.assert;
 
 const Ast = @import("Ast.zig");
 const Span = @import("Lexer.zig").Span;
 
 allocator: Allocator = undefined,
 ast: *const Ast,
-
-output: std.ArrayListUnmanaged(u8) = .{},
-writer: std.ArrayListUnmanaged(u8).Writer = undefined,
-indent_level: usize = 1,
+output: std.ArrayList(u8),
+writer: std.ArrayList(u8).Writer,
+indent_level: usize,
 
 const Self = @This();
-const Error = std.ArrayListUnmanaged(u8).Writer.Error;
+const Error = std.ArrayList(u8).Writer.Error;
 const spaces: []const u8 = " " ** 1024;
 const INDENT_SIZE = 4;
 
 pub fn init(allocator: Allocator, ast: *const Ast) Self {
-    return .{ .allocator = allocator, .ast = ast };
+    return .{
+        .allocator = allocator,
+        .ast = ast,
+        .output = .empty,
+        .indent_level = 1,
+        .writer = undefined,
+    };
 }
 
-pub fn render(self: *Self) !void {
+pub fn render(self: *Self) Error![]const u8 {
     self.writer = self.output.writer(self.allocator);
     try self.writer.writeAll("{\n");
 
@@ -31,6 +37,8 @@ pub fn render(self: *Self) !void {
 
     self.indent_level -= 1;
     try self.writer.writeAll("}\n");
+
+    return self.output.items;
 }
 
 fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
@@ -186,7 +194,7 @@ fn renderNameTypeValue(self: *Self, decl: *const Ast.VarDecl, comma: bool) !void
 fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
     if (typ == null) return "";
 
-    var buf: std.ArrayListUnmanaged(u8) = .{};
+    var buf: std.ArrayList(u8) = .{};
 
     switch (typ.?.*) {
         .array => |t| {

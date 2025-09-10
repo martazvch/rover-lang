@@ -2,7 +2,6 @@ const std = @import("std");
 const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const MultiArrayList = std.MultiArrayList;
 
 const GenReport = @import("../reporter.zig").GenReport;
@@ -17,40 +16,35 @@ const oom = @import("../utils.zig").oom;
 
 source: []const u8,
 errs: ArrayList(ParserReport),
-arena: ArenaAllocator,
 allocator: Allocator,
 token_tags: []const Token.Tag,
 token_spans: []const Span,
-token_idx: usize = 0,
-nodes: ArrayListUnmanaged(Node) = .{},
-
-// TODO: create a Context structure
-panic_mode: bool = false,
-in_cond: bool = false,
-in_group: bool = false,
+token_idx: usize,
+nodes: ArrayList(Node),
+ctx: Context,
 
 const Self = @This();
 pub const ParserReport = GenReport(ParserMsg);
+const Context = struct {
+    panic_mode: bool,
+    in_cond: bool,
+    in_group: bool,
+
+    pub const empty: Context = .{ .panic_mode = false, .in_cond = false, .in_group = false };
+};
 const Error = error{Err};
 
-// TODO: useless
-pub const empty: Self = .{
-    .source = undefined,
-    .errs = undefined,
-    .arena = undefined,
-    .allocator = undefined,
-    .token_tags = undefined,
-    .token_spans = undefined,
-};
-
-pub fn init(self: *Self, allocator: Allocator) void {
-    self.arena = .init(allocator);
-    self.allocator = self.arena.allocator();
-    self.errs = .init(self.allocator);
-}
-
-pub fn deinit(self: *Self) void {
-    self.arena.deinit();
+pub fn init(allocator: Allocator) Self {
+    return .{
+        .allocator = allocator,
+        .source = undefined,
+        .errs = .empty,
+        .nodes = .empty,
+        .token_idx = 0,
+        .token_spans = undefined,
+        .token_tags = undefined,
+        .ctx = .empty,
+    };
 }
 
 /// Parses the token stream
@@ -186,12 +180,12 @@ fn errAtPrev(self: *Self, error_kind: ParserMsg) Error {
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
 fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
-    if (self.panic_mode) return error.Err;
+    if (self.ctx.panic_mode) return error.Err;
 
-    self.panic_mode = true;
+    self.ctx.panic_mode = true;
 
     const report = ParserReport.err(error_kind, self.token_spans[token]);
-    self.errs.append(report) catch oom();
+    self.errs.append(self.allocator, report) catch oom();
 
     return error.Err;
 }
@@ -201,18 +195,18 @@ fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
 /// are already in panic mode, the following errors are just
 /// consequencies of actual bad statement
 fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
-    if (self.panic_mode) return error.Err;
+    if (self.ctx.panic_mode) return error.Err;
 
-    self.panic_mode = true;
+    self.ctx.panic_mode = true;
 
     const report = ParserReport.err(error_kind, span);
-    self.errs.append(report) catch oom();
+    self.errs.append(self.allocator, report) catch oom();
 
     return error.Err;
 }
 
 fn synchronize(self: *Self) void {
-    self.panic_mode = false;
+    self.ctx.panic_mode = false;
 
     while (!self.check(.eof)) {
         switch (self.token_tags[self.token_idx]) {
@@ -264,8 +258,8 @@ fn fnDecl(self: *Self) Error!Node {
 
 fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
     const closing_token: Token.Tag = if (is_closure) .pipe else .right_paren;
-    var params: ArrayListUnmanaged(Ast.VarDecl) = .{};
-    var param_names: ArrayListUnmanaged(TokenIndex) = .{};
+    var params: ArrayList(Ast.VarDecl) = .empty;
+    var param_names: ArrayList(TokenIndex) = .empty;
     var named_started = false;
 
     while (!self.check(closing_token)) {
@@ -355,8 +349,8 @@ fn structDecl(self: *Self) !Node {
     try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_struct_body);
     self.skipNewLines();
 
-    var fields: ArrayListUnmanaged(Ast.VarDecl) = .{};
-    var field_names: ArrayListUnmanaged(TokenIndex) = .{};
+    var fields: ArrayList(Ast.VarDecl) = .empty;
+    var field_names: ArrayList(TokenIndex) = .empty;
     defer field_names.deinit(self.allocator);
 
     // If at least one field
@@ -395,7 +389,7 @@ fn structDecl(self: *Self) !Node {
     }
 
     // Functions
-    var functions: ArrayListUnmanaged(Ast.FnDecl) = .{};
+    var functions: ArrayList(Ast.FnDecl) = .empty;
 
     while (!self.check(.right_brace) and !self.check(.eof)) {
         try self.expect(.@"fn", .expect_fn_in_struct_body);
@@ -435,9 +429,8 @@ fn varDecl(self: *Self) Error!Node {
 
 fn multiVarDecl(self: *Self, first_name: usize) Error!Node {
     var count: usize = 1;
-    var decls: ArrayListUnmanaged(Ast.VarDecl) = .{};
-    var variables = ArrayListUnmanaged(usize){};
-    defer variables.deinit(self.allocator);
+    var decls: ArrayList(Ast.VarDecl) = .empty;
+    var variables: ArrayList(usize) = .empty;
 
     while (self.match(.comma)) {
         try self.expect(.identifier, .{ .expect_name = .{ .kind = "variable" } });
@@ -496,7 +489,7 @@ fn parseType(self: *Self) Error!*Ast.Type {
 
     if (self.isIdentOrType()) {
         if (self.check(.dot)) {
-            var tokens: ArrayListUnmanaged(TokenIndex) = .{};
+            var tokens: ArrayList(TokenIndex) = .empty;
             tokens.append(self.allocator, self.token_idx - 1) catch oom();
 
             while (self.match(.dot)) {
@@ -519,7 +512,7 @@ fn parseType(self: *Self) Error!*Ast.Type {
     } else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 
-        var params: ArrayListUnmanaged(*Ast.Type) = .{};
+        var params: ArrayList(*Ast.Type) = .empty;
         try self.expect(.left_paren, .expect_paren_after_fn_name);
 
         while (!self.check(.right_paren) and !self.check(.eof)) {
@@ -565,7 +558,7 @@ fn discard(self: *Self) Error!Node {
 }
 
 fn use(self: *Self) Error!Node {
-    var names: ArrayListUnmanaged(usize) = .{};
+    var names: ArrayList(usize) = .empty;
 
     if (self.match(.dot)) {
         names.append(self.allocator, self.token_idx - 1) catch oom();
@@ -582,7 +575,7 @@ fn use(self: *Self) Error!Node {
     }
 
     const items = if (self.match(.left_brace)) b: {
-        var items: ArrayListUnmanaged(Ast.Use.ItemAndAlias) = .{};
+        var items: ArrayList(Ast.Use.ItemAndAlias) = .empty;
 
         while (self.match(.identifier)) {
             items.append(self.allocator, .{ .item = self.token_idx - 1, .alias = try self.getAlias() }) catch oom();
@@ -665,11 +658,11 @@ fn print(self: *Self) Error!Node {
 }
 
 fn whileStmt(self: *Self) Error!Node {
-    const save = self.in_cond;
-    self.in_cond = true;
-    errdefer self.in_cond = save;
+    const save = self.ctx.in_cond;
+    self.ctx.in_cond = true;
+    errdefer self.ctx.in_cond = save;
     const cond = try self.parsePrecedenceExpr(0);
-    self.in_cond = save;
+    self.ctx.in_cond = save;
 
     const body = if (self.matchAndSkip(.left_brace))
         try self.blockExpr()
@@ -768,7 +761,7 @@ fn parseExpr(self: *Self) Error!*Expr {
 fn array(self: *Self) Error!*Expr {
     const start = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
-    var values: ArrayListUnmanaged(*Expr) = .{};
+    var values: ArrayList(*Expr) = .empty;
 
     self.skipNewLines();
     while (!self.check(.eof) and !self.match(.right_bracket)) {
@@ -804,7 +797,7 @@ fn blockExpr(self: *Self) Error!*Expr {
 fn block(self: *Self) Error!struct { *Expr, bool } {
     const openning_brace = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
-    var exprs: ArrayListUnmanaged(Node) = .{};
+    var exprs: ArrayList(Node) = .empty;
     var has_callable = false;
 
     self.skipNewLines();
@@ -857,12 +850,12 @@ fn closure(self: *Self) Error!*Expr {
 
 fn ifExpr(self: *Self) Error!*Expr {
     const tk = self.token_idx - 1;
-    const save = self.in_cond;
-    self.in_cond = true;
-    errdefer self.in_cond = save;
+    const save = self.ctx.in_cond;
+    self.ctx.in_cond = true;
+    errdefer self.ctx.in_cond = save;
     const condition = try self.parsePrecedenceExpr(0);
     self.skipNewLines();
-    self.in_cond = save;
+    self.ctx.in_cond = save;
 
     // TODO: Warning for unnecessary 'do' if there is a block after
     const then: Node = if (self.matchAndSkip(.left_brace))
@@ -903,9 +896,9 @@ fn leftParenExprStart(self: *Self) Error!*Expr {
     const opening = self.prev(.span).start;
     self.skipNewLines();
 
-    const save = self.in_group;
-    defer self.in_group = save;
-    self.in_group = true;
+    const save = self.ctx.in_group;
+    defer self.ctx.in_group = save;
+    self.ctx.in_group = true;
 
     const expr = self.allocator.create(Expr) catch oom();
     const value = try self.parsePrecedenceExpr(0);
@@ -967,7 +960,7 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
         } else if (self.match(.left_bracket)) {
             expr = try self.arrayAccess(expr);
         } else if (self.match(.left_brace)) {
-            if (self.in_cond and !self.in_group) {
+            if (self.ctx.in_cond and !self.ctx.in_group) {
                 self.token_idx -= 1;
                 return expr;
             }
@@ -1008,7 +1001,7 @@ fn field(self: *Self, expr: *Expr) Error!*Expr {
 fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
     const call_expr = self.allocator.create(Expr) catch oom();
 
-    var args: ArrayListUnmanaged(*Expr) = .{};
+    var args: ArrayList(*Expr) = .empty;
     args.ensureTotalCapacity(self.allocator, 256) catch oom();
     var named_started = false;
 
@@ -1050,7 +1043,7 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
 
 fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
     const struct_lit = self.allocator.create(Expr) catch oom();
-    var fields_values: ArrayListUnmanaged(Ast.FieldAndValue) = .{};
+    var fields_values: ArrayList(Ast.FieldAndValue) = .empty;
 
     b: {
         if (expr.* == .literal) {

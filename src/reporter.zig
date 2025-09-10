@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const assert = std.debug.assert;
-const Writer = std.fs.File.Writer;
+const Writer = std.Io.Writer;
 const builtin = @import("builtin");
 
 const Span = @import("frontend/Lexer.zig").Span;
@@ -61,231 +61,183 @@ const warning_msg = generateMsg("Warning:", .Yellow);
 const corner_to_hint = boxChar(.BottomLeft) ++ boxChar(.Horitzontal) ** 4;
 const corner_to_end = boxChar(.BottomLeft) ++ boxChar(.Horitzontal) ** 2;
 
-/// Generic reporter type. The *Item* is the type of object to refer to get extra data
-/// and *Reporter* is the enum that holds the messages. *Report* must have methods:
-/// - getMsg
-/// - getHint
-/// - getHelp
-pub fn GenReporter(comptime Report: type) type {
-    return struct {
-        source: [:0]const u8,
-        writer: WriterType,
+/// Reports all the reports of type *Report*
+pub fn reportAll(
+    Report: type,
+    reports: []const GenReport(Report),
+    verbose: bool,
+    file_name: []const u8,
+    source: [:0]const u8,
+) !void {
+    const prev_cp = if (builtin.os.tag == .windows) cp: {
+        const prev = std.os.windows.kernel32.GetConsoleOutputCP();
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
+        break :cp prev;
+    } else 0;
 
-        const Self = @This();
+    defer if (builtin.os.tag == .windows) {
+        _ = std.os.windows.kernel32.SetConsoleOutputCP(prev_cp);
+    };
 
-        const WindowsReporter = struct {
-            prev_cp: c_uint,
-            writer: std.fs.File.Writer,
+    var stderr_buf: [2048]u8 = undefined;
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buf);
+    const stderr = &stderr_writer.interface;
 
-            const InnerSelf = @This();
-
-            pub fn init(writer: std.fs.File.Writer) InnerSelf {
-                return .{ .writer = writer, .prev_cp = std.os.windows.kernel32.GetConsoleOutputCP() };
-            }
-
-            pub fn write(self: InnerSelf, bytes: []const u8) !usize {
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-                const count = try self.writer.write(bytes);
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
-                return count;
-            }
-
-            pub fn writeAll(self: InnerSelf, bytes: []const u8) !void {
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-                try self.writer.writeAll(bytes);
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
-            }
-
-            pub fn print(self: InnerSelf, comptime format: []const u8, args: anytype) !void {
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(65001);
-                const count = try self.writer.print(format, args);
-                _ = std.os.windows.kernel32.SetConsoleOutputCP(self.prev_cp);
-                return count;
-            }
-        };
-
-        const WriterType = union(enum) {
-            StdOut: std.fs.File.Writer,
-            Custom: WindowsReporter,
-
-            pub fn write(self: *const WriterType, bytes: []const u8) !usize {
-                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
-                return writer.write(bytes);
-            }
-
-            pub fn writeAll(self: *const WriterType, comptime format: []const u8) !void {
-                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
-                return writer.writeAll(format);
-            }
-
-            pub fn print(self: *const WriterType, comptime format: []const u8, args: anytype) !void {
-                const writer = if (builtin.os.tag == .windows) self.Custom else self.StdOut;
-                return writer.print(format, args);
-            }
-        };
-
-        pub fn init(source: [:0]const u8) Self {
-            const stdout = std.io.getStdOut().writer();
-            const writer: WriterType = if (builtin.os.tag == .windows)
-                .{ .Custom = WindowsReporter.init(stdout) }
-            else
-                .{ .StdOut = stdout };
-
-            return .{ .writer = writer, .source = source };
+    if (verbose) {
+        for (reports) |*report| {
+            try display(Report, report, stderr, file_name, source);
         }
-
-        /// Reports all the reports of type *Report*
-        pub fn reportAll(self: *Self, file_name: []const u8, reports: []const GenReport(Report)) !void {
-            const sep = if (builtin.os.tag == .windows) '\\' else '/';
-            var iter = std.mem.splitBackwardsScalar(u8, file_name, sep);
-            const name = iter.first();
-
-            for (reports) |*report| {
-                try self.display(report, name);
-            }
+    } else {
+        for (reports) |report| {
+            try report.toStr(stderr);
+            try stderr.writeAll("\n");
         }
+    }
 
-        fn display(self: *Self, report: *const GenReport(Report), file_name: []const u8) !void {
-            // Prints the error part
-            //  Error: <err-msg>
-            try self.writer.print("{s} ", .{report.level.get_level_msg()});
-            try report.getMsg(self.writer);
-            _ = try self.writer.write("\n");
+    try stderr.flush();
+}
 
-            // If there is visual indication on text
-            if (report.end > 0) {
-                var current: usize = 0;
-                var line_start: usize = 0;
-                var line_count: usize = 0;
-                var previous_line: ?[]const u8 = null;
+fn display(Report: type, report: *const GenReport(Report), writer: *Writer, file_name: []const u8, source: [:0]const u8) !void {
+    // Prints the error part
+    //  Error: <err-msg>
+    try writer.print("{s} ", .{report.level.get_level_msg()});
+    try report.getMsg(writer);
+    _ = try writer.write("\n");
 
-                // Looking for current line where it occured and buffers the previous one
-                // for context
-                while (true) : (current += 1) {
-                    if (current >= self.source.len) break;
+    // If there is visual indication on text
+    if (report.end > 0) {
+        var current: usize = 0;
+        var line_start: usize = 0;
+        var line_count: usize = 0;
+        var previous_line: ?[]const u8 = null;
 
-                    if (self.source[current] == '\n') {
-                        if (current >= report.start) break;
+        // Looking for current line where it occured and buffers the previous one
+        // for context
+        while (true) : (current += 1) {
+            if (current >= source.len) break;
 
-                        // line_start > 0 otherwise if first line of file is \n, current - 1 crashes
-                        if (line_start > 0) {
-                            const end = if (self.source[current - 1] == '\r') current - 1 else current;
-                            previous_line = self.source[line_start..end];
-                        }
+            if (source[current] == '\n') {
+                if (current >= report.start) break;
 
-                        line_count += 1;
-                        // Skip the \n
-                        line_start = current + 1;
-                    }
+                // line_start > 0 otherwise if first line of file is \n, current - 1 crashes
+                if (line_start > 0) {
+                    const end = if (source[current - 1] == '\r') current - 1 else current;
+                    previous_line = source[line_start..end];
                 }
 
-                // Line index start to 1
                 line_count += 1;
-
-                var buf: [10]u8 = undefined;
-                // We consider the maximum line number being 99 999. The extra space
-                // is for space between line number and gutter and the one at the beginning
-                const buf2: [7]u8 = [_]u8{' '} ** 7;
-
-                // Gets line number digit count
-                const written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
-                const line_digit_count = written.len;
-                const left_padding = buf2[0 .. written.len + 2];
-
-                // Prints file name and location infos
-                //  ╭─[file_name.rv:1:5]
-                try self.writer.print(
-                    "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
-                    .{
-                        left_padding,
-                        boxChar(.UpperLeft),
-                        boxChar(.Horitzontal),
-                        color(.Blue),
-                        file_name,
-                        color(.NoColor),
-                        line_count,
-                        report.end - line_start + 1,
-                    },
-                );
-                // Prints previous line number, separation and line itself
-                //  56 | var a = 3
-                if (previous_line) |pl| {
-                    try self.print_line(line_count - 1, pl, line_digit_count);
-                }
-
-                // Prints current line number, separation and line
-                //  57 | fn add(a, b c)
-                try self.print_line(line_count, self.source[line_start..current], line_digit_count);
-
-                // Underlines the problem
-                // Takes padding into account + separator + space
-                //  <space><space> |
-                try self.writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
-
-                // We get the length of the error code and the half to underline it
-                var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
-                const start_space = report.start - line_start;
-                const lexeme_len = @max(report.end - report.start, 1);
-                const half = @divFloor(lexeme_len, 2);
-
-                // Prints initial space
-                _ = try self.writer.write(space_buf[0..start_space]);
-
-                // We write in yellow
-                _ = try self.writer.write(color(.Yellow));
-
-                // Prints ─┬─
-                for (0..lexeme_len) |i| {
-                    if (i == half) {
-                        _ = try self.writer.write(boxChar(.UnderT));
-                    } else {
-                        _ = try self.writer.write(boxChar(.Horitzontal));
-                    }
-                }
-                _ = try self.writer.write("\n");
-
-                // We switch back to no color
-                _ = try self.writer.write(color(.NoColor));
-
-                // Prints to indication (written state is the good one at this stage
-                // for the beginning of the sequence to print)
-                //  <space><space> | ╰─── <indication txt>
-                try self.writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
-                _ = try self.writer.write(space_buf[0 .. start_space + half]);
-
-                _ = try self.writer.write(color(.Yellow));
-
-                try self.writer.print("{s} ", .{corner_to_hint});
-                _ = try report.getHint(self.writer);
-                _ = try self.writer.write("\n");
-                _ = try self.writer.write(color(.NoColor));
-
-                _ = try self.writer.write(left_padding);
-                try self.writer.print("{s}\n", .{corner_to_end});
+                // Skip the \n
+                line_start = current + 1;
             }
-
-            var fba = try std.BoundedArray(u8, 1000).init(0);
-            try report.getHelp(fba.writer());
-
-            if (fba.slice().len > 0) {
-                try self.writer.print("  {s} {s}\n", .{ help_msg, fba.slice()[0..fba.slice().len] });
-            }
-
-            _ = try self.writer.write("\n");
         }
 
-        // Limitation of Zig, can only use comptime known strings for formatting...
-        // TODO: dynamic formatting
-        fn print_line(self: *const Self, line_nb: usize, line: []const u8, digit_count: usize) !void {
-            try switch (digit_count) {
-                1 => self.writer.print(" {:>1} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
-                2 => self.writer.print(" {:>2} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
-                3 => self.writer.print(" {:>3} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
-                4 => self.writer.print(" {:>4} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
-                5 => self.writer.print(" {:>5} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
-                else => unreachable,
-            };
+        // Line index start to 1
+        line_count += 1;
+
+        var buf: [10]u8 = undefined;
+        // We consider the maximum line number being 99 999. The extra space
+        // is for space between line number and gutter and the one at the beginning
+        const buf2: [7]u8 = [_]u8{' '} ** 7;
+
+        // Gets line number digit count
+        const written = try std.fmt.bufPrint(&buf, "{}", .{line_count});
+        const line_digit_count = written.len;
+        const left_padding = buf2[0 .. written.len + 2];
+
+        // Prints file name and location infos
+        //  ╭─[file_name.rv:1:5]
+        try writer.print(
+            "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
+            .{
+                left_padding,
+                boxChar(.UpperLeft),
+                boxChar(.Horitzontal),
+                color(.Blue),
+                file_name,
+                color(.NoColor),
+                line_count,
+                report.end - line_start + 1,
+            },
+        );
+        // Prints previous line number, separation and line itself
+        //  56 | var a = 3
+        if (previous_line) |pl| {
+            try print_line(writer, line_count - 1, pl, line_digit_count);
         }
+
+        // Prints current line number, separation and line
+        //  57 | fn add(a, b c)
+        try print_line(writer, line_count, source[line_start..current], line_digit_count);
+
+        // Underlines the problem
+        // Takes padding into account + separator + space
+        //  <space><space> |
+        try writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
+
+        // We get the length of the error code and the half to underline it
+        var space_buf: [1024]u8 = [_]u8{' '} ** 1024;
+        const start_space = report.start - line_start;
+        const lexeme_len = @max(report.end - report.start, 1);
+        const half = @divFloor(lexeme_len, 2);
+
+        // Prints initial space
+        _ = try writer.write(space_buf[0..start_space]);
+
+        // We write in yellow
+        _ = try writer.write(color(.Yellow));
+
+        // Prints ─┬─
+        for (0..lexeme_len) |i| {
+            if (i == half) {
+                _ = try writer.write(boxChar(.UnderT));
+            } else {
+                _ = try writer.write(boxChar(.Horitzontal));
+            }
+        }
+        _ = try writer.write("\n");
+
+        // We switch back to no color
+        _ = try writer.write(color(.NoColor));
+
+        // Prints to indication (written state is the good one at this stage
+        // for the beginning of the sequence to print)
+        //  <space><space> | ╰─── <indication txt>
+        try writer.print("{s}{s} ", .{ left_padding, boxChar(.Vertical) });
+        _ = try writer.write(space_buf[0 .. start_space + half]);
+
+        _ = try writer.write(color(.Yellow));
+
+        try writer.print("{s} ", .{corner_to_hint});
+        _ = try report.getHint(writer);
+        _ = try writer.write("\n");
+        _ = try writer.write(color(.NoColor));
+
+        _ = try writer.write(left_padding);
+        try writer.print("{s}\n", .{corner_to_end});
+    }
+
+    var buf: [1024]u8 = undefined;
+    var fbw = std.Io.Writer.fixed(&buf);
+
+    try report.getHelp(&fbw);
+
+    if (fbw.buffered().len > 0) {
+        try writer.print("  {s} {s}\n", .{ help_msg, fbw.buffered() });
+    }
+
+    _ = try writer.write("\n");
+}
+
+// Limitation of Zig, can only use comptime known strings for formatting...
+// TODO: dynamic formatting
+fn print_line(writer: *Writer, line_nb: usize, line: []const u8, digit_count: usize) !void {
+    try switch (digit_count) {
+        1 => writer.print(" {:>1} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+        2 => writer.print(" {:>2} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+        3 => writer.print(" {:>3} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+        4 => writer.print(" {:>4} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+        5 => writer.print(" {:>5} {s} {s}\n", .{ line_nb, boxChar(.Vertical), line }),
+        else => unreachable,
     };
 }
 
@@ -355,6 +307,7 @@ pub fn GenReport(comptime T: type) type {
             return self.report.getHelp(writer);
         }
 
+        /// Used in test mode when we only want error name and associated data
         pub fn toStr(self: *const Self, writer: anytype) !void {
             const name = @tagName(self.report);
             try writer.writeAll(name);

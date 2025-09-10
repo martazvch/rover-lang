@@ -1,7 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
 
 const Value = @import("../runtime/values.zig").Value;
 const oom = @import("../utils.zig").oom;
@@ -19,26 +18,26 @@ pub const Error = error{TooManyConst};
 pub fn init(allocator: Allocator) Self {
     return .{
         .allocator = allocator,
-        .code = ArrayList(u8).init(allocator),
-        .offsets = ArrayList(usize).init(allocator),
+        .code = .empty,
+        .offsets = .empty,
         .constants = undefined,
         .constant_count = 0,
     };
 }
 
-pub fn deinit(self: *Self) void {
-    self.code.deinit();
-    self.offsets.deinit();
+pub fn deinit(self: *Self, allocator: Allocator) void {
+    self.code.deinit(allocator);
+    self.offsets.deinit(allocator);
 }
 
 pub fn writeOp(self: *Self, op: OpCode, offset: usize) void {
-    self.code.append(@intFromEnum(op)) catch oom();
-    self.offsets.append(offset) catch oom();
+    self.code.append(self.allocator, @intFromEnum(op)) catch oom();
+    self.offsets.append(self.allocator, offset) catch oom();
 }
 
 pub fn writeByte(self: *Self, byte: u8, offset: usize) void {
-    self.code.append(byte) catch oom();
-    self.offsets.append(offset) catch oom();
+    self.code.append(self.allocator, byte) catch oom();
+    self.offsets.append(self.allocator, offset) catch oom();
 }
 
 pub fn writeConstant(self: *Self, value: Value) Error!u8 {

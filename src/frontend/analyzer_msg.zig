@@ -1,4 +1,5 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
 const oom = @import("../utils.zig").oom;
 
 pub const AnalyzerMsg = union(enum) {
@@ -50,6 +51,7 @@ pub const AnalyzerMsg = union(enum) {
     no_main,
     return_outside_fn,
     self_outside_struct,
+    too_many_fn_args: struct { expect: usize, found: usize },
     too_many_locals,
     too_many_types,
     type_mismatch: struct { expect: []const u8, found: []const u8 },
@@ -75,12 +77,11 @@ pub const AnalyzerMsg = union(enum) {
     void_param,
     void_print,
     void_value,
-    too_many_fn_args: struct { expect: []const u8, found: []const u8 },
-    wrong_fn_args_count: struct { expect: []const u8, found: []const u8 },
+    // wrong_fn_args_count: struct { expect: usize, found: usize },
 
     const Self = @This();
 
-    pub fn getMsg(self: Self, writer: anytype) !void {
+    pub fn getMsg(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
@@ -130,7 +131,7 @@ pub const AnalyzerMsg = union(enum) {
             .return_outside_fn => writer.writeAll("return outside of a function"),
             .self_outside_struct => writer.writeAll("only structure's methods can refer to 'self'"),
             .too_many_locals => writer.writeAll("too many local variables, maximum is 255"),
-            .too_many_fn_args => |e| writer.print("expect maximum {s} arguments but found {s}", .{ e.expect, e.found }),
+            .too_many_fn_args => |e| writer.print("expect maximum {} arguments but found {}", .{ e.expect, e.found }),
             .too_many_types => writer.writeAll("too many types declared, maximum is 268435455"),
             .type_mismatch => |e| writer.print("type mismatch, expect type '{s}' but found '{s}' ", .{ e.expect, e.found }),
             .undeclared_field_access => |e| writer.print("field '{s}' isn't part of structure's definition", .{e.name}),
@@ -149,11 +150,11 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_print => writer.writeAll("try to print a 'void' value"),
             .void_value => writer.writeAll("value is of type 'void'"),
-            .wrong_fn_args_count => |e| writer.print("wrong argument count, expect {s} but found {s}", .{ e.expect, e.found }),
+            // .wrong_fn_args_count => |e| writer.print("wrong argument count, expect {s} but found {s}", .{ e.expect, e.found }),
         };
     }
 
-    pub fn getHint(self: Self, writer: anytype) !void {
+    pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
             .already_imported_module => writer.writeAll("this module"),
@@ -204,11 +205,11 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("this parameter"),
             .void_print => writer.writeAll("this expression is of type 'void'"),
             .void_value => writer.writeAll("this expression produces no value"),
-            .wrong_fn_args_count => writer.writeAll("this call is invalid"),
+            // .wrong_fn_args_count => writer.writeAll("this call is invalid"),
         };
     }
 
-    pub fn getHelp(self: Self, writer: anytype) !void {
+    pub fn getHelp(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared,
             .already_declared_field,
@@ -304,7 +305,7 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
-            .wrong_fn_args_count => writer.writeAll("refer to function's definition to see expected arguments"),
+            // .wrong_fn_args_count => writer.writeAll("refer to function's definition to see expected arguments"),
         };
     }
 
@@ -321,36 +322,37 @@ pub const AnalyzerMsg = union(enum) {
     }
 
     // TODO: No other way to take ownership of string??
-    pub fn tooManyFnArgs(expect: usize, found: usize) Self {
-        var list = std.ArrayList(u8).init(std.heap.page_allocator);
-        const writer = list.writer();
-        writer.print("{}", .{expect}) catch oom();
-
-        var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
-        const writer1 = list1.writer();
-        writer1.print("{}", .{found}) catch oom();
-
-        const tmp: AnalyzerMsg = .{ .too_many_fn_args = .{
-            .expect = list.toOwnedSlice() catch oom(),
-            .found = list1.toOwnedSlice() catch oom(),
-        } };
-
-        return tmp;
-    }
-    pub fn wrongFnArgsCount(expect: usize, found: usize) Self {
-        var list = std.ArrayList(u8).init(std.heap.page_allocator);
-        const writer = list.writer();
-        writer.print("{}", .{expect}) catch oom();
-
-        var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
-        const writer1 = list1.writer();
-        writer1.print("{}", .{found}) catch oom();
-
-        const tmp: AnalyzerMsg = .{ .wrong_fn_args_count = .{
-            .expect = list.toOwnedSlice() catch oom(),
-            .found = list1.toOwnedSlice() catch oom(),
-        } };
-
-        return tmp;
-    }
+    // I think reporter handles usize
+    // pub fn tooManyFnArgs(expect: usize, found: usize) Self {
+    //     var list: std.ArrayList(u8) = .empty;
+    //     const writer = list.writer();
+    //     writer.print("{}", .{expect}) catch oom();
+    //
+    //     var list1: std.ArrayList(u8) = .empty;
+    //     const writer1 = list1.writer();
+    //     writer1.print("{}", .{found}) catch oom();
+    //
+    //     const tmp: AnalyzerMsg = .{ .too_many_fn_args = .{
+    //         .expect = list.toOwnedSlice() catch oom(),
+    //         .found = list1.toOwnedSlice() catch oom(),
+    //     } };
+    //
+    //     return tmp;
+    // }
+    // pub fn wrongFnArgsCount(expect: usize, found: usize) Self {
+    //     var list = std.ArrayList(u8).init(std.heap.page_allocator);
+    //     const writer = list.writer();
+    //     writer.print("{}", .{expect}) catch oom();
+    //
+    //     var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
+    //     const writer1 = list1.writer();
+    //     writer1.print("{}", .{found}) catch oom();
+    //
+    //     const tmp: AnalyzerMsg = .{ .wrong_fn_args_count = .{
+    //         .expect = list.toOwnedSlice() catch oom(),
+    //         .found = list1.toOwnedSlice() catch oom(),
+    //     } };
+    //
+    //     return tmp;
+    // }
 };

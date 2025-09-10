@@ -1,0 +1,6 @@
+fn main() {
+    _ = if false do 1.5 else {4}
+    _ = if true {1} else {5.6}
+    _ = if true {1.5} else {5*2}
+}
+

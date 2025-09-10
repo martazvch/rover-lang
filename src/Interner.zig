@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 const oom = @import("utils.zig").oom;
 

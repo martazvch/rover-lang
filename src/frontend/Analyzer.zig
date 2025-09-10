@@ -1,6 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const ArrayListUnmanaged = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
@@ -87,8 +87,8 @@ interner: *Interner,
 path: *Sb,
 containers: Sb,
 
-errs: ArrayListUnmanaged(AnalyzerReport),
-warns: ArrayListUnmanaged(AnalyzerReport),
+errs: ArrayList(AnalyzerReport),
+warns: ArrayList(AnalyzerReport),
 ast: *const Ast,
 scope: LexScope,
 type_interner: *TypeInterner,
@@ -321,7 +321,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 }
 
 fn loadFunctionCaptures(self: *Self, captures: *const Ast.FnDecl.Meta.Captures) Error![]const Instruction.Data {
-    var instructions: ArrayListUnmanaged(Instruction.Data) = .{};
+    var instructions: ArrayList(Instruction.Data) = .{};
     instructions.ensureTotalCapacity(self.allocator, captures.count()) catch oom();
 
     var it = captures.iterator();
@@ -743,7 +743,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) TypeResult {
     var final_type = self.type_interner.cache.void;
     var backpatched = false;
 
-    var elems: ArrayListUnmanaged(Instruction.Array.Elem) = .{};
+    var elems: ArrayList(Instruction.Array.Elem) = .{};
     elems.ensureUnusedCapacity(self.allocator, expr.values.len) catch oom();
 
     for (expr.values) |val| {
@@ -1240,7 +1240,8 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
     const param_count = proto.count();
     const params = ty.params.values()[@intFromBool(ty.kind == .method)..];
 
-    if (args.len > param_count) return self.err(AnalyzerMsg.tooManyFnArgs(param_count, args.len), err_span);
+    // if (args.len > param_count) return self.err(AnalyzerMsg.tooManyFnArgs(param_count, args.len), err_span);
+    if (args.len > param_count) return self.err(.{ .too_many_fn_args = .{ .expect = param_count, .found = args.len } }, err_span);
 
     var proto_values = proto.values();
     const start = self.ir_builder.count();
@@ -1512,7 +1513,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) TypeResult {
         },
         .string => {
             const no_quotes = text[1 .. text.len - 1];
-            var final: ArrayListUnmanaged(u8) = .{};
+            var final: ArrayList(u8) = .{};
             var i: usize = 0;
 
             while (i < no_quotes.len) : (i += 1) {

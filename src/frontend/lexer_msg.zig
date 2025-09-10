@@ -1,3 +1,5 @@
+const Writer = @import("std").Io.Writer;
+
 pub const LexerMsg = union(enum) {
     leading_zeroes,
     unterminated_str,
@@ -5,24 +7,24 @@ pub const LexerMsg = union(enum) {
 
     const Self = @This();
 
-    pub fn getMsg(self: Self, writer: anytype) !void {
+    pub fn getMsg(self: Self, writer: *Writer) !void {
         try switch (self) {
-            .leading_zeroes => writer.print("leading zeros in integer literals are not allowed", .{}),
-            .unterminated_str => writer.print("unterminated string", .{}),
-            .unexpected_char => writer.print("unexpected character", .{}),
+            .leading_zeroes => writer.writeAll("leading zeros in integer literals are not allowed"),
+            .unterminated_str => writer.writeAll("unterminated string"),
+            .unexpected_char => writer.writeAll("unexpected character"),
         };
     }
 
-    pub fn getHint(self: Self, writer: anytype) !void {
+    pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
-            else => writer.print("here", .{}),
+            else => writer.writeAll("here"),
         };
     }
 
-    pub fn getHelp(self: Self, writer: anytype) !void {
+    pub fn getHelp(self: Self, writer: *Writer) !void {
         try switch (self) {
-            .leading_zeroes => writer.print("remove the leading zeros", .{}),
-            .unterminated_str => writer.print("close the opening quote", .{}),
+            .leading_zeroes => writer.writeAll("remove the leading zeros"),
+            .unterminated_str => writer.writeAll("close the opening quote"),
             else => {},
         };
     }

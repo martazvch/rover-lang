@@ -36,12 +36,12 @@ pub fn main() !void {
         .diagnostic = &diag,
         .allocator = gpa.allocator(),
     }) catch |err| {
-        diag.report(std.io.getStdErr().writer(), err) catch {};
+        diag.reportToFile(std.fs.File.stderr(), err) catch {};
         std.process.exit(0);
     };
     defer res.deinit();
 
-    if (res.args.help != 0) return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
+    if (res.args.help != 0) return clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
 
     const config: Vm.Config = .{
         .print_ast = if (res.args.@"print-ast" == 1) true else false,
