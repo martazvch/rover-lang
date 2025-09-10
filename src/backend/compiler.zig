@@ -291,8 +291,8 @@ const Compiler = struct {
                 &self.manager.module,
                 self.manager.render_mode,
             );
-
             dis.disChunk(&alloc_writer.writer, self.function.name.chars);
+
             var buf: [1024]u8 = undefined;
             var stdout_writer = std.fs.File.stdout().writer(&buf);
             const stdout = &stdout_writer.interface;
@@ -550,12 +550,10 @@ const Compiler = struct {
     }
 
     // TODO: protect cast
-    // fn capture(self: *Self, data: *const Instruction.Capture) Error!void {
     fn capture(self: *Self, data: *const Instruction.Capture, line: usize) Error!void {
         self.writeOpAndByte(
             if (data.is_local) .get_capt_local else .get_capt_frame,
             @intCast(data.index),
-            // self.getLineNumber(),
             line,
         );
     }

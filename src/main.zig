@@ -10,13 +10,18 @@ const Pipeline = @import("Pipeline.zig");
 const Repl = @import("runtime/Repl.zig");
 const Vm = @import("runtime/Vm.zig");
 
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer {
-        const status = gpa.deinit();
-        std.debug.assert(status == .ok);
-    }
-    const allocator = gpa.allocator();
+    const allocator, const is_debug = gpa: {
+        break :gpa switch (builtin.mode) {
+            .Debug, .ReleaseSafe => .{ debug_allocator.allocator(), true },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, false },
+        };
+    };
+    defer if (is_debug) {
+        std.debug.assert(debug_allocator.deinit() == .ok);
+    };
 
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
@@ -34,7 +39,7 @@ pub fn main() !void {
     var diag = clap.Diagnostic{};
     var res = clap.parse(clap.Help, &params, parsers, .{
         .diagnostic = &diag,
-        .allocator = gpa.allocator(),
+        .allocator = allocator,
     }) catch |err| {
         diag.reportToFile(std.fs.File.stderr(), err) catch {};
         std.process.exit(0);

@@ -8,19 +8,29 @@ ret_naked
 get_local index 0
 unbox
 print
+get_local index 1
+unbox
+print
 ret_naked
 
 -- nested2 --
 push_null
 constant index 0, value <function capture1>
-get_local index 4
-closure index 1
+get_capt_frame index 0
+get_capt_frame index 1
+closure index 2
 ret_naked
 
 -- nested --
 push_null
 get_local index 0
 unbox
+
+constant index 0, value <function nested2>
+// 1 because 'c' already captured in frame slot 1
+get_capt_frame index 1
+get_capt_frame index 0
+closure index 2
 ret_naked
 
 -- capture2 --
@@ -34,7 +44,7 @@ constant index 0, value 3
 box
 
 constant index 1, value <function capture>
-get_local index 0
+get_capt_local index 0
 closure index 1
 
 constant index 2, value 1
@@ -45,14 +55,15 @@ box
 constant index 4, value 9
 
 constant index 5, value <function nested>
-get_local index 3
-closure index 1
+get_capt_local index 3
+get_capt_local index 4
+closure index 2
 
 constant index 6, value 1
 box
 
 constant index 7, value <function capture2>
-get_local index 7
+get_capt_local index 7
 closure index 1
 
 constant index 8, value 2

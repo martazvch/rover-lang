@@ -232,10 +232,12 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .ge_float => self.stack.push(Value.makeBool(self.stack.pop().float <= self.stack.pop().float)),
             .ge_int => self.stack.push(Value.makeBool(self.stack.pop().int <= self.stack.pop().int)),
             .get_capt_frame => {
+                // Get a capture in the current call frame, not on stack
                 const index = frame.readByte();
                 self.stack.push(frame.captures[index]);
             },
             .get_capt_local => {
+                // Local captured are determined by their index relative to start of call frame
                 const index = frame.readByte();
                 self.stack.push((frame.slots + index)[0]);
             },

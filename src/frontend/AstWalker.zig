@@ -27,10 +27,15 @@ const CaptureCtx = struct {
         pub const empty: Scope = .{ .locals = .empty, .captures = .empty };
 
         pub fn addCapture(self: *Scope, allocator: Allocator, name: InternerIdx, index: usize, is_local: bool) usize {
+            if (self.captures.getIndex(name)) |i| {
+                return i;
+            }
+
             self.captures.put(allocator, name, .{ .index = index, .is_local = is_local }) catch oom();
             return self.captures.count() - 1;
         }
     };
+
     const VarDecl = struct {
         name: InternerIdx,
         depth: usize,
@@ -143,6 +148,7 @@ fn functionCaptures(self: *Self, node: *Ast.FnDecl, ctx: *CaptureCtx) void {
     const scope = ctx.close();
     node.meta.captures = scope.captures;
 
+    // Closures become runtime value on stack
     if (scope.captures.count() > 0) {
         ctx.declareLocal(self.allocator, self.interner.intern(self.ast.toSource(node.name)), null);
     }
