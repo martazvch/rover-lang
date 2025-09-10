@@ -14,9 +14,9 @@ print
 ret_naked
 
 -- getVecFromPos --
-get_global index 0, <structure Vec2>
+load_sym index 0, <structure Vec2>
+get_local index 0
 get_local index 1
-get_local index 2
 struct_lit index 2
 ret
 
@@ -29,7 +29,7 @@ constant index 0, value 12
 ret
 
 -- global scope --
-OP_EXIT_REPL
+exit_repl
 
 //---- geom ----
 
@@ -38,16 +38,16 @@ get_local index 0
 get_field index 0
 get_local index 1
 add_int
-get_local index 0
-OP_GET_FIELD_REG index 0
-OP_REG_ASSIGN
+get_local_cow index 0
+set_field index 0
+
 get_local index 0
 get_field index 1
 get_local index 1
 add_int
-get_local index 0
-OP_GET_FIELD_REG index 1
-OP_REG_ASSIGN
+get_local_cow index 0
+set_field index 1
+
 ret_naked
 
 -- display --
@@ -66,52 +66,57 @@ ret_naked
 
 -- moveCenter --
 get_local index 0
-OP_GET_FIELD_REG index 1
+get_field index 1
 get_field index 0
+
 get_local index 1
 get_field index 0
 add_int
+
+get_local_cow index 0
+get_field_cow index 1
+set_field index 0
+
 get_local index 0
-OP_GET_FIELD_REG index 1
-OP_GET_FIELD_REG index 0
-OP_REG_ASSIGN
-get_local index 0
-OP_GET_FIELD_REG index 1
 get_field index 1
+get_field index 1
+
 get_local index 1
 get_field index 1
 add_int
-get_local index 0
-OP_GET_FIELD_REG index 1
-OP_GET_FIELD_REG index 1
-OP_REG_ASSIGN
+
+get_local_cow index 0
+get_field_cow index 1
+set_field index 1
+
 get_local index 0
 get_field index 1
 ret
 
 -- global scope --
-OP_EXIT_REPL
+exit_repl
 
 //---- test.rv ----
 
 -- main --
-get_global index 0, <structure Vec2>
+load_extern_sym index 0, module 0
 constant index 0, value 3
 constant index 1, value 9
 struct_lit index 2
-get_global index 1, <structure Point>
+
+load_extern_sym index 0, module 1
 constant index 2, value 5
 constant index 3, value 8
 struct_lit index 2
-constant index 4, value <structure Vec2>
-get_local index 3
-constant index 5, value 55
-constant index 6, value 333
+
+load_extern_sym index 0, module 0
+constant index 4, value 55
+constant index 5, value 333
 struct_lit index 2
 pop
-pop
+
 ret_naked
 
 -- global scope --
-get_global index 3, <function main>
+load_sym index 0, <function main>
 call index 0

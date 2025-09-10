@@ -1864,8 +1864,11 @@ fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
 
 /// Checks if it should increment the reference count of the expression based on its type
 /// on the type of expression. All non-literal heap variables will be incremented
+/// One exception is made if it's a non-literal heap object return by a function
+///  ex: like: fn makePoint() -> Point { Point{} }
 fn shouldIncrRc(ty: *const Type, expr: *const Expr) bool {
-    return ty.isHeap() and !isHeapLiteral(expr);
+    // TODO: only works if it's a call, if we put in parenthesis for example, we don't see it anymore
+    return ty.isHeap() and !isHeapLiteral(expr) and expr.* != .fn_call;
 }
 
 /// Checks if the expression is a literal generating a heap object

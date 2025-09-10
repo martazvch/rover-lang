@@ -117,7 +117,7 @@
                 [Variable index: 1, scope: local]
     [Fn call arity: 0]
         [Load symbol 2 of module 0]
-    [Variable declaration index: 2, scope: local, incr_rc]
+    [Variable declaration index: 2, scope: local]
         [Fn call arity: 2]
             [Load symbol 3 of module 0]
             - args:
@@ -148,7 +148,7 @@
                 - args:
                 [String just ]
                 [String concaneted]
-    [Variable declaration index: 3, scope: local, incr_rc]
+    [Variable declaration index: 3, scope: local]
         [Fn call arity: 1]
             [Method access 0]
                 [Variable index: 1, scope: local]

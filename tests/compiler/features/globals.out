@@ -20,5 +20,5 @@ set_global index 1
 constant index 5, value Best software
 set_global index 2
 
-get_global index 3, <function main>
+load_sym index 0, <function main>
 call index 0

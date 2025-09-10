@@ -5,11 +5,11 @@ ret_naked
 ret_naked
 
 -- add2 --
-get_local index 2
+get_local index 1
 ret
 
 -- add3 --
-get_local index 1
+get_local index 0
 ret
 
 -- add4 --
@@ -17,19 +17,17 @@ ret_naked
 
 -- add5 --
 constant index 0, value 1
-get_local index 1
-get_local index 3
-add_int
+get_local index 0
 get_local index 2
+add_int
+get_local index 1
 ret
 
 -- main --
-// Empty
-get_global index 0, <function add>
+load_sym index 0, <function add>
 call index 0
 
-// With args
-get_global index 1, <function add1>
+load_sym index 1, <function add1>
 constant index 0, value 1
 constant index 1, value 2.5
 call index 2
@@ -37,5 +35,5 @@ call index 2
 ret_naked
 
 -- global scope --
-get_global index 6, <function main>
+load_sym index 6, <function main>
 call index 0

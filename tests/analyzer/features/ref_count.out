@@ -95,7 +95,7 @@
                 [Field access 0]
                     [Variable index: 2, scope: local]
             [Increment ref count]
-    [Variable declaration index: 12, scope: local, incr_rc]
+    [Variable declaration index: 12, scope: local]
         [Fn call arity: 0]
             [Method access 0]
                 [Field access 0]

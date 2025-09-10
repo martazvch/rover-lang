@@ -5,7 +5,7 @@ pop
 constant index 1, value 65.82
 pop
 
-push_push_true
+push_true
 pop
 
 push_false
@@ -20,5 +20,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 0, <function main>
+load_sym index 0, <function main>
 call index 0

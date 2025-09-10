@@ -9,29 +9,34 @@ get_local index 0
 get_field index 0
 get_local index 1
 add_int
-get_local index 0
-OP_GET_FIELD_REG index 0
-OP_REG_ASSIGN
+
+get_local_cow index 0
+set_field index 0
+
 get_local index 0
 get_field index 0
 ret
 
 -- main --
-get_global index 0, <structure Human>
+load_sym index 0, <structure Human>
 constant index 0, value 5
 constant index 1, value Tom
 struct_lit index 2
 
 push_null
-get_local index 1
-OP_INVOKE arity 0, method index 0
-get_local index 1
+get_local index 0
+get_method index 0
+call index 1
+
+get_local index 0
+get_method index 1
 constant index 2, value 10
-OP_INVOKE arity 1, method index 1
+call index 2
+
 pop
 ret_naked
 
 -- global scope --
-get_global index 1, <function main>
+load_sym index 3, <function main>
 call index 0
 

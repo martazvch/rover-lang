@@ -1,9 +1,9 @@
 -- main --
-push_push_true
-jump_push_false 1 -> 6
+push_true
+jump_false 1 -> 6
 pop
 push_false
-jump_push_false 6 -> 16
+jump_false 6 -> 16
 pop
 constant index 0, value yes
 print
@@ -12,5 +12,5 @@ pop
 ret_naked
 
 -- global scope --
-get_global index 0, <function main>
+load_sym index 0, <function main>
 call index 0

@@ -15,7 +15,7 @@
                 - args
                 [Variable index: 0, scope: local]
                 [Variable index: 1, scope: local]
-    [Variable declaration index: 0, scope: local, incr_rc]
+    [Variable declaration index: 0, scope: local]
         [Fn call arity: 1]
             [Method access 0]
                 [Load symbol 0]
@@ -28,9 +28,8 @@
         [Variable index: 1, scope: local]
         - args:
         [Int 65]
-    [Increment ref count]
     [Assignment index: 0, scope: local, cow]
-    [Variable declaration index: 2, scope: local, incr_rc]
+    [Variable declaration index: 2, scope: local]
         [Fn call arity: 2]
             [Method access 0]
                 [Load symbol 4]
@@ -45,5 +44,4 @@
         - args:
         [Int 56]
         [Int 78]
-    [Increment ref count]
     [Assignment index: 2, scope: local, cow]

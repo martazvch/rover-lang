@@ -1,14 +1,14 @@
 -- main --
-get_global index 0, <structure Person>
+load_sym index 0, <structure Person>
 constant index 0, value Tom
 struct_lit index 1
+
 constant index 1, value Martin
-get_local index 1
-OP_GET_FIELD_REG index 0
-OP_REG_ASSIGN
+get_local_cow index 0
+set_field index 0
 ret_naked
 
 -- global scope --
-get_global index 1, <function main>
+load_sym index 1, <function main>
 call index 0
 

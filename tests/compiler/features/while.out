@@ -1,21 +1,25 @@
 -- main --
 constant index 0, value 0
-get_local index 1
+
+get_local index 0
 constant index 1, value 4
 lt_int
-jump_push_false 7 -> 24
+jump_false 7 -> 24
+
 pop
-get_local index 1
+get_local index 0
 print
-get_local index 1
+
+get_local index 0
 constant index 2, value 1
 add_int
-set_local index 1
-OP_LOOP 21 -> 2
+set_local index 0
+
+loop 21 -> 2
 pop
 
 ret_naked
 
 -- global scope --
-get_global index 0, <function main>
+load_sym index 0, <function main>
 call index 0

@@ -1,50 +1,46 @@
-// For structure literals, we compile each field initialization's expression, then we
-// emit a struct_lit code with the arity and finally get the variable containing
-// the declaration while assigning in order to each each field
-
 -- main --
-get_global index 0, <structure Human>
+load_sym index 0, <structure Human>
 constant index 0, value 5
 constant index 1, value Tom
 struct_lit index 2
 
-get_global index 0, <structure Human>
+load_sym index 0, <structure Human>
 constant index 2, value 5
 constant index 3, value Tom
 struct_lit index 2
+set_local index 0
 
-set_local index 1
 constant index 4, value 95
 
-get_global index 0, <structure Human>
-get_local index 2
+load_sym index 0, <structure Human>
+get_local index 1
 constant index 5, value Tom
 struct_lit index 2
+set_local index 0
 
-set_local index 1
 constant index 6, value Tom
 
-get_global index 0, <structure Human>
+load_sym index 0, <structure Human>
 constant index 7, value 6
-get_local index 3
-struct_lit index 2
-set_local index 1
-
-get_global index 0, <structure Human>
 get_local index 2
-get_local index 3
 struct_lit index 2
-set_local index 1
+set_local index 0
 
-get_global index 0, <structure Human>
+load_sym index 0, <structure Human>
+get_local index 1
 get_local index 2
-get_local index 3
 struct_lit index 2
-set_local index 1
+set_local index 0
+
+load_sym index 0, <structure Human>
+get_local index 1
+get_local index 2
+struct_lit index 2
+set_local index 0
 
 ret_naked
 
 -- global scope --
-get_global index 1, <function main>
+load_sym index 1, <function main>
 call index 0
 
