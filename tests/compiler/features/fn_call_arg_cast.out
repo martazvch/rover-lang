@@ -5,19 +5,18 @@ ret_naked
 ret_naked
 
 -- main --
-constant index 0, value <function add1>
-get_local index 1
-constant index 1, value 1
-constant index 2, value 2
+load_sym index 2, <function add1>
+constant index 0, value 1
+constant index 1, value 2
 cast_to_float
 call index 2
 
 // Call to sub
-get_global index 0, <function sub>
-constant index 3, value 1
+load_sym index 0, <function sub>
+constant index 2, value 1
 cast_to_float
-constant index 4, value 2
-constant index 5, value 3
+constant index 3, value 2
+constant index 4, value 3
 cast_to_float
 call index 3
 
@@ -25,5 +24,5 @@ call index 3
 ret_naked
 
 -- global scope --
-get_global index 1, <function main>
+load_sym index 1, <function main>
 call index 0
