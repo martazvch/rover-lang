@@ -1,20 +1,19 @@
 -- add1 --
 constant index 0, value 1
-get_local index 1
-get_local index 3
-add_int
+get_local index 0
 get_local index 2
+add_int
+get_local index 1
 ret
 
 -- main --
-constant index 0, value <function add1>
-get_local index 1
-constant index 1, value 1
-constant index 2, value 2
+load_sym index 1, <function add1>
+constant index 0, value 1
+constant index 1, value 2
 call index 2
 pop
 ret_naked
 
 -- global scope --
-get_global index 0, <function main>
+load_sym index 0, <function main>
 call index 0

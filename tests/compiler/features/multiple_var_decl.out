@@ -26,11 +26,11 @@ constant index 10, value 56
 constant index 11, value 2
 sub_int
 mul_int
-get_global index 0, <function add>
+load_sym index 0, <function add>
 call index 0
 
 ret_naked
 
 -- global scope --
-get_global index 1, <function main>
+load_sym index 1, <function main>
 call index 0

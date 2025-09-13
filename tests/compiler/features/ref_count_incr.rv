@@ -1,19 +1,11 @@
 struct Point {
     x, y: int
-
-    fn display(self) {
-        print "Point"
-        print self.x
-        print self.y
-        print ""
-    }
 }
 
 struct Poly {
     pt: Point,
 
     fn clone(self) -> Self {
-        // self
         Poly{pt=Point{x=1, y=2}}
     }
 }
@@ -22,8 +14,6 @@ struct Structure {
     poly: Poly,
     polys: []Poly,
 }
-
-fn testFn(pt: Point, poly: Poly, structure: Structure) {}
 
 fn main() {
     var pt = Point{x=2, y=6}
@@ -36,15 +26,20 @@ fn main() {
     var ref3 = structure.polys
     var ref4 = structure.polys[0]
     var ref5 = structure.polys[0].pt
-    var noref = structure.polys[0].pt.x
 
     var pts = [pt]
     var structs = [structure.poly.pt]
 
-    var tmp = structure.poly.clone()
-    var tmp1 = structure.poly.clone().pt
-    var tmp2 = structure.poly.clone().pt.x
-
+    // Functions arguments can't be mutated if they aren't references
+    // so no need to increment a reference count they won't be written
     testFn(pt, structure.poly, structure)
+
+    // Same rule but nested
+    noRef2 = (structure.poly.clone().pt)
+    noRef2 = { structure.poly.clone().pt } 
+    noRef2 = ( { ( structure.poly.clone().pt ) } ) 
+
+    noRef2 = if true do return else poly.clone().pt
+    noRef2 = if true do poly.clone().pt else return
 }
 

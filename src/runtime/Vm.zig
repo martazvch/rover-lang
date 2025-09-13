@@ -154,13 +154,13 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .array_get => {
                 const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(Obj.Array);
-                const final = checkArrayIndex(array, index);
+                const final = checkArrayIndex(array.values.items.len, index);
                 self.stack.push(array.values.items[final]);
             },
             .array_get_cow => {
                 const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(Obj.Array);
-                const final = checkArrayIndex(array, index);
+                const final = checkArrayIndex(array.values.items.len, index);
                 const value = &array.values.items[final];
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
@@ -171,7 +171,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const array = self.stack.pop().obj.as(Obj.Array);
                 const value = self.stack.pop();
 
-                const final = checkArrayIndex(array, index);
+                const final = checkArrayIndex(array.values.items.len, index);
                 array.values.items[final] = value;
             },
             .array_set_chain => unreachable,
@@ -461,17 +461,17 @@ fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
     self.stack.top -= 1;
 }
 
-fn checkArrayIndex(array: *const Obj.Array, index: i64) usize {
+fn checkArrayIndex(array_len: usize, index: i64) usize {
     // TODO: runtime error desactivable with release fast mode
-    if (index > array.values.items.len - 1) @panic("Out of bound access");
+    if (index > array_len - 1) @panic("Out of bound access");
 
     return if (index >= 0)
         @intCast(index)
     else b: {
         const tmp: usize = @abs(index);
-        if (tmp > array.values.items.len) @panic("Out of bound");
+        if (tmp > array_len) @panic("Out of bound");
 
-        break :b array.values.items.len - tmp;
+        break :b array_len - tmp;
     };
 }
 

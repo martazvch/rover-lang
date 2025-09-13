@@ -1,0 +1,46 @@
+struct Point {
+    x, y: int
+}
+
+struct Poly {
+    pt: Point,
+
+    fn clone(self) -> Self {
+        Poly{pt=Point{x=1, y=2}}
+    }
+}
+
+struct Structure {
+    poly: Poly,
+    polys: []Poly,
+}
+
+fn testFn(pt: Point, poly: Poly, structure: Structure) {}
+
+fn main() {
+    var pt = Point{x=2, y=6}
+    var poly = Poly{pt}
+    var structure = Structure{poly, polys=[poly]}
+
+    var noRef1 = structure.polys[0].pt.x
+
+    // Non of those should increment ref count because they are newly
+    // created objects. If a function returns a heap object that isn't
+    // a reference, we don't increment reference count
+    var noRef2 = structure.poly.clone()
+    var noRef3 = structure.poly.clone().pt
+    noRef1 = structure.poly.clone().pt.x
+
+    // Functions arguments can't be mutated if they aren't references
+    // so no need to increment a reference count they won't be written
+    testFn(pt, structure.poly, structure)
+
+    // Same rule but nested
+    noRef2 = (structure.poly.clone()) 
+    noRef2 = { structure.poly.clone() } 
+    noRef2 = ( { ( structure.poly.clone() ) } ) 
+
+    noRef2 = if true do return else poly.clone()
+    noRef2 = if true do poly.clone() else return
+}
+

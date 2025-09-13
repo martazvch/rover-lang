@@ -1,0 +1,72 @@
+-- clone --
+load_sym index 1, <structure Poly>
+load_sym index 0, <structure Point>
+constant index 0, value 1
+constant index 1, value 2
+struct_lit index 2
+struct_lit index 1
+ret
+
+-- main --
+load_sym index 0, <structure Point>
+constant index 0, value 2
+constant index 1, value 6
+struct_lit index 2
+
+load_sym index 1, <structure Poly>
+get_local index 0
+incr_ref
+struct_lit index 1
+
+load_sym index 3, <structure Structure>
+get_local index 1
+incr_ref
+get_local index 1
+incr_ref
+array_new index 1
+struct_lit index 2
+
+get_local index 0
+incr_ref
+
+get_local index 2
+get_field index 0
+incr_ref
+
+get_local index 2
+get_field index 0
+get_field index 0
+incr_ref
+
+get_local index 2
+get_field index 1
+incr_ref
+
+get_local index 2
+get_field index 1
+constant index 2, value 0
+array_get
+incr_ref
+
+get_local index 2
+get_field index 1
+constant index 3, value 0
+array_get
+get_field index 0
+incr_ref
+
+get_local index 0
+incr_ref
+array_new index 1
+
+get_local index 2
+get_field index 0
+get_field index 0
+incr_ref
+array_new index 1
+
+ret_naked
+
+-- global scope --
+load_sym index 4, <function main>
+call index 0

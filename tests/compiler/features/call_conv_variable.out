@@ -1,4 +1,4 @@
-//---- math ----
+// ---- math.rv ----
 
 -- len --
 get_local index 0
@@ -14,9 +14,9 @@ print
 ret_naked
 
 -- getVecFromPos --
-get_global index 0, <structure Vec2>
+load_sym index 0, <structure Vec2>
+get_local index 0
 get_local index 1
-get_local index 2
 struct_lit index 2
 ret
 
@@ -29,9 +29,7 @@ constant index 0, value 12
 ret
 
 -- global scope --
-OP_EXIT_REPL
-
-//---- test.rv ----
+exit_repl
 
 -- static --
 constant index 0, value 3
@@ -43,8 +41,7 @@ get_field index 0
 ret
 
 -- importFuncFromMethod --
-OP_GET_GLOBAL_REG index 0, <module math>
-OP_BOUND_IMPORT index 3
+load_extern_sym index 4, module 0
 ret
 
 -- copy --
@@ -52,45 +49,57 @@ constant index 0, value 5
 ret
 
 -- main --
-get_global index 1, <structure Foo>
-OP_LOAD_STRUCT_DEF
-OP_GET_DEFAULT index 0
+load_sym index 0, <structure Foo>
+get_default index 0
 struct_lit index 1
-OP_GET_GLOBAL_REG index 1, <structure Foo>
-OP_GET_STATIC_METHOD index 0
-get_local index 2
-call index 0
-print
-get_global index 2, <function copy>
-set_local index 2
-get_local index 2
-call index 0
-print
+
+load_sym index 0, <structure Foo>
+get_static_method index 0
+
 get_local index 1
-bound_method index 1
-set_local index 2
-get_local index 2
 call index 0
 print
-OP_GET_GLOBAL_REG index 0, <module math>
-OP_BOUND_IMPORT index 3
-set_local index 2
-get_local index 2
-call index 0
-print
+
+load_sym index 4, <function copy>
+set_local index 1
+
 get_local index 1
-bound_method index 2
-get_local index 3
 call index 0
 print
-get_local index 3
+
+get_local index 0
+get_method index 1
+closure index 1
+set_local index 1
+
+get_local index 1
 call index 0
-set_local index 2
+print
+
+load_extern_sym index 4, module 0
+set_local index 1
+
+get_local index 1
+call index 0
+print
+
+get_local index 0
+get_method index 2
+closure index 1
+
 get_local index 2
+call index 0
+print
+
+get_local index 2
+call index 0
+set_local index 1
+
+get_local index 1
 call index 0
 print
 ret_naked
 
 -- global scope --
-get_global index 3, <function main>
+load_sym index 5, <function main>
 call index 0
