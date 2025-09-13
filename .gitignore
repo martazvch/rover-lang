@@ -3,3 +3,5 @@ zig-out
 /.vscode
 .DS_STORE
 .zig-profile
+data/
+test.rv
