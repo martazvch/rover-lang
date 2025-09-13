@@ -169,19 +169,6 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     };
 }
 
-pub fn invoke(self: *Obj, vm: *Vm, index: usize) struct { *Function, bool } {
-    return switch (self.kind) {
-        .instance => .{ self.as(Instance).parent.methods[index], false },
-        .module => b: {
-            const module = self.as(Module).module;
-            vm.updateModule(module);
-            break :b .{ module.globals[index].obj.as(Function), true };
-        },
-        .structure => .{ self.as(Structure).methods[index], false },
-        else => unreachable,
-    };
-}
-
 pub fn structLiteral(self: *Obj, vm: *Vm) *Instance {
     return switch (self.kind) {
         .structure => Instance.create(vm, self.as(Structure)),
@@ -197,12 +184,12 @@ pub const Array = struct {
 
     pub fn create(vm: *Vm, values: []Value) *Self {
         const obj = Obj.allocate(vm, Self, .array);
-        obj.values = .{};
-        obj.values.ensureTotalCapacity(vm.allocator, values.len) catch oom();
+        obj.values = .empty;
 
-        // TODO: useless because append assumes capacity?
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
+
+        obj.values.ensureTotalCapacity(vm.gc_alloc, values.len) catch oom();
 
         for (values) |val| {
             obj.values.appendAssumeCapacity(val);
@@ -223,8 +210,8 @@ pub const Array = struct {
 
     pub fn deinit(self: *Self, vm: *Vm) void {
         // We don't own the values, just the array
-        self.values.deinit(vm.allocator);
-        vm.allocator.destroy(self);
+        self.values.deinit(vm.gc_alloc);
+        vm.gc_alloc.destroy(self);
     }
 };
 
@@ -485,8 +472,11 @@ pub const Instance = struct {
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
 
+        obj.fields.len = 0;
         for (self.fields, 0..) |*field, i| {
-            obj.fields[i] = field.deepCopy(vm);
+            const value = field.deepCopy(vm);
+            obj.fields.len += 1;
+            obj.fields[i] = value;
         }
 
         return obj;
