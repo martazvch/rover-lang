@@ -126,7 +126,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
 
     // Compiler
     var compiler = CompilationManager.init(
-        self.allocator,
+        self.vm.allocator,
         file_name,
         self.vm,
         &self.ctx.interner,

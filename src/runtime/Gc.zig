@@ -42,7 +42,6 @@ pub fn init(vm: *Vm, parent_allocator: Allocator) Self {
 
 pub fn deinit(self: *Self) void {
     self.grays.deinit(self.parent_allocator);
-    self.tmp_roots.deinit(self.vm.allocator);
 }
 
 /// Pushes a reference to an object that's being created, to allow marking it as root
@@ -91,22 +90,14 @@ fn markRoots(self: *Self) Allocator.Error!void {
     while (value != self.vm.stack.top) : (value += 1) {
         try self.markValue(&value[0]);
     }
-
-    // TODO: see if we can do other manner
-    // try self.markModule(self.vm.module);
-    // for (self.vm.module_chain.items) |mod| {
-    //     try self.markModule(mod);
-    // }
 }
 
-fn markModule(self: *Self, module: *CompiledModule) Allocator.Error!void {
-    // No need to mark the function, it's never gonna be called. We use only
-    // the global symbols
-    try self.markArray(module.globals);
+fn markModule(self: *Self, module: *CompiledModule) void {
+    errdefer oom();
 
-    // for (module.imports) |*mod| {
-    //     try self.markModule(mod);
-    // }
+    try self.markArray(module.globals);
+    try self.markArray(module.symbols);
+    try self.markObject(module.function.asObj());
 }
 
 fn traceRef(self: *Self) Allocator.Error!void {
@@ -137,7 +128,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
         .function => {
             const function = obj.as(Function);
             try self.markObject(function.name.asObj());
-            try self.markArray(&function.chunk.constants);
+            try self.markArray(function.chunk.constants[0..function.chunk.constant_count]);
         },
         .instance => {
             const instance = obj.as(Instance);
@@ -196,8 +187,9 @@ fn sweep(self: *Self) void {
 }
 
 fn markValue(self: *Self, value: *const Value) Allocator.Error!void {
-    if (value.asObj()) |obj|
+    if (value.asObj()) |obj| {
         try self.markObject(obj);
+    }
 }
 
 fn markObject(self: *Self, obj: ?*Obj) Allocator.Error!void {
@@ -217,8 +209,9 @@ fn markObject(self: *Self, obj: ?*Obj) Allocator.Error!void {
 }
 
 fn markArray(self: *Self, array: []const Value) Allocator.Error!void {
-    for (array) |*value|
+    for (array) |*value| {
         try self.markValue(value);
+    }
 }
 
 /// Calling alloc triggers the GC before allocating

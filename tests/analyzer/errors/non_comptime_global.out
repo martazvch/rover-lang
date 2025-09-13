@@ -1,0 +1,3 @@
+non_comptime_in_global
+non_comptime_default, parameter
+non_comptime_default, field

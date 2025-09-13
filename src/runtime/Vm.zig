@@ -19,6 +19,7 @@ stack: Stack,
 frame_stack: FrameStack,
 ip: [*]u8,
 allocator: Allocator,
+arena_comptime: std.heap.ArenaAllocator,
 gc_alloc: Allocator,
 // TODO: not Zig's hashmap?
 strings: Table,
@@ -41,7 +42,9 @@ pub const Config = struct {
 };
 
 pub fn init(self: *Self, allocator: Allocator, config: Config) void {
-    self.allocator = allocator;
+    self.arena_comptime = .init(allocator);
+    self.allocator = self.arena_comptime.allocator();
+
     // TODO: pass an ObjectPoolAlloc?
     self.gc = .init(self, allocator);
     self.gc_alloc = self.gc.allocator();
@@ -63,8 +66,8 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
 }
 
 pub fn deinit(self: *Self) void {
+    self.arena_comptime.deinit();
     self.gc.deinit();
-    self.strings.deinit();
     self.freeObjects();
 }
 
@@ -108,8 +111,8 @@ fn instructionNb(self: *const Self) usize {
 }
 
 pub fn run(self: *Self, module: CompiledModule, modules: []CompiledModule) !void {
-    self.gc.active = true;
     self.modules = modules;
+    self.gc.active = true;
     try self.execute(&module);
 }
 
@@ -544,11 +547,6 @@ pub const CallFrame = struct {
         const part2 = self.readByte();
 
         return (@as(u16, part1) << 8) | part2;
-    }
-
-    pub fn initModule(self: *CallFrame, module: *const CompiledModule) void {
-        self.globals = module.globals;
-        self.symbols = module.symbols;
     }
 
     // PERF: preshot the closure or function?

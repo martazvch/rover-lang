@@ -5,7 +5,6 @@ const oom = @import("../utils.zig").oom;
 pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
-    already_imported_module: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
     assign_to_constant: struct { name: []const u8 },
     assign_to_struct_fn,
@@ -62,11 +61,11 @@ pub const AnalyzerMsg = union(enum) {
     unknown_module: struct { name: []const u8 },
     unknown_param: struct { name: []const u8 },
     unknown_struct_field: struct { name: []const u8 },
-    unpure_in_global,
-    unpure_default: struct {
+    non_comptime_in_global,
+    non_comptime_default: struct {
         kind: []const u8,
 
-        pub fn new(kind: enum { field, param }) @This() {
+        pub fn new(kind: enum { field, parameter }) @This() {
             return .{ .kind = @tagName(kind) };
         }
     },
@@ -77,7 +76,6 @@ pub const AnalyzerMsg = union(enum) {
     void_param,
     void_print,
     void_value,
-    // wrong_fn_args_count: struct { expect: usize, found: usize },
 
     const Self = @This();
 
@@ -85,7 +83,6 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
-            .already_imported_module => |e| writer.print("module '{s}' as already been imported", .{e.name}),
             .array_elem_different_type => |e| writer.print(
                 "elements of an array must share the same type, found '{s}' and '{s}'",
                 .{ e.found1, e.found2 },
@@ -141,8 +138,8 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_module => |e| writer.print("unknown module '{s}'", .{e.name}),
             .unknown_param => |e| writer.print("function doesn't have parameter '{s}'", .{e.name}),
             .unknown_struct_field => |e| writer.print("unknown structure's field '{s}'", .{e.name}),
-            .unpure_in_global => writer.writeAll("non-constant expressions are not allowed in global scope"),
-            .unpure_default => |e| writer.print("non-constant expressions are not allowed for {s}", .{e.kind}),
+            .non_comptime_in_global => writer.writeAll("only compilation time expressions are allowed in global scope"),
+            .non_comptime_default => |e| writer.print("only compilation time expressions are allowed for {s}", .{e.kind}),
             .unused_value => writer.writeAll("unused value"),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
@@ -150,14 +147,12 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_print => writer.writeAll("try to print a 'void' value"),
             .void_value => writer.writeAll("value is of type 'void'"),
-            // .wrong_fn_args_count => |e| writer.print("wrong argument count, expect {s} but found {s}", .{ e.expect, e.found }),
         };
     }
 
     pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
-            .already_imported_module => writer.writeAll("this module"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
@@ -170,7 +165,7 @@ pub const AnalyzerMsg = union(enum) {
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .float_equal_cast => writer.writeAll("this expression is implicitly casted to 'float'"),
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
-            .incompatible_if_type, .unpure_in_global, .unpure_default => writer.writeAll("this expression"),
+            .incompatible_if_type, .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
             .invalid_call_target => writer.writeAll("this is neither a function neither a method"),
@@ -205,7 +200,6 @@ pub const AnalyzerMsg = union(enum) {
             .void_param => writer.writeAll("this parameter"),
             .void_print => writer.writeAll("this expression is of type 'void'"),
             .void_value => writer.writeAll("this expression produces no value"),
-            // .wrong_fn_args_count => writer.writeAll("this call is invalid"),
         };
     }
 
@@ -215,7 +209,6 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared_field,
             .duplicate_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
-            .already_imported_module => writer.writeAll("remove the import"),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
             .assign_to_struct_fn => writer.writeAll("it is not allowed to modify structures' functions at runtime"),
             .assign_to_constant => writer.writeAll(
@@ -297,62 +290,18 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_module => writer.writeAll("create the module first and bring it in project scope (or maybe just a typo?)"),
             .unknown_param => writer.writeAll("refer to function's definition to see available parameters"),
             .unknown_struct_field => writer.writeAll("refer to the structure's declaration to see available fields"),
-            .unpure_default => writer.writeAll("only constant expressions are allowed for default values"),
-            .unpure_in_global => writer.writeAll("use a constant expression or initialize the value later in a local scope"),
+            .non_comptime_default => writer.writeAll("only compilation time known expressions are allowed for default values"),
+            .non_comptime_in_global => writer.writeAll("use a constant expression or initialize the value later in a local scope"),
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .unused_value => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
             .void_array => writer.writeAll("use any other type to declare an array"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
-            // .wrong_fn_args_count => writer.writeAll("refer to function's definition to see expected arguments"),
         };
-    }
-
-    pub fn invalidArithmetic(found: []const u8) Self {
-        return .{ .invalid_arithmetic = .{ .found = found } };
     }
 
     pub fn implicitCast(side: []const u8, typ: []const u8) Self {
         return .{ .implicit_cast = .{ .side = side, .type = typ } };
     }
-
-    pub fn invalidCmp(found1: []const u8, found2: []const u8) Self {
-        return .{ .invalid_comparison = .{ .found1 = found1, .found2 = found2 } };
-    }
-
-    // TODO: No other way to take ownership of string??
-    // I think reporter handles usize
-    // pub fn tooManyFnArgs(expect: usize, found: usize) Self {
-    //     var list: std.ArrayList(u8) = .empty;
-    //     const writer = list.writer();
-    //     writer.print("{}", .{expect}) catch oom();
-    //
-    //     var list1: std.ArrayList(u8) = .empty;
-    //     const writer1 = list1.writer();
-    //     writer1.print("{}", .{found}) catch oom();
-    //
-    //     const tmp: AnalyzerMsg = .{ .too_many_fn_args = .{
-    //         .expect = list.toOwnedSlice() catch oom(),
-    //         .found = list1.toOwnedSlice() catch oom(),
-    //     } };
-    //
-    //     return tmp;
-    // }
-    // pub fn wrongFnArgsCount(expect: usize, found: usize) Self {
-    //     var list = std.ArrayList(u8).init(std.heap.page_allocator);
-    //     const writer = list.writer();
-    //     writer.print("{}", .{expect}) catch oom();
-    //
-    //     var list1 = std.ArrayList(u8).init(std.heap.page_allocator);
-    //     const writer1 = list1.writer();
-    //     writer1.print("{}", .{found}) catch oom();
-    //
-    //     const tmp: AnalyzerMsg = .{ .wrong_fn_args_count = .{
-    //         .expect = list.toOwnedSlice() catch oom(),
-    //         .found = list1.toOwnedSlice() catch oom(),
-    //     } };
-    //
-    //     return tmp;
-    // }
 };

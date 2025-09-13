@@ -30,16 +30,11 @@ fn main() {
     var pts = [pt]
     var structs = [structure.poly.pt]
 
-    // Functions arguments can't be mutated if they aren't references
-    // so no need to increment a reference count they won't be written
-    testFn(pt, structure.poly, structure)
+    ref2 = (structure.poly.pt)
+    ref2 = { { structure.poly.pt } }
+    ref2 = { ( { ( structure.poly.pt ) } ) }
 
-    // Same rule but nested
-    noRef2 = (structure.poly.clone().pt)
-    noRef2 = { structure.poly.clone().pt } 
-    noRef2 = ( { ( structure.poly.clone().pt ) } ) 
-
-    noRef2 = if true do return else poly.clone().pt
-    noRef2 = if true do poly.clone().pt else return
+    ref2 = if true do return else poly.pt
+    ref2 = if true do poly.pt else return
 }
 

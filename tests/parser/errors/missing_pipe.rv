@@ -1,0 +1,3 @@
+var closure = |x: int, y: float {
+
+}

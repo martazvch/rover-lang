@@ -52,6 +52,24 @@ call index 0
 array_get
 print
 
+constant index 11, value 1
+constant index 12, value 1
+
+constant index 13, value 1
+constant index 14, value 2
+array_new index 2
+constant index 15, value 3
+constant index 16, value 4
+array_new index 2
+array_new index 2
+
+constant index 17, value 98
+get_local_cow index 5
+get_local index 3
+array_get_cow
+get_local index 4
+array_set
+
 ret_naked
 
 -- global scope --

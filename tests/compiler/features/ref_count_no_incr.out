@@ -53,8 +53,9 @@ get_method index 0
 call index 1
 get_field index 0
 get_field index 0
+set_local index 3
 
-load_sym index 5, <function testFn>
+load_sym index 4, <function testFn>
 get_local index 0
 get_local index 2
 get_field index 0
@@ -65,19 +66,53 @@ get_local index 2
 get_field index 0
 get_method index 0
 call index 1
+get_field index 0
+set_local index 5
 
 get_local index 2
 get_field index 0
 get_method index 0
 call index 1
+get_field index 0
+ret_scope index 0
+ret_scope index 0
+set_local index 5
 
 get_local index 2
 get_field index 0
 get_method index 0
 call index 1
+get_field index 0
+ret_scope index 0
+ret_scope index 0
+set_local index 5
+
+push_true
+jump_false 127 -> 135
+pop
+ret_naked
+jump 132 -> 144
+pop
+get_local index 1
+get_method index 0
+call index 1
+get_field index 0
+set_local index 5
+
+push_true
+jump_false 147 -> 162
+pop
+get_local index 1
+get_method index 0
+call index 1
+get_field index 0
+jump 159 -> 164
+pop
+ret_naked
+set_local index 5
 
 ret_naked
 
 -- global scope --
-load_sym index 6, <function main>
+load_sym index 5, <function main>
 call index 0

@@ -100,7 +100,7 @@
             [Method access 0]
                 [Field access 0]
                     [Variable index: 2, scope: local]
-    [Variable declaration index: 13, scope: local, incr_rc]
+    [Variable declaration index: 13, scope: local]
         [Field access 0]
             [Fn call arity: 0]
                 [Method access 0]

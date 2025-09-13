@@ -213,7 +213,7 @@ const Tester = struct {
                     specific_tested = true;
                 }
                 cwd = try cwd.openDir(entry.path, .{});
-                self.testFile(&cwd, .standalone, "main.rv", "standalone") catch continue;
+                self.testFile(&cwd, .standalone, "main.rv", "features") catch continue;
                 cwd = try cwd.openDir("..", .{});
             }
         }

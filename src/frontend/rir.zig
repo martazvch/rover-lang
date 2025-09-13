@@ -125,6 +125,8 @@ pub const Instruction = struct {
     pub const If = struct {
         cast: Cast,
         has_else: bool,
+        incr_rc_then: bool,
+        incr_rc_else: bool,
 
         pub const Cast = enum(u2) { then, @"else", none };
     };

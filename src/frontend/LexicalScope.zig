@@ -17,9 +17,10 @@ pub const Variable = struct {
     type: *const Type,
     kind: enum { local, global },
     initialized: bool,
-    index: Index = 0,
-    captured: bool = false,
+    index: Index,
+    captured: bool,
     constant: bool,
+    comp_time: bool,
 
     pub const Index = usize;
 };
@@ -87,6 +88,7 @@ pub fn declareVar(
     captured: bool,
     initialized: bool,
     constant: bool,
+    comp_time: bool,
 ) error{TooManyLocals}!usize {
     if (self.current.variables.count() == 255 and !self.isGlobal()) {
         return error.TooManyLocals;
@@ -100,6 +102,7 @@ pub fn declareVar(
         .index = index,
         .captured = captured,
         .constant = constant,
+        .comp_time = comp_time,
     }) catch oom();
 
     return index;

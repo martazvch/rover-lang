@@ -1,0 +1,11 @@
+fn main() {
+    var count = 0
+
+    var incr = || {count += 1}
+    incr()
+    incr()
+    incr()
+
+    print count
+}
+

@@ -1,4 +1,0 @@
-var a = 2.3 + 5.5 - 7.6
-var b = a
-
-fn main() {}

@@ -46,10 +46,10 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         const line = self.chunk.offsets.items[offset];
         if (line > self.prev_line) {
             writer.print("{:>4}  ", .{line}) catch oom();
+            self.prev_line = line;
         } else {
             writer.writeAll("   |  ") catch oom();
         }
-        self.prev_line = line;
     }
 
     const op: OpCode = @enumFromInt(self.chunk.code.items[offset]);

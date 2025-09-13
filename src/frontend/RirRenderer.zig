@@ -392,9 +392,11 @@ fn identifier(self: *Self, data: *const Instruction.Variable) void {
 }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
-    self.indentAndPrintSlice("[If cast: {s}, has else: {}]", .{
+    self.indentAndPrintSlice("[If cast: {s}, has else: {}{s}{s}]", .{
         @tagName(data.cast),
         data.has_else,
+        if (data.incr_rc_then) ", incr ref count then" else "",
+        if (data.incr_rc_else) ", incr ref count else" else "",
     });
 
     self.indentAndAppendSlice("- condition:");

@@ -32,6 +32,7 @@ const Kind = enum {
     structure,
 };
 
+// TODO: report a runtime error for OOM
 pub fn allocate(vm: *Vm, comptime T: type, kind: Kind) *T {
     comptime assert(@hasField(T, "obj"));
     comptime assert(@hasDecl(T, "asObj"));
@@ -40,6 +41,24 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: Kind) *T {
     ptr.obj = .{ .kind = kind, .next = vm.objects };
 
     vm.objects = &ptr.obj;
+
+    if (comptime options.log_gc) {
+        std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
+    }
+
+    return ptr;
+}
+
+/// Another version of allocation but fon't register the object into the VM linked list.
+/// Used for objects that live for ever like symbols which are created at compile time
+/// Dedicated function so that we don't add a bool check at runtime when allocating with `allocate`
+// TODO: report a runtime error for OOM
+fn allocateComptime(vm: *Vm, comptime T: type, kind: Kind) *T {
+    comptime assert(@hasField(T, "obj"));
+    comptime assert(@hasDecl(T, "asObj"));
+
+    const ptr = vm.allocator.create(T) catch oom();
+    ptr.obj = .{ .kind = kind, .next = null };
 
     if (comptime options.log_gc) {
         std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
@@ -180,6 +199,8 @@ pub const Array = struct {
         const obj = Obj.allocate(vm, Self, .array);
         obj.values = .{};
         obj.values.ensureTotalCapacity(vm.allocator, values.len) catch oom();
+
+        // TODO: useless because append assumes capacity?
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
 
@@ -232,23 +253,23 @@ pub const String = struct {
         return obj;
     }
 
+    /// **Warning**: Meant to be used at compile time only
     pub fn copy(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
         const interned = vm.strings.findString(str, hash);
 
         if (interned) |i| return i;
 
-        const chars = vm.gc_alloc.alloc(u8, str.len) catch oom();
+        const chars = vm.allocator.alloc(u8, str.len) catch oom();
         @memcpy(chars, str);
 
-        if (options.log_gc) {
-            std.debug.print(
-                "{*} allocate {} bytes for copying: {s}\n",
-                .{ chars.ptr, chars.len, chars },
-            );
-        }
+        var obj = Obj.allocateComptime(vm, Self, .string);
+        obj.chars = chars;
+        obj.hash = hash;
 
-        return String.create(vm, chars, hash);
+        _ = vm.strings.set(obj, Value.null_);
+
+        return obj;
     }
 
     // Take a string allocated by calling Vm. If interned already, free
@@ -296,14 +317,12 @@ pub const Function = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: *String, default_count: usize, module_index: usize) *Self {
-        const obj = Obj.allocate(vm, Self, .function);
+        const obj = Obj.allocateComptime(vm, Self, .function);
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.module_index = module_index;
-
-        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }
@@ -330,6 +349,11 @@ pub const Closure = struct {
 
     pub fn create(vm: *Vm, function: *Function, captures: []Value) *Self {
         const obj = Obj.allocate(vm, Self, .closure);
+        vm.gc.pushTmpRoot(&obj.obj);
+        defer vm.gc.popTmpRoot();
+
+        // Fix the size to zero to avoid GC bug
+        obj.captures.len = 0;
         obj.function = function;
         obj.captures = vm.gc_alloc.alloc(Value, captures.len) catch oom();
         @memcpy(obj.captures, captures);
@@ -409,13 +433,11 @@ pub const Structure = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: *String, field_count: usize, default_count: usize, methods: []*Function) *Self {
-        const obj = Obj.allocate(vm, Self, .structure);
+        const obj = Obj.allocateComptime(vm, Self, .structure);
         obj.name = name;
         obj.field_count = field_count;
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.methods = methods;
-
-        if (options.log_gc) obj.asObj().log();
 
         return obj;
     }

@@ -36,11 +36,11 @@ fn main() {
     testFn(pt, structure.poly, structure)
 
     // Same rule but nested
-    noRef2 = (structure.poly.clone()) 
-    noRef2 = { structure.poly.clone() } 
-    noRef2 = ( { ( structure.poly.clone() ) } ) 
+    noRef3 = (structure.poly.clone().pt)
+    noRef3 = { { structure.poly.clone().pt } }
+    noRef3 = { ( { ( structure.poly.clone().pt ) } ) }
 
-    noRef2 = if true do return else poly.clone()
-    noRef2 = if true do poly.clone() else return
+    noRef3 = if true do return else poly.clone().pt
+    noRef3 = if true do poly.clone().pt else return
 }
 

@@ -30,4 +30,10 @@ fn main() {
     // Access in struct
     print foo.arr
     print foo.arr[getIdx()]
+
+    // Array index must not be cow-checked
+    var i, j = 1
+    var arr3 = [[1, 2], [3, 4]]
+    arr3[i][j] = 98
+    print arr3[i][j]
 }

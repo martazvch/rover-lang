@@ -2,6 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
+const FieldEnum = std.meta.FieldEnum;
 
 const Disassembler = @import("../backend/Disassembler.zig");
 const rir = @import("../frontend/rir.zig");
@@ -129,7 +130,16 @@ const Compiler = struct {
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
-    const State = struct { cow: bool = false };
+    const State = struct {
+        cow: bool = false,
+
+        pub fn setAndGetPrev(self: *State, comptime f: FieldEnum(State), value: @FieldType(State, @tagName(f))) @TypeOf(value) {
+            const prev = @field(self, @tagName(f));
+            @field(self, @tagName(f)) = value;
+
+            return prev;
+        }
+    };
     const FnKind = enum { global, @"fn", method };
 
     pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize, module_index: usize) Self {
@@ -205,18 +215,15 @@ const Compiler = struct {
         );
     }
 
-    fn addGlobal(self: *Self, index: usize, global: Value) u8 {
+    fn addGlobal(self: *Self, index: usize, global: Value) void {
         self.manager.module.globals[index] = global;
-        // TODO: protect
-        // return @intCast(self.manager.module.globals.items.len - 1);
-        return @intCast(index);
     }
 
     fn addSymbol(self: *Self, index: usize, symbol: Value) void {
         self.manager.module.symbols[index] = symbol;
     }
 
-    /// Emits the corresponding `get_heap`, `get_global` or `get_local` with the correct index
+    /// Emits the corresponding `get_global` or `get_local` with the correct index
     fn emitGetVar(self: *Self, variable: *const Instruction.Variable, offset: usize) void {
         // BUG: Protect the cast, we can't have more than 256 variable to lookup for now
         self.writeOpAndByte(
@@ -361,7 +368,13 @@ const Compiler = struct {
         const line = self.getLineNumber();
         // Variable
         try self.compileInstr();
+
+        // Index, we deactivate cow for indicies because never wanted but could be triggered by a multiple array
+        // access inside an array assignment
+        const prev = self.state.setAndGetPrev(.cow, false);
         try self.compileInstr();
+        self.state.cow = prev;
+
         self.writeOp(if (self.state.cow) .array_get_cow else .array_get, line);
     }
 
@@ -378,9 +391,9 @@ const Compiler = struct {
 
     fn arrayAssign(self: *Self, line: usize) Error!void {
         // Variable
-        self.state.cow = true;
-        defer self.state.cow = false;
+        const prev = self.state.setAndGetPrev(.cow, true);
         try self.compileInstr();
+        self.state.cow = prev;
 
         // Index
         try self.compileInstr();
@@ -394,8 +407,6 @@ const Compiler = struct {
         }
 
         // Variable
-        const prev = self.setToRegAndGetPrevious(true);
-        defer self.state.to_reg = prev;
         try self.compileInstr();
 
         // TODO: protect the cast
@@ -695,7 +706,9 @@ const Compiler = struct {
 
         // Then body
         try self.compileInstr();
+        // TODO: can only one at the time?
         if (data.cast == .then) self.writeOp(.cast_to_float, line);
+        if (data.incr_rc_then) self.writeOp(.incr_ref, line);
 
         // Exits the if expression
         const else_jump = self.emitJump(.jump, line);
@@ -709,6 +722,7 @@ const Compiler = struct {
         if (data.has_else) {
             try self.compileInstr();
             if (data.cast == .@"else") self.writeOp(.cast_to_float, line);
+            if (data.incr_rc_else) self.writeOp(.incr_ref, line);
         }
 
         try self.patchJump(else_jump);
@@ -837,7 +851,7 @@ const Compiler = struct {
         // If we are top level, value should be pure and compile time known
         // The purpose is to initialize the slot so when accessed like self.globals[idx] we don't segfault
         if (data.variable.scope == .global) {
-            _ = self.addGlobal(data.variable.index, .null_);
+            self.addGlobal(data.variable.index, .null_);
         } else if (data.box) {
             self.writeOp(.box, line);
         }

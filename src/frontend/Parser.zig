@@ -929,8 +929,9 @@ fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
 fn returnExpr(self: *Self) Error!*Expr {
     const kw = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
+    // The check on 'else' allow syntax like: var a = if true do return else 4
     expr.* = .{ .@"return" = .{
-        .expr = if (self.check(.new_line) or self.check(.right_brace))
+        .expr = if (self.check(.new_line) or self.check(.right_brace) or self.check(.@"else"))
             null
         else
             try self.parsePrecedenceExpr(0),
