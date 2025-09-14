@@ -1,2 +1,3 @@
 type_mismatch, bool, int
 type_mismatch, int, bool
+duplicate_field, x

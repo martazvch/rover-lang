@@ -6,6 +6,8 @@ struct Foo {
     fn method(self, a=1) {}
 }
 
+fn defaults(a: int, b=2) {}
+
 fn main() {
     add(1)
     add(1, 2)
@@ -18,4 +20,6 @@ fn main() {
 
     foo.staticFn(5)
     Foo.method()
+
+    defaults(a=1, a=2)
 }

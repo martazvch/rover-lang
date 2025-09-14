@@ -363,7 +363,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
         }
 
         if (self.scope.isVarOrSymInCurrentScope(param_name)) {
-            return self.err(.{ .duplicate_param = .{ .name = self.ast.toSource(p.name) } }, span);
+            return self.err(.{ .already_declared_param = .{ .name = self.ast.toSource(p.name) } }, span);
         }
 
         var param_type = try self.checkAndGetType(p.typ, ctx);
@@ -1294,9 +1294,9 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
     // the form of 'default_value' but we check for all real param default to mark their index (order
     // of declaration) so that the compiler can emit the right index
     var default_count: usize = 0;
-    for (proto_values) |default| {
+    for (proto_values) |val| {
         self.makeInstruction(.{ .default_value = default_count }, err_span.start, .add_no_alloc);
-        if (default) default_count += 1;
+        if (val.default) default_count += 1;
     }
 
     for (args, 0..) |arg, i| {
@@ -1313,8 +1313,14 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
                 }
 
                 const name = self.interner.intern(self.ast.toSource(na.name));
-                proto.putAssumeCapacity(name, true);
-                param_index = proto.getIndex(name).?;
+                const gop = proto.getOrPutAssumeCapacity(name);
+
+                if (gop.value_ptr.done) return self.err(
+                    .{ .duplicate_param = .{ .name = self.ast.toSource(na.name) } },
+                    self.ast.getSpan(na.name),
+                );
+                gop.value_ptr.done = true;
+                param_index = gop.index;
 
                 param_info = ty.params.getPtr(name) orelse return self.err(
                     .{ .unknown_param = .{ .name = self.ast.toSource(na.name) } },
@@ -1330,7 +1336,7 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
                 const value_type = try self.analyzeExpr(arg, ctx);
                 param_info = &params[i];
                 cast = (try self.performTypeCoercion(param_info.type, value_type, false, self.ast.getSpan(arg))).cast;
-                proto_values[i] = true;
+                proto_values[i].done = true;
                 param_index = i;
             },
         }
@@ -1351,12 +1357,10 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
     // Check if any missing non-default parameter
     const err_count = self.errs.items.len;
 
-    for (proto_values, 0..) |has_value, i| if (!has_value) {
-        self.err(
-            .{ .missing_function_param = .{ .name = self.interner.getKey(proto.keys()[i]).? } },
-            err_span,
-        ) catch {};
-    };
+    for (proto.keys(), proto_values) |k, v| {
+        if (v.done or v.default) continue;
+        self.err(.{ .missing_function_param = .{ .name = self.interner.getKey(k).? } }, err_span) catch {};
+    }
 
     return if (err_count < self.errs.items.len) error.Err else .{ .arity = param_count, .default_count = default_count };
 }
@@ -1629,7 +1633,6 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
         if (f.default) default_count += 1;
     }
 
-    // BUG: Doesn't check for field duplication
     for (expr.fields) |*fv| {
         const field_span = self.ast.getSpan(fv.name);
         const field_name = self.interner.intern(self.ast.toSource(fv.name));
@@ -1641,7 +1644,11 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
         const field_index = struct_type.fields.getIndex(field_name).?;
 
         const value_instr = self.ir_builder.count();
-        proto.putAssumeCapacity(field_name, true);
+        const gop = proto.getOrPutAssumeCapacity(field_name);
+        if (gop.value_ptr.done) {
+            return self.err(.{ .duplicate_field = .{ .name = self.interner.getKey(field_name).? } }, field_span);
+        }
+        gop.value_ptr.done = true;
 
         const res: TypeInfos = if (fv.value) |value|
             try self.analyzeExprInfos(value, ctx)
@@ -1662,19 +1669,15 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
         );
     }
 
-    var has_err = false;
-    var kv = proto.iterator();
-    while (kv.next()) |entry| {
-        if (!entry.value_ptr.*) {
-            has_err = true;
-            self.err(
-                .{ .missing_field_struct_literal = .{ .name = self.interner.getKey(entry.key_ptr.*).? } },
-                span,
-            ) catch {};
-        }
+    // Check for non-completed prototype
+    const err_count = self.errs.items.len;
+
+    for (proto.keys(), proto.values()) |k, v| {
+        if (v.done or v.default) continue;
+        self.err(.{ .missing_field_struct_literal = .{ .name = self.interner.getKey(k).? } }, span) catch {};
     }
 
-    if (has_err) return error.Err;
+    if (self.errs.items.len > err_count) return error.Err;
 
     // TODO: implement an invoke strategy
     // TODO: protect cast

@@ -161,8 +161,8 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     self.checkInrcRc(data.incr_rc);
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAccess(1,  data.cow, true),
-        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth,  data.cow, true),
+        .array_access => return self.arrayAccess(1, data.cow, true),
+        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, data.cow, true),
         .identifier => |*variable| variable,
         .field => |*member| return self.fieldAssignment(member, data.cow),
         else => unreachable,

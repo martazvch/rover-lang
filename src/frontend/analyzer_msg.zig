@@ -4,6 +4,7 @@ const oom = @import("../utils.zig").oom;
 
 pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
+    already_declared_param: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
     array_mismatch_dim: struct { declared: usize, accessed: usize },
@@ -25,6 +26,7 @@ pub const AnalyzerMsg = union(enum) {
         }
     },
     dot_type_on_non_mod: struct { found: []const u8 },
+    duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
     float_equal,
     float_equal_cast,
@@ -101,7 +103,9 @@ pub const AnalyzerMsg = union(enum) {
                 .{ e.kind, e.kind, e.expect, e.found },
             ),
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
-            .duplicate_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
+            .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
+            .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
+            .already_declared_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
             .float_equal_cast => writer.writeAll("unsafe floating-point values comparison"),
             .incompatible_if_type => |e| writer.print("'if' and 'else' have incompatible types, found '{s}'  and '{s}'", .{ e.found1, e.found2 }),
@@ -152,7 +156,7 @@ pub const AnalyzerMsg = union(enum) {
 
     pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
-            .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
+            .already_declared, .already_declared_field, .already_declared_param => writer.writeAll("this name"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
             .array_mismatch_dim => writer.writeAll("this array access is wrong"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
@@ -162,10 +166,11 @@ pub const AnalyzerMsg = union(enum) {
             .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
             .cant_infer_arary_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
+            .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
+            .duplicate_field, .duplicate_param => writer.writeAll("this one"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .float_equal_cast => writer.writeAll("this expression is implicitly casted to 'float'"),
-            .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .incompatible_if_type, .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
@@ -207,7 +212,7 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared,
             .already_declared_field,
-            .duplicate_param,
+            .already_declared_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
             .array_mismatch_dim => writer.writeAll("refer to variable's definition to get array's dimension"),
@@ -225,12 +230,14 @@ pub const AnalyzerMsg = union(enum) {
                 \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
                 \\Also, doing 'var arr: []int = []' is equivalent to 'var arr: []int'.
             ),
+            .dead_code => writer.writeAll("remove unreachable code"),
             .default_value_type_mismatch => |e| writer.print(
                 "modify {s}'s default value to match '{s}' type or change {s}'s type",
                 .{ e.kind, e.expect, e.kind },
             ),
-            .dead_code => writer.writeAll("remove unreachable code"),
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
+            .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
+            .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),
             .void_discard => writer.writeAll("remove the discard"),
             .float_equal => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 

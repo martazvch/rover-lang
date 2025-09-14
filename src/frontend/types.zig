@@ -37,6 +37,7 @@ pub const Type = union(enum) {
     };
 
     pub const Loc = struct { name: InternerIdx, container: InternerIdx };
+    pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
 
     pub const Function = struct {
         loc: ?Loc,
@@ -46,7 +47,6 @@ pub const Type = union(enum) {
 
         pub const Kind = enum { normal, method, bound };
         pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
-        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, bool);
 
         pub fn proto(self: *const Function, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -60,7 +60,7 @@ pub const Type = union(enum) {
                     continue;
                 }
 
-                res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
+                res.putAssumeCapacity(entry.key_ptr.*, .{ .default = entry.value_ptr.default });
             }
 
             return res;
@@ -101,13 +101,13 @@ pub const Type = union(enum) {
             default: bool,
         };
 
-        pub fn proto(self: *const Structure, allocator: Allocator) AutoArrayHashMapUnmanaged(InternerIdx, bool) {
-            var res: AutoArrayHashMapUnmanaged(InternerIdx, bool) = .empty;
+        pub fn proto(self: *const Structure, allocator: Allocator) Proto {
+            var res: Proto = .empty;
             res.ensureTotalCapacity(allocator, self.fields.count()) catch oom();
 
             var kv = self.fields.iterator();
             while (kv.next()) |entry| {
-                res.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.default);
+                res.putAssumeCapacity(entry.key_ptr.*, .{ .default = entry.value_ptr.default });
             }
 
             return res;

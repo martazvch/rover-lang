@@ -1,5 +1,5 @@
 void_param
-duplicate_param, arg1
+already_declared_param, arg1
 type_mismatch, int, bool
 type_mismatch, void, int
 already_declared, bis
