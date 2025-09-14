@@ -293,7 +293,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const field = &self.stack.peekRef(0).obj.as(Obj.Instance).fields[field_idx];
                 field.obj = self.cow(field.obj);
                 self.stack.peekRef(0).* = field.*;
-                // self.stack.peekRef(0).* = Value.makeObj(self.cow(field.obj));
             },
             .get_global => {
                 const idx = frame.readByte();

@@ -208,8 +208,15 @@ pub const Array = struct {
         var values: ArrayList(Value) = .empty;
         values.ensureTotalCapacity(vm.allocator, self.values.items.len) catch oom();
 
+        const index = vm.gc.tmp_roots.items.len;
+        defer vm.gc.tmp_roots.shrinkRetainingCapacity(index);
+
+        vm.gc.tmp_roots.ensureUnusedCapacity(vm.allocator, self.values.items.len) catch oom();
+
         for (self.values.items) |val| {
-            values.appendAssumeCapacity(val.deepCopy(vm));
+            const value = val.deepCopy(vm);
+            values.appendAssumeCapacity(value);
+            if (value.asObj()) |obj| vm.gc.tmp_roots.appendAssumeCapacity(obj);
         }
 
         return Self.create(vm, values.toOwnedSlice(vm.allocator) catch oom());

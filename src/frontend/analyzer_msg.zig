@@ -70,7 +70,6 @@ pub const AnalyzerMsg = union(enum) {
             return .{ .kind = @tagName(kind) };
         }
     },
-    unused_value,
     use_uninit_var: struct { name: []const u8 },
     void_array,
     void_discard,
@@ -142,7 +141,6 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_struct_field => |e| writer.print("unknown structure's field '{s}'", .{e.name}),
             .non_comptime_in_global => writer.writeAll("only compilation time expressions are allowed in global scope"),
             .non_comptime_default => |e| writer.print("only compilation time expressions are allowed for {s}", .{e.kind}),
-            .unused_value => writer.writeAll("unused value"),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
             .void_discard => writer.writeAll("trying to discard a non value"),
@@ -197,7 +195,6 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_module => writer.writeAll("this name"),
             .unknown_param => writer.writeAll("this parameter"),
             .unknown_struct_field => writer.writeAll("this name"),
-            .unused_value => writer.writeAll("this expression produces a value"),
             .void_array => writer.writeAll("declared here"),
             .void_discard => writer.writeAll("this expression produces no value"),
             .void_param => writer.writeAll("this parameter"),
@@ -297,7 +294,6 @@ pub const AnalyzerMsg = union(enum) {
             .non_comptime_default => writer.writeAll("only compilation time known expressions are allowed for default values"),
             .non_comptime_in_global => writer.writeAll("use a constant expression or initialize the value later in a local scope"),
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
-            .unused_value => writer.writeAll("use '_' to ignore the value: _ = 1 + 2"),
             .void_array => writer.writeAll("use any other type to declare an array"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),

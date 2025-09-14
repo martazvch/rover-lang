@@ -872,7 +872,7 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
         pure = pure and final.comp_time;
 
         if (!self.isVoid(final.type) and i != expr.nodes.len - 1) {
-            return self.err(.unused_value, expr.span);
+            self.makeInstruction(.pop, self.ast.getSpan(node).start, .add);
         }
 
         // Nothing to do at compile time for import statements
