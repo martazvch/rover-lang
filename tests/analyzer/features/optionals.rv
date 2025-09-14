@@ -1,0 +1,7 @@
+fn main() {
+    var a: ?int = 8
+    var b: ?float = null
+
+    if b == null { }
+    if b != null { }
+}

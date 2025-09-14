@@ -949,50 +949,6 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
     return .{ .type = result_type, .comp_time = lhs.comp_time and rhs.comp_time };
 }
 
-fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
-    const closure_idx = self.ir_builder.reserveInstr();
-
-    self.scope.open(self.allocator, false);
-    defer _ = self.scope.close();
-
-    const captures_instrs_data = try self.loadFunctionCaptures(&expr.meta.captures);
-    const param_res = try self.fnParams(expr.params, ctx);
-
-    // Update type for resolution in function's body
-    const closure_type: Type.Function = .{
-        .loc = null,
-        .params = param_res.decls,
-        .return_type = try self.checkAndGetType(expr.return_type, ctx),
-        .kind = .normal,
-    };
-    const interned_type = self.type_interner.intern(.{ .function = closure_type });
-
-    const span = self.ast.getSpan(expr);
-    const offset = span.start;
-
-    ctx.fn_type = interned_type;
-    const len, const cast = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
-
-    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, offset);
-
-    // TODO: protect the cast
-    self.makeInstruction(
-        .{ .fn_decl = .{
-            .kind = .closure,
-            .name = null,
-            .cast = cast,
-            .body_len = len,
-            .default_params = @intCast(param_res.default_count),
-            .captures_count = captures_count,
-            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
-        } },
-        offset,
-        .{ .set_at = closure_idx },
-    );
-
-    return .newType(interned_type);
-}
-
 fn isStringConcat(op: TokenTag, lhs: *const Type, rhs: *const Type) bool {
     return op == .plus and lhs.is(.str) and rhs.is(.str);
 }
@@ -1057,42 +1013,52 @@ fn getEqualityOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, 
             .int => .eq_int,
             .float => .eq_float,
             .str => .eq_str,
-            else => .eq_str,
+            .null, .optional => .eq_null,
+            else => unreachable,
         },
         .bang_equal => switch (lhs.*) {
             .bool => .ne_bool,
             .int => .ne_int,
             .float => .ne_float,
             .str => .ne_str,
-            else => .ne_str,
+            .null, .optional => .ne_null,
+            else => unreachable,
         },
         else => unreachable,
     } };
 
-    if (lhs != rhs) {
-        if ((lhs.is(.int) and rhs.is(.float)) or (lhs.is(.float) and rhs.is(.int))) {
-            if (lhs.is(.int)) {
-                instr.cast = .lhs;
-                self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
-            } else {
-                instr.cast = .rhs;
-                self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
-            }
+    if (lhs == rhs) {
+        return .{ .instr = instr, .result_type = self.type_interner.cache.bool };
+    }
 
-            instr.op = if (op == .equal_equal) .eq_float else .ne_float;
-        } else {
-            return self.err(
-                .{ .invalid_comparison = .{ .found1 = self.getTypeName(lhs), .found2 = self.getTypeName(rhs) } },
-                self.ast.getSpan(expr),
-            );
+    if (lhs.is(.float) or rhs.is(.float) and (lhs.isNumeric() and rhs.isNumeric())) {
+        instr.cast = if (lhs.is(.int)) .lhs else if (rhs.is(.int)) .rhs else .none;
+        self.warn(.float_equal, self.ast.getSpan(expr));
+
+        instr.op = if (op == .equal_equal) .eq_float else .ne_float;
+        return .{ .instr = instr, .result_type = self.type_interner.cache.bool };
+    }
+
+    if (lhs.is(.optional) or rhs.is(.optional)) {
+        if (lhs.is(.null) or rhs.is(.null)) {
+            // We use the cast slot to say wich side is the null literal
+            instr.cast = if (lhs.is(.optional)) .rhs else .lhs;
+
+            return .{ .instr = instr, .result_type = self.type_interner.cache.bool };
         }
-    } else {
-        if (lhs.is(.float)) {
-            self.warn(.float_equal, self.ast.getSpan(expr));
+
+        if (lhs.is(.optional)) {
+            return self.err(.{ .non_null_comp_optional = .{ .found = self.getTypeName(rhs) } }, self.ast.getSpan(expr.rhs));
+        }
+        if (rhs.is(.optional)) {
+            return self.err(.{ .non_null_comp_optional = .{ .found = self.getTypeName(lhs) } }, self.ast.getSpan(expr.lhs));
         }
     }
 
-    return .{ .instr = instr, .result_type = self.type_interner.cache.bool };
+    return self.err(
+        .{ .invalid_comparison = .{ .found1 = self.getTypeName(lhs), .found2 = self.getTypeName(rhs) } },
+        self.ast.getSpan(expr),
+    );
 }
 
 fn getComparisonOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type, expr: *const Ast.Binop) Error!ArithmeticResult {
@@ -1105,14 +1071,14 @@ fn getComparisonOp(self: *Self, op: TokenTag, lhs: *const Type, rhs: *const Type
                 return .{ .instr = .{ .op = floatCompOp(op), .cast = .none }, .result_type = result_type };
             },
             .int => {
-                self.warn(.float_equal_cast, self.ast.getSpan(expr.rhs));
+                self.warn(.float_equal, self.ast.getSpan(expr.rhs));
                 return .{ .instr = .{ .op = floatCompOp(op), .cast = .rhs }, .result_type = result_type };
             },
             else => unreachable,
         },
         .int => switch (rhs.*) {
             .float => {
-                self.warn(.float_equal_cast, self.ast.getSpan(expr.lhs));
+                self.warn(.float_equal, self.ast.getSpan(expr.lhs));
                 return .{ .instr = .{ .op = floatCompOp(op), .cast = .lhs }, .result_type = result_type };
             },
             .int => return .{ .instr = .{ .op = intCompOp(op), .cast = .none }, .result_type = result_type },
@@ -1149,6 +1115,50 @@ fn checkBooleanLogic(self: *Self, lhs: *const Type, rhs: *const Type, expr: *con
     if (!rhs.is(.bool)) {
         return self.err(.{ .invalid_logical = .{ .found = self.getTypeName(rhs) } }, self.ast.getSpan(expr.rhs));
     }
+}
+
+fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
+    const closure_idx = self.ir_builder.reserveInstr();
+
+    self.scope.open(self.allocator, false);
+    defer _ = self.scope.close();
+
+    const captures_instrs_data = try self.loadFunctionCaptures(&expr.meta.captures);
+    const param_res = try self.fnParams(expr.params, ctx);
+
+    // Update type for resolution in function's body
+    const closure_type: Type.Function = .{
+        .loc = null,
+        .params = param_res.decls,
+        .return_type = try self.checkAndGetType(expr.return_type, ctx),
+        .kind = .normal,
+    };
+    const interned_type = self.type_interner.intern(.{ .function = closure_type });
+
+    const span = self.ast.getSpan(expr);
+    const offset = span.start;
+
+    ctx.fn_type = interned_type;
+    const len, const cast = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
+
+    const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, offset);
+
+    // TODO: protect the cast
+    self.makeInstruction(
+        .{ .fn_decl = .{
+            .kind = .closure,
+            .name = null,
+            .cast = cast,
+            .body_len = len,
+            .default_params = @intCast(param_res.default_count),
+            .captures_count = captures_count,
+            .return_kind = if (ctx.returns) .explicit else if (self.isVoid(interned_type)) .implicit_void else .implicit_value,
+        } },
+        offset,
+        .{ .set_at = closure_idx },
+    );
+
+    return .newType(interned_type);
 }
 
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
@@ -1816,6 +1826,10 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) TypeR
                 .kind = .normal,
             } });
         },
+        .optional => |opt| {
+            const child = try self.checkAndGetType(opt.child, ctx);
+            return self.type_interner.intern(.{ .optional = child });
+        },
         .scalar => {
             const interned = self.interner.intern(self.ast.toSource(t));
 
@@ -1843,22 +1857,28 @@ const TypeCoherence = struct { type: *const Type, cast: bool = false };
 /// The goal is to see if the two types are equivalent and if so, make the transformations needed
 fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_cast: bool, span: Span) Error!TypeCoherence {
     if (self.isVoid(value)) return self.err(.void_value, span);
-    if (decl == value) return .{ .type = decl, .cast = false };
+
+    if (value.is(.null)) {
+        return if (decl.is(.optional))
+            .{ .type = decl, .cast = false }
+        else
+            self.err(.{ .null_assign_to_non_optional = .{ .expect = self.getTypeName(decl) } }, span);
+    }
+
+    var local_decl = if (decl.is(.optional) and !value.is(.optional)) decl.optional else decl;
+    if (local_decl == value) return .{ .type = decl, .cast = false };
 
     check: {
-        // if (!self.isVoid(decl) and std.meta.activeTag(decl.*) != std.meta.activeTag(value.*)) break :check;
-
         if (value.is(.array)) {
-            return self.checkArrayType(decl, value, span) catch |e| switch (e) {
+            return self.checkArrayType(local_decl, value, span) catch |e| switch (e) {
                 error.mismatch => break :check,
                 else => |narrowed| return narrowed,
             };
         } else if (value.is(.function)) {
-            return self.checkFunctionEq(decl, value) catch break :check;
+            return self.checkFunctionEq(local_decl, value) catch break :check;
         }
 
         var cast = false;
-        var local_decl = decl;
 
         // TODO: proper error handling
         if (value.is(.module)) @panic("Can't use modules in expressions");

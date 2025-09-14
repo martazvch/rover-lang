@@ -292,10 +292,9 @@ fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
             // Potential other argument following self
             _ = self.match(.comma);
 
-            // TODO: Allocate only one `Self` type for all
-            const typ = self.allocator.create(Ast.Type) catch oom();
-            typ.* = .{ .self = name_idx };
-            params.append(self.allocator, .{ .name = name_idx, .typ = typ, .value = null }) catch oom();
+            const ty = self.allocator.create(Ast.Type) catch oom();
+            ty.* = .{ .self = name_idx };
+            params.append(self.allocator, .{ .name = name_idx, .typ = ty, .value = null }) catch oom();
             continue;
         }
 
@@ -485,7 +484,7 @@ fn expectTypeOrEmpty(self: *Self) Error!?*Ast.Type {
 
 /// Parses a type. It assumes you know that a type is expected at this place
 fn parseType(self: *Self) Error!*Ast.Type {
-    const typ = self.allocator.create(Ast.Type) catch oom();
+    const ty = self.allocator.create(Ast.Type) catch oom();
 
     if (self.isIdentOrType()) {
         if (self.check(.dot)) {
@@ -501,14 +500,14 @@ fn parseType(self: *Self) Error!*Ast.Type {
             // as a float by the Lexer
             if (self.check(.float)) return self.errAtCurrent(.non_ident_in_type);
 
-            typ.* = .{ .fields = tokens.toOwnedSlice(self.allocator) catch oom() };
+            ty.* = .{ .fields = tokens.toOwnedSlice(self.allocator) catch oom() };
         } else {
-            typ.* = .{ .scalar = self.token_idx - 1 };
+            ty.* = .{ .scalar = self.token_idx - 1 };
         }
     } else if (self.match(.left_bracket)) {
         const openning = self.token_idx - 1;
         try self.expect(.right_bracket, .missing_bracket_array_type);
-        typ.* = .{ .array = .{ .openning = openning, .child = try self.parseType() } };
+        ty.* = .{ .array = .{ .openning = openning, .child = try self.parseType() } };
     } else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 
@@ -531,24 +530,22 @@ fn parseType(self: *Self) Error!*Ast.Type {
 
         span.end = self.token_idx - 1;
 
-        typ.* = .{ .function = .{
+        ty.* = .{ .function = .{
             .params = params.toOwnedSlice(self.allocator) catch oom(),
             .return_type = return_type,
             .span = span,
         } };
+    } else if (self.match(.question_mark)) {
+        ty.* = .{ .optional = .{ .token = self.token_idx - 1, .child = try self.parseType() } };
     } else {
         return self.errAtCurrent(.expect_type_name);
     }
 
-    return typ;
+    return ty;
 }
 
 fn isIdentOrType(self: *Self) bool {
-    return self.match(.identifier) or
-        self.match(.float_kw) or
-        self.match(.int_kw) or
-        self.match(.str_kw) or
-        self.match(.bool);
+    return self.match(.identifier) or self.match(.float_kw) or self.match(.int_kw) or self.match(.str_kw) or self.match(.bool);
 }
 
 fn discard(self: *Self) Error!Node {

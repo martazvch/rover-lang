@@ -264,6 +264,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),
             .eq_int => self.stack.push(Value.makeBool(self.stack.pop().int == self.stack.pop().int)),
+            .eq_null => self.stack.push(Value.makeBool(self.stack.pop() == .null)),
             .eq_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) == self.stack.pop().obj.as(Obj.String))),
             .exit_repl => {
                 // Here, there is no value to pop for now, no implicit null is
@@ -376,6 +377,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
+            .ne_null => self.stack.push(Value.makeBool(self.stack.pop() != .null)),
             .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) != self.stack.pop().obj.as(Obj.String))),
             .neg_float => self.stack.peekRef(0).float *= -1,
             .neg_int => self.stack.peekRef(0).int *= -1,
@@ -442,8 +444,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
             },
             .str_cat => self.strConcat(),
-            .str_mul_l => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
-            .str_mul_r => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
+            .str_mul => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
             .struct_lit => {
                 const arity = frame.readByte();
                 var instance = self.stack.peekRef(arity).obj.structLiteral(self);
@@ -462,6 +463,13 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .sub_int => {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
+            },
+            .swap => {
+                const a = self.stack.peekRef(0);
+                const b = self.stack.peekRef(1);
+                const tmp = a.*;
+                a.* = b.*;
+                b.* = tmp;
             },
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }

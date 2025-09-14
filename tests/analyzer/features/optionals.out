@@ -1,0 +1,19 @@
+[Function declaration main, return kind: implicit_void]
+    [Variable declaration index: 0, scope: local]
+        [Int 8]
+    [Variable declaration index: 1, scope: local]
+        [Null]
+    [If cast: none, has else: false]
+    - condition:
+        [Binop type: eq_null, cast: rhs]
+            [Variable index: 1, scope: local]
+            [Null]
+    - then:
+        [Block pop count: 0, is_expr: false]
+    [If cast: none, has else: false]
+    - condition:
+        [Binop type: ne_null, cast: rhs]
+            [Variable index: 1, scope: local]
+            [Null]
+    - then:
+        [Block pop count: 0, is_expr: false]

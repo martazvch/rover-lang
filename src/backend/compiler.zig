@@ -471,10 +471,16 @@ const Compiler = struct {
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(line, data);
 
         try self.compileInstr();
-        if (data.cast == .lhs and data.op != .mul_str) self.writeOp(.cast_to_float, line);
+        if (data.cast == .lhs and data.op != .mul_str and data.op != .eq_null and data.op != .ne_null) self.writeOp(.cast_to_float, line);
 
         try self.compileInstr();
-        if (data.cast == .rhs and data.op != .mul_str) self.writeOp(.cast_to_float, line);
+        if (data.cast == .rhs and data.op != .mul_str and data.op != .eq_null and data.op != .ne_null) self.writeOp(.cast_to_float, line);
+
+        // Special handle for instructions using 'cast' field for another purpose
+        // If the left side is marked as the operand, we swap their position for the VM
+        if (data.op == .mul_str or data.op == .eq_null or data.op == .ne_null) {
+            if (data.cast == .lhs) self.writeOp(.swap, line);
+        }
 
         self.writeOp(
             switch (data.op) {
@@ -486,6 +492,7 @@ const Compiler = struct {
                 .eq_bool => .eq_bool,
                 .eq_float => .eq_float,
                 .eq_int => .eq_int,
+                .eq_null => .eq_null,
                 .eq_str => .eq_str,
                 .ge_float => .ge_float,
                 .ge_int => .ge_int,
@@ -497,10 +504,11 @@ const Compiler = struct {
                 .lt_int => .lt_int,
                 .mul_float => .mul_float,
                 .mul_int => .mul_int,
-                .mul_str => if (data.cast == .rhs) .str_mul_r else .str_mul_l,
+                .mul_str => .str_mul,
                 .ne_bool => .ne_bool,
                 .ne_float => .ne_float,
                 .ne_int => .ne_int,
+                .ne_null => .ne_null,
                 .ne_str => .ne_str,
                 .sub_float => .sub_float,
                 .sub_int => .sub_int,

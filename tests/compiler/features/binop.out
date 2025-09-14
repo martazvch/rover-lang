@@ -43,12 +43,13 @@ pop
 
 constant index 14, value 2
 constant index 15, value foo
-str_mul_l
+swap
+str_mul
 pop
 
 constant index 16, value foo
 constant index 17, value 4
-str_mul_r
+str_mul
 pop
 
 constant index 18, value 6.789

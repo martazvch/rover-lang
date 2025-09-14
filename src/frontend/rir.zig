@@ -45,10 +45,10 @@ pub const Instruction = struct {
     };
 
     pub const Binop = struct {
-        cast: Cast = .none,
+        cast: Side = .none,
         op: Op,
 
-        pub const Cast = enum(u2) { lhs, rhs, none };
+        pub const Side = enum(u2) { lhs, rhs, none };
         pub const Op = enum(u6) {
             add_float,
             add_int,
@@ -59,6 +59,7 @@ pub const Instruction = struct {
             eq_bool,
             eq_float,
             eq_int,
+            eq_null,
             eq_str,
             ge_float,
             ge_int,
@@ -74,6 +75,7 @@ pub const Instruction = struct {
             ne_bool,
             ne_float,
             ne_int,
+            ne_null,
             ne_str,
             @"or",
             sub_float,

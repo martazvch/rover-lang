@@ -63,6 +63,7 @@ pub const Type = union(enum) {
     },
     function: Fn,
     fields: []TokenIndex,
+    optional: struct { token: TokenIndex, child: *Type },
     scalar: TokenIndex,
     self: TokenIndex,
 
@@ -241,6 +242,10 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
                 .end = self.token_spans[t[t.len - 1]].end,
             },
             .function => |t| t.span,
+            .optional => |t| .{
+                .start = t.token,
+                .end = self.getSpan(t.child).end,
+            },
             .scalar, .self => |t| self.token_spans[t],
         },
         Use => .{

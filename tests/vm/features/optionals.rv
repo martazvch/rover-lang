@@ -1,0 +1,8 @@
+fn main() {
+    var a: ?int = null
+
+    if a == null { print "yes" }
+    if null == a { print "yes" }
+    if a != null {} else { print "yes" }
+    if null != a {} else { print "yes" }
+}

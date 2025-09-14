@@ -192,11 +192,11 @@ fn renderNameTypeValue(self: *Self, decl: *const Ast.VarDecl, comma: bool) !void
 }
 
 fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
-    if (typ == null) return "";
+    const ty = typ orelse return "";
 
-    var buf: std.ArrayList(u8) = .{};
+    var buf: std.ArrayList(u8) = .empty;
 
-    switch (typ.?.*) {
+    switch (ty.*) {
         .array => |t| {
             try buf.appendSlice(self.allocator, "[]");
             try buf.appendSlice(self.allocator, try self.renderType(t.child));
@@ -226,6 +226,7 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
                 try buf.appendSlice(self.allocator, try self.renderType(ret));
             } else try buf.appendSlice(self.allocator, "void");
         },
+        .optional => |t| try buf.print(self.allocator, "?{s}", .{try self.renderType(t.child)}),
         .scalar => |t| try buf.appendSlice(self.allocator, self.spanToSrc(t)),
         .self => try buf.appendSlice(self.allocator, "Self"),
     }

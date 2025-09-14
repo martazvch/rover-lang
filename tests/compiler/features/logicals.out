@@ -9,6 +9,43 @@ constant index 0, value yes
 print
 jump 13 -> 17
 pop
+
+push_null
+
+get_local index 0
+push_null
+eq_null
+jump_false 22 -> 29
+pop
+jump 26 -> 30
+pop
+
+push_null
+get_local index 0
+swap
+eq_null
+jump_false 35 -> 42
+pop
+jump 39 -> 43
+pop
+
+get_local index 0
+push_null
+ne_null
+jump_false 47 -> 54
+pop
+jump 51 -> 55
+pop
+
+push_null
+get_local index 0
+swap
+ne_null
+jump_false 60 -> 67
+pop
+jump 64 -> 68
+pop
+
 ret_naked
 
 -- global scope --

@@ -95,7 +95,7 @@ fn parseInstr(self: *Self) void {
         .load_symbol => |*data| self.loadSymbol(data),
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
-        .null => unreachable,
+        .null => self.indentAndAppendSlice("[Null]"),
         .pop => self.indentAndAppendSlice("[Pop]"),
         .print => {
             self.indentAndAppendSlice("[Print]");

@@ -1,3 +1,10 @@
 fn main() {
     if true and false do print "yes"
+
+    var a: ?int = null
+
+    if a == null {}
+    if null == a {}
+    if a != null {}
+    if null != a {}
 }

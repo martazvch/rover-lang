@@ -19,6 +19,7 @@ pub const Type = union(enum) {
     array: Array,
     function: Function,
     module: InternerIdx,
+    optional: *const Type,
     structure: Structure,
 
     pub const Array = struct {
@@ -167,6 +168,7 @@ pub const Type = union(enum) {
                 }
             },
             .module => |interned| hasher.update(asBytes(&interned)),
+            .optional => |child| child.hash(hasher),
             .structure => |ty| {
                 if (ty.loc) |loc| {
                     hasher.update(asBytes(&loc.name));
@@ -209,6 +211,9 @@ pub const Type = union(enum) {
             .module => |interned| {
                 const name = interner.getKey(interned).?;
                 writer.print("module: {s}", .{name}) catch oom();
+            },
+            .optional => |opt| {
+                writer.print("?{s}", .{opt.toString(allocator, scope, current_mod, interner, module_interner)}) catch oom();
             },
             .structure => |ty| {
                 if (ty.loc) |loc| {
