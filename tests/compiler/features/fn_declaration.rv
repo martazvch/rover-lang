@@ -3,6 +3,7 @@ fn mul(a:int) {}
 fn sub(a:int, b: float) -> int {
     5
 }
+fn castInt() -> float { 4 }
 
 fn main() {
     {

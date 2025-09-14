@@ -1,4 +1,5 @@
 [Function declaration add, return kind: implicit_void]
+
 [Function declaration main, return kind: implicit_void]
     [Block pop count: 0, is_expr: false]
         [Function declaration another_bool, return kind: implicit_value]
@@ -17,17 +18,26 @@
                 [Load symbol 4]
                 - args:
                 [Int 1]
+
 [Function declaration add1, return kind: explicit]
     [Return expr: false, cast: false]
+
 [Function declaration add2, return kind: implicit_value]
     [Int 5]
+
 [Function declaration add3, return kind: implicit_void]
+
 [Function declaration add4, return kind: explicit]
     [Return expr: true, cast: false]
         [Int 5]
+
 [Function declaration default, return kind: implicit_void]
     - default params
     [Int 7]
     [Int 7]
     [Bool false]
     [Bool false]
+
+[Function declaration castInt, return kind: implicit_value]
+    [Int 4]
+    [Cast to float]

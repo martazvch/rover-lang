@@ -283,7 +283,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
 
     // Save the index because function's body could invalidated `sym` pointer
     ctx.fn_type = interned_type;
-    const len = try self.fnBody(node.body.nodes, &fn_type, span, ctx);
+    const len, const cast = try self.fnBody(node.body.nodes, &fn_type, span, ctx);
     _ = self.scope.close();
 
     // If in a structure declaration, we remove the symbol as it's gonna live inside the structure
@@ -304,6 +304,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!void
         .{ .fn_decl = .{
             .kind = if (is_closure) .closure else .{ .symbol = sym.index },
             .name = name,
+            .cast = cast,
             .body_len = len,
             .default_params = @intCast(param_res.default_count),
             .captures_count = captures_count,
@@ -394,7 +395,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
     return .{ .decls = decls, .default_count = default_count, .is_method = is_method };
 }
 
-fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: Span, ctx: *Context) Error!usize {
+fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: Span, ctx: *Context) Error!struct { usize, bool } {
     var had_err = false;
     var final_type: *const Type = self.type_interner.cache.void;
     var deadcode_start: usize = 0;
@@ -433,21 +434,21 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         self.ir_builder.instructions.shrinkRetainingCapacity(deadcode_start);
     }
 
-    if (!had_err and final_type != fn_type.return_type) {
-        const err_span = if (body.len > 0) self.ast.getSpan(body[body.len - 1]) else name_span;
+    const cast = cast: {
+        if (!had_err and final_type != fn_type.return_type) {
+            const err_span = if (body.len > 0) self.ast.getSpan(body[body.len - 1]) else name_span;
 
-        // TODO: make 'typeCoercion' accept a param: 'allow_void_decl' to check for first if cond
-        // there is the same in return or fnBody
-        if (self.isVoid(fn_type.return_type) and !self.isVoid(final_type)) {
-            return self.err(.{ .type_mismatch = .{ .expect = "void", .found = self.getTypeName(final_type) } }, err_span);
-        } else {
-            const coerce = try self.performTypeCoercion(fn_type.return_type, final_type, false, err_span);
-
-            if (coerce.cast) @panic("Casting return value from function not implemented");
+            if (self.isVoid(fn_type.return_type) and !self.isVoid(final_type)) {
+                return self.err(.{ .type_mismatch = .{ .expect = "void", .found = self.getTypeName(final_type) } }, err_span);
+            } else {
+                const coerce = try self.performTypeCoercion(fn_type.return_type, final_type, true, err_span);
+                break :cast coerce.cast;
+            }
         }
-    }
+        break :cast false;
+    };
 
-    return len - deadcode_count;
+    return .{ len - deadcode_count, cast };
 }
 
 fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Result {
@@ -970,7 +971,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     const offset = span.start;
 
     ctx.fn_type = interned_type;
-    const len = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
+    const len, const cast = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
 
     const captures_count = self.makeFunctionCapturesInstr(captures_instrs_data, offset);
 
@@ -979,6 +980,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
         .{ .fn_decl = .{
             .kind = .closure,
             .name = null,
+            .cast = cast,
             .body_len = len,
             .default_params = @intCast(param_res.default_count),
             .captures_count = captures_count,

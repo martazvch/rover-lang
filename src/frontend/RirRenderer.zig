@@ -195,7 +195,7 @@ fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void 
 }
 
 fn binop(self: *Self, data: *const Instruction.Binop) void {
-    self.indentAndPrintSlice("[Binop type: {s}, cast: {s}]", .{ @tagName(data.op), @tagName(data.cast) });
+    self.indentAndPrintSlice("[Binop type: {t}, cast: {t}]", .{ data.op, data.cast });
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr();
@@ -227,7 +227,7 @@ fn boundMethod(self: *Self, field_index: usize) void {
 }
 
 fn cast(self: *Self, typ: Type) void {
-    self.indentAndPrintSlice("[Cast to {s}]", .{@tagName(typ)});
+    self.indentAndPrintSlice("[Cast to {t}]", .{typ});
 }
 
 fn discard(self: *Self) void {
@@ -309,8 +309,8 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     };
 
     self.indentAndPrintSlice(
-        "[{s} declaration {s}, return kind: {s}]",
-        .{ fn_kind, fn_name, @tagName(data.return_kind) },
+        "[{s} declaration {s}, return kind: {t}]",
+        .{ fn_kind, fn_name, data.return_kind },
     );
 
     self.indent_level += 1;
@@ -331,6 +331,8 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
         self.parseInstr();
     }
 
+    if (data.cast) self.parseInstr();
+
     if (data.captures_count > 0) {
         self.indentAndAppendSlice("- captures");
         for (0..data.captures_count) |_| {
@@ -340,14 +342,14 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
 }
 
 fn identifier(self: *Self, data: *const Instruction.Variable) void {
-    self.indentAndPrintSlice("[Variable index: {}, scope: {s}]", .{
-        data.index, @tagName(data.scope),
+    self.indentAndPrintSlice("[Variable index: {}, scope: {t}]", .{
+        data.index, data.scope,
     });
 }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
-    self.indentAndPrintSlice("[If cast: {s}, has else: {}{s}{s}]", .{
-        @tagName(data.cast),
+    self.indentAndPrintSlice("[If cast: {t}, has else: {}{s}{s}]", .{
+        data.cast,
         data.has_else,
         if (data.incr_rc_then) ", incr ref count then" else "",
         if (data.incr_rc_else) ", incr ref count else" else "",
@@ -463,9 +465,9 @@ fn unary(self: *Self, data: *const Instruction.Unary) void {
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
-    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {s}{s}{s}]", .{
+    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {t}{s}{s}]", .{
         data.variable.index,
-        @tagName(data.variable.scope),
+        data.variable.scope,
         if (data.box) ", box" else "",
         if (data.incr_rc) ", incr_rc" else "",
     });

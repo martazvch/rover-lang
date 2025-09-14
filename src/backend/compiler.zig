@@ -663,6 +663,7 @@ const Compiler = struct {
         for (0..data.body_len) |_| {
             try compiler.compileInstr();
         }
+        if (data.cast) try compiler.compileInstr();
 
         // Giving line 0 won't print any number as it will be less than current line as if it were on last line
         if (data.return_kind == .implicit_value) {

@@ -104,6 +104,7 @@ pub const Instruction = struct {
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
+        cast: bool,
         body_len: u64,
         default_params: u8,
         captures_count: usize,
