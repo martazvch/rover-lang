@@ -5,9 +5,9 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
-const LexicalScope = @import("LexicalScope.zig");
 const ModuleInterner = @import("../ModuleInterner.zig");
 const oom = @import("../utils.zig").oom;
+const LexicalScope = @import("LexicalScope.zig");
 
 pub const Type = union(enum) {
     void,
@@ -24,14 +24,15 @@ pub const Type = union(enum) {
     pub const Array = struct {
         child: *const Type,
 
-        pub fn getChild(self: *const Array) *const Type {
+        pub fn getDepthAndChild(self: *const Array) struct { usize, *const Type } {
+            var depth: usize = 1;
             var child = self.child;
 
-            while (child.* == .array) {
+            while (child.* == .array) : (depth += 1) {
                 child = child.array.child;
             }
 
-            return child;
+            return .{ depth, child };
         }
     };
 

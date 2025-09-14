@@ -64,11 +64,10 @@ array_new index 2
 array_new index 2
 
 constant index 17, value 98
-get_local_cow index 5
-get_local index 3
-array_get_cow
 get_local index 4
-array_set
+get_local index 3
+get_local_cow index 5
+array_set_chain index 2
 
 ret_naked
 

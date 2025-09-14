@@ -31,6 +31,7 @@ pub const Instruction = struct {
         multiple_var_decl: usize,
         name: usize,
         null,
+        pop,
         print,
         @"return": Return,
         string: usize,
@@ -86,13 +87,7 @@ pub const Instruction = struct {
         pub const Elem = struct { cast: bool, incr_rc: bool };
     };
     // TODO: see if cow/rc actually used
-    pub const ArrayAccessChain = struct {
-        depth: usize,
-        /// Cow for the array identifier
-        cow: bool,
-        /// Increment RC for accessed array element
-        incr_rc: bool,
-    };
+    pub const ArrayAccessChain = struct { depth: usize };
     pub const Assignment = struct {
         /// Casts to float the value before assignment
         cast: bool,

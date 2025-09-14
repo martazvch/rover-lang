@@ -31,4 +31,16 @@ fn main() {
     obj.poly.vertex[1][0].past[0] = [55, 66]
     print obj.poly.vertex[1][0].past // [[55, 66], [15, 16]]
     print p3.past // [[11, 22], [33, 44]]
+
+    var ref = poly.vertex
+    poly.vertex[1][0].y = 123456
+    print ref[1][0].y // 12
+
+    var ref2 = poly.vertex[1]
+    poly.vertex[1][0].x = 123456
+    print ref2[0].x // 11
+
+    var ref3 = poly.vertex[1][0]
+    poly.vertex[1][0].past = [[123, 456]]
+    print ref3.past // [[13, 14], [15, 16]] 
 }

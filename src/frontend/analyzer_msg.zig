@@ -6,6 +6,7 @@ pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
     array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
+    array_mismatch_dim: struct { declared: usize, accessed: usize },
     assign_to_constant: struct { name: []const u8 },
     assign_to_struct_fn,
     assign_type,
@@ -87,6 +88,7 @@ pub const AnalyzerMsg = union(enum) {
                 "elements of an array must share the same type, found '{s}' and '{s}'",
                 .{ e.found1, e.found2 },
             ),
+            .array_mismatch_dim => |e| writer.print("trying to access dimension {} of a {}-dimensions array", .{ e.accessed, e.declared }),
             .assign_to_constant => |e| writer.print("can't assign to constant variable '{s}'", .{e.name}),
             .assign_to_struct_fn => writer.writeAll("can't assign to structure's functions"),
             .assign_type => writer.writeAll("trying to assign a type"),
@@ -154,6 +156,7 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared, .already_declared_field, .duplicate_param => writer.writeAll("this name"),
             .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
+            .array_mismatch_dim => writer.writeAll("this array access is wrong"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
             .assign_type => writer.writeAll("This is a type, not a value"),
@@ -210,6 +213,7 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
             .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
+            .array_mismatch_dim => writer.writeAll("refer to variable's definition to get array's dimension"),
             .assign_to_struct_fn => writer.writeAll("it is not allowed to modify structures' functions at runtime"),
             .assign_to_constant => writer.writeAll(
                 "variables declared with 'const' and function parameters are constant, their value can't be changed",

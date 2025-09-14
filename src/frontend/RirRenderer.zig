@@ -17,12 +17,8 @@ const Token = @import("Lexer.zig").Token;
 const Labels = struct { depth: usize, msg: []const u8 };
 
 allocator: Allocator,
-// source: []const u8,
 instrs: []const Instruction.Data,
-// errs: []const AnalyzerReport,
-// warns: []const AnalyzerReport,
 interner: *const Interner,
-// static_analyzis: bool,
 indent_level: u8,
 tree: ArrayList(u8),
 writer: std.ArrayList(u8).Writer,
@@ -34,38 +30,17 @@ const spaces: [1024]u8 = [_]u8{' '} ** 1024;
 const Error = Allocator.Error || std.fmt.BufPrintError;
 const Self = @This();
 
-pub fn init(
-    allocator: Allocator,
-    // source: []const u8,
-    instrs: []const Instruction.Data,
-    // errs: []const AnalyzerReport,
-    // warns: []const AnalyzerReport,
-    interner: *const Interner,
-    // static_analyzis: bool,
-) Self {
+pub fn init(allocator: Allocator, instrs: []const Instruction.Data, interner: *const Interner) Self {
     return .{
         .allocator = allocator,
-        // .source = source,
         .instrs = instrs,
-        // .errs = errs,
-        // .warns = warns,
         .interner = interner,
-        // .static_analyzis = static_analyzis,
         .tree = .empty,
         .writer = undefined,
         .instr_idx = 0,
         .indent_level = 0,
     };
 }
-
-// pub fn deinit(self: *Self) void {
-//     self.tree.deinit();
-// }
-
-// pub fn display(self: *const Self) !void {
-//     var stdout = std.io.getStdOut().writer();
-//     try stdout.writeAll(self.tree.items);
-// }
 
 fn indent(self: *Self) void {
     self.tree.appendSlice(self.allocator, Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
@@ -76,33 +51,13 @@ pub fn renderIr(self: *Self, file_name: []const u8) Error![]const u8 {
     // TODO: remove the comment
     try self.writer.print("//-- {s} --\n", .{file_name});
 
-    // if (self.errs.len > 0)
-    //     try self.parseErrs()
-    // else if (self.static_analyzis and self.warns.len > 0)
-    //     try self.parseErrs()
-    // else while (self.instr_idx < self.instrs.len)
     while (self.instr_idx < self.instrs.len) {
         self.parseInstr();
     }
-
     try self.writer.writeAll("\n");
 
     return self.tree.items;
 }
-
-// fn parseErrs(self: *Self) !void {
-//     const stdout = std.io.getStdOut().writer();
-//
-//     for (self.errs) |err| {
-//         try err.toStr(stdout);
-//         try stdout.writeAll("\n");
-//     }
-//
-//     for (self.warns) |warn| {
-//         try warn.toStr(stdout);
-//         try stdout.writeAll("\n");
-//     }
-// }
 
 fn at(self: *const Self) *const Instruction.Data {
     return &self.instrs[self.instr_idx];
@@ -114,15 +69,14 @@ fn eof(self: *const Self) bool {
 
 fn next(self: *Self) Instruction.Data {
     defer self.instr_idx += 1;
-
     return self.instrs[self.instr_idx];
 }
 
 fn parseInstr(self: *Self) void {
     switch (self.next()) {
         .array => |*data| self.array(data),
-        .array_access => self.arrayAccess(1, false, false, false),
-        .array_access_chain => |*data| self.arrayAccess(data.depth, data.incr_rc, data.cow, false),
+        .array_access => self.arrayAccess(1, false, false),
+        .array_access_chain => |*data| self.arrayAccess(data.depth, false, false),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
@@ -142,6 +96,7 @@ fn parseInstr(self: *Self) void {
         .multiple_var_decl => |data| self.multipleVarDecl(data),
         .name => unreachable,
         .null => unreachable,
+        .pop => self.indentAndAppendSlice("[Pop]"),
         .print => {
             self.indentAndAppendSlice("[Print]");
             self.indent_level += 1;
@@ -173,7 +128,7 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     }
 }
 
-fn arrayAccess(self: *Self, depth: usize, incr_rc: bool, cow: bool, is_assign: bool) void {
+fn arrayAccess(self: *Self, depth: usize, cow: bool, is_assign: bool) void {
     if (is_assign)
         self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]")
     else
@@ -181,7 +136,6 @@ fn arrayAccess(self: *Self, depth: usize, incr_rc: bool, cow: bool, is_assign: b
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    self.checkInrcRc(incr_rc);
     if (cow) self.indentAndAppendSlice("[Cow]");
 
     if (depth > 1) {
@@ -207,8 +161,8 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     self.checkInrcRc(data.incr_rc);
 
     const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAccess(1, false, data.cow, true),
-        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, false, data.cow, true),
+        .array_access => return self.arrayAccess(1,  data.cow, true),
+        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth,  data.cow, true),
         .identifier => |*variable| variable,
         .field => |*member| return self.fieldAssignment(member, data.cow),
         else => unreachable,

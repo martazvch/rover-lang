@@ -5,5 +5,3 @@ incompatible_if_type, int, str
 incompatible_if_type, void, float
 incompatible_if_type, float, str
 incompatible_if_type, int, str
-unused_value
-unused_value

@@ -55,6 +55,14 @@ variables and even initialize them with a compile time known value.
         - Same as while can be exited with a value after or not
     - match:
         - Each branch must return the same type
+- Unused values are automatically popped from the stack but you can explictly discard them
+- Automatically discarded errors is a warning
+
+```rust
+1 + 1 // result is discarded
+_ = 1 + 1 // explicit discard
+mayFail() // warning
+```
 
 ### Statements
 

@@ -68,64 +68,59 @@ incr_ref
 get_default index 0
 struct_lit index 2
 
+constant index 25, value 0
+constant index 26, value 1
 get_local index 6
 get_field index 0
 get_field index 0
-constant index 25, value 1
-array_get
-constant index 26, value 0
-array_get
+array_get_chain index 2
 print
 
-get_local index 6
-get_field index 0
-get_field index 0
-get_local index 0
-array_get
 constant index 27, value 0
-array_get
-get_field index 0
-print
-
+get_local index 0
 get_local index 6
 get_field index 0
 get_field index 0
-constant index 28, value 1
-array_get
-constant index 29, value 0
-array_get
+array_get_chain index 2
+get_field index 0
+print
+
+constant index 28, value 0
+constant index 29, value 1
+get_local index 6
+get_field index 0
+get_field index 0
+array_get_chain index 2
 get_field index 2
 constant index 30, value 0
 array_get
 print
 
+constant index 31, value 1
+get_local index 0
+constant index 32, value 0
+constant index 33, value 1
 get_local index 6
 get_field index 0
 get_field index 0
-constant index 31, value 1
-array_get
-constant index 32, value 0
-array_get
+array_get_chain index 2
 get_field index 2
-get_local index 0
-array_get
-constant index 33, value 1
-array_get
+array_get_chain index 2
 print
 
 constant index 34, value 55
 constant index 35, value 66
 array_new index 2
+constant index 36, value 0
+constant index 37, value 1
 get_local_cow index 6
 get_field_cow index 0
 get_field_cow index 0
-constant index 36, value 1
-array_get_cow
-constant index 37, value 0
-array_get_cow
+array_get_chain_cow index 2
 get_field_cow index 2
 constant index 38, value 0
 array_set
+
 ret_naked
 
 -- global scope --

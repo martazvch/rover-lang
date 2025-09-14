@@ -40,39 +40,32 @@
                         [Int 1]
                     [Int 11]
     [Print]
-        [Array access]
-            - array
-            [Array access]
-                - array
-                [Variable index: 0, scope: local]
-                - index
-                [Int 1]
-            - index
+        [Array chain access]
+            - indicies
             [Int 2]
-    [Print]
-        [Array access]
-            - array
-            [Array access]
-                - array
-                [Variable index: 0, scope: local]
-                - index
-                [Unary minus]
-                    [Int 2]
-            - index
-            [Unary minus]
-                [Int 1]
-    [Int 99]
-    [Array assignment]
-        - array
-        [Array access]
+            [Int 1]
             - array
             [Variable index: 0, scope: local]
-            - index
+    [Print]
+        [Array chain access]
+            - indicies
             [Unary minus]
                 [Int 1]
-        - index
+            [Unary minus]
+                [Int 2]
+            - array
+            [Variable index: 0, scope: local]
+
+    [Int 99]
+    [Array chain assignment]
+        - indicies
         [Fn call arity: 0]
             [Load symbol 1]
+        [Unary minus]
+            [Int 1]
+        - array
+        [Variable index: 0, scope: local]
+
     [Array]
         [Int 1]
     [Array assignment]
@@ -83,19 +76,18 @@
         - index
         [Fn call arity: 0]
             [Load symbol 1]
+
     [Unary minus]
         [Int 9]
-    [Array assignment]
-        - array
-        [Array access]
-            - array
-            [Field access 0]
-                [Variable index: 2, scope: local]
-            - index
-            [Fn call arity: 0]
-                [Load symbol 1]
-        - index
+    [Array chain assignment]
+        - indicies
         [Int 1]
+        [Fn call arity: 0]
+            [Load symbol 1]
+        - array
+        [Field access 0]
+            [Variable index: 2, scope: local]
+
     [Print]
         [Array access]
             - array
@@ -105,14 +97,11 @@
             [Fn call arity: 0]
                 [Load symbol 1]
     [Print]
-        [Array access]
-            - array
-            [Array access]
-                - array
-                [Field access 0]
-                    [Variable index: 2, scope: local]
-                - index
-                [Fn call arity: 0]
-                    [Load symbol 1]
-            - index
+        [Array chain access]
+            - indicies
             [Int 1]
+            [Fn call arity: 0]
+                [Load symbol 1]
+            - array
+            [Field access 0]
+                [Variable index: 2, scope: local]

@@ -14,4 +14,7 @@ fn main() {
     var voidArrVoidVal = []
 
     var voidValueInArray = [1, {}]
+
+    var twoDim = [[1, 2], [3, 4]]
+    print twoDim[0][1][2]
 }

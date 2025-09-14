@@ -154,11 +154,7 @@ pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_mai
 
     for (ast.nodes) |*node| {
         ctx.reset();
-        const node_type = self.analyzeNode(node, &ctx) catch continue;
-
-        if (!self.isVoid(node_type)) {
-            self.err(.unused_value, self.ast.getSpan(node)) catch {};
-        }
+        _ = self.analyzeNode(node, &ctx) catch continue;
     }
 
     if (expect_main and self.main == null) {
@@ -244,7 +240,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) Error!voi
 
 fn discard(self: *Self, expr: *const Expr, ctx: *Context) Error!void {
     const span = self.ast.getSpan(expr);
-    self.makeInstruction(.{ .discard = undefined }, span.start, .add);
+    self.makeInstruction(.discard, span.start, .add);
     const discarded = try self.analyzeExpr(expr, ctx);
 
     if (self.isVoid(discarded)) return self.err(.void_discard, span);
@@ -418,7 +414,6 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         ctx.allow_partial = i < len - 1;
 
         // We try to analyze the whole body
-        // const ty = self.analyzeNode(n, ctx) catch {
         const ty = self.analyzeNode(n, ctx) catch {
             had_err = true;
             continue;
@@ -429,7 +424,7 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
 
         // If last expression produced a value and that it wasn't the last one and it wasn't a return, error
         if (i != len - 1 and !ctx.returns and !self.isVoid(final_type)) {
-            self.err(.unused_value, self.ast.getSpan(n)) catch {};
+            self.makeInstruction(.pop, 0, .add);
         }
     }
 
@@ -669,12 +664,10 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
         var struct_field: Type.Structure.Field = undefined;
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
-        if (ty.fields.get(field_name) != null) {
-            return self.err(
-                .{ .already_declared_field = .{ .name = self.ast.toSource(f.name) } },
-                span,
-            );
-        }
+        if (ty.fields.get(field_name) != null) return self.err(
+            .{ .already_declared_field = .{ .name = self.ast.toSource(f.name) } },
+            span,
+        );
 
         const field_type = try self.checkAndGetType(f.typ, ctx);
         const field_value_type = if (f.value) |value| blk: {
@@ -759,7 +752,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
     var backpatched = false;
     var pure = true;
 
-    var elems: ArrayList(Instruction.Array.Elem) = .{};
+    var elems: ArrayList(Instruction.Array.Elem) = .empty;
     elems.ensureUnusedCapacity(self.allocator, expr.values.len) catch oom();
 
     for (expr.values) |val| {
@@ -804,6 +797,10 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
 }
 
 fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result {
+    if (expr.array.* == .array_access) {
+        return self.arrayAccessChain(expr, ctx);
+    }
+
     const span = self.ast.getSpan(expr.array);
     self.makeInstruction(.array_access, span.start, .add);
     const arr = try self.analyzeExpr(expr.array, ctx);
@@ -818,6 +815,36 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result 
     try self.expectArrayIndex(expr.index, ctx);
 
     return .{ .type = type_value, .heap_ref = type_value.isHeap() };
+}
+
+fn arrayAccessChain(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result {
+    const index = self.ir_builder.reserveInstr();
+    // We use 1 here because we're gonna compile last index too at the end
+    // of the chain, resulting in 1 more length that the chain
+    var depth: usize = 1;
+    var current = expr;
+
+    while (current.array.* == .array_access) : (depth += 1) {
+        try self.expectArrayIndex(current.index, ctx);
+        current = &current.array.array_access;
+    }
+    try self.expectArrayIndex(current.index, ctx);
+
+    const arr = try self.analyzeExpr(current.array, ctx);
+    const type_depth, const ty = arr.array.getDepthAndChild();
+
+    if (depth > type_depth) return self.err(
+        .{ .array_mismatch_dim = .{ .declared = type_depth, .accessed = depth } },
+        self.ast.getSpan(expr),
+    );
+
+    self.makeInstruction(
+        .{ .array_access_chain = .{ .depth = depth } },
+        self.ast.getSpan(expr).start,
+        .{ .set_at = index },
+    );
+
+    return .{ .type = ty, .heap_ref = ty.isHeap() };
 }
 
 /// Analyze the expression and return an error if the type isn't an integer
@@ -1730,7 +1757,9 @@ fn internIfNotInCurrentScope(self: *Self, token: usize) Error!usize {
 
 /// Checks that the node is a declared type and return it's value. If node is `.empty`, returns `void`
 fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) TypeResult {
-    return if (ty) |t| return switch (t.*) {
+    const t = ty orelse return self.type_interner.cache.void;
+
+    return switch (t.*) {
         .array => |arr_type| {
             const child = try self.checkAndGetType(arr_type.child, ctx);
 
@@ -1800,7 +1829,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) TypeR
             return found_type;
         },
         .self => if (ctx.struct_type) |struct_type| struct_type else self.err(.self_outside_struct, self.ast.getSpan(t)),
-    } else self.type_interner.cache.void;
+    };
 }
 
 const TypeCoherence = struct { type: *const Type, cast: bool = false };
@@ -1808,53 +1837,59 @@ const TypeCoherence = struct { type: *const Type, cast: bool = false };
 /// Checks for `void` values, array inference, cast and function type generation
 /// The goal is to see if the two types are equivalent and if so, make the transformations needed
 fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_cast: bool, span: Span) Error!TypeCoherence {
+    if (self.isVoid(value)) return self.err(.void_value, span);
     if (decl == value) return .{ .type = decl, .cast = false };
 
-    var cast = false;
-    var local_decl = decl;
-    var local_value = value;
+    check: {
+        // if (!self.isVoid(decl) and std.meta.activeTag(decl.*) != std.meta.activeTag(value.*)) break :check;
 
-    if (self.isVoid(value)) return self.err(.void_value, span);
+        if (value.is(.array)) {
+            return self.checkArrayType(decl, value, span) catch |e| switch (e) {
+                error.mismatch => break :check,
+                else => |narrowed| return narrowed,
+            };
+        } else if (value.is(.function)) {
+            return self.checkFunctionEq(decl, value) catch break :check;
+        }
 
-    if (value.is(.array)) {
-        local_value = try self.inferArrayType(decl, value, span);
-    } else if (value.is(.function)) {
-        // Functions function's return types like: 'fn add() -> fn(int) -> int' don't have a declaration
-        // There is also the case when assigning to a variable and infering type like: var bound = foo.method
-        // Here, we want `bound` to be an anonymus function, it loses all declaration infos because it's a runtime value
-        if (self.isVoid(decl)) return .{
-            .type = if (value.function.loc != null)
-                self.type_interner.intern(.{ .function = value.function.toAnon(self.allocator) })
-            else
-                value,
-            .cast = false,
-        };
-        return self.checkFunctionEq(decl, value, span);
-    }
+        var cast = false;
+        var local_decl = decl;
 
-    // TODO: proper error handling
-    if (value.is(.module)) @panic("Can't use modules in expressions");
+        // TODO: proper error handling
+        if (value.is(.module)) @panic("Can't use modules in expressions");
 
-    if (self.isVoid(local_decl)) {
-        local_decl = local_value;
-    } else {
-        if (local_decl != local_value) {
+        if (self.isVoid(local_decl)) {
+            local_decl = value;
+        } else if (local_decl != value) {
             // One case in wich we can coerce, int -> float
-            if (local_value.canCastTo(local_decl)) {
+            if (value.canCastTo(local_decl)) {
                 cast = true;
                 if (emit_cast) self.makeInstruction(.{ .cast = .float }, span.start, .add);
-            } else return self.err(
-                .{ .type_mismatch = .{ .expect = self.getTypeName(local_decl), .found = self.getTypeName(local_value) } },
-                span,
-            );
+            } else break :check;
         }
+
+        return .{ .type = local_decl, .cast = cast };
     }
 
-    return .{ .type = local_decl, .cast = cast };
+    return self.err(
+        .{ .type_mismatch = .{ .expect = self.getTypeName(decl), .found = self.getTypeName(value) } },
+        span,
+    );
 }
 
 /// Checks if two different pointers to function type are equal, due to anonymus ones
-fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type, span: Span) Error!TypeCoherence {
+fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!TypeCoherence {
+    // Functions function's return types like: 'fn add() -> fn(int) -> int' don't have a declaration
+    // There is also the case when assigning to a variable and infering type like: var bound = foo.method
+    // Here, we want `bound` to be an anonymus function, it loses all declaration infos because it's a runtime value
+    if (self.isVoid(decl)) return .{
+        .type = if (value.function.loc != null)
+            self.type_interner.intern(.{ .function = value.function.toAnon(self.allocator) })
+        else
+            value,
+        .cast = false,
+    };
+
     const f1 = decl.function;
     const f2 = value.function;
 
@@ -1869,24 +1904,33 @@ fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type, span: Spa
         return .{ .type = decl, .cast = false };
     }
 
-    return self.err(
-        .{ .type_mismatch = .{ .expect = self.getTypeName(decl), .found = self.getTypeName(value) } },
-        span,
-    );
+    return error.Err;
 }
 
 /// Try to infer array value type from variable's declared type
-fn inferArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span) Error!*const Type {
-    // Get nested item's type from: [][][]int -> int
-    const child = value.array.getChild();
+fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span) (Error || error{mismatch})!TypeCoherence {
+    const depth_value, const child_value = value.array.getDepthAndChild();
 
-    // Empty array like: []
-    if (self.isVoid(child)) {
-        // No type declared and empty array like: var a = [], else infer from declaration
-        return if (self.isVoid(decl)) self.err(.cant_infer_arary_type, span) else decl;
+    check: {
+        if (self.isVoid(decl)) {
+            // Empty array like: []
+            if (self.isVoid(child_value)) {
+                // No type declared and empty array like: var a = [], else infer from declaration
+                return self.err(.cant_infer_arary_type, span);
+            }
+        } else {
+            if (!decl.is(.array)) break :check;
+            const depth_decl, const child_decl = decl.array.getDepthAndChild();
+            if (depth_value != depth_decl) break :check;
+            if (!self.isVoid(child_value)) {
+                if (depth_value != depth_decl or child_value != child_decl) break :check;
+            }
+        }
+
+        return .{ .type = value, .cast = false };
     }
 
-    return value;
+    return error.mismatch;
 }
 
 fn isVoid(self: *const Self, ty: *const Type) bool {

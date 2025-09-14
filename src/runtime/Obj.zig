@@ -205,7 +205,14 @@ pub const Array = struct {
     }
 
     pub fn deepCopy(self: *const Self, vm: *Vm) *Self {
-        return Self.create(vm, self.values.items);
+        var values: ArrayList(Value) = .empty;
+        values.ensureTotalCapacity(vm.allocator, self.values.items.len) catch oom();
+
+        for (self.values.items) |val| {
+            values.appendAssumeCapacity(val.deepCopy(vm));
+        }
+
+        return Self.create(vm, values.toOwnedSlice(vm.allocator) catch oom());
     }
 
     pub fn deinit(self: *Self, vm: *Vm) void {

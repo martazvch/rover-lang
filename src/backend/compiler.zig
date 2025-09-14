@@ -315,7 +315,7 @@ const Compiler = struct {
         try switch (self.next()) {
             .array => |*data| self.array(data),
             .array_access => self.arrayAccess(),
-            .array_access_chain => |*data| self.arrayAccessChain(data, self.getLineNumber()),
+            .array_access_chain => |*data| self.arrayAccessChain(data),
             .assignment => |*data| self.assignment(data),
             .binop => |*data| self.binop(data),
             .block => |*data| self.block(data),
@@ -336,6 +336,7 @@ const Compiler = struct {
             .multiple_var_decl => |data| self.multipleVarDecl(data),
             .name => unreachable,
             .null => self.nullInstr(),
+            .pop => self.writeOp(.pop, self.getLineNumber()),
             .print => self.print(),
             .@"return" => |*data| self.returnInstr(data),
             .string => |data| self.stringInstr(data),
@@ -375,18 +376,22 @@ const Compiler = struct {
         try self.compileInstr();
         self.state.cow = prev;
 
-        self.writeOp(if (self.state.cow) .array_get_cow else .array_get, line);
+        self.writeOp(.array_get, line);
     }
 
-    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
+    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain) Error!void {
+        const line = self.getLineNumber();
         // Indicies
+        const prev = self.state.setAndGetPrev(.cow, false);
         for (0..data.depth) |_| {
             try self.compileInstr();
         }
+        self.state.cow = prev;
 
         // Variable
         try self.compileInstr();
-        if (data.incr_rc) self.writeOp(.incr_ref, line);
+        // get_chain_cow is used when the chain is in the middle of assigne like: foo.bar[0][1].baz = 1
+        self.writeOpAndByte(if (self.state.cow) .array_get_chain_cow else .array_get_chain, @intCast(data.depth), line);
     }
 
     fn arrayAssign(self: *Self, line: usize) Error!void {
@@ -407,10 +412,12 @@ const Compiler = struct {
         }
 
         // Variable
+        const prev = self.state.setAndGetPrev(.cow, true);
         try self.compileInstr();
+        self.state.cow = prev;
 
         // TODO: protect the cast
-        self.writeOpAndByte(.array_assign_chain, @intCast(data.depth), line);
+        self.writeOpAndByte(.array_set_chain, @intCast(data.depth), line);
     }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
@@ -430,7 +437,7 @@ const Compiler = struct {
         const variable_data = switch (self.next()) {
             .identifier => |*variable| variable,
             .array_access => return self.arrayAssign(line),
-            // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, line),
+            .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, line),
             .field => |*field_data| return self.fieldAssignment(field_data, line),
             else => unreachable,
         };

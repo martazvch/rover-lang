@@ -84,68 +84,53 @@
             [Variable index: 4, scope: local]
             [Increment ref count]
     [Print]
-        [Array access]
+        [Array chain access]
+            - indicies
+            [Int 0]
+            [Int 1]
             - array
-            [Array access]
+            [Field access 0]
+                [Field access 0]
+                    [Variable index: 5, scope: local]
+    [Print]
+        [Field access 0]
+            [Array chain access]
+                - indicies
+                [Int 0]
+                [Int 1]
                 - array
                 [Field access 0]
                     [Field access 0]
                         [Variable index: 5, scope: local]
-                - index
-                [Int 1]
-            - index
-            [Int 0]
-    [Print]
-        [Field access 0]
-            [Array access]
-                - array
-                [Array access]
-                    - array
-                    [Field access 0]
-                        [Field access 0]
-                            [Variable index: 5, scope: local]
-                    - index
-                    [Int 1]
-                - index
-                [Int 0]
     [Print]
         [Array access]
             - array
             [Field access 2]
-                [Array access]
-                    - array
-                    [Array access]
-                        - array
-                        [Field access 0]
-                            [Field access 0]
-                                [Variable index: 5, scope: local]
-                        - index
-                        [Int 1]
-                    - index
+                [Array chain access]
+                    - indicies
                     [Int 0]
+                    [Int 1]
+                    - array
+                    [Field access 0]
+                        [Field access 0]
+                            [Variable index: 5, scope: local]
             - index
             [Int 0]
     [Print]
-        [Array access]
-            - array
-            [Array access]
-                - array
-                [Field access 2]
-                    [Array access]
-                        - array
-                        [Array access]
-                            - array
-                            [Field access 0]
-                                [Field access 0]
-                                    [Variable index: 5, scope: local]
-                            - index
-                            [Int 1]
-                        - index
-                        [Int 0]
-                - index
-                [Int 1]
-            - index
+        [Array chain access]
+            - indicies
             [Int 1]
+            [Int 1]
+            - array
+            [Field access 2]
+                [Array chain access]
+                    - indicies
+                    [Int 0]
+                    [Int 1]
+                    - array
+                    [Field access 0]
+                        [Field access 0]
+                            [Variable index: 5, scope: local]
     [Array]
         [Int 55]
         [Int 66]
@@ -153,16 +138,13 @@
         [Cow]
         - array
         [Field access 2]
-            [Array access]
-                - array
-                [Array access]
-                    - array
-                    [Field access 0]
-                        [Field access 0]
-                            [Variable index: 5, scope: local]
-                    - index
-                    [Int 1]
-                - index
+            [Array chain access]
+                - indicies
                 [Int 0]
+                [Int 1]
+                - array
+                [Field access 0]
+                    [Field access 0]
+                        [Variable index: 5, scope: local]
         - index
         [Int 0]
