@@ -853,6 +853,7 @@ fn ifExpr(self: *Self) Error!*Expr {
     const save = self.ctx.in_cond;
     self.ctx.in_cond = true;
     errdefer self.ctx.in_cond = save;
+
     const condition = try self.parsePrecedenceExpr(0);
     self.skipNewLines();
     self.ctx.in_cond = save;
@@ -1043,24 +1044,27 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
 }
 
 fn structLiteral(self: *Self, expr: *Expr) Error!*Expr {
+    self.skipNewLines();
     const struct_lit = self.allocator.create(Expr) catch oom();
     var fields_values: ArrayList(Ast.FieldAndValue) = .empty;
 
-    b: {
-        if (expr.* == .literal) {
-            if (expr.literal.tag == .identifier) break :b;
-        } else if (expr.* == .field) break :b;
+    check: {
+        if (expr.* == .literal and expr.literal.tag == .identifier) break :check;
+        if (expr.* == .field) break :check;
 
         return self.errAtPrev(.invalid_struct_literal);
     }
 
     // All the skip_lines cover the different syntaxes
-    while (!self.check(.right_brace)) {
-        self.skipNewLines();
-        if (self.check(.eof)) return self.errAtPrev(.expect_brace_after_struct_lit);
-
+    while (!self.check(.eof) and !self.check(.right_brace)) {
         if (!self.match(.identifier)) {
             return self.errAtCurrent(.struct_lit_non_ident_field);
+        }
+        const ident = self.token_idx - 1;
+        self.skipNewLines();
+
+        if (!self.check(.equal) and !self.check(.comma) and !self.check(.right_brace)) {
+            return self.errAt(ident, .expect_equal_struct_lit);
         }
 
         // Either: { x = 3 }  or { x }

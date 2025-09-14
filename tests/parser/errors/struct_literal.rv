@@ -3,4 +3,5 @@ Foo{45}
 var a = 1
 Foo{a
 
-
+var a = Foo{a:5}
+var a = Foo{

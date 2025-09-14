@@ -536,6 +536,11 @@ const Compiler = struct {
 
         for (0..data.length) |_| {
             try self.compileInstr();
+
+            if (self.manager.instr_idx < self.manager.instr_data.len and self.at().* == .pop) {
+                self.writeOp(.pop, 0);
+                self.manager.instr_idx += 1;
+            }
         }
 
         if (data.is_expr) {

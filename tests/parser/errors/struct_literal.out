@@ -1,3 +1,4 @@
 struct_lit_non_ident_field
+expect_equal_struct_lit
+expect_equal_struct_lit
 expect_brace_after_struct_lit
-
