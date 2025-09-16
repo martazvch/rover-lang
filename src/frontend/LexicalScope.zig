@@ -41,6 +41,7 @@ pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{},
 
 pub const Scope = struct {
     variables: VariableMap = .empty,
+    forwarded: VariableMap = .empty,
     symbols: SymbolArrMap = .empty,
     extern_symbols: ExternMap = .empty,
     /// First is the interned identifier and second is the interned module's path key of module interner
@@ -50,9 +51,24 @@ pub const Scope = struct {
     offset: usize,
 };
 
-pub fn open(self: *Self, allocator: Allocator, offset_from_child: bool) void {
-    const offset = if (offset_from_child) self.current.variables.count() + self.current.offset else 0;
-    self.scopes.append(allocator, .{ .offset = offset }) catch oom();
+pub fn open(self: *Self, allocator: Allocator, offset_from_parent: bool) void {
+    const offset = if (offset_from_parent) self.current.variables.count() + self.current.offset else 0;
+    var scope: Scope = .{ .offset = offset };
+
+    // If variables have been forwarded, for declare them now
+    if (self.scopes.items.len > 0) {
+        scope.variables.ensureUnusedCapacity(allocator, self.current.forwarded.count()) catch oom();
+
+        var it = self.current.forwarded.iterator();
+
+        while (it.next()) |entry| {
+            scope.variables.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.*);
+        }
+
+        self.current.forwarded.clearRetainingCapacity();
+    }
+
+    self.scopes.append(allocator, scope) catch oom();
     self.updateCurrent();
 }
 
@@ -72,6 +88,7 @@ pub fn initGlobalScope(self: *Self, allocator: Allocator, interner: *Interner, t
     }
 }
 
+/// Update `current` field to last scope. **Assumes** that there is at least one scope
 fn updateCurrent(self: *Self) void {
     self.current = &self.scopes.items[self.scopes.items.len - 1];
 }
@@ -90,11 +107,9 @@ pub fn declareVar(
     constant: bool,
     comp_time: bool,
 ) error{TooManyLocals}!usize {
-    if (self.current.variables.count() == 255 and !self.isGlobal()) {
-        return error.TooManyLocals;
-    }
-
     const index = self.current.variables.count();
+    if (index == 255 and !self.isGlobal()) return error.TooManyLocals;
+
     self.current.variables.put(allocator, name, .{
         .type = ty,
         .kind = if (self.isGlobal()) .global else .local,
@@ -106,6 +121,21 @@ pub fn declareVar(
     }) catch oom();
 
     return index;
+}
+
+pub fn declareVarInFutureScope(self: *Self, allocator: Allocator, name: InternerIdx, ty: *const Type, captured: bool) error{TooManyLocals}!void {
+    const index = self.current.forwarded.count();
+    if (index == 255) return error.TooManyLocals;
+
+    self.current.forwarded.put(allocator, name, .{
+        .type = ty,
+        .kind = .local,
+        .initialized = true,
+        .index = index,
+        .captured = captured,
+        .constant = true,
+        .comp_time = false,
+    }) catch oom();
 }
 
 /// Tries to retreive a variable from scopes and the local offset of its scope

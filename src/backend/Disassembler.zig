@@ -109,6 +109,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .ne_float => self.simpleInstruction(writer, "ne_float", offset),
         .ne_int => self.simpleInstruction(writer, "ne_int", offset),
         .ne_null => self.simpleInstruction(writer, "ne_null", offset),
+        .ne_null_push => self.simpleInstruction(writer, "ne_null_push", offset),
         .ne_str => self.simpleInstruction(writer, "ne_str", offset),
         .neg_float => self.simpleInstruction(writer, "neg_float", offset),
         .neg_int => self.simpleInstruction(writer, "neg_int", offset),

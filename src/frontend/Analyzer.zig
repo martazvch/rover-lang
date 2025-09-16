@@ -34,6 +34,7 @@ pub const AnalyzedModule = struct {
 const Context = struct {
     fn_type: ?*const Type,
     struct_type: ?*const Type,
+    decl_type: ?*const Type,
     allow_partial: bool,
     returns: bool,
     in_call: bool,
@@ -41,6 +42,7 @@ const Context = struct {
     pub const empty: Context = .{
         .fn_type = null,
         .struct_type = null,
+        .decl_type = null,
         .allow_partial = true,
         .returns = false,
         .in_call = false,
@@ -187,7 +189,7 @@ fn analyzeNodeInfos(self: *Self, node: *const Node, ctx: *Context) Result {
         .expr => |n| return try self.analyzeExprInfos(n, ctx),
     }
 
-    return .newType(self.type_interner.cache.void);
+    return .newType(self.type_interner.getCached(.void));
 }
 
 fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) Error!void {
@@ -397,7 +399,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
 
 fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: Span, ctx: *Context) Error!struct { usize, bool } {
     var had_err = false;
-    var final_type: *const Type = self.type_interner.cache.void;
+    var final_type: *const Type = self.type_interner.getCached(.void);
     var deadcode_start: usize = 0;
     var deadcode_count: usize = 0;
     const len = body.len;
@@ -410,9 +412,11 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
             deadcode_count = len - i;
         }
 
-        // If last statement, we don't allow partial anymore (for return)
+        // If last statement, we don't allow partial return anymore
         // Usefull for 'if' for example, in this case we want all the branches to return something
-        ctx.allow_partial = i < len - 1;
+        if (i == len - 1) {
+            ctx.decl_type = ctx.fn_type;
+        }
 
         // We try to analyze the whole body
         const ty = self.analyzeNode(n, ctx) catch {
@@ -568,6 +572,9 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) Error!vo
 
     if (node.value) |value| {
         has_value = true;
+
+        const snapshot = ctx.snapshot();
+        defer snapshot.restore();
         ctx.allow_partial = false;
 
         const value_res = try self.expectValue(value, ctx);
@@ -681,7 +688,7 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
             }
 
             break :blk res.type;
-        } else self.type_interner.cache.void;
+        } else self.type_interner.getCached(.void);
 
         if (!self.isVoid(field_value_type) and !self.isVoid(field_type) and field_value_type != field_type) {
             if (field_value_type.canCastTo(field_type)) {
@@ -729,6 +736,7 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, ctx: *Context) Result {
         .block => |*e| self.block(e, ctx),
         .binop => |*e| self.binop(e, ctx),
         .closure => |*e| self.closure(e, ctx),
+        .extractor => |*e| self.extractor(e, ctx),
         .field => |*e| self.field(e, ctx),
         .fn_call => |*e| self.call(e, ctx),
         .grouping => |*e| self.analyzeExprInfos(e.expr, ctx),
@@ -749,7 +757,7 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, ctx: *Context) Result {
 
 fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
     const index = self.ir_builder.reserveInstr();
-    var final_type = self.type_interner.cache.void;
+    var final_type = self.type_interner.getCached(.void);
     var backpatched = false;
     var pure = true;
 
@@ -864,7 +872,7 @@ fn block(self: *Self, expr: *const Ast.Block, ctx: *Context) Result {
     errdefer _ = self.scope.close();
 
     const index = self.ir_builder.reserveInstr();
-    var final: TypeInfos = .newType(self.type_interner.cache.void);
+    var final: TypeInfos = .newType(self.type_interner.getCached(.void));
     var len: usize = expr.nodes.len;
     var pure = false;
 
@@ -1159,6 +1167,22 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     );
 
     return .newType(interned_type);
+}
+
+fn extractor(self: *Self, expr: *const Ast.Extractor, ctx: *Context) Result {
+    const span = self.ast.getSpan(expr);
+    const index = self.ir_builder.reserveInstr();
+    const expr_ty = try self.analyzeExpr(expr.expr, ctx);
+
+    const ty = expr_ty.getChildIfOptional() orelse @panic("Extract non optional");
+
+    // TODO: be sure that it's in the correct scope
+    const binding = try self.internIfNotInCurrentScope(expr.alias);
+    _ = try self.forwardDeclareVariable(binding, ty, false, self.ast.getSpan(expr.alias));
+
+    self.makeInstruction(.extractor, span.start, .{ .set_at = index });
+
+    return .newType(self.type_interner.cache.bool);
 }
 
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
@@ -1490,10 +1514,11 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
     pure = pure and then_res.comp_time;
 
     const then_returned = ctx.returns;
-    var final_type = if (then_returned) self.type_interner.cache.void else then_res.type;
+    // var final_type = if (then_returned) self.type_interner.getCached(.void) else then_res.type;
     ctx.returns = false;
 
     var else_returned = false;
+    var else_ty: ?*const Type = null;
 
     if (expr.@"else") |*n| {
         const else_res = try self.analyzeNodeInfos(n, ctx);
@@ -1501,50 +1526,76 @@ fn ifExpr(self: *Self, expr: *const Ast.If, ctx: *Context) Result {
         instr.incr_rc_else = else_res.heap_ref;
         pure = pure and else_res.comp_time;
         else_returned = ctx.returns;
-
-        if (!else_returned) {
-            if (then_returned) {
-                final_type = else_res.type;
-            } else {
-                try self.ifTypeCoherenceAndCast(then_res.type, else_res.type, expr, &instr);
-            }
-        }
-    } else if (!then_res.type.is(.void) and !ctx.allow_partial) {
+        else_ty = else_res.type;
+    } else if (!ctx.allow_partial) {
         return self.err(
             .{ .missing_else_clause = .{ .if_type = self.getTypeName(then_res.type) } },
             self.ast.getSpan(expr),
         );
     }
 
+    _ = try self.mergeIfBranch(then_res.type, then_returned, else_ty, else_returned, expr, ctx);
+
     // The whole instructions returns out of scope
     ctx.returns = then_returned and else_returned;
     self.makeInstruction(.{ .@"if" = instr }, span.start, .{ .set_at = index });
 
     return if (ctx.returns)
-        .newType(self.type_interner.cache.void)
+        .newType(self.type_interner.getCached(.void))
     else
-        .{ .type = final_type, .comp_time = pure };
+        .{ .type = then_res.type, .comp_time = pure };
 }
 
-fn ifTypeCoherenceAndCast(
-    self: *Self,
-    then_type: *const Type,
-    else_type: *const Type,
-    expr: *const Ast.If,
-    instr: *Instruction.If,
-) Error!void {
-    if (then_type == else_type) return;
+const IfBranchRes = struct {
+    type: *const Type,
+    cast: Instruction.If.Cast,
+};
 
-    if (else_type.canCastTo(then_type)) {
-        instr.cast = .@"else";
-        self.warn(AnalyzerMsg.implicitCast("else branch", "float"), self.ast.getSpan(expr.@"else".?));
-    } else if (then_type.canCastTo(else_type)) {
-        instr.cast = .then;
-        self.warn(AnalyzerMsg.implicitCast("then branch", "float"), self.ast.getSpan(expr.then));
-    } else return self.err(
-        .{ .incompatible_if_type = .{ .found1 = self.getTypeName(then_type), .found2 = self.getTypeName(else_type) } },
-        self.ast.getSpan(expr),
-    );
+fn mergeIfBranch(
+    self: *Self,
+    then_ty: *const Type,
+    then_ret: bool,
+    else_ty: ?*const Type,
+    else_ret: bool,
+    expr: *const Ast.If,
+    ctx: *const Context,
+) Error!IfBranchRes {
+    var cast: Instruction.If.Cast = .none;
+
+    if (then_ty == else_ty) return .{ .type = then_ty, .cast = cast };
+
+    var final = self.getDeclOrVoid(ctx);
+    std.log.debug("Final: {any}", .{final.*});
+    const then_span = self.ast.getSpan(expr.then);
+
+    const then_cast = try self.checkIfBranch(&final, then_ty, then_ret, then_span, ctx);
+    if (then_cast) {
+        cast = .then;
+    }
+
+    const else_type = else_ty orelse return .{
+        .type = if (then_ret) self.type_interner.getCached(.never) else final,
+        .cast = cast,
+    };
+    const else_span = self.ast.getSpan(expr.@"else".?);
+
+    const else_cast = try self.checkIfBranch(&final, else_type, else_ret, else_span, ctx);
+    if (else_cast) {
+        cast = if (cast == .then) .both else .@"else";
+    }
+
+    return .{ .type = if (then_ret and else_ret) self.type_interner.getCached(.never) else final, .cast = cast };
+}
+
+fn checkIfBranch(self: *Self, decl: **const Type, ty: *const Type, ret: bool, span: Span, ctx: *const Context) Error!bool {
+    if (ret) {
+        const coerce = try self.performTypeCoercion(ctx.fn_type.?.function.return_type, ty, false, span);
+        return coerce.cast;
+    } else {
+        const coerce = try self.performTypeCoercion(decl.*, ty, false, span);
+        decl.* = coerce.type;
+        return coerce.cast;
+    }
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
@@ -1714,7 +1765,7 @@ fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
     var value_res = if (expr.expr) |e| blk: {
         instr.value = true;
         break :blk try self.analyzeExprInfos(e, ctx);
-    } else TypeInfos.newType(self.type_interner.cache.void);
+    } else TypeInfos.newType(self.type_interner.getCached(.void));
 
     // We do that here because we can insert a cast
     if (ty != value_res.type) {
@@ -1772,7 +1823,7 @@ fn internIfNotInCurrentScope(self: *Self, token: usize) Error!usize {
 
 /// Checks that the node is a declared type and return it's value. If node is `.empty`, returns `void`
 fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) TypeResult {
-    const t = ty orelse return self.type_interner.cache.void;
+    const t = ty orelse return self.type_interner.getCached(.void);
 
     return switch (t.*) {
         .array => |arr_type| {
@@ -1959,11 +2010,15 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
 }
 
 fn isVoid(self: *const Self, ty: *const Type) bool {
-    return ty == self.type_interner.cache.void;
+    return ty == self.type_interner.getCached(.void);
 }
 
 fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
     return ty.toString(self.allocator, &self.scope, self.module_name, self.interner, &self.pipeline.ctx.module_interner);
+}
+
+pub fn getDeclOrVoid(self: *const Self, ctx: *const Context) *const Type {
+    return ctx.decl_type orelse self.type_interner.getCached(.void);
 }
 
 fn declareVariable(
@@ -1984,5 +2039,9 @@ fn declareVariable(
         initialized,
         constant,
         comp_time,
-    ) catch self.err(.too_many_locals, span);
+    ) catch return self.err(.too_many_locals, span);
+}
+
+fn forwardDeclareVariable(self: *Self, name: InternerIdx, ty: *const Type, captured: bool, span: Span) Error!void {
+    return self.scope.declareVarInFutureScope(self.allocator, name, ty, captured) catch self.err(.too_many_locals, span);
 }

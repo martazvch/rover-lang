@@ -283,6 +283,14 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .closure => |*e| try self.renderFnDecl("", e, comma),
+        .extractor => |*e| {
+            try self.openKey(@tagName(expr.*), .block);
+            try self.openKey("expr", .block);
+            try self.renderExpr(e.expr, false);
+            try self.closeKey(.block, true);
+            try self.pushKeyValue("alias", self.spanToSrc(e.alias), false);
+            try self.closeKey(.block, comma);
+        },
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.openKey("structure", .block);

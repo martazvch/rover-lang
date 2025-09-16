@@ -3,6 +3,7 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
+const FieldEnum = std.meta.FieldEnum;
 
 const GenReport = @import("../reporter.zig").GenReport;
 const Ast = @import("Ast.zig");
@@ -29,8 +30,21 @@ const Context = struct {
     panic_mode: bool,
     in_cond: bool,
     in_group: bool,
+    can_extract: bool,
 
-    pub const empty: Context = .{ .panic_mode = false, .in_cond = false, .in_group = false };
+    pub const empty: Context = .{
+        .panic_mode = false,
+        .in_cond = false,
+        .in_group = false,
+        .can_extract = false,
+    };
+
+    pub fn setAndGetPrevious(self: *Context, comptime f: FieldEnum(Context), value: @FieldType(Context, @tagName(f))) @TypeOf(value) {
+        const val = @field(self, @tagName(f));
+        @field(self, @tagName(f)) = value;
+
+        return val;
+    }
 };
 const Error = error{Err};
 
@@ -847,13 +861,19 @@ fn closure(self: *Self) Error!*Expr {
 
 fn ifExpr(self: *Self) Error!*Expr {
     const tk = self.token_idx - 1;
-    const save = self.ctx.in_cond;
-    self.ctx.in_cond = true;
-    errdefer self.ctx.in_cond = save;
 
-    const condition = try self.parsePrecedenceExpr(0);
+    const condition = condition: {
+        const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
+        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
+        defer {
+            self.ctx.in_cond = save_cond;
+            self.ctx.can_extract = save_extract;
+        }
+
+        break :condition try self.parsePrecedenceExpr(0);
+    };
+
     self.skipNewLines();
-    self.ctx.in_cond = save;
 
     // TODO: Warning for unnecessary 'do' if there is a block after
     const then: Node = if (self.matchAndSkip(.left_brace))
@@ -958,16 +978,31 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
             expr = try self.finishCall(expr);
         } else if (self.match(.left_bracket)) {
             expr = try self.arrayAccess(expr);
-        } else if (self.match(.left_brace)) {
+        } else if (self.check(.left_brace)) {
             if (self.ctx.in_cond and !self.ctx.in_group) {
-                self.token_idx -= 1;
                 return expr;
             }
-            expr = try self.structLiteral(expr);
+            self.token_idx += 1;
+
+            // Can't chain them, break the loop
+            return self.structLiteral(expr);
+        } else if (self.check(.extractor)) {
+            if (!self.ctx.can_extract) return self.errAtCurrent(.invalid_extract_ctx);
+            self.token_idx += 1;
+
+            // Can't chain them, break the loop
+            return self.extractor(expr);
         } else break;
     }
 
     return expr;
+}
+
+fn extractor(self: *Self, expr: *Expr) Error!*Expr {
+    const res = self.allocator.create(Expr) catch oom();
+    try self.expect(.identifier, .expect_name_after_extract);
+    res.* = .{ .extractor = .{ .expr = expr, .alias = self.token_idx - 1 } };
+    return res;
 }
 
 fn arrayAccess(self: *Self, expr: *Expr) Error!*Expr {

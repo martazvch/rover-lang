@@ -21,6 +21,7 @@ pub const Instruction = struct {
         capture: Capture,
         cast: Type,
         discard,
+        extractor,
         field: Field,
         float: f64,
         fn_decl: FnDecl,
@@ -126,7 +127,7 @@ pub const Instruction = struct {
         incr_rc_then: bool,
         incr_rc_else: bool,
 
-        pub const Cast = enum(u2) { then, @"else", none };
+        pub const Cast = enum(u2) { then, @"else", both, none };
     };
     pub const LoadSymbol = struct {
         module_index: ?usize,

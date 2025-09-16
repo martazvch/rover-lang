@@ -86,6 +86,7 @@ fn parseInstr(self: *Self) void {
         .capture => |*data| self.capture(data),
         .cast => |data| self.cast(data),
         .discard => self.discard(),
+        .extractor => self.extractor(),
         .field => |*data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
@@ -232,6 +233,13 @@ fn cast(self: *Self, typ: Type) void {
 
 fn discard(self: *Self) void {
     self.indentAndAppendSlice("[Discard]");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    self.parseInstr();
+}
+
+fn extractor(self: *Self) void {
+    self.indentAndAppendSlice("[Extractor]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr();

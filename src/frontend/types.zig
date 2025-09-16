@@ -10,6 +10,7 @@ const oom = @import("../utils.zig").oom;
 const LexicalScope = @import("LexicalScope.zig");
 
 pub const Type = union(enum) {
+    never,
     void,
     int,
     float,
@@ -138,6 +139,10 @@ pub const Type = union(enum) {
         return self.is(.int) and other.is(.float);
     }
 
+    pub fn getChildIfOptional(self: *const Type) ?*const Type {
+        return if (self.is(.optional)) self.optional else null;
+    }
+
     pub fn hash(self: Type, hasher: anytype) void {
         const asBytes = std.mem.asBytes;
 
@@ -154,7 +159,7 @@ pub const Type = union(enum) {
         hasher.update(asBytes(&@intFromEnum(self)));
 
         switch (self) {
-            .void, .int, .float, .bool, .str, .null => {},
+            .never, .void, .int, .float, .bool, .str, .null => {},
             .array => |ty| ty.child.hash(hasher),
             .function => |ty| {
                 if (ty.loc) |loc| {
@@ -194,7 +199,7 @@ pub const Type = union(enum) {
         var writer = res.writer(allocator);
 
         switch (self.*) {
-            .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
+            .never, .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
                 writer.writeAll("[]") catch oom();
                 writer.writeAll(ty.child.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
@@ -242,7 +247,8 @@ pub const TypeInterner = struct {
     interned: AutoHashMapUnmanaged(u64, *Type) = .{},
     cache: Cache,
 
-    pub const Cache = CreateCache(&.{ .int, .float, .bool, .str, .null, .void });
+    const CacheList: []const Type = &.{ .never, .int, .float, .bool, .str, .null, .void };
+    pub const Cache = CreateCache(CacheList);
 
     pub fn init(allocator: Allocator) TypeInterner {
         return .{ .arena = std.heap.ArenaAllocator.init(allocator), .cache = undefined };
@@ -282,6 +288,14 @@ pub const TypeInterner = struct {
                 }
             }
         }
+    }
+
+    pub fn getCached(self: *const TypeInterner, comptime ty: Type) *const Type {
+        if (!@hasField(Cache, @tagName(ty))) {
+            @compileError("Trying to get a non-cached type in interner");
+        }
+
+        return @field(self.cache, @tagName(ty));
     }
 
     // TODO: use getOrPut

@@ -326,6 +326,8 @@ const Compiler = struct {
             .cast => |data| self.cast(data),
             .default_value => unreachable,
             .discard => self.discard(),
+            .extractor => self.extractor(),
+            // .extractor => unreachable,
             .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.compileFn(data),
@@ -720,9 +722,11 @@ const Compiler = struct {
         const line = self.getLineNumber();
 
         // Condition
+        const is_extractor = self.at().* == .extractor;
         try self.compileInstr();
+
         const then_jump = self.emitJump(.jump_false, line);
-        // Pops the condition, no longer needed
+        // Pops the condition
         self.writeOp(.pop, line);
 
         // Then body
@@ -737,6 +741,9 @@ const Compiler = struct {
 
         // If we go in the else branch, we pop the condition too
         self.writeOp(.pop, line);
+        // If the condition was an extractor, the variable tested against `null` is still on
+        // top of stack so we have to remove it (see `extractor` function)
+        if (is_extractor) self.writeOp(.pop, line);
 
         // We insert a jump in the then body to be able to jump over the else branch
         // Otherwise, we just patch the then_jump
@@ -747,6 +754,16 @@ const Compiler = struct {
         }
 
         try self.patchJump(else_jump);
+    }
+
+    fn extractor(self: *Self) Error!void {
+        const line = self.getLineNumber();
+        try self.compileInstr();
+
+        // In case of an extractor, we don't replace top of stack with the bool result of
+        // comparison because if it's true, it's gonna be popped and so last value on stack
+        // will be the one extracted, it acts as if we just declared the value in scope
+        self.writeOp(.ne_null_push, line);
     }
 
     // TODO: protect the casts

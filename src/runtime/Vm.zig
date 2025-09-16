@@ -378,6 +378,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),
             .ne_null => self.stack.push(Value.makeBool(self.stack.pop() != .null)),
+            .ne_null_push => self.stack.push(Value.makeBool(self.stack.peek(0) != .null)),
             .ne_str => self.stack.push(Value.makeBool(self.stack.pop().obj.as(Obj.String) != self.stack.pop().obj.as(Obj.String))),
             .neg_float => self.stack.peekRef(0).float *= -1,
             .neg_int => self.stack.peekRef(0).int *= -1,

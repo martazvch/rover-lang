@@ -106,6 +106,7 @@ pub const OpCode = enum(u8) {
     ne_float,
     ne_int,
     ne_null,
+    ne_null_push,
     ne_str,
     neg_float,
     neg_int,
