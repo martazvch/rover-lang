@@ -1,0 +1,39 @@
+fn add() -> int {
+    if true do 1 else 5
+}
+
+fn add1() -> int {
+    if false { 1 } else { 5 }
+}
+
+fn add2() -> int {
+    var trash = if true do return 1 else 5
+    trash
+}
+
+fn add3() -> int {
+    var trash = if true do 1 else return 5
+    trash
+}
+
+fn add4() -> int {
+    if true do return 1 else return 5
+}
+
+fn add5() -> int {
+    return if true do 1 else 5
+}
+
+fn add6() -> int {
+    return if true do return 1 else 5
+}
+
+fn add7() -> int {
+    return if true do 1 else return 5
+}
+
+fn add8() -> int {
+    return if true do return 1 else return 5
+}
+
+fn main() {}

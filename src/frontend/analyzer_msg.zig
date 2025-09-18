@@ -36,7 +36,6 @@ pub const AnalyzerMsg = union(enum) {
     invalid_comparison: struct { found1: []const u8, found2: []const u8 },
     invalid_logical: struct { found: []const u8 },
     invalid_unary: struct { found: []const u8 },
-    implicit_cast: struct { side: []const u8, type: []const u8 },
     missing_symbol_in_module: struct { symbol: []const u8, module: []const u8 },
     missing_else_clause: struct { if_type: []const u8 },
     missing_field_struct_literal: struct { name: []const u8 },
@@ -115,9 +114,8 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => |e| writer.print("invalid comparison between types '{s}' and '{s}'", .{ e.found1, e.found1 }),
             .invalid_logical => writer.writeAll("logical operators must be used with booleans"),
             .invalid_unary => writer.writeAll("invalid unary operation"),
-            .implicit_cast => writer.writeAll("implicit cast, expressions have different types"),
             .missing_symbol_in_module => |e| writer.print("no symbol named '{s}' in module '{s}'", .{ e.symbol, e.module }),
-            .missing_else_clause => writer.writeAll("'if' may be missing in 'else' clause"),
+            .missing_else_clause => writer.writeAll("'if' is missing an 'else' clause"),
             .missing_field_struct_literal => |e| writer.print("missing field '{s}' in structure literal", .{e.name}),
             .missing_file_in_module => |e| writer.print("module doesn't contain file '{s}'", .{e.file}),
             .missing_function_param => |e| writer.print("missing argument '{s}'", .{e.name}),
@@ -179,7 +177,6 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => writer.writeAll("expressions have different types"),
             .invalid_logical => |e| writer.print("this expression resolves to a '{s}'", .{e.found}),
             .invalid_unary, .non_bool_cond => writer.writeAll("expression is not a boolean type"),
-            .implicit_cast => writer.writeAll("this is implicitly casted"),
             .missing_symbol_in_module => writer.writeAll("this symbol is unknown"),
             .missing_else_clause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .missing_field_struct_literal => writer.writeAll("non-exhaustive structure literal"),
@@ -256,7 +253,6 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => writer.writeAll("expressions must have the same type when compared"),
             .invalid_logical => writer.writeAll("modify the logic to operate on booleans"),
             .invalid_unary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
-            .implicit_cast => |e| writer.print("explicitly cast {s} to '{s}'", .{ e.side, e.type }),
             .missing_symbol_in_module => writer.writeAll("refer to module's source code or documentation to ge the list of available symbols"),
             .missing_else_clause => writer.writeAll("add an 'else' block that evaluate to the expected type"),
             .missing_field_struct_literal => writer.writeAll(
@@ -286,7 +282,7 @@ pub const AnalyzerMsg = union(enum) {
             .too_many_locals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
             .too_many_fn_args => writer.writeAll("refer to the function's definition to correct the call"),
             .too_many_types => writer.writeAll("it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code"),
-            .type_mismatch => writer.writeAll("refer to variable's definition to assign the correct type"),
+            .type_mismatch => writer.writeAll("refer to definition to return the correct type"),
             .undeclared_field_access => writer.writeAll("refer to structure's definition to see available fields or modify it"),
             .undeclared_type => writer.writeAll("consider declaring or importing the type before use"),
             .undeclared_var => writer.writeAll("consider declaring or importing the variable before use"),
@@ -302,9 +298,5 @@ pub const AnalyzerMsg = union(enum) {
             .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
         };
-    }
-
-    pub fn implicitCast(side: []const u8, typ: []const u8) Self {
-        return .{ .implicit_cast = .{ .side = side, .type = typ } };
     }
 };

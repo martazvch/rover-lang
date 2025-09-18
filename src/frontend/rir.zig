@@ -127,7 +127,16 @@ pub const Instruction = struct {
         incr_rc_then: bool,
         incr_rc_else: bool,
 
-        pub const Cast = enum(u2) { then, @"else", both, none };
+        pub const Cast = enum(u2) {
+            then,
+            @"else",
+            both,
+            none,
+
+            pub fn addSide(self: *Cast, side: Cast) void {
+                self.* = if (self.* == .none) side else .both;
+            }
+        };
     };
     pub const LoadSymbol = struct {
         module_index: ?usize,
