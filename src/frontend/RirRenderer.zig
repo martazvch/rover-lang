@@ -17,12 +17,11 @@ const Token = @import("Lexer.zig").Token;
 const Labels = struct { depth: usize, msg: []const u8 };
 
 allocator: Allocator,
-instrs: []const Instruction.Data,
 interner: *const Interner,
+instrs: []const Instruction.Data,
 indent_level: u8,
 tree: ArrayList(u8),
 writer: std.ArrayList(u8).Writer,
-instr_idx: usize,
 
 const indent_size: u8 = 4;
 const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -33,11 +32,10 @@ const Self = @This();
 pub fn init(allocator: Allocator, instrs: []const Instruction.Data, interner: *const Interner) Self {
     return .{
         .allocator = allocator,
-        .instrs = instrs,
         .interner = interner,
+        .instrs = instrs,
         .tree = .empty,
         .writer = undefined,
-        .instr_idx = 0,
         .indent_level = 0,
     };
 }
@@ -46,74 +44,85 @@ fn indent(self: *Self) void {
     self.tree.appendSlice(self.allocator, Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
 }
 
-pub fn renderIr(self: *Self, file_name: []const u8) Error![]const u8 {
+pub fn renderIr(self: *Self, file_name: []const u8, roots: []const usize) Error![]const u8 {
     self.writer = self.tree.writer(self.allocator);
     // TODO: remove the comment
     try self.writer.print("//-- {s} --\n", .{file_name});
 
-    while (self.instr_idx < self.instrs.len) {
-        self.parseInstr();
+    // while (self.instr_idx < self.instrs.len) {
+    //     self.parseInstr();
+    // }
+    // try self.writer.writeAll("\n");
+
+    for (roots) |root| {
+        self.parseInstr(root);
     }
+
     try self.writer.writeAll("\n");
 
     return self.tree.items;
 }
 
-fn at(self: *const Self) *const Instruction.Data {
-    return &self.instrs[self.instr_idx];
-}
+// fn at(self: *const Self) *const Instruction.Data {
+//     return &self.instrs[self.instr_idx];
+// }
 
-fn eof(self: *const Self) bool {
-    return self.instr_idx == self.instrs.len;
-}
+// fn eof(self: *const Self) bool {
+//     return self.instr_idx == self.instrs.len;
+// }
 
-fn next(self: *Self) Instruction.Data {
-    defer self.instr_idx += 1;
-    return self.instrs[self.instr_idx];
-}
+// fn next(self: *Self) Instruction.Data {
+//     defer self.instr_idx += 1;
+//     return self.instrs[self.instr_idx];
+// }
 
-fn parseInstr(self: *Self) void {
-    switch (self.next()) {
-        .array => |*data| self.array(data),
-        .array_access => self.arrayAccess(1, false, false),
-        .array_access_chain => |*data| self.arrayAccess(data.depth, false, false),
-        .assignment => |*data| self.assignment(data),
+fn parseInstr(self: *Self, instr: rir.Index) void {
+    switch (self.instrs[instr]) {
+        // .array => |*data| self.array(data),
+        // .array_access => self.arrayAccess(1, false, false),
+        // .array_access_chain => |*data| self.arrayAccess(data.depth, false, false),
+        // .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
-        .bound_method => |data| self.boundMethod(data),
+        .box => |data| self.indexInstr("Box", data),
+        // .bound_method => |data| self.boundMethod(data),
         .call => |*data| self.fnCall(data),
-        .capture => |*data| self.capture(data),
-        .cast => |data| self.cast(data),
-        .discard => self.discard(),
-        .extractor => self.extractor(),
-        .field => |*data| self.getField(data, false),
+        // .capture => |*data| self.capture(data),
+        // .cast => |data| self.cast(data),
+        .cast_to_float => |index| self.indexInstr("Cast to float", index),
+        // .discard => self.discard(),
+        // .extractor => self.extractor(),
+        // .field => |*data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
-        .@"if" => |*data| self.ifInstr(data),
+        // .@"if" => |*data| self.ifInstr(data),
         .int => |data| self.intInstr(data),
         .load_symbol => |*data| self.loadSymbol(data),
-        .multiple_var_decl => |data| self.multipleVarDecl(data),
-        .name => unreachable,
+        // .multiple_var_decl => |data| self.multipleVarDecl(data),
+        // .name => unreachable,
         .null => self.indentAndAppendSlice("[Null]"),
-        .pop => self.indentAndAppendSlice("[Pop]"),
-        .print => {
-            self.indentAndAppendSlice("[Print]");
-            self.indent_level += 1;
-            defer self.indent_level -= 1;
-            self.parseInstr();
-        },
-        .@"return" => |*data| self.returnInstr(data),
+        .pop => |index| self.indexInstr("Pop", index),
+        .print => |index| self.indexInstr("Print", index),
+        // .@"return" => |*data| self.returnInstr(data),
         .string => |data| self.stringInstr(data),
-        .struct_decl => |*data| self.structDecl(data),
-        .default_value => unreachable,
-        .struct_literal => |*data| self.structLiteral(data),
-        .value => unreachable,
+        // .struct_decl => |*data| self.structDecl(data),
+        // .default_value => unreachable,
+        // .struct_literal => |*data| self.structLiteral(data),
+        // .value => unreachable,
         .unary => |*data| self.unary(data),
-        .var_decl => |*data| self.varDecl(data),
-        .@"while" => self.whileInstr(),
+        .unbox => |index| self.indexInstr("Unbox", index),
+        // .var_decl => |*data| self.varDecl(data),
+        // .@"while" => self.whileInstr(),
     }
+}
+
+fn indexInstr(self: *Self, name: []const u8, index: rir.Index) void {
+    self.indentAndPrintSlice("[{s}]", .{name});
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    self.parseInstr(index);
 }
 
 fn array(self: *Self, data: *const Instruction.Array) void {
@@ -196,11 +205,11 @@ fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void 
 }
 
 fn binop(self: *Self, data: *const Instruction.Binop) void {
-    self.indentAndPrintSlice("[Binop type: {t}, cast: {t}]", .{ data.op, data.cast });
+    self.indentAndPrintSlice("[Binop type: {t}]", .{data.op});
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.parseInstr();
-    self.parseInstr();
+    self.parseInstr(data.lhs);
+    self.parseInstr(data.rhs);
 }
 
 fn block(self: *Self, data: *const Instruction.Block) void {
@@ -208,8 +217,8 @@ fn block(self: *Self, data: *const Instruction.Block) void {
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    for (0..data.length) |_| {
-        self.parseInstr();
+    for (data.instrs) |instr| {
+        self.parseInstr(instr);
     }
 }
 
@@ -227,9 +236,9 @@ fn boundMethod(self: *Self, field_index: usize) void {
     self.parseInstr();
 }
 
-fn cast(self: *Self, typ: Type) void {
-    self.indentAndPrintSlice("[Cast to {t}]", .{typ});
-}
+// fn cast(self: *Self, typ: Type) void {
+//     self.indentAndPrintSlice("[Cast to {t}]", .{typ});
+// }
 
 fn discard(self: *Self) void {
     self.indentAndAppendSlice("[Discard]");
@@ -250,43 +259,45 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}]", .{data.arity});
+    self.indentAndAppendSlice("[Fn call]");
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    // Variable
-    self.parseInstr();
+    self.parseInstr(data.callee);
 
-    if (data.arity > 0) {
+    if (data.args.len > 0) {
         self.indentAndAppendSlice("- args:");
 
-        var last: usize = 0;
-        for (0..data.arity) |_| {
-            switch (self.next()) {
-                .value => |param_data| {
-                    if (param_data.cast) {
-                        self.indentAndAppendSlice("[Cast next value to float]");
-                    }
-                    if (param_data.box) {
-                        self.indentAndAppendSlice("[Box next value]");
-                    }
-                    const save = self.instr_idx;
-                    self.instr_idx = param_data.value_instr;
-                    self.parseInstr();
-                    last = @max(last, self.instr_idx);
-
-                    self.instr_idx = save;
-                },
-                .default_value => {},
-                else => |eee| {
-                    std.log.debug("Found: {any}", .{eee});
-                    unreachable;
-                },
-            }
+        for (data.args) |arg| {
+            self.parseInstr(arg);
         }
+        // var last: usize = 0;
+        // for (0..data.arity) |_| {
+        //     switch (self.next()) {
+        //         .value => |param_data| {
+        //             if (param_data.cast) {
+        //                 self.indentAndAppendSlice("[Cast next value to float]");
+        //             }
+        //             if (param_data.box) {
+        //                 self.indentAndAppendSlice("[Box next value]");
+        //             }
+        //             const save = self.instr_idx;
+        //             self.instr_idx = param_data.value_instr;
+        //             self.parseInstr();
+        //             last = @max(last, self.instr_idx);
+        //
+        //             self.instr_idx = save;
+        //         },
+        //         .default_value => {},
+        //         else => |eee| {
+        //             std.log.debug("Found: {any}", .{eee});
+        //             unreachable;
+        //         },
+        //     }
+        // }
 
-        if (last > self.instr_idx) self.instr_idx = last;
+        // if (last > self.instr_idx) self.instr_idx = last;
     }
 }
 
@@ -325,28 +336,28 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     defer self.indent_level -= 1;
 
     if (data.default_params > 0) {
-        self.indentAndAppendSlice("- default params");
-        for (0..data.default_params) |_| {
-            self.parseInstr();
-        }
-
-        if (data.body_len > 0) {
-            self.indentAndAppendSlice("- body");
-        }
+        // self.indentAndAppendSlice("- default params");
+        // for (0..data.default_params) |_| {
+        //     self.parseInstr();
+        // }
+        //
+        // if (data.body_len > 0) {
+        //     self.indentAndAppendSlice("- body");
+        // }
     }
 
-    for (0..data.body_len) |_| {
-        self.parseInstr();
+    for (data.body) |instr| {
+        self.parseInstr(instr);
     }
 
-    if (data.cast) self.parseInstr();
+    // if (data.cast) self.parseInstr();
 
-    if (data.captures_count > 0) {
-        self.indentAndAppendSlice("- captures");
-        for (0..data.captures_count) |_| {
-            self.parseInstr();
-        }
-    }
+    // if (data.captures_count > 0) {
+    //     self.indentAndAppendSlice("- captures");
+    //     for (0..data.captures_count) |_| {
+    //         self.parseInstr();
+    //     }
+    // }
 }
 
 fn identifier(self: *Self, data: *const Instruction.Variable) void {
@@ -469,7 +480,7 @@ fn unary(self: *Self, data: *const Instruction.Unary) void {
     self.indentAndPrintSlice("[Unary {s}]", .{@tagName(data.op)});
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.parseInstr();
+    self.parseInstr(data.instr);
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {

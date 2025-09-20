@@ -445,7 +445,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
             },
             .str_cat => self.strConcat(),
-            .str_mul => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
+            .str_mul => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .struct_lit => {
                 const arity = frame.readByte();
                 var instance = self.stack.peekRef(arity).obj.structLiteral(self);

@@ -4,53 +4,59 @@ pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
 
+pub const Index = usize;
+
 pub const Instruction = struct {
     data: Data,
     offset: usize,
 
     pub const Data = union(enum) {
-        array: Array,
-        array_access,
-        array_access_chain: ArrayAccessChain,
-        assignment: Assignment,
+        // array: Array,
+        // array_access,
+        // array_access_chain: ArrayAccessChain,
+        // assignment: Assignment,
         binop: Binop,
         block: Block,
         bool: bool,
-        bound_method: usize,
+        box: Index,
+        // bound_method: usize,
         call: Call,
-        capture: Capture,
-        cast: Type,
-        discard,
-        extractor,
-        field: Field,
+        // capture: Capture,
+        // cast: Type,
+        cast_to_float: Index,
+        // discard,
+        // extractor,
+        // field: Field,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
-        @"if": If,
+        // @"if": If,
         int: i64,
         load_symbol: LoadSymbol,
-        multiple_var_decl: usize,
-        name: usize,
+        // multiple_var_decl: usize,
+        // name: usize,
         null,
-        pop,
-        print,
-        @"return": Return,
+        pop: Index,
+        print: Index,
+        // @"return": Return,
         string: usize,
-        struct_decl: StructDecl,
-        default_value: usize,
-        struct_literal: StructLiteral,
+        // struct_decl: StructDecl,
+        // default_value: usize,
+        // struct_literal: StructLiteral,
         unary: Unary,
-        value: Value,
-        var_decl: VarDecl,
-        @"while",
+        unbox: Index,
+        // value: Value,
+        // var_decl: VarDecl,
+        // @"while",
     };
 
     pub const Binop = struct {
-        cast: Side = .none,
+        lhs: Index,
+        rhs: Index,
         op: Op,
 
-        pub const Side = enum(u2) { lhs, rhs, none };
-        pub const Op = enum(u6) {
+        // pub const Side = enum(u2) { lhs, rhs, none };
+        pub const Op = enum {
             add_float,
             add_int,
             add_str,
@@ -101,14 +107,20 @@ pub const Instruction = struct {
         /// Increment assigned value reference count
         incr_rc: bool,
     };
-    pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, implicit_first: bool };
+    pub const Block = struct {
+        instrs: []const Index,
+        pop_count: u8,
+        is_expr: bool,
+    };
+    // pub const Call = struct { arity: u8, implicit_first: bool };
+    pub const Call = struct { callee: Index, args: []const Index, implicit_first: bool };
     pub const Capture = struct { index: usize, is_local: bool };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
         cast: bool,
-        body_len: u64,
+        // body_len: u64,
+        body: []const Index,
         default_params: u8,
         captures_count: usize,
         return_kind: ReturnKind,
@@ -154,6 +166,7 @@ pub const Instruction = struct {
     pub const Unary = struct {
         op: Op,
         typ: Type,
+        instr: Index,
 
         pub const Op = enum { minus, bang };
     };
@@ -168,6 +181,6 @@ pub const Instruction = struct {
     pub const Variable = struct {
         index: u64,
         scope: Scope,
-        unbox: bool,
+        // unbox: bool,
     };
 };
