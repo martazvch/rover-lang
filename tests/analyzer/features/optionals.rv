@@ -1,7 +1,9 @@
 fn main() {
+    // Declaration
     var a: ?int = 8
     var b: ?float = null
 
+    // Comparison to null
     if b == null { }
     if b != null { }
 }

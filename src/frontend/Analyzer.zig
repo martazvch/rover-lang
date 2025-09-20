@@ -1954,6 +1954,8 @@ const TypeCoherence = struct { type: *const Type, cast: bool = false };
 /// Checks for `void` values, array inference, cast and function type generation
 /// The goal is to see if the two types are equivalent and if so, make the transformations needed
 fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_cast: bool, span: Span) Error!TypeCoherence {
+    if (decl == value) return .{ .type = decl, .cast = false };
+
     if (value.is(.null)) {
         return if (decl.is(.optional))
             .{ .type = decl, .cast = false }
@@ -1966,36 +1968,41 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, emit_
     if (value.is(.never)) return .{ .type = decl, .cast = false };
 
     // If we don't assign an optional, extract the chgild type from declaration
-    var local_decl = if (decl.is(.optional) and !value.is(.optional)) decl.optional else decl;
+    var current_decl = if (decl.is(.optional)) decl.optional else decl;
     // Then if it's the same, return it
-    if (local_decl == value) return .{ .type = decl, .cast = false };
+    if (current_decl == value) return .{ .type = decl, .cast = false };
 
     check: {
         if (value.is(.array)) {
-            return self.checkArrayType(local_decl, value, span) catch |e| switch (e) {
+            return self.checkArrayType(current_decl, value, span) catch |e| switch (e) {
                 error.mismatch => break :check,
                 else => |narrowed| return narrowed,
             };
         } else if (value.is(.function)) {
-            return self.checkFunctionEq(local_decl, value) catch break :check;
+            return self.checkFunctionEq(current_decl, value) catch break :check;
         }
-
-        var cast = false;
 
         // TODO: proper error handling
         if (value.is(.module)) @panic("Can't use modules in expressions");
 
-        if (self.isVoid(local_decl)) {
-            local_decl = value;
-        } else if (local_decl != value) {
+        var cast = false;
+
+        if (self.isVoid(current_decl)) {
+            current_decl = value;
+        } else if (current_decl != value) {
             // One case in wich we can coerce, int -> float
-            if (value.canCastTo(local_decl)) {
+            if (value.canCastTo(current_decl)) {
                 cast = true;
                 if (emit_cast) self.makeInstruction(.{ .cast = .float }, span.start, .add);
             } else break :check;
         }
 
-        return .{ .type = local_decl, .cast = cast };
+        // We wrap again the non-optional
+        if (decl.is(.optional)) {
+            current_decl = self.ti.intern(.{ .optional = current_decl });
+        }
+
+        return .{ .type = current_decl, .cast = cast };
     }
 
     return self.err(
