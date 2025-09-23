@@ -26,15 +26,38 @@ pub const Type = union(enum) {
     pub const Array = struct {
         child: *const Type,
 
-        pub fn getDepthAndChild(self: *const Array) struct { usize, *const Type } {
-            var depth: usize = 1;
+        pub fn depth(self: *const Array) usize {
+            var res: usize = 1;
             var child = self.child;
 
-            while (child.* == .array) : (depth += 1) {
+            while (child.* == .array) : (res += 1) {
                 child = child.array.child;
             }
 
-            return .{ depth, child };
+            return res;
+        }
+
+        pub fn getChildAt(self: *const Array, at: usize) ?*const Type {
+            var dep: usize = 0;
+            var child = self.child;
+
+            while (child.* == .array) : (dep += 1) {
+                child = child.array.child;
+                if (dep == at) return child;
+            }
+
+            return null;
+        }
+
+        pub fn getDepthAndChild(self: *const Array) struct { usize, *const Type } {
+            var dep: usize = 1;
+            var child = self.child;
+
+            while (child.* == .array) : (dep += 1) {
+                child = child.array.child;
+            }
+
+            return .{ dep, child };
         }
     };
 
@@ -96,7 +119,7 @@ pub const Type = union(enum) {
         loc: ?Loc,
         functions: AutoArrayHashMapUnmanaged(InternerIdx, *const Type),
         fields: AutoArrayHashMapUnmanaged(InternerIdx, Field),
-        defaults: usize,
+        // defaults: usize,
 
         pub const Field = struct {
             type: *const Type,

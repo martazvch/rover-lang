@@ -11,26 +11,27 @@ pub const Instruction = struct {
     offset: usize,
 
     pub const Data = union(enum) {
-        // array: Array,
-        // array_access,
+        array: Array,
+        array_access: ArrayAccess,
         // array_access_chain: ArrayAccessChain,
-        // assignment: Assignment,
+        assignment: Assignment,
         binop: Binop,
         block: Block,
         bool: bool,
         box: Index,
-        // bound_method: usize,
+        bound_method: BoundMethod,
         call: Call,
         // capture: Capture,
         // cast: Type,
         cast_to_float: Index,
-        // discard,
+        discard: Index,
         // extractor,
-        // field: Field,
+        field: Field,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
         // @"if": If,
+        incr_rc: Index,
         int: i64,
         load_symbol: LoadSymbol,
         // multiple_var_decl: usize,
@@ -38,18 +39,19 @@ pub const Instruction = struct {
         null,
         pop: Index,
         print: Index,
-        // @"return": Return,
+        @"return": Return,
         string: usize,
-        // struct_decl: StructDecl,
+        struct_decl: StructDecl,
         // default_value: usize,
         // struct_literal: StructLiteral,
         unary: Unary,
         unbox: Index,
         // value: Value,
-        // var_decl: VarDecl,
+        var_decl: VarDecl,
         // @"while",
     };
 
+    pub const ArrayAccess = struct { array: Index, indicies: []const Index };
     pub const Binop = struct {
         lhs: Index,
         rhs: Index,
@@ -91,27 +93,31 @@ pub const Instruction = struct {
     };
 
     pub const Array = struct {
-        elems: []const Elem,
-
-        pub const Elem = struct { cast: bool, incr_rc: bool };
+        values: []const Index,
+        // elems: []const Elem,
+        //
+        // pub const Elem = struct { cast: bool, incr_rc: bool };
     };
     // TODO: see if cow/rc actually used
-    pub const ArrayAccessChain = struct { depth: usize };
+    // pub const ArrayAccessChain = struct { depth: usize };
     pub const Assignment = struct {
-        /// Casts to float the value before assignment
-        cast: bool,
+        assigne: Index,
+        value: Index,
+        // Casts to float the value before assignment
+        // cast: bool,
         /// When the assigne is a heap allocated object, we check if there are shallow copy
         /// of it before mutation. If so, check the reference count and perform a deep copy if
         /// it is referenced
         cow: bool,
-        /// Increment assigned value reference count
-        incr_rc: bool,
+        // /// Increment assigned value reference count
+        // incr_rc: bool,
     };
     pub const Block = struct {
         instrs: []const Index,
         pop_count: u8,
         is_expr: bool,
     };
+    pub const BoundMethod = struct { structure: Index, index: usize };
     // pub const Call = struct { arity: u8, implicit_first: bool };
     pub const Call = struct { callee: Index, args: []const Index, implicit_first: bool };
     pub const Capture = struct { index: usize, is_local: bool };
@@ -128,6 +134,7 @@ pub const Instruction = struct {
         pub const Kind = union(enum) { closure, symbol: usize };
     };
     pub const Field = struct {
+        structure: Index,
         index: usize,
         kind: Kind,
 
@@ -154,8 +161,15 @@ pub const Instruction = struct {
         module_index: ?usize,
         symbol_index: u8,
     };
-    pub const Return = struct { value: bool, cast: bool };
-    pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
+    pub const Return = struct { value: ?Index };
+    pub const StructDecl = struct {
+        // Interner index
+        name: usize,
+        index: usize,
+        fields_count: usize,
+        default_fields: []const Index,
+        functions: []const Index,
+    };
     pub const StructLiteral = struct { fields_count: u8 };
     pub const Value = struct {
         value_instr: usize,
@@ -172,11 +186,12 @@ pub const Instruction = struct {
     };
     pub const VarDecl = struct {
         box: bool,
-        cast: bool,
+        // cast: bool,
         variable: Variable,
-        has_value: bool,
-        /// Increment reference count of value
-        incr_rc: bool,
+        // has_value: bool,
+        value: ?Index,
+        // Increment reference count of value
+        // incr_rc: bool,
     };
     pub const Variable = struct {
         index: u64,

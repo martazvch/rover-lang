@@ -71,7 +71,8 @@ pub fn wrapPreviousInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruc
 }
 
 pub fn wrapInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data), index: usize) usize {
-    if (instr != .pop and instr != .cast_to_float and instr != .print and instr != .box and instr != .unbox) {
+    // TODO: just check payload type and if it's a single index, can be wrapped
+    if (instr != .pop and instr != .cast_to_float and instr != .print and instr != .box and instr != .unbox and instr != .incr_rc and instr != .discard) {
         @compileError("Can only wrap pop instructions");
     }
 
