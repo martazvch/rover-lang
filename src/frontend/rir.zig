@@ -5,6 +5,7 @@ pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
 
 pub const Index = usize;
+pub const IndexVoid = @import("std").math.maxInt(Index);
 
 pub const Instruction = struct {
     data: Data,
@@ -25,12 +26,12 @@ pub const Instruction = struct {
         // cast: Type,
         cast_to_float: Index,
         discard: Index,
-        // extractor,
+        extractor: Index,
         field: Field,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
-        // @"if": If,
+        @"if": If,
         incr_rc: Index,
         int: i64,
         load_symbol: LoadSymbol,
@@ -43,12 +44,14 @@ pub const Instruction = struct {
         string: usize,
         struct_decl: StructDecl,
         // default_value: usize,
-        // struct_literal: StructLiteral,
+        struct_literal: StructLiteral,
         unary: Unary,
         unbox: Index,
         // value: Value,
         var_decl: VarDecl,
-        // @"while",
+        @"while": While,
+
+        noop, // Used only by 'use' statements as they don't produce any instructions
     };
 
     pub const ArrayAccess = struct { array: Index, indicies: []const Index };
@@ -120,18 +123,19 @@ pub const Instruction = struct {
     pub const BoundMethod = struct { structure: Index, index: usize };
     // pub const Call = struct { arity: u8, implicit_first: bool };
     pub const Call = struct { callee: Index, args: []const Index, implicit_first: bool };
-    pub const Capture = struct { index: usize, is_local: bool };
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
-        cast: bool,
+        // cast: bool,
         // body_len: u64,
         body: []const Index,
-        default_params: u8,
-        captures_count: usize,
+        defaults: []const Index,
+        // captures_count: usize,
+        captures: []const Capture,
         return_kind: ReturnKind,
 
         pub const Kind = union(enum) { closure, symbol: usize };
+        pub const Capture = struct { index: usize, local: bool };
     };
     pub const Field = struct {
         structure: Index,
@@ -141,21 +145,24 @@ pub const Instruction = struct {
         pub const Kind = enum { method, field, static_method, symbol };
     };
     pub const If = struct {
-        cast: Cast,
-        has_else: bool,
-        incr_rc_then: bool,
-        incr_rc_else: bool,
+        cond: Index,
+        then: Index,
+        @"else": ?Index,
+        // cast: Cast,
+        // has_else: bool,
+        // incr_rc_then: bool,
+        // incr_rc_else: bool,
 
-        pub const Cast = enum(u2) {
-            then,
-            @"else",
-            both,
-            none,
-
-            pub fn addSide(self: *Cast, side: Cast) void {
-                self.* = if (self.* == .none) side else .both;
-            }
-        };
+        // pub const Cast = enum(u2) {
+        //     then,
+        //     @"else",
+        //     both,
+        //     none,
+        //
+        //     pub fn addSide(self: *Cast, side: Cast) void {
+        //         self.* = if (self.* == .none) side else .both;
+        //     }
+        // };
     };
     pub const LoadSymbol = struct {
         module_index: ?usize,
@@ -170,13 +177,14 @@ pub const Instruction = struct {
         default_fields: []const Index,
         functions: []const Index,
     };
-    pub const StructLiteral = struct { fields_count: u8 };
-    pub const Value = struct {
-        value_instr: usize,
-        cast: bool,
-        box: bool,
-        incr_rc: bool,
-    };
+    // pub const StructLiteral = struct { fields_count: u8 };
+    pub const StructLiteral = struct { structure: Index, values: []const Index };
+    // pub const Value = struct {
+    //     value_instr: usize,
+    //     cast: bool,
+    //     box: bool,
+    //     incr_rc: bool,
+    // };
     pub const Unary = struct {
         op: Op,
         typ: Type,
@@ -198,4 +206,5 @@ pub const Instruction = struct {
         scope: Scope,
         // unbox: bool,
     };
+    pub const While = struct { cond: Index, body: Index };
 };

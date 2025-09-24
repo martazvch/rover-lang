@@ -38,9 +38,10 @@ pub const Type = union(enum) {
         }
 
         pub fn getChildAt(self: *const Array, at: usize) ?*const Type {
-            var dep: usize = 0;
             var child = self.child;
+            if (at == 0) return child;
 
+            var dep: usize = 1;
             while (child.* == .array) : (dep += 1) {
                 child = child.array.child;
                 if (dep == at) return child;
@@ -141,6 +142,10 @@ pub const Type = union(enum) {
 
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
+    }
+
+    pub fn as(self: *const Type, comptime tag: std.meta.Tag(Type)) ?@FieldType(Type, @tagName(tag)) {
+        return if (self.is(tag)) @field(self, @tagName(tag)) else null;
     }
 
     pub fn isNumeric(self: *const Type) bool {

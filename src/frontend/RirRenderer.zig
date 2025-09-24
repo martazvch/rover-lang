@@ -93,12 +93,12 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         // .cast => |data| self.cast(data),
         .cast_to_float => |index| self.indexInstr("Cast to float", index),
         .discard => |index| self.indexInstr("Discard", index),
-        // .extractor => self.extractor(),
+        .extractor => |index| self.indexInstr("Extractor", index),
         .field => |*data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
-        // .@"if" => |*data| self.ifInstr(data),
+        .@"if" => |*data| self.ifInstr(data),
         .int => |data| self.intInstr(data),
         .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
@@ -111,12 +111,14 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
         // .default_value => unreachable,
-        // .struct_literal => |*data| self.structLiteral(data),
+        .struct_literal => |*data| self.structLiteral(data),
         // .value => unreachable,
         .unary => |*data| self.unary(data),
         .unbox => |index| self.indexInstr("Unbox", index),
         .var_decl => |*data| self.varDecl(data),
-        // .@"while" => self.whileInstr(),
+        .@"while" => |data| self.whileInstr(data),
+
+        .noop => {},
     }
 }
 
@@ -302,7 +304,7 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
 }
 
 fn capture(self: *Self, data: *const Instruction.Capture) void {
-    self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.is_local });
+    self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.local });
 }
 
 fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {
@@ -335,19 +337,28 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    if (data.default_params > 0) {
-        // self.indentAndAppendSlice("- default params");
-        // for (0..data.default_params) |_| {
-        //     self.parseInstr();
-        // }
-        //
+    if (data.defaults.len > 0) {
+        self.indentAndAppendSlice("- default params");
+        for (data.defaults) |def| {
+            self.parseInstr(def);
+        }
+
         // if (data.body_len > 0) {
         //     self.indentAndAppendSlice("- body");
         // }
     }
 
+    self.indentAndAppendSlice("- body");
     for (data.body) |instr| {
         self.parseInstr(instr);
+    }
+
+    if (data.captures.len > 0) {
+        self.indentAndAppendSlice("- captures");
+        for (data.captures) |capt| {
+            // self.parseInstr(capt);
+            self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ capt.index, capt.local });
+        }
     }
 
     // if (data.cast) self.parseInstr();
@@ -367,27 +378,29 @@ fn identifier(self: *Self, data: *const Instruction.Variable) void {
 }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
-    self.indentAndPrintSlice("[If cast: {t}, has else: {}{s}{s}]", .{
-        data.cast,
-        data.has_else,
-        if (data.incr_rc_then) ", incr ref count then" else "",
-        if (data.incr_rc_else) ", incr ref count else" else "",
-    });
+    // self.indentAndPrintSlice("[If cast: {t}, has else: {}{s}{s}]", .{
+    //     data.cast,
+    //     data.has_else,
+    //     if (data.incr_rc_then) ", incr ref count then" else "",
+    //     if (data.incr_rc_else) ", incr ref count else" else "",
+    // });
+
+    self.indentAndAppendSlice("[If]");
 
     self.indentAndAppendSlice("- condition:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.cond);
     self.indent_level -= 1;
 
     self.indentAndAppendSlice("- then:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.then);
     self.indent_level -= 1;
 
-    if (data.has_else) {
+    if (data.@"else") |instr| {
         self.indentAndAppendSlice("- else:");
         self.indent_level += 1;
-        self.parseInstr();
+        self.parseInstr(instr);
         self.indent_level -= 1;
     }
 }
@@ -450,31 +463,36 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     defer self.indent_level -= 1;
     // Variable containing type
     self.indentAndAppendSlice("- structure");
-    self.parseInstr();
+    self.parseInstr(data.structure);
 
-    if (data.fields_count > 0) {
-        self.indentAndAppendSlice("- args");
-        var last: usize = 0;
-
-        for (0..data.fields_count) |_| {
-            switch (self.next()) {
-                .value => |value_data| {
-                    const save = self.instr_idx;
-                    self.instr_idx = value_data.value_instr;
-                    self.parseInstr();
-                    if (value_data.cast) self.indentAndAppendSlice("[Cast to float]");
-                    self.checkInrcRc(value_data.incr_rc);
-
-                    last = @max(last, self.instr_idx);
-                    self.instr_idx = save;
-                },
-                .default_value => {},
-                else => {},
-            }
-        }
-
-        if (last > self.instr_idx) self.instr_idx = last;
+    self.indentAndAppendSlice("- args");
+    for (data.values) |val| {
+        self.parseInstr(val);
     }
+
+    // if (data.fields_count > -1) {
+    //     self.indentAndAppendSlice("- args");
+    //     var last: usize = 0;
+    //
+    //     for (0..data.fields_count) |_| {
+    //         switch (self.next()) {
+    //             .value => |value_data| {
+    //                 const save = self.instr_idx;
+    //                 self.instr_idx = value_data.value_instr;
+    //                 self.parseInstr();
+    //                 if (value_data.cast) self.indentAndAppendSlice("[Cast to float]");
+    //                 self.checkInrcRc(value_data.incr_rc);
+    //
+    //                 last = @max(last, self.instr_idx);
+    //                 self.instr_idx = save;
+    //             },
+    //             .default_value => {},
+    //             else => {},
+    //         }
+    //     }
+    //
+    //     if (last > self.instr_idx) self.instr_idx = last;
+    // }
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {
@@ -498,16 +516,16 @@ fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
     // if (data.cast) self.parseInstr();
 }
 
-fn whileInstr(self: *Self) void {
+fn whileInstr(self: *Self, data: Instruction.While) void {
     self.indentAndAppendSlice("[While]");
-    self.instr_idx += 1;
+    // self.instr_idx += 1;
     self.indentAndAppendSlice("- condition:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.cond);
     self.indent_level -= 1;
     self.indentAndAppendSlice("- body:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.body);
     self.indent_level -= 1;
 }
 
