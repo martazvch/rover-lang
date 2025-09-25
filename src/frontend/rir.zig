@@ -35,7 +35,7 @@ pub const Instruction = struct {
         incr_rc: Index,
         int: i64,
         load_symbol: LoadSymbol,
-        // multiple_var_decl: usize,
+        multiple_var_decl: MultiVarDecl,
         // name: usize,
         null,
         pop: Index,
@@ -122,7 +122,10 @@ pub const Instruction = struct {
     };
     pub const BoundMethod = struct { structure: Index, index: usize };
     // pub const Call = struct { arity: u8, implicit_first: bool };
-    pub const Call = struct { callee: Index, args: []const Index, implicit_first: bool };
+
+    pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool };
+    pub const Arg = union(enum) { instr: Index, default: usize };
+
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
@@ -168,6 +171,7 @@ pub const Instruction = struct {
         module_index: ?usize,
         symbol_index: u8,
     };
+    pub const MultiVarDecl = struct { decls: []const Index };
     pub const Return = struct { value: ?Index };
     pub const StructDecl = struct {
         // Interner index
@@ -178,7 +182,10 @@ pub const Instruction = struct {
         functions: []const Index,
     };
     // pub const StructLiteral = struct { fields_count: u8 };
-    pub const StructLiteral = struct { structure: Index, values: []const Index };
+    pub const StructLiteral = struct {
+        structure: Index,
+        values: []const Arg,
+    };
     // pub const Value = struct {
     //     value_instr: usize,
     //     cast: bool,

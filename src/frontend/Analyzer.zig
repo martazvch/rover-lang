@@ -472,7 +472,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
 fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: Span, ctx: *Context) Error![]const InstrIndex {
     var had_err = false;
     var final_type: *const Type = self.ti.getCached(.void);
-    var deadcode_start: usize = 0;
+    var deadcode = false;
     // var deadcode_count: usize = 0;
     const len = body.len;
 
@@ -481,10 +481,10 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
 
     for (body, 0..) |*n, i| {
         // If previous statement returned, it's only dead code now
-        if (deadcode_start == 0 and ctx.returns) {
+        if (!deadcode and ctx.returns) {
             self.warn(.dead_code, self.ast.getSpan(n));
             // deadcode_start = self.ir_builder.count();
-            deadcode_start = self.irb.count();
+            deadcode = true;
             // deadcode_count = len - i;
         }
 
@@ -495,7 +495,9 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         };
 
         // If we analyze dead code, we don't update the type
-        if (deadcode_start == 0) final_type = res.type;
+        if (deadcode) continue;
+
+        final_type = res.type;
 
         // If last expression produced a value and that it wasn't the last one we pop it
         if (i != len - 1 and !self.isVoid(final_type)) {
@@ -507,10 +509,11 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
     }
 
     // We strip unused instructions to not compile them
-    if (deadcode_start > 0) {
-        // self.ir_builder.instructions.shrinkRetainingCapacity(deadcode_start);
-        self.irb.instructions.shrinkRetainingCapacity(deadcode_start);
-    }
+    // if (deadcode_start > 0) {
+    // self.ir_builder.instructions.shrinkRetainingCapacity(deadcode_start);
+    // self.irb.instructions.shrinkRetainingCapacity(deadcode_start);
+    //     instrs.shrinkRetainingCapacity(deadcode_start);
+    // }
 
     if (!had_err and final_type != fn_type.return_type) {
         const err_span = if (body.len > 0) self.ast.getSpan(body[body.len - 1]) else name_span;
@@ -719,13 +722,17 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) StmtResu
 fn multiVarDecl(self: *Self, node: *const Ast.MultiVarDecl, ctx: *Context) StmtResult {
     // self.makeInstruction(.{ .multiple_var_decl = node.decls.len }, self.ast.getSpan(node).start, .add);
 
-    var final: usize = 0;
+    var decls: ArrayList(InstrIndex) = .empty;
+    decls.ensureTotalCapacity(self.allocator, node.decls.len) catch oom();
 
     for (node.decls) |*n| {
-        final = try self.varDeclaration(n, ctx);
+        decls.appendAssumeCapacity(try self.varDeclaration(n, ctx));
     }
 
-    return final;
+    return self.irb.addInstr(
+        .{ .multiple_var_decl = .{ .decls = decls.toOwnedSlice(self.allocator) catch oom() } },
+        self.ast.getSpan(node).start,
+    );
 }
 
 fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResult {
@@ -832,6 +839,8 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
                     self.ast.getSpan(f.name),
                 );
             }
+
+            default_fields.append(self.allocator, res.instr) catch oom();
         }
         // else self.ti.getCached(.void);
 
@@ -1118,6 +1127,9 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
                     error.NonNumLsh => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(lhs.type_infos.type) } }, lhs_span),
                     error.NonNumRhs => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(rhs.type_infos.type) } }, rhs_span),
                 };
+
+                if (lhs_type.is(.float) or rhs_type.is(.float)) self.warn(.float_equal, self.ast.getSpan(expr));
+
                 break :instr .{ getArithmeticOp(expr.op, ty), lhs_instr, rhs_instr, self.ti.getCached(.bool) };
             },
             .equal_equal, .bang_equal => {
@@ -1129,6 +1141,8 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
                         self.ast.getSpan(expr),
                     ),
                 };
+
+                if (lhs_type.is(.float) or rhs_type.is(.float)) self.warn(.float_equal, self.ast.getSpan(expr));
 
                 break :instr .{ getComparisonOp(expr.op, ty), lhs_instr, rhs_instr, self.ti.getCached(.bool) };
             },
@@ -1440,22 +1454,33 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     // return .newType(callee.function.return_type);
 }
 
-fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error![]const InstrIndex {
+fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error![]const Instruction.Arg {
     var proto = ty.proto(self.allocator);
     const param_count = proto.count();
     const params = ty.params.values()[@intFromBool(ty.kind == .method)..];
 
     if (args.len > param_count) return self.err(.{ .too_many_fn_args = .{ .expect = param_count, .found = args.len } }, err_span);
 
-    var instrs: ArrayList(InstrIndex) = .empty;
-    instrs.ensureTotalCapacity(self.allocator, param_count) catch oom();
+    // var instrs: ArrayList(InstrIndex) = .empty;
+    // instrs.ensureTotalCapacity(self.allocator, param_count) catch oom();
 
+    var instrs = self.allocator.alloc(Instruction.Arg, params.len) catch oom();
     var proto_values = proto.values();
+
+    var default_count: usize = 0;
+    for (proto_values, 0..) |val, i| {
+        if (val.default) {
+            instrs[i] = .{ .default = default_count };
+            default_count += 1;
+        } else {
+            instrs[i] = undefined;
+        }
+    }
 
     for (args, 0..) |arg, i| {
         var param_info: *const Type.Function.Parameter = undefined;
 
-        const value, const value_span = value: {
+        const value, const index, const value_span = value: {
             switch (arg.*) {
                 .named_arg => |na| {
                     if (ty.kind == .bound) return self.err(.named_arg_in_bounded, self.ast.getSpan(na.name));
@@ -1476,14 +1501,14 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
 
                     const value_type = try self.analyzeExpr(na.value, ctx);
 
-                    break :value .{ value_type, self.ast.getSpan(na.value) };
+                    break :value .{ value_type, gop.index, self.ast.getSpan(na.value) };
                 },
                 else => {
                     const value_type = try self.analyzeExpr(arg, ctx);
                     param_info = &params[i];
                     proto_values[i].done = true;
 
-                    break :value .{ value_type, self.ast.getSpan(arg) };
+                    break :value .{ value_type, i, self.ast.getSpan(arg) };
                 },
             }
         };
@@ -1493,7 +1518,8 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
         var instr = if (coerce.cast) self.irb.wrapPreviousInstr(.cast_to_float) else value.instr;
         instr = if (param_info.captured) self.irb.wrapPreviousInstr(.box) else instr;
 
-        instrs.appendAssumeCapacity(instr);
+        // instrs.appendAssumeCapacity(instr);
+        instrs[index] = .{ .instr = instr };
     }
 
     // Check if any missing non-default parameter
@@ -1505,7 +1531,7 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
     }
 
     // return if (err_count < self.errs.items.len) error.Err else .{ .arity = param_count, .default_count = default_count };
-    return if (err_count < self.errs.items.len) error.Err else instrs.toOwnedSlice(self.allocator) catch oom();
+    return if (err_count < self.errs.items.len) error.Err else instrs;
 }
 
 const IdentRes = struct {
@@ -1923,8 +1949,17 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
     // var values: ArrayList(InstrIndex) = .empty;
     // values.ensureTotalCapacity(self.allocator, struct_type.fields.count()) catch oom();
 
-    var values = self.allocator.alloc(InstrIndex, struct_type.fields.count()) catch oom();
-    @memset(values, 0);
+    var values = self.allocator.alloc(Instruction.Arg, struct_type.fields.count()) catch oom();
+
+    var default_count: usize = 0;
+    for (struct_type.fields.values(), 0..) |f, i| {
+        if (f.default) {
+            values[i] = .{ .default = default_count };
+            default_count += 1;
+        } else {
+            values[i] = undefined;
+        }
+    }
 
     for (expr.fields) |*fv| {
         const field_span = self.ast.getSpan(fv.name);
@@ -1966,7 +2001,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
 
         // values.appendAssumeCapacity(res.instr);
         // values.items[field_index] = res.instr;
-        values[field_index] = res.instr;
+        values[field_index] = .{ .instr = res.instr };
 
         // self.makeInstruction(
         //     .{ .value = .{ .value_instr = value_instr, .cast = coercion.cast, .box = false, .incr_rc = res.heap_ref } },
@@ -2000,6 +2035,9 @@ fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
     const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, span);
     const ty = fn_type.function.return_type;
 
+    errdefer ctx.returns = false;
+    defer ctx.returns = true;
+
     const exp = expr.expr orelse return .{
         .type_infos = .newType(self.ti.getCached(.void)),
         .instr = self.irb.addInstr(.{ .@"return" = .{ .value = null } }, span.start),
@@ -2016,7 +2054,7 @@ fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
         if (coerce.cast) value_res.instr = self.irb.wrapInstr(.cast_to_float, value_res.instr);
     }
 
-    ctx.returns = true;
+    // ctx.returns = true;
     return .{
         .type_infos = value_res.type_infos,
         .instr = self.irb.addInstr(.{ .@"return" = .{ .value = value_res.instr } }, span.start),

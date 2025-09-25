@@ -9,19 +9,24 @@
             - structure
             [Load symbol 0]
             - args
-            [Int 1]
             [Cast to float]
-            [Int 2]
+                [Int 1]
             [Cast to float]
+                [Int 2]
+            [Default field 0]
             [Bool true]
+            [Default field 1]
+            [Default field 2]
     [Structure literal]
         - structure
         [Load symbol 0]
         - args
-        [Int 3]
         [Cast to float]
-        [Int 99]
+            [Int 3]
         [Cast to float]
+            [Int 99]
         [Int 7]
         [Bool false]
+        [Default field 1]
+        [Default field 2]
     [Assignment index: 0, scope: local, cow]

@@ -19,45 +19,45 @@
             [Array]
                 [Int 6]
                 [Int 7]
-                [Fn call arity: 0]
+                [Fn call]
                     [Load symbol 1]
     [Print]
         [Array access]
-            - array
-            [Variable index: 0, scope: local]
             - index
             [Int 1]
-    [Print]
-        [Array access]
             - array
             [Variable index: 0, scope: local]
+    [Print]
+        [Array access]
             - index
             [Unary minus]
                 [Int 2]
+            - array
+            [Variable index: 0, scope: local]
     [Int 99]
     [Array assignment]
+        - index
+        [Fn call]
+            [Load symbol 1]
         - array
         [Variable index: 0, scope: local]
-        - index
-        [Fn call arity: 0]
-            [Load symbol 1]
     [Unary minus]
         [Int 9]
     [Array assignment]
+        - index
+        [Fn call]
+            [Load symbol 1]
         - array
         [Field access 0]
             [Variable index: 2, scope: local]
-        - index
-        [Fn call arity: 0]
-            [Load symbol 1]
     [Print]
         [Array access]
+            - index
+            [Fn call]
+                [Load symbol 1]
             - array
             [Field access 0]
                 [Variable index: 2, scope: local]
-            - index
-            [Fn call arity: 0]
-                [Load symbol 1]
     [Variable declaration index: 3, scope: local]
         [Array]
     [Variable declaration index: 4, scope: local]

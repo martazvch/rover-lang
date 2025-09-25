@@ -31,24 +31,24 @@
                 [Array]
                     [Int 6]
                     [Int 7]
-                    [Fn call arity: 0]
+                    [Fn call]
                         [Load symbol 1]
                 [Array]
                     [Int 8]
-                    [Binop type: add_int, cast: none]
+                    [Binop type: add_int]
                         [Int 9]
                         [Int 1]
                     [Int 11]
     [Print]
-        [Array chain access]
-            - indicies
+        [Array access]
+            - index
             [Int 2]
             [Int 1]
             - array
             [Variable index: 0, scope: local]
     [Print]
-        [Array chain access]
-            - indicies
+        [Array access]
+            - index
             [Unary minus]
                 [Int 1]
             [Unary minus]
@@ -57,9 +57,9 @@
             [Variable index: 0, scope: local]
 
     [Int 99]
-    [Array chain assignment]
-        - indicies
-        [Fn call arity: 0]
+    [Array assignment]
+        - index
+        [Fn call]
             [Load symbol 1]
         [Unary minus]
             [Int 1]
@@ -70,19 +70,19 @@
         [Int 1]
     [Array assignment]
         [Cow]
+        - index
+        [Fn call]
+            [Load symbol 1]
         - array
         [Field access 0]
             [Variable index: 2, scope: local]
-        - index
-        [Fn call arity: 0]
-            [Load symbol 1]
 
     [Unary minus]
         [Int 9]
-    [Array chain assignment]
-        - indicies
+    [Array assignment]
+        - index
         [Int 1]
-        [Fn call arity: 0]
+        [Fn call]
             [Load symbol 1]
         - array
         [Field access 0]
@@ -90,17 +90,17 @@
 
     [Print]
         [Array access]
+            - index
+            [Fn call]
+                [Load symbol 1]
             - array
             [Field access 0]
                 [Variable index: 2, scope: local]
-            - index
-            [Fn call arity: 0]
-                [Load symbol 1]
     [Print]
-        [Array chain access]
-            - indicies
+        [Array access]
+            - index
             [Int 1]
-            [Fn call arity: 0]
+            [Fn call]
                 [Load symbol 1]
             - array
             [Field access 0]

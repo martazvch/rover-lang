@@ -67,25 +67,26 @@
             - args
             [Array]
                 [Array]
-                    [Variable index: 0, scope: local]
-                    [Increment ref count]
-                    [Variable index: 1, scope: local]
-                    [Increment ref count]
+                    [Incr rc]
+                        [Variable index: 0, scope: local]
+                    [Incr rc]
+                        [Variable index: 1, scope: local]
                 [Array]
-                    [Variable index: 2, scope: local]
-                    [Increment ref count]
-                    [Variable index: 3, scope: local]
-                    [Increment ref count]
+                    [Incr rc]
+                        [Variable index: 2, scope: local]
+                    [Incr rc]
+                        [Variable index: 3, scope: local]
     [Variable declaration index: 5, scope: local]
         [Structure literal]
             - structure
             [Load symbol 2]
             - args
-            [Variable index: 4, scope: local]
-            [Increment ref count]
+            [Incr rc]
+                [Variable index: 4, scope: local]
+            [Default field 0]
     [Print]
-        [Array chain access]
-            - indicies
+        [Array access]
+            - index
             [Int 0]
             [Int 1]
             - array
@@ -94,8 +95,8 @@
                     [Variable index: 5, scope: local]
     [Print]
         [Field access 0]
-            [Array chain access]
-                - indicies
+            [Array access]
+                - index
                 [Int 0]
                 [Int 1]
                 - array
@@ -104,27 +105,27 @@
                         [Variable index: 5, scope: local]
     [Print]
         [Array access]
+            - index
+            [Int 0]
             - array
             [Field access 2]
-                [Array chain access]
-                    - indicies
+                [Array access]
+                    - index
                     [Int 0]
                     [Int 1]
                     - array
                     [Field access 0]
                         [Field access 0]
                             [Variable index: 5, scope: local]
-            - index
-            [Int 0]
     [Print]
-        [Array chain access]
-            - indicies
+        [Array access]
+            - index
             [Int 1]
             [Int 1]
             - array
             [Field access 2]
-                [Array chain access]
-                    - indicies
+                [Array access]
+                    - index
                     [Int 0]
                     [Int 1]
                     - array
@@ -136,15 +137,15 @@
         [Int 66]
     [Array assignment]
         [Cow]
+        - index
+        [Int 0]
         - array
         [Field access 2]
-            [Array chain access]
-                - indicies
+            [Array access]
+                - index
                 [Int 0]
                 [Int 1]
                 - array
                 [Field access 0]
                     [Field access 0]
                         [Variable index: 5, scope: local]
-        - index
-        [Int 0]

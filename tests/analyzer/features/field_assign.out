@@ -14,8 +14,8 @@
             [Load symbol 1]
             - args
             [String Tom]
-            [Variable index: 0, scope: local]
-            [Increment ref count]
+            [Incr rc]
+                [Variable index: 0, scope: local]
     [String Martin]
     [Field assignment]
         [Field access 0]

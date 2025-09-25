@@ -369,7 +369,7 @@ const Compiler = struct {
             .int => |data| self.intInstr(data),
             .incr_rc => |index| self.wrappedInstr(.incr_ref, index),
             .load_symbol => |*data| self.loadSymbol(data),
-            // .multiple_var_decl => |data| self.multipleVarDecl(data),
+            .multiple_var_decl => |*data| self.multipleVarDecl(data),
             // .name => unreachable,
             .null => self.nullInstr(),
             // .pop => self.writeOp(.pop, self.getLineNumber()),
@@ -420,49 +420,62 @@ const Compiler = struct {
         self.state.cow = prev;
 
         // self.writeOp(.array_get, line);
-        self.writeOp(.array_get);
-    }
-
-    fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain) Error!void {
-        const line = self.getLineNumber();
-        // Indicies
-        const prev = self.state.setAndGetPrev(.cow, false);
-        for (0..data.depth) |_| {
-            try self.compileInstr();
+        // TODO: protect the cast
+        if (data.indicies.len == 1) {
+            self.writeOp(.array_get);
+        } else {
+            self.writeOpAndByte(if (self.state.cow) .array_get_chain_cow else .array_get_chain, @intCast(data.indicies.len));
         }
-        self.state.cow = prev;
-
-        // Variable
-        try self.compileInstr();
-        // get_chain_cow is used when the chain is in the middle of assigne like: foo.bar[0][1].baz = 1
-        self.writeOpAndByte(if (self.state.cow) .array_get_chain_cow else .array_get_chain, @intCast(data.depth), line);
     }
 
-    fn arrayAssign(self: *Self, line: usize) Error!void {
+    // fn arrayAccessChain(self: *Self, data: *const Instruction.ArrayAccessChain) Error!void {
+    //     const line = self.getLineNumber();
+    //     // Indicies
+    //     const prev = self.state.setAndGetPrev(.cow, false);
+    //     for (0..data.depth) |_| {
+    //         try self.compileInstr();
+    //     }
+    //     self.state.cow = prev;
+    //
+    //     // Variable
+    //     try self.compileInstr();
+    //     // get_chain_cow is used when the chain is in the middle of assigne like: foo.bar[0][1].baz = 1
+    //     self.writeOpAndByte(if (self.state.cow) .array_get_chain_cow else .array_get_chain, @intCast(data.depth), line);
+    // }
+
+    fn arrayAssign(self: *Self, data: *const Instruction.ArrayAccess) Error!void {
         // Variable
         const prev = self.state.setAndGetPrev(.cow, true);
-        try self.compileInstr();
+        try self.compileInstr(data.array);
         self.state.cow = prev;
 
         // Index
-        try self.compileInstr();
-        self.writeOp(.array_set, line);
-    }
-
-    fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
-        // Indicies
-        for (0..data.depth) |_| {
-            try self.compileInstr();
+        for (data.indicies) |index| {
+            try self.compileInstr(index);
         }
-
-        // Variable
-        const prev = self.state.setAndGetPrev(.cow, true);
-        try self.compileInstr();
-        self.state.cow = prev;
-
+        // self.writeOp(.array_set, line);
         // TODO: protect the cast
-        self.writeOpAndByte(.array_set_chain, @intCast(data.depth), line);
+        if (data.indicies.len == 1) {
+            self.writeOp(.array_set);
+        } else {
+            self.writeOpAndByte(.array_set_chain, @intCast(data.indicies.len));
+        }
     }
+
+    // fn arrayAssignChain(self: *Self, data: *const Instruction.ArrayAccessChain, line: usize) Error!void {
+    //     // Indicies
+    //     for (0..data.depth) |_| {
+    //         try self.compileInstr();
+    //     }
+    //
+    //     // Variable
+    //     const prev = self.state.setAndGetPrev(.cow, true);
+    //     try self.compileInstr();
+    //     self.state.cow = prev;
+    //
+    //     // TODO: protect the cast
+    //     self.writeOpAndByte(.array_set_chain, @intCast(data.depth), line);
+    // }
 
     fn assignment(self: *Self, data: *const Instruction.Assignment) Error!void {
         // const line = self.getLineNumber();
@@ -479,12 +492,14 @@ const Compiler = struct {
 
         // TODO: no use of data.cow?
         // const variable_data = switch (self.next()) {
-        const variable_data = switch (self.manager.instr_data[data.assigne]) {
-            .identifier => |*variable| variable,
+        const variable_data, const unbox = switch (self.manager.instr_data[data.assigne]) {
+            .identifier => |*variable| .{ variable, false },
             // .array_access => return self.arrayAssign(line),
+            .array_access => |*arr_data| return self.arrayAssign(arr_data),
             // .array_access_chain => |*array_data| return self.arrayAssignChain(array_data, line),
             // .field => |*field_data| return self.fieldAssignment(field_data, line),
             .field => |*field_data| return self.fieldAssignment(field_data),
+            .unbox => |index| .{ &self.manager.instr_data[index].identifier, true },
             else => unreachable,
         };
 
@@ -494,8 +509,7 @@ const Compiler = struct {
             if (variable_data.scope == .global)
                 .set_global
             else if (variable_data.scope == .local)
-                // if (variable_data.unbox) .set_local_box else .set_local
-                .set_local
+                if (unbox) .set_local_box else .set_local
             else
                 unreachable,
             @intCast(variable_data.index),
@@ -680,9 +694,10 @@ const Compiler = struct {
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         // const line = self.getLineNumber();
         try self.compileInstr(data.callee);
-        for (data.args) |arg| {
-            try self.compileInstr(arg);
-        }
+        try self.compileArgs(data.args);
+        // for (data.args) |arg| {
+        //     try self.compileInstr(arg);
+        // }
         // try self.compileArgs(data.arity);
         // self.writeOpAndByte(.call, data.arity + @intFromBool(data.implicit_first), line);
         // TODO: protect cast
@@ -690,31 +705,33 @@ const Compiler = struct {
     }
 
     // fn compileArgs(self: *Self, arity: usize) Error!void {
-    //     const line = self.getLineNumber();
-    //     var last: usize = 0;
-    //
-    //     for (0..arity) |_| {
-    //         switch (self.next()) {
-    //             .value => |data| {
-    //                 const save = self.setInstrIndexGetPrev(data.value_instr);
-    //                 defer self.manager.instr_idx = save;
-    //                 try self.compileInstr();
-    //                 // Arguments may not be in the same order as the declaration, we could be
-    //                 // resolving the first value during the last iteration
-    //                 last = @max(last, self.manager.instr_idx);
-    //
-    //                 // TODO: maybe define an union, because it can't be several at the same time
-    //                 if (data.cast) self.writeOp(.cast_to_float, line);
-    //                 if (data.box) self.writeOp(.box, line);
-    //                 if (data.incr_rc) self.writeOp(.incr_ref, line);
-    //             },
-    //             .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), line),
-    //             else => unreachable,
-    //         }
-    //     }
-    //
-    //     if (last > self.manager.instr_idx) self.manager.instr_idx = last;
-    // }
+    fn compileArgs(self: *Self, args: []const Instruction.Arg) Error!void {
+        // const line = self.getLineNumber();
+        // var last: usize = 0;
+
+        // for (0..arity) |_| {
+        for (args) |arg| {
+            switch (arg) {
+                .default => |index| self.writeOpAndByte(.get_default, @intCast(index)),
+                .instr => |instr| {
+                    // const save = self.setInstrIndexGetPrev(data.value_instr);
+                    // defer self.manager.instr_idx = save;
+                    try self.compileInstr(instr);
+                    // Arguments may not be in the same order as the declaration, we could be
+                    // resolving the first value during the last iteration
+                    // last = @max(last, self.manager.instr_idx);
+                    //
+                    // TODO: maybe define an union, because it can't be several at the same time
+                    // if (data.cast) self.writeOp(.cast_to_float, line);
+                    // if (data.box) self.writeOp(.box, line);
+                    // if (data.incr_rc) self.writeOp(.incr_ref, line);
+                },
+                // .default_value => |idx| self.writeOpAndByte(.get_default, @intCast(idx), line),
+            }
+        }
+
+        // if (last > self.manager.instr_idx) self.manager.instr_idx = last;
+    }
 
     fn compileCallable(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
         // TODO: protect cast
@@ -856,9 +873,9 @@ const Compiler = struct {
         }
     }
 
-    fn multipleVarDecl(self: *Self, count: usize) Error!void {
-        for (0..count) |_| {
-            try self.compileInstr();
+    fn multipleVarDecl(self: *Self, data: *const Instruction.MultiVarDecl) Error!void {
+        for (data.decls) |decl| {
+            try self.compileInstr(decl);
         }
     }
 
@@ -943,10 +960,10 @@ const Compiler = struct {
         // Structure
         try self.compileInstr(data.structure);
 
-        // try self.compileArgs(data.fields_count);
-        for (data.values) |val| {
-            try self.compileInstr(val);
-        }
+        try self.compileArgs(data.values);
+        // for (data.values) |val| {
+        //     try self.compileInstr(val);
+        // }
         // self.writeOpAndByte(.struct_lit, @intCast(data.fields_count), line);
         // TODO: protect cast
         self.writeOpAndByte(.struct_lit, @intCast(data.values.len));
@@ -987,6 +1004,7 @@ const Compiler = struct {
             self.addGlobal(data.variable.index, .null_);
         } else if (data.box) {
             // self.writeOp(.box, line);
+            self.writeOp(.box);
         }
 
         // self.defineVariable(data.variable, line);

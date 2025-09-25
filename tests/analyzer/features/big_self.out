@@ -7,6 +7,8 @@
             - structure
             [Load symbol 0]
             - args
+            [Default field 0]
+            [Default field 1]
 [Structure declaration Bar]
     [Function declaration init, return kind: implicit_value]
         [Structure literal]

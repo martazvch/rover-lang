@@ -38,26 +38,26 @@ array_new index 3
 array_new index 2
 struct_lit index 1
 
+get_local index 0
 constant index 18, value 2
 constant index 19, value 1
-get_local index 0
 array_get_chain index 2
 print
 
+get_local index 0
 constant index 20, value 1
 neg_int
 constant index 21, value 2
 neg_int
-get_local index 0
 array_get_chain index 2
 print
 
 constant index 22, value 99
+get_local_cow index 0
 load_sym index 1, <function getIdx>
 call index 0
 constant index 23, value 1
 neg_int
-get_local_cow index 0
 array_set_chain index 2
 
 constant index 24, value 1
@@ -70,11 +70,11 @@ array_set
 
 constant index 25, value 9
 neg_int
+get_local_cow index 2
+get_field_cow index 0
 constant index 26, value 1
 load_sym index 1, <function getIdx>
 call index 0
-get_local_cow index 2
-get_field_cow index 0
 array_set_chain index 2
 
 get_local index 2
@@ -84,11 +84,11 @@ call index 0
 array_get
 print
 
+get_local index 2
+get_field index 0
 constant index 27, value 1
 load_sym index 1, <function getIdx>
 call index 0
-get_local index 2
-get_field index 0
 array_get_chain index 2
 print
 

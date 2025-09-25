@@ -15,8 +15,8 @@
             - args
             [Int 5]
             [String Tom]
-            [Variable index: 0, scope: local]
-            [Increment ref count]
+            [Incr rc]
+                [Variable index: 0, scope: local]
     [Print]
         [Field access 1]
             [Field access 2]

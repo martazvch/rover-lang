@@ -1,38 +1,38 @@
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
             [Block pop count: 0, is_expr: false]
-                [Return expr: false, cast: false]
+                [Return]
         - else:
             [Int 4]
     [Variable declaration index: 1, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool false]
         - then:
             [Int 5]
         - else:
-            [Return expr: false, cast: false]
+            [Return]
     [Function declaration func, return kind: explicit]
         [Print]
-            [If cast: none, has else: true]
+            [If]
             - condition:
                 [Bool true]
             - then:
                 [String str]
             - else:
-                [Return expr: true, cast: false]
+                [Return]
                     [Variable index: 0, scope: local]
         [Variable declaration index: 1, scope: local]
-            [If cast: none, has else: true]
+            [If]
             - condition:
                 [Bool true]
             - then:
-                [Return expr: true, cast: false]
-                    [Binop type: add_int, cast: none]
+                [Return]
+                    [Binop type: add_int]
                         [Variable index: 0, scope: local]
                         [Int 2]
             - else:
@@ -40,42 +40,42 @@
                     [Variable declaration index: 0, scope: local]
                         [Float 56.4]
                     [String champ]
-        [If cast: none, has else: false]
+        [If]
         - condition:
             [Bool true]
         - then:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 8]
-        [Return expr: true, cast: false]
-            [If cast: none, has else: true]
+        [Return]
+            [If]
             - condition:
                 [Bool true]
             - then:
                 [Block pop count: 0, is_expr: true]
-                    [If cast: none, has else: true]
+                    [If]
                     - condition:
                         [Bool true]
                     - then:
                         [Block pop count: 0, is_expr: true]
-                            [Return expr: true, cast: false]
+                            [Return]
                                 [Block pop count: 0, is_expr: true]
                                     [Int 1]
                     - else:
                         [Int 5]
             - else:
                 [Block pop count: 0, is_expr: true]
-                    [If cast: none, has else: true]
+                    [If]
                     - condition:
                         [Bool false]
                     - then:
                         [Block pop count: 0, is_expr: true]
-                            [Return expr: true, cast: false]
-                                [If cast: none, has else: true]
+                            [Return]
+                                [If]
                                 - condition:
                                     [Bool true]
                                 - then:
                                     [Block pop count: 0, is_expr: true]
-                                        [Return expr: true, cast: false]
+                                        [Return]
                                             [Int 4]
                                 - else:
                                     [Int 3]

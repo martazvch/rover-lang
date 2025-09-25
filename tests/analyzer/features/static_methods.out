@@ -16,32 +16,32 @@
                 [Variable index: 0, scope: local]
                 [Variable index: 1, scope: local]
     [Variable declaration index: 0, scope: local]
-        [Fn call arity: 1]
+        [Fn call]
             [Method access 0]
                 [Load symbol 0]
-            - args:
+            - args
             [Int 5]
     [Variable declaration index: 1, scope: local]
         [Method access 0]
             [Load symbol 0]
-    [Fn call arity: 1]
+    [Fn call]
         [Variable index: 1, scope: local]
-        - args:
+        - args
         [Int 65]
     [Assignment index: 0, scope: local, cow]
     [Variable declaration index: 2, scope: local]
-        [Fn call arity: 2]
+        [Fn call]
             [Method access 0]
                 [Load symbol 4]
-            - args:
+            - args
             [Int 12]
             [Int 99]
     [Variable declaration index: 3, scope: local]
         [Method access 0]
             [Load symbol 4]
-    [Fn call arity: 2]
+    [Fn call]
         [Variable index: 3, scope: local]
-        - args:
+        - args
         [Int 56]
         [Int 78]
     [Assignment index: 2, scope: local, cow]

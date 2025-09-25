@@ -102,7 +102,7 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .int => |data| self.intInstr(data),
         .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
-        // .multiple_var_decl => |data| self.multipleVarDecl(data),
+        .multiple_var_decl => |*data| self.multipleVarDecl(data),
         // .name => unreachable,
         .null => self.indentAndAppendSlice("[Null]"),
         .pop => |index| self.indexInstr("Pop", index),
@@ -179,16 +179,22 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     // self.checkInrcRc(data.incr_rc);
 
     // const variable_data = switch (self.next()) {
-    const variable_data = switch (self.instrs[data.assigne]) {
+    const variable_data, const unbox = switch (self.instrs[data.assigne]) {
         // .array_access => return self.arrayAccess(1, data.cow, true),
+        .array_access => |*arr_data| return self.arrayAccess(arr_data, data.cow, true),
         // .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, data.cow, true),
-        .identifier => |*variable| variable,
+        .identifier => |*variable| .{ variable, false },
         .field => |*member| return self.fieldAssignment(member, data.cow),
-        else => unreachable,
+        .unbox => |index| .{ &self.instrs[index].identifier, true },
+        else => |got| {
+            std.log.debug("Got: {any}", .{got});
+            unreachable;
+        },
     };
 
-    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}{s}]", .{
-        variable_data.index, @tagName(variable_data.scope), if (data.cow) ", cow" else "",
+    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}{s}{s}]", .{
+        variable_data.index,           @tagName(variable_data.scope),
+        if (data.cow) ", cow" else "", if (unbox) ", unbox" else "",
     });
 }
 
@@ -267,39 +273,52 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
     defer self.indent_level -= 1;
 
     self.parseInstr(data.callee);
+    self.argsList(data.args);
 
-    if (data.args.len > 0) {
-        self.indentAndAppendSlice("- args:");
+    // if (data.args.len > 0) {
+    //     self.indentAndAppendSlice("- args:");
+    //
+    //     for (data.args) |arg| {
+    //         self.parseInstr(arg);
+    //     }
+    // var last: usize = 0;
+    // for (0..data.arity) |_| {
+    //     switch (self.next()) {
+    //         .value => |param_data| {
+    //             if (param_data.cast) {
+    //                 self.indentAndAppendSlice("[Cast next value to float]");
+    //             }
+    //             if (param_data.box) {
+    //                 self.indentAndAppendSlice("[Box next value]");
+    //             }
+    //             const save = self.instr_idx;
+    //             self.instr_idx = param_data.value_instr;
+    //             self.parseInstr();
+    //             last = @max(last, self.instr_idx);
+    //
+    //             self.instr_idx = save;
+    //         },
+    //         .default_value => {},
+    //         else => |eee| {
+    //             std.log.debug("Found: {any}", .{eee});
+    //             unreachable;
+    //         },
+    //     }
+    // }
 
-        for (data.args) |arg| {
-            self.parseInstr(arg);
+    // if (last > self.instr_idx) self.instr_idx = last;
+    // }
+}
+
+fn argsList(self: *Self, args: []const Instruction.Arg) void {
+    if (args.len == 0) return;
+
+    self.indentAndAppendSlice("- args");
+    for (args) |arg| {
+        switch (arg) {
+            .default => |def| self.indentAndPrintSlice("[Default field {}]", .{def}),
+            .instr => |i| self.parseInstr(i),
         }
-        // var last: usize = 0;
-        // for (0..data.arity) |_| {
-        //     switch (self.next()) {
-        //         .value => |param_data| {
-        //             if (param_data.cast) {
-        //                 self.indentAndAppendSlice("[Cast next value to float]");
-        //             }
-        //             if (param_data.box) {
-        //                 self.indentAndAppendSlice("[Box next value]");
-        //             }
-        //             const save = self.instr_idx;
-        //             self.instr_idx = param_data.value_instr;
-        //             self.parseInstr();
-        //             last = @max(last, self.instr_idx);
-        //
-        //             self.instr_idx = save;
-        //         },
-        //         .default_value => {},
-        //         else => |eee| {
-        //             std.log.debug("Found: {any}", .{eee});
-        //             unreachable;
-        //         },
-        //     }
-        // }
-
-        // if (last > self.instr_idx) self.instr_idx = last;
     }
 }
 
@@ -343,12 +362,10 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
             self.parseInstr(def);
         }
 
-        // if (data.body_len > 0) {
-        //     self.indentAndAppendSlice("- body");
-        // }
+        // Add a separation between the two category, otherwise not needed
+        if (data.body.len > 0) self.indentAndAppendSlice("- body");
     }
 
-    self.indentAndAppendSlice("- body");
     for (data.body) |instr| {
         self.parseInstr(instr);
     }
@@ -417,9 +434,9 @@ fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
     }
 }
 
-fn multipleVarDecl(self: *Self, count: usize) void {
-    for (0..count) |_| {
-        self.parseInstr();
+fn multipleVarDecl(self: *Self, data: *const Instruction.MultiVarDecl) void {
+    for (data.decls) |decl| {
+        self.parseInstr(decl);
     }
 }
 
@@ -464,11 +481,7 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     // Variable containing type
     self.indentAndAppendSlice("- structure");
     self.parseInstr(data.structure);
-
-    self.indentAndAppendSlice("- args");
-    for (data.values) |val| {
-        self.parseInstr(val);
-    }
+    self.argsList(data.values);
 
     // if (data.fields_count > -1) {
     //     self.indentAndAppendSlice("- args");
