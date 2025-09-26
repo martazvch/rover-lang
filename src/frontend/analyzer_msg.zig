@@ -29,7 +29,6 @@ pub const AnalyzerMsg = union(enum) {
     duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
     float_equal,
-    incompatible_if_type: struct { found1: []const u8, found2: []const u8 },
     invalid_arithmetic: struct { found: []const u8 },
     invalid_assign_target,
     invalid_call_target,
@@ -76,7 +75,6 @@ pub const AnalyzerMsg = union(enum) {
     void_array,
     void_discard,
     void_param,
-    void_print,
     void_value,
 
     const Self = @This();
@@ -107,7 +105,6 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
             .already_declared_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
-            .incompatible_if_type => |e| writer.print("'if' and 'else' have incompatible types, found '{s}'  and '{s}'", .{ e.found1, e.found2 }),
             .invalid_arithmetic => |e| writer.print("invalid arithmetic operation on type '{s}'", .{e.found}),
             .invalid_assign_target => writer.writeAll("invalid assignment target"),
             .invalid_call_target => writer.writeAll("invalid call target, can only call functions and methods"),
@@ -149,7 +146,6 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
             .void_discard => writer.writeAll("trying to discard a non value"),
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
-            .void_print => writer.writeAll("try to print a 'void' value"),
             .void_value => writer.writeAll("value is of type 'void'"),
         };
     }
@@ -170,7 +166,7 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
-            .incompatible_if_type, .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
+            .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
             .invalid_call_target => writer.writeAll("this is neither a function neither a method"),
@@ -203,7 +199,6 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("declared here"),
             .void_discard => writer.writeAll("this expression produces no value"),
             .void_param => writer.writeAll("this parameter"),
-            .void_print => writer.writeAll("this expression is of type 'void'"),
             .void_value => writer.writeAll("this expression produces no value"),
         };
     }
@@ -246,7 +241,6 @@ pub const AnalyzerMsg = union(enum) {
                 \\   value - other < 1e-6  instead of  value < other
                 ,
             ),
-            .incompatible_if_type => writer.writeAll("make both paths return the same type"),
             .invalid_arithmetic => writer.writeAll("expect a numeric type"),
             .invalid_assign_target => writer.writeAll("can only assign to variables"),
             .invalid_call_target => writer.writeAll("change call target to a function or a method or remove the call"),
@@ -295,7 +289,6 @@ pub const AnalyzerMsg = union(enum) {
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .void_array => writer.writeAll("use any other type to declare an array"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
-            .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
         };
     }

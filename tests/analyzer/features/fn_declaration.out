@@ -5,7 +5,7 @@
         [Function declaration another_bool, return kind: implicit_value]
             [Variable declaration index: 2, scope: local]
                 [Int 5]
-            [Binop type: or, cast: none]
+            [Binop type: or]
                 [Bool true]
                 [Bool false]
     [Function declaration add1, return kind: implicit_void]
@@ -14,13 +14,13 @@
                 [Variable index: 0, scope: local]
             [String yes]
         [Discard]
-            [Fn call arity: 1]
+            [Fn call]
                 [Load symbol 4]
-                - args:
+                - args
                 [Int 1]
 
 [Function declaration add1, return kind: explicit]
-    [Return expr: false, cast: false]
+    [Return]
 
 [Function declaration add2, return kind: implicit_value]
     [Int 5]
@@ -28,7 +28,7 @@
 [Function declaration add3, return kind: implicit_void]
 
 [Function declaration add4, return kind: explicit]
-    [Return expr: true, cast: false]
+    [Return]
         [Int 5]
 
 [Function declaration default, return kind: implicit_void]
@@ -39,5 +39,5 @@
     [Bool false]
 
 [Function declaration castInt, return kind: implicit_value]
-    [Int 4]
     [Cast to float]
+        [Int 4]

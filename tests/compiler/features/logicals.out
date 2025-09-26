@@ -20,30 +20,28 @@ pop
 jump 26 -> 30
 pop
 
-push_null
 get_local index 0
-swap
+push_null
 eq_null
-jump_false 35 -> 42
+jump_false 34 -> 41
 pop
-jump 39 -> 43
+jump 38 -> 42
 pop
 
 get_local index 0
 push_null
 ne_null
-jump_false 47 -> 54
+jump_false 46 -> 53
 pop
-jump 51 -> 55
+jump 50 -> 54
 pop
 
-push_null
 get_local index 0
-swap
+push_null
 ne_null
-jump_false 60 -> 67
+jump_false 58 -> 65
 pop
-jump 64 -> 68
+jump 62 -> 66
 pop
 
 ret_naked

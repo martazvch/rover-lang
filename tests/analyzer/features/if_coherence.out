@@ -1,6 +1,6 @@
 [Function declaration main, return kind: implicit_void]
     [Variable declaration index: 0, scope: local]
-        [If cast: then, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -8,7 +8,7 @@
         - else:
             [Float 4.5]
     [Variable declaration index: 1, scope: local]
-        [If cast: else, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -16,7 +16,7 @@
         - else:
             [Int 4]
     [Variable declaration index: 2, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -24,16 +24,16 @@
         - else:
             [Int 4]
     [Variable declaration index: 3, scope: local]
-        [If cast: none, has else: true]
-        - condition:
-            [Bool true]
-        - then:
-            [Int 1]
-        - else:
-            [Int 4]
         [Cast to float]
+            [If]
+            - condition:
+                [Bool true]
+            - then:
+                [Int 1]
+            - else:
+                [Int 4]
     [Variable declaration index: 4, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -41,7 +41,7 @@
         - else:
             [Null]
     [Variable declaration index: 5, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -49,7 +49,7 @@
         - else:
             [Float 5.6]
     [Variable declaration index: 6, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -57,7 +57,7 @@
         - else:
             [Null]
     [Variable declaration index: 7, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:

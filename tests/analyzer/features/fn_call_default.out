@@ -1,6 +1,6 @@
 [Structure declaration Vec2]
     [Function declaration len, return kind: implicit_value]
-        [Binop type: add_int, cast: none]
+        [Binop type: add_int]
             [Field access 0]
                 [Variable index: 0, scope: local]
             [Field access 1]
@@ -50,37 +50,47 @@
     [Bool false]
     [Bool false]
 [Function declaration main, return kind: implicit_void]
-    [Fn call arity: 5]
+    [Fn call]
         [Load symbol 4]
-        - args:
+        - args
         [String abcd]
         [Int 8]
-    [Fn call arity: 5]
+        [Default field 1]
+        [Default field 2]
+        [Default field 3]
+    [Fn call]
         [Load symbol 4]
-        - args:
+        - args
         [String abcd]
         [Int 8]
+        [Default field 1]
+        [Default field 2]
         [Bool true]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0]
             - args
+            [Default field 0]
     [Print]
-        [Fn call arity: 1]
+        [Fn call]
             [Method access 0]
                 [Load symbol 0]
-            - args:
+            - args
+            [Default field 0]
     [Print]
-        [Fn call arity: 1]
+        [Fn call]
             [Load symbol 3]
-            - args:
+            - args
+            [Default field 0]
     [Print]
-        [Fn call arity: 1]
+        [Fn call]
             [Method access 1]
                 [Variable index: 0, scope: local]
-            - args:
+            - args
+            [Default field 0]
     [Print]
-        [Fn call arity: 1]
+        [Fn call]
             [Load symbol 5 of module 0]
-            - args:
+            - args
+            [Default field 0]

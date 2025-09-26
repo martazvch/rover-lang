@@ -43,12 +43,11 @@ pop
 
 constant index 14, value 2
 constant index 15, value foo
-swap
 str_mul
 pop
 
-constant index 16, value foo
-constant index 17, value 4
+constant index 16, value 4
+constant index 17, value foo
 str_mul
 pop
 

@@ -3,16 +3,16 @@
         [Int 8]
     [Variable declaration index: 1, scope: local]
         [Null]
-    [If cast: none, has else: false]
+    [If]
     - condition:
-        [Binop type: eq_null, cast: rhs]
+        [Binop type: eq_null]
             [Variable index: 1, scope: local]
             [Null]
     - then:
         [Block pop count: 0, is_expr: false]
-    [If cast: none, has else: false]
+    [If]
     - condition:
-        [Binop type: ne_null, cast: rhs]
+        [Binop type: ne_null]
             [Variable index: 1, scope: local]
             [Null]
     - then:

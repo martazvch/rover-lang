@@ -1,8 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 
-const Instruction = @import("rir.zig").Instruction;
+const rir = @import("rir.zig");
+const Instruction = rir.Instruction;
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
@@ -14,45 +16,40 @@ pub const Mode = union(enum) {
 
 allocator: Allocator,
 instructions: MultiArrayList(Instruction),
+roots: ArrayList(rir.Index),
 
 pub fn init(allocator: Allocator) Self {
-    return .{ .allocator = allocator, .instructions = .empty };
-}
-
-/// Reserves an empty slot and returns its index
-pub fn reserveInstr(self: *Self) usize {
-    return self.instructions.addOne(self.allocator) catch oom();
-}
-
-pub fn ensureUnusedSize(self: *Self, size: usize) void {
-    self.instructions.ensureUnusedCapacity(self.allocator, size) catch oom();
-}
-
-pub fn emit(self: *Self, instr: Instruction, mode: Mode) void {
-    switch (mode) {
-        .add => self.addInstr(instr),
-        .add_no_alloc => self.addInstrNoAlloc(instr),
-        .set_at => |idx| self.setInstr(idx, instr),
-    }
+    return .{ .allocator = allocator, .instructions = .empty, .roots = .empty };
 }
 
 pub fn count(self: *const Self) usize {
     return self.instructions.len;
 }
 
-/// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstr(self: *Self, instr: Instruction) void {
-    self.instructions.append(self.allocator, instr) catch oom();
+pub fn addInstr(self: *Self, instr_data: Instruction.Data, offset: usize) usize {
+    self.instructions.append(self.allocator, .{ .data = instr_data, .offset = offset }) catch oom();
+    return self.instructions.len - 1;
 }
 
-/// Adds a new instruction and add it's `start` field and returns its index.
-fn addInstrNoAlloc(self: *Self, instr: Instruction) void {
-    self.instructions.appendAssumeCapacity(instr);
+pub fn addRootInstr(self: *Self, index: rir.Index) void {
+    self.roots.append(self.allocator, index) catch oom();
 }
 
-/// Sets the instruction at the given idnex
-fn setInstr(self: *Self, index: usize, instr: Instruction) void {
-    self.instructions.set(index, instr);
+pub fn wrapPreviousInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data)) usize {
+    return self.wrapInstr(instr, self.instructions.len - 1);
+}
+
+pub fn wrapInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data), index: usize) usize {
+    if (@FieldType(Instruction.Data, @tagName(instr)) != rir.Index) {
+        @compileError("Can only wrap instructions that have a single instruction as a payload");
+    }
+
+    const prev_offset = self.instructions.items(.offset)[index];
+
+    const wrap = @unionInit(Instruction.Data, @tagName(instr), index);
+    self.instructions.append(self.allocator, .{ .data = wrap, .offset = prev_offset }) catch oom();
+
+    return self.instructions.len - 1;
 }
 
 /// Converts instructions offsets to line numbers

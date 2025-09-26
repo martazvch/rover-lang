@@ -18,7 +18,7 @@ pub fn NativeWrap(func: anytype) type {
         comptime func: @TypeOf(func) = func,
 
         pub fn call(ctx: *const anyopaque, stack: []const Value) Value {
-            const self = @as(*const @This(), @alignCast(@ptrCast(ctx)));
+            const self = @as(*const @This(), @ptrCast(@alignCast(ctx)));
             var args: ArgsType = undefined;
             const fields = @typeInfo(ArgsType).@"struct".fields;
 

@@ -1,7 +1,7 @@
 //-- math --
 [Structure declaration Vec2]
     [Function declaration len, return kind: implicit_value]
-        [Binop type: add_int, cast: none]
+        [Binop type: add_int]
             [Field access 0]
                 [Variable index: 0, scope: local]
             [Field access 1]
@@ -25,24 +25,24 @@
     [Variable index: 0, scope: local]
 
 [Function declaration main, return kind: implicit_void]
-    [Fn call arity: 0]
+    [Fn call]
         [Load symbol 2 of module 0]
     [Variable declaration index: 0, scope: local]
-        [Fn call arity: 2]
+        [Fn call]
             [Load symbol 3 of module 0]
-            - args:
+            - args
             [Int 1]
             [Int 2]
     [Variable declaration index: 1, scope: local]
         [Load symbol 2 of module 0]
-    [Fn call arity: 0]
+    [Fn call]
         [Variable index: 1, scope: local]
     [Variable declaration index: 2, scope: local]
         [Load symbol 3 of module 0]
     [Variable declaration index: 3, scope: local]
-        [Fn call arity: 2]
+        [Fn call]
             [Variable index: 2, scope: local]
-            - args:
+            - args
             [Int 6]
             [Int 89]
     [Print]

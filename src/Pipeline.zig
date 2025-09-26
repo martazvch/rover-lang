@@ -116,7 +116,8 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     }
     if (self.analyzer.errs.items.len > 0) {
         try reportAll(AnalyzerMsg, self.analyzer.errs.items, !options.test_mode, file_name, source);
-        self.instr_count = self.analyzer.ir_builder.count();
+        // self.instr_count = self.analyzer.ir_builder.count();
+        self.instr_count = self.analyzer.irb.count();
         return error.ExitOnPrint;
     }
     if (self.ctx.config.print_ir) {
@@ -136,14 +137,16 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     );
 
     const compiled_module = try compiler.compile(
-        self.instr_count,
-        self.analyzer.ir_builder.instructions.items(.data),
-        self.analyzer.ir_builder.computeLineFromOffsets(source),
+        // self.instr_count,
+        // self.analyzer.ir_builder.instructions.items(.data),
+        self.analyzer.irb.instructions.items(.data)[self.instr_count..],
+        self.analyzer.irb.roots.items[self.instr_count..],
+        self.analyzer.irb.computeLineFromOffsets(source)[self.instr_count..],
         self.analyzer.main,
         self.ctx.module_interner.compiled.count(),
     );
 
-    self.instr_count = self.analyzer.ir_builder.count();
+    self.instr_count = self.analyzer.irb.count();
     self.ctx.module_interner.add(path_interned, analyzed_module, compiled_module);
 
     return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)
@@ -176,8 +179,9 @@ fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *
 
     var rir_renderer = RirRenderer.init(
         allocator,
-        analyzer.ir_builder.instructions.items(.data)[start..],
+        // analyzer.ir_builder.instructions.items(.data)[start..],
+        analyzer.irb.instructions.items(.data)[start..],
         &self.ctx.interner,
     );
-    try stdout.writeAll(try rir_renderer.renderIr(file_name));
+    try stdout.writeAll(try rir_renderer.renderIr(file_name, self.analyzer.irb.roots.items[start..]));
 }

@@ -5,7 +5,7 @@
                 [Int 7]
             [Variable declaration index: 1, scope: local]
                 [Int 56]
-            [Binop type: sub_int, cast: none]
+            [Binop type: sub_int]
                 [Variable index: 0, scope: local]
                 [Int 5]
             [Assignment index: 1, scope: local]

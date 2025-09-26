@@ -162,14 +162,14 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .array_get_chain => {
                 const depth = frame.readByte();
-                var array = self.stack.peekRef(0).obj.as(Obj.Array);
+                var array = self.stack.peekRef(depth).obj.as(Obj.Array);
 
                 for (0..depth - 1) |i| {
-                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i + 1).int);
+                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i).int);
                     array = array.values.items[index].obj.as(Obj.Array);
                 }
 
-                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth).int);
+                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth - 1).int);
                 const value = array.values.items[index];
 
                 self.stack.peekRef(depth).* = value;
@@ -177,22 +177,23 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .array_get_chain_cow => {
                 const depth = frame.readByte();
-                var value = self.stack.peek(0);
+                var value = self.stack.peek(depth);
                 var array = value.obj.as(Obj.Array);
 
                 for (0..depth - 1) |i| {
-                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i + 1).int);
+                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i).int);
                     value = array.values.items[index];
                     value.obj = self.cow(value.obj);
                     array = value.obj.as(Obj.Array);
                 }
 
-                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth).int);
+                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth - 1).int);
                 array.values.items[index].obj = self.cow(array.values.items[index].obj);
 
                 self.stack.peekRef(depth).* = array.values.items[index];
                 self.stack.top -= depth;
             },
+            // PERF: don't pop, just decrement rsp (check all pops, maybe they aren't usefull at all)
             .array_set => {
                 const index = self.stack.pop().int;
                 const array = self.stack.pop().obj.as(Obj.Array);
@@ -204,16 +205,16 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .array_set_chain => {
                 // Array on top of stack already cowed
                 const depth = frame.readByte();
-                var array = self.stack.peekRef(0).obj.as(Obj.Array);
+                var array = self.stack.peekRef(depth).obj.as(Obj.Array);
 
                 for (0..depth - 1) |i| {
-                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i + 1).int);
+                    const index = checkArrayIndex(array.values.items.len, self.stack.peek(i).int);
                     var value = array.values.items[index];
                     value.obj = self.cow(value.obj);
                     array = value.obj.as(Obj.Array);
                 }
 
-                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth).int);
+                const index = checkArrayIndex(array.values.items.len, self.stack.peek(depth - 1).int);
                 array.values.items[index] = self.stack.peek(depth + 1);
                 self.stack.top -= depth + 2;
             },
@@ -445,9 +446,10 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
             },
             .str_cat => self.strConcat(),
-            .str_mul => self.strMul(self.stack.peekRef(1).obj.as(Obj.String), self.stack.peekRef(0).int),
+            .str_mul => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .struct_lit => {
                 const arity = frame.readByte();
+                // PERF: do we need a function call?
                 var instance = self.stack.peekRef(arity).obj.structLiteral(self);
 
                 for (0..arity) |i| {

@@ -1,5 +1,5 @@
 [Function declaration add, return kind: implicit_value]
-    [If cast: none, has else: true]
+    [If]
     - condition:
         [Bool true]
     - then:
@@ -7,7 +7,7 @@
     - else:
         [Int 5]
 [Function declaration add1, return kind: implicit_value]
-    [If cast: none, has else: true]
+    [If]
     - condition:
         [Bool false]
     - then:
@@ -18,39 +18,39 @@
             [Int 5]
 [Function declaration add2, return kind: implicit_value]
     [Variable declaration index: 0, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 1]
         - else:
             [Int 5]
     [Variable index: 0, scope: local]
 [Function declaration add3, return kind: implicit_value]
     [Variable declaration index: 0, scope: local]
-        [If cast: none, has else: true]
+        [If]
         - condition:
             [Bool true]
         - then:
             [Int 1]
         - else:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 5]
     [Variable index: 0, scope: local]
 [Function declaration add4, return kind: explicit]
-    [If cast: none, has else: true]
+    [If]
     - condition:
         [Bool true]
     - then:
-        [Return expr: true, cast: false]
+        [Return]
             [Int 1]
     - else:
-        [Return expr: true, cast: false]
+        [Return]
             [Int 5]
 [Function declaration add5, return kind: explicit]
-    [Return expr: true, cast: false]
-        [If cast: none, has else: true]
+    [Return]
+        [If]
         - condition:
             [Bool true]
         - then:
@@ -58,34 +58,34 @@
         - else:
             [Int 5]
 [Function declaration add6, return kind: explicit]
-    [Return expr: true, cast: false]
-        [If cast: none, has else: true]
+    [Return]
+        [If]
         - condition:
             [Bool true]
         - then:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 1]
         - else:
             [Int 5]
 [Function declaration add7, return kind: explicit]
-    [Return expr: true, cast: false]
-        [If cast: none, has else: true]
+    [Return]
+        [If]
         - condition:
             [Bool true]
         - then:
             [Int 1]
         - else:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 5]
 [Function declaration add8, return kind: explicit]
-    [Return expr: true, cast: false]
-        [If cast: none, has else: true]
+    [Return]
+        [If]
         - condition:
             [Bool true]
         - then:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 1]
         - else:
-            [Return expr: true, cast: false]
+            [Return]
                 [Int 5]
 [Function declaration main, return kind: implicit_void]

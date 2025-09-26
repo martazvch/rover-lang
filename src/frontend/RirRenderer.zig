@@ -17,12 +17,11 @@ const Token = @import("Lexer.zig").Token;
 const Labels = struct { depth: usize, msg: []const u8 };
 
 allocator: Allocator,
-instrs: []const Instruction.Data,
 interner: *const Interner,
+instrs: []const Instruction.Data,
 indent_level: u8,
 tree: ArrayList(u8),
 writer: std.ArrayList(u8).Writer,
-instr_idx: usize,
 
 const indent_size: u8 = 4;
 const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -33,11 +32,10 @@ const Self = @This();
 pub fn init(allocator: Allocator, instrs: []const Instruction.Data, interner: *const Interner) Self {
     return .{
         .allocator = allocator,
-        .instrs = instrs,
         .interner = interner,
+        .instrs = instrs,
         .tree = .empty,
         .writer = undefined,
-        .instr_idx = 0,
         .indent_level = 0,
     };
 }
@@ -46,74 +44,64 @@ fn indent(self: *Self) void {
     self.tree.appendSlice(self.allocator, Self.spaces[0 .. self.indent_level * Self.indent_size]) catch oom();
 }
 
-pub fn renderIr(self: *Self, file_name: []const u8) Error![]const u8 {
+pub fn renderIr(self: *Self, file_name: []const u8, roots: []const usize) Error![]const u8 {
     self.writer = self.tree.writer(self.allocator);
     // TODO: remove the comment
     try self.writer.print("//-- {s} --\n", .{file_name});
 
-    while (self.instr_idx < self.instrs.len) {
-        self.parseInstr();
+    for (roots) |root| {
+        self.parseInstr(root);
     }
+
     try self.writer.writeAll("\n");
 
     return self.tree.items;
 }
 
-fn at(self: *const Self) *const Instruction.Data {
-    return &self.instrs[self.instr_idx];
-}
-
-fn eof(self: *const Self) bool {
-    return self.instr_idx == self.instrs.len;
-}
-
-fn next(self: *Self) Instruction.Data {
-    defer self.instr_idx += 1;
-    return self.instrs[self.instr_idx];
-}
-
-fn parseInstr(self: *Self) void {
-    switch (self.next()) {
+fn parseInstr(self: *Self, instr: rir.Index) void {
+    switch (self.instrs[instr]) {
         .array => |*data| self.array(data),
-        .array_access => self.arrayAccess(1, false, false),
-        .array_access_chain => |*data| self.arrayAccess(data.depth, false, false),
+        .array_access => |*data| self.arrayAccess(data, false, false),
         .assignment => |*data| self.assignment(data),
         .binop => |*data| self.binop(data),
         .block => |*data| self.block(data),
         .bool => |data| self.boolInstr(data),
+        .box => |data| self.indexInstr("Box", data),
         .bound_method => |data| self.boundMethod(data),
         .call => |*data| self.fnCall(data),
-        .capture => |*data| self.capture(data),
-        .cast => |data| self.cast(data),
-        .discard => self.discard(),
-        .extractor => self.extractor(),
+        .cast_to_float => |index| self.indexInstr("Cast to float", index),
+        .discard => |index| self.indexInstr("Discard", index),
+        .extractor => |index| self.indexInstr("Extractor", index),
         .field => |*data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
         .@"if" => |*data| self.ifInstr(data),
         .int => |data| self.intInstr(data),
+        .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
-        .multiple_var_decl => |data| self.multipleVarDecl(data),
-        .name => unreachable,
+        .multiple_var_decl => |*data| self.multipleVarDecl(data),
         .null => self.indentAndAppendSlice("[Null]"),
-        .pop => self.indentAndAppendSlice("[Pop]"),
-        .print => {
-            self.indentAndAppendSlice("[Print]");
-            self.indent_level += 1;
-            defer self.indent_level -= 1;
-            self.parseInstr();
-        },
+        .pop => |index| self.indexInstr("Pop", index),
+        .print => |index| self.indexInstr("Print", index),
         .@"return" => |*data| self.returnInstr(data),
         .string => |data| self.stringInstr(data),
         .struct_decl => |*data| self.structDecl(data),
-        .default_value => unreachable,
         .struct_literal => |*data| self.structLiteral(data),
-        .value => unreachable,
         .unary => |*data| self.unary(data),
+        .unbox => |index| self.indexInstr("Unbox", index),
         .var_decl => |*data| self.varDecl(data),
-        .@"while" => self.whileInstr(),
+        .@"while" => |data| self.whileInstr(data),
+
+        .noop => {},
     }
+}
+
+fn indexInstr(self: *Self, name: []const u8, index: rir.Index) void {
+    self.indentAndPrintSlice("[{s}]", .{name});
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    self.parseInstr(index);
 }
 
 fn array(self: *Self, data: *const Instruction.Array) void {
@@ -121,71 +109,42 @@ fn array(self: *Self, data: *const Instruction.Array) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    for (data.elems) |elem| {
-        self.parseInstr();
-
-        if (elem.cast) self.indentAndAppendSlice("[Cast to float]");
-        self.checkInrcRc(elem.incr_rc);
+    for (data.values) |value| {
+        self.parseInstr(value);
     }
 }
 
-fn arrayAccess(self: *Self, depth: usize, cow: bool, is_assign: bool) void {
-    if (is_assign)
-        self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]")
-    else
-        self.indentAndAppendSlice(if (depth > 1) "[Array chain access]" else "[Array access]");
+fn arrayAccess(self: *Self, data: *const Instruction.ArrayAccess, cow: bool, is_assign: bool) void {
+    self.indentAndAppendSlice(if (is_assign) "[Array assignment]" else "[Array access]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
     if (cow) self.indentAndAppendSlice("[Cow]");
 
-    if (depth > 1) {
-        self.indentAndAppendSlice("- indicies");
-        for (0..depth) |_| self.parseInstr();
-        self.indentAndAppendSlice("- array");
-        self.parseInstr();
-    } else {
-        self.indentAndAppendSlice("- array");
-        self.parseInstr();
-        self.indentAndAppendSlice("- index");
-        self.parseInstr();
-    }
+    self.indentAndAppendSlice("- index");
+    for (data.indicies) |index| self.parseInstr(index);
+    self.indentAndAppendSlice("- array");
+    self.parseInstr(data.array);
 }
 
 fn assignment(self: *Self, data: *const Instruction.Assignment) void {
-    // Value
-    self.parseInstr();
+    self.parseInstr(data.value);
 
-    if (data.cast) {
-        self.indentAndAppendSlice("[Cast to float]");
-    }
-    self.checkInrcRc(data.incr_rc);
-
-    const variable_data = switch (self.next()) {
-        .array_access => return self.arrayAccess(1, data.cow, true),
-        .array_access_chain => |*array_data| return self.arrayAccess(array_data.depth, data.cow, true),
-        .identifier => |*variable| variable,
+    const variable_data, const unbox = switch (self.instrs[data.assigne]) {
+        .array_access => |*arr_data| return self.arrayAccess(arr_data, data.cow, true),
+        .identifier => |*variable| .{ variable, false },
         .field => |*member| return self.fieldAssignment(member, data.cow),
-        else => unreachable,
+        .unbox => |index| .{ &self.instrs[index].identifier, true },
+        else => |got| {
+            std.log.debug("Got: {any}", .{got});
+            unreachable;
+        },
     };
 
-    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}{s}]", .{
-        variable_data.index, @tagName(variable_data.scope), if (data.cow) ", cow" else "",
+    self.indentAndPrintSlice("[Assignment index: {}, scope: {s}{s}{s}]", .{
+        variable_data.index,           @tagName(variable_data.scope),
+        if (data.cow) ", cow" else "", if (unbox) ", unbox" else "",
     });
-}
-
-fn arrayAssignment(self: *Self, depth: usize) void {
-    self.indentAndAppendSlice(if (depth > 1) "[Array chain assignment]" else "[Array assignment]");
-    self.indent_level += 1;
-    defer self.indent_level -= 1;
-
-    // Array
-    self.indentAndAppendSlice("- variable");
-    self.parseInstr();
-    // Index
-    self.indentAndAppendSlice(if (depth > 1) "- indicies" else "- index");
-
-    for (0..depth) |_| self.parseInstr();
 }
 
 fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void {
@@ -196,11 +155,11 @@ fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void 
 }
 
 fn binop(self: *Self, data: *const Instruction.Binop) void {
-    self.indentAndPrintSlice("[Binop type: {t}, cast: {t}]", .{ data.op, data.cast });
+    self.indentAndPrintSlice("[Binop type: {t}]", .{data.op});
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.parseInstr();
-    self.parseInstr();
+    self.parseInstr(data.lhs);
+    self.parseInstr(data.rhs);
 }
 
 fn block(self: *Self, data: *const Instruction.Block) void {
@@ -208,8 +167,8 @@ fn block(self: *Self, data: *const Instruction.Block) void {
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    for (0..data.length) |_| {
-        self.parseInstr();
+    for (data.instrs) |instr| {
+        self.parseInstr(instr);
     }
 }
 
@@ -217,18 +176,11 @@ fn boolInstr(self: *Self, value: bool) void {
     self.indentAndPrintSlice("[Bool {}]", .{value});
 }
 
-fn boundMethod(self: *Self, field_index: usize) void {
-    self.indentAndPrintSlice("[Bound method, method index: {}]", .{field_index});
-
+fn boundMethod(self: *Self, data: Instruction.BoundMethod) void {
+    self.indentAndPrintSlice("[Bound method, method index: {}]", .{data.index});
     self.indent_level += 1;
     defer self.indent_level -= 1;
-
-    // Variable
-    self.parseInstr();
-}
-
-fn cast(self: *Self, typ: Type) void {
-    self.indentAndPrintSlice("[Cast to {t}]", .{typ});
+    self.parseInstr(data.structure);
 }
 
 fn discard(self: *Self) void {
@@ -250,48 +202,28 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndPrintSlice("[Fn call arity: {}]", .{data.arity});
+    self.indentAndAppendSlice("[Fn call]");
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
+    self.parseInstr(data.callee);
+    self.argsList(data.args);
+}
 
-    // Variable
-    self.parseInstr();
+fn argsList(self: *Self, args: []const Instruction.Arg) void {
+    if (args.len == 0) return;
 
-    if (data.arity > 0) {
-        self.indentAndAppendSlice("- args:");
-
-        var last: usize = 0;
-        for (0..data.arity) |_| {
-            switch (self.next()) {
-                .value => |param_data| {
-                    if (param_data.cast) {
-                        self.indentAndAppendSlice("[Cast next value to float]");
-                    }
-                    if (param_data.box) {
-                        self.indentAndAppendSlice("[Box next value]");
-                    }
-                    const save = self.instr_idx;
-                    self.instr_idx = param_data.value_instr;
-                    self.parseInstr();
-                    last = @max(last, self.instr_idx);
-
-                    self.instr_idx = save;
-                },
-                .default_value => {},
-                else => |eee| {
-                    std.log.debug("Found: {any}", .{eee});
-                    unreachable;
-                },
-            }
+    self.indentAndAppendSlice("- args");
+    for (args) |arg| {
+        switch (arg) {
+            .default => |def| self.indentAndPrintSlice("[Default field {}]", .{def}),
+            .instr => |i| self.parseInstr(i),
         }
-
-        if (last > self.instr_idx) self.instr_idx = last;
     }
 }
 
 fn capture(self: *Self, data: *const Instruction.Capture) void {
-    self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.is_local });
+    self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.local });
 }
 
 fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {
@@ -302,12 +234,9 @@ fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-
-    // Variable
-    self.parseInstr();
+    self.parseInstr(data.structure);
 }
 
-//TODO: captures count
 fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     const fn_name = if (data.name) |idx| self.interner.getKey(idx).? else "";
 
@@ -324,27 +253,24 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    if (data.default_params > 0) {
+    if (data.defaults.len > 0) {
         self.indentAndAppendSlice("- default params");
-        for (0..data.default_params) |_| {
-            self.parseInstr();
+        for (data.defaults) |def| {
+            self.parseInstr(def);
         }
 
-        if (data.body_len > 0) {
-            self.indentAndAppendSlice("- body");
-        }
+        // Add a separation between the two category, otherwise not needed
+        if (data.body.len > 0) self.indentAndAppendSlice("- body");
     }
 
-    for (0..data.body_len) |_| {
-        self.parseInstr();
+    for (data.body) |instr| {
+        self.parseInstr(instr);
     }
 
-    if (data.cast) self.parseInstr();
-
-    if (data.captures_count > 0) {
+    if (data.captures.len > 0) {
         self.indentAndAppendSlice("- captures");
-        for (0..data.captures_count) |_| {
-            self.parseInstr();
+        for (data.captures) |capt| {
+            self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ capt.index, capt.local });
         }
     }
 }
@@ -356,27 +282,22 @@ fn identifier(self: *Self, data: *const Instruction.Variable) void {
 }
 
 fn ifInstr(self: *Self, data: *const Instruction.If) void {
-    self.indentAndPrintSlice("[If cast: {t}, has else: {}{s}{s}]", .{
-        data.cast,
-        data.has_else,
-        if (data.incr_rc_then) ", incr ref count then" else "",
-        if (data.incr_rc_else) ", incr ref count else" else "",
-    });
+    self.indentAndAppendSlice("[If]");
 
     self.indentAndAppendSlice("- condition:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.cond);
     self.indent_level -= 1;
 
     self.indentAndAppendSlice("- then:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.then);
     self.indent_level -= 1;
 
-    if (data.has_else) {
+    if (data.@"else") |instr| {
         self.indentAndAppendSlice("- else:");
         self.indent_level += 1;
-        self.parseInstr();
+        self.parseInstr(instr);
         self.indent_level -= 1;
     }
 }
@@ -393,19 +314,18 @@ fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
     }
 }
 
-fn multipleVarDecl(self: *Self, count: usize) void {
-    for (0..count) |_| {
-        self.parseInstr();
+fn multipleVarDecl(self: *Self, data: *const Instruction.MultiVarDecl) void {
+    for (data.decls) |decl| {
+        self.parseInstr(decl);
     }
 }
 
 fn returnInstr(self: *Self, data: *const Instruction.Return) void {
-    self.indentAndPrintSlice("[Return expr: {}, cast: {}]", .{ data.value, data.cast });
+    self.indentAndAppendSlice("[Return]");
 
-    if (data.value) {
+    if (data.value) |val| {
         self.indent_level += 1;
-        self.parseInstr();
-        if (data.cast) self.parseInstr();
+        self.parseInstr(val);
         self.indent_level -= 1;
     }
 }
@@ -415,88 +335,59 @@ fn stringInstr(self: *Self, index: usize) void {
 }
 
 fn structDecl(self: *Self, data: *const Instruction.StructDecl) void {
-    const name = self.next().name;
-    self.indentAndPrintSlice("[Structure declaration {s}]", .{self.interner.getKey(name).?});
+    self.indentAndPrintSlice("[Structure declaration {s}]", .{self.interner.getKey(data.name).?});
     self.indent_level += 1;
     defer self.indent_level -= 1;
 
-    if (data.default_fields > 0) {
+    if (data.default_fields.len > 0) {
         self.indentAndAppendSlice("- default values");
-        for (0..data.default_fields) |_| {
-            self.parseInstr();
+        for (data.default_fields) |def| {
+            self.parseInstr(def);
         }
     }
 
-    for (0..data.func_count) |_| {
-        self.parseInstr();
+    for (data.functions) |func| {
+        self.parseInstr(func);
     }
 }
 
 fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     self.indentAndAppendSlice("[Structure literal]");
+
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    // Variable containing type
     self.indentAndAppendSlice("- structure");
-    self.parseInstr();
-
-    if (data.fields_count > 0) {
-        self.indentAndAppendSlice("- args");
-        var last: usize = 0;
-
-        for (0..data.fields_count) |_| {
-            switch (self.next()) {
-                .value => |value_data| {
-                    const save = self.instr_idx;
-                    self.instr_idx = value_data.value_instr;
-                    self.parseInstr();
-                    if (value_data.cast) self.indentAndAppendSlice("[Cast to float]");
-                    self.checkInrcRc(value_data.incr_rc);
-
-                    last = @max(last, self.instr_idx);
-                    self.instr_idx = save;
-                },
-                .default_value => {},
-                else => {},
-            }
-        }
-
-        if (last > self.instr_idx) self.instr_idx = last;
-    }
+    self.parseInstr(data.structure);
+    self.argsList(data.values);
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {
     self.indentAndPrintSlice("[Unary {s}]", .{@tagName(data.op)});
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.parseInstr();
+    self.parseInstr(data.instr);
 }
 
 fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
-    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {t}{s}{s}]", .{
+    self.indentAndPrintSlice("[Variable declaration index: {}, scope: {t}]", .{
         data.variable.index,
         data.variable.scope,
-        if (data.box) ", box" else "",
-        if (data.incr_rc) ", incr_rc" else "",
     });
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    if (data.has_value) self.parseInstr() else self.indentAndAppendSlice("[Null]");
-
-    if (data.cast) self.parseInstr();
+    if (data.value) |index| self.parseInstr(index) else self.indentAndAppendSlice("[Null]");
 }
 
-fn whileInstr(self: *Self) void {
+fn whileInstr(self: *Self, data: Instruction.While) void {
     self.indentAndAppendSlice("[While]");
-    self.instr_idx += 1;
     self.indentAndAppendSlice("- condition:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.cond);
     self.indent_level -= 1;
     self.indentAndAppendSlice("- body:");
     self.indent_level += 1;
-    self.parseInstr();
+    self.parseInstr(data.body);
     self.indent_level -= 1;
 }
 

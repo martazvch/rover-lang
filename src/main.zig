@@ -49,11 +49,11 @@ pub fn main() !void {
     if (res.args.help != 0) return clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
 
     const config: Vm.Config = .{
-        .print_ast = if (res.args.@"print-ast" == 1) true else false,
-        .print_bytecode = if (res.args.@"print-bytecode" == 1) true else false,
-        .static_analyzis = if (res.args.@"static-analyzis" == 1) true else false,
-        .print_ir = if (res.args.@"print-ir" == 1) true else false,
-        .embedded = if (res.positionals[0] == null) true else false,
+        .print_ast = res.args.@"print-ast" == 1,
+        .print_bytecode = res.args.@"print-bytecode" == 1,
+        .static_analyzis = res.args.@"static-analyzis" == 1,
+        .print_ir = res.args.@"print-ir" == 1,
+        .embedded = res.positionals[0] == null,
     };
 
     if (res.positionals[0]) |f| {

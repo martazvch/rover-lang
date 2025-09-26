@@ -4,7 +4,7 @@
             [Field access 1]
                 [Variable index: 0, scope: local]
     [Function declaration getOld, return kind: implicit_value]
-        [Binop type: add_int, cast: none]
+        [Binop type: add_int]
             [Field access 0]
                 [Variable index: 0, scope: local]
             [Variable index: 1, scope: local]
@@ -31,10 +31,10 @@
     [Variable declaration index: 4, scope: local]
         [Bound method, method index: 1]
             [Variable index: 0, scope: local]
-    [Fn call arity: 0]
+    [Fn call]
         [Variable index: 2, scope: local]
     [Discard]
-        [Fn call arity: 1]
+        [Fn call]
             [Variable index: 4, scope: local]
-            - args:
+            - args
             [Int 10]

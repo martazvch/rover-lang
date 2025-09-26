@@ -4,53 +4,57 @@ pub const Type = enum(u2) { float, int };
 pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
 
+pub const Index = usize;
+pub const IndexVoid = @import("std").math.maxInt(Index);
+
 pub const Instruction = struct {
     data: Data,
     offset: usize,
 
     pub const Data = union(enum) {
         array: Array,
-        array_access,
-        array_access_chain: ArrayAccessChain,
+        array_access: ArrayAccess,
         assignment: Assignment,
         binop: Binop,
         block: Block,
         bool: bool,
-        bound_method: usize,
+        box: Index,
+        bound_method: BoundMethod,
         call: Call,
-        capture: Capture,
-        cast: Type,
-        discard,
-        extractor,
+        cast_to_float: Index,
+        discard: Index,
+        extractor: Index,
         field: Field,
         float: f64,
         fn_decl: FnDecl,
         identifier: Variable,
         @"if": If,
+        incr_rc: Index,
         int: i64,
         load_symbol: LoadSymbol,
-        multiple_var_decl: usize,
-        name: usize,
+        multiple_var_decl: MultiVarDecl,
         null,
-        pop,
-        print,
+        pop: Index,
+        print: Index,
         @"return": Return,
         string: usize,
         struct_decl: StructDecl,
-        default_value: usize,
         struct_literal: StructLiteral,
         unary: Unary,
-        value: Value,
+        unbox: Index,
         var_decl: VarDecl,
-        @"while",
+        @"while": While,
+
+        noop, // Used only by 'use' statements as they don't produce any instructions
     };
 
+    pub const ArrayAccess = struct { array: Index, indicies: []const Index };
     pub const Binop = struct {
-        cast: Side = .none,
+        lhs: Index,
+        rhs: Index,
         op: Op,
 
-        pub const Side = enum(u2) { lhs, rhs, none };
-        pub const Op = enum(u6) {
+        pub const Op = enum {
             add_float,
             add_int,
             add_str,
@@ -85,89 +89,78 @@ pub const Instruction = struct {
     };
 
     pub const Array = struct {
-        elems: []const Elem,
-
-        pub const Elem = struct { cast: bool, incr_rc: bool };
+        values: []const Index,
     };
-    // TODO: see if cow/rc actually used
-    pub const ArrayAccessChain = struct { depth: usize };
     pub const Assignment = struct {
-        /// Casts to float the value before assignment
-        cast: bool,
-        /// When the assigne is a heap allocated object, we check if there are shallow copy
-        /// of it before mutation. If so, check the reference count and perform a deep copy if
-        /// it is referenced
+        assigne: Index,
+        value: Index,
         cow: bool,
-        /// Increment assigned value reference count
-        incr_rc: bool,
     };
-    pub const Block = struct { length: usize, pop_count: u8, is_expr: bool };
-    pub const Call = struct { arity: u8, implicit_first: bool };
-    pub const Capture = struct { index: usize, is_local: bool };
+    pub const Block = struct {
+        instrs: []const Index,
+        pop_count: u8,
+        is_expr: bool,
+    };
+    pub const BoundMethod = struct { structure: Index, index: usize };
+    pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool };
+    pub const Arg = union(enum) { instr: Index, default: usize };
+
     pub const FnDecl = struct {
         kind: Kind,
         name: ?usize,
-        cast: bool,
-        body_len: u64,
-        default_params: u8,
-        captures_count: usize,
+        body: []const Index,
+        defaults: []const Index,
+        captures: []const Capture,
         return_kind: ReturnKind,
 
         pub const Kind = union(enum) { closure, symbol: usize };
+        pub const Capture = struct { index: usize, local: bool };
     };
     pub const Field = struct {
+        structure: Index,
         index: usize,
         kind: Kind,
 
         pub const Kind = enum { method, field, static_method, symbol };
     };
     pub const If = struct {
-        cast: Cast,
-        has_else: bool,
-        incr_rc_then: bool,
-        incr_rc_else: bool,
-
-        pub const Cast = enum(u2) {
-            then,
-            @"else",
-            both,
-            none,
-
-            pub fn addSide(self: *Cast, side: Cast) void {
-                self.* = if (self.* == .none) side else .both;
-            }
-        };
+        cond: Index,
+        then: Index,
+        @"else": ?Index,
     };
     pub const LoadSymbol = struct {
         module_index: ?usize,
         symbol_index: u8,
     };
-    pub const Return = struct { value: bool, cast: bool };
-    pub const StructDecl = struct { index: usize, fields_count: usize, default_fields: usize, func_count: usize };
-    pub const StructLiteral = struct { fields_count: u8 };
-    pub const Value = struct {
-        value_instr: usize,
-        cast: bool,
-        box: bool,
-        incr_rc: bool,
+    pub const MultiVarDecl = struct { decls: []const Index };
+    pub const Return = struct { value: ?Index };
+    pub const StructDecl = struct {
+        // Interner index
+        name: usize,
+        index: usize,
+        fields_count: usize,
+        default_fields: []const Index,
+        functions: []const Index,
+    };
+    pub const StructLiteral = struct {
+        structure: Index,
+        values: []const Arg,
     };
     pub const Unary = struct {
         op: Op,
         typ: Type,
+        instr: Index,
 
         pub const Op = enum { minus, bang };
     };
     pub const VarDecl = struct {
         box: bool,
-        cast: bool,
         variable: Variable,
-        has_value: bool,
-        /// Increment reference count of value
-        incr_rc: bool,
+        value: ?Index,
     };
     pub const Variable = struct {
         index: u64,
         scope: Scope,
-        unbox: bool,
     };
+    pub const While = struct { cond: Index, body: Index };
 };
