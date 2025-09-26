@@ -120,7 +120,6 @@ pub const Type = union(enum) {
         loc: ?Loc,
         functions: AutoArrayHashMapUnmanaged(InternerIdx, *const Type),
         fields: AutoArrayHashMapUnmanaged(InternerIdx, Field),
-        // defaults: usize,
 
         pub const Field = struct {
             type: *const Type,
@@ -326,7 +325,6 @@ pub const TypeInterner = struct {
         return @field(self.cache, @tagName(ty));
     }
 
-    // TODO: use getOrPut
     pub fn intern(self: *TypeInterner, ty: Type) *Type {
         var hasher = std.hash.Wyhash.init(0);
         ty.hash(&hasher);

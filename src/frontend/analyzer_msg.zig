@@ -75,7 +75,6 @@ pub const AnalyzerMsg = union(enum) {
     void_array,
     void_discard,
     void_param,
-    void_print,
     void_value,
 
     const Self = @This();
@@ -147,7 +146,6 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
             .void_discard => writer.writeAll("trying to discard a non value"),
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
-            .void_print => writer.writeAll("try to print a 'void' value"),
             .void_value => writer.writeAll("value is of type 'void'"),
         };
     }
@@ -201,7 +199,6 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("declared here"),
             .void_discard => writer.writeAll("this expression produces no value"),
             .void_param => writer.writeAll("this parameter"),
-            .void_print => writer.writeAll("this expression is of type 'void'"),
             .void_value => writer.writeAll("this expression produces no value"),
         };
     }
@@ -292,7 +289,6 @@ pub const AnalyzerMsg = union(enum) {
             .use_uninit_var => writer.writeAll("consider initializing the variable before use"),
             .void_array => writer.writeAll("use any other type to declare an array"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
-            .void_print => writer.writeAll("use a any other expression's type than 'void'"),
             .void_value => writer.writeAll("consider returning a value from expression"),
         };
     }
