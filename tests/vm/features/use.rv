@@ -10,7 +10,7 @@ fn main() {
     print vec.y
 
     fn trash(a: int) -> bool {
-            a < 10
+        return a < 10
     }
     print trash(vec.y)
 

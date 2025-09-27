@@ -213,6 +213,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
                 self.captureFromNode(n, ctx);
             }
         },
+        .@"break" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),
         .fn_call => |*e| {
             self.captureFromExpr(e.callee, ctx);
             for (e.args) |arg| {

@@ -349,6 +349,8 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .le_float => self.stack.push(Value.makeBool(self.stack.pop().float >= self.stack.pop().float)),
             .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
 
+            .load_blk_val => self.stack.push(frame.blk_val),
+
             .load_extern_sym => {
                 const module_index = frame.readByte();
                 const symbol_index = frame.readByte();
@@ -445,6 +447,9 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const index = frame.readByte();
                 frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
             },
+
+            .store_blk_val => frame.blk_val = self.stack.pop(),
+
             .str_cat => self.strConcat(),
             .str_mul => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .struct_lit => {
@@ -581,6 +586,7 @@ pub const CallFrame = struct {
     ip: [*]u8,
     slots: [*]Value,
     captures: []Value,
+    blk_val: Value,
 
     pub fn readByte(self: *CallFrame) u8 {
         defer self.ip += 1;

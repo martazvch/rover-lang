@@ -123,12 +123,14 @@ pub const CompilationManager = struct {
 const Compiler = struct {
     manager: *CompilationManager,
     function: *Obj.Function,
+    breaks: ArrayList(usize),
     state: State = .{},
 
     const Self = @This();
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
+    // TODO: could make a generic construct with only flags like this (share with other contexts)
     const State = struct {
         cow: bool = false,
 
@@ -150,6 +152,7 @@ const Compiler = struct {
                 default_count,
                 module_index,
             ),
+            .breaks = .empty,
         };
     }
 
@@ -300,6 +303,7 @@ const Compiler = struct {
             .bool => |data| self.boolInstr(data),
             .box => |index| self.wrappedInstr(.box, index),
             .bound_method => |data| self.boundMethod(data),
+            .@"break" => |data| self.breakInstr(data),
             .call => |*data| self.fnCall(data),
             .cast_to_float => |index| self.wrappedInstr(.cast_to_float, index),
             .discard => |index| self.wrappedInstr(.pop, index),
@@ -477,18 +481,32 @@ const Compiler = struct {
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {
+        // if (data.is_expr) self.writeOp(.push_null);
+
         for (data.instrs) |instr| {
             try self.compileInstr(instr);
         }
 
-        if (data.is_expr) {
-            self.writeOpAndByte(.ret_scope, data.pop_count);
-        } else {
-            // PERF: horrible perf, just emit a stack.top -= count
-            for (0..data.pop_count) |_| {
-                self.writeOp(.pop);
-            }
+        // if (data.is_expr) {
+        //     self.writeOpAndByte(.ret_scope, data.pop_count);
+        // } else {
+        // //     // PERF: horrible perf, just emit a stack.top -= count
+        // for (0..data.pop_count) |_| {
+        //     self.writeOp(.pop);
+        // }
+        // }
+
+        for (self.breaks.items) |b| {
+            try self.patchJump(b);
         }
+        self.breaks.clearRetainingCapacity();
+
+        // PERF: horrible perf, just emit a stack.top -= count
+        for (0..data.pop_count) |_| {
+            self.writeOp(.pop);
+        }
+
+        if (data.is_expr) self.writeOp(.load_blk_val);
     }
 
     fn boolInstr(self: *Self, value: bool) Error!void {
@@ -501,6 +519,15 @@ const Compiler = struct {
         // Get method duplicates instance on top of stack and it's used by closure
         self.writeOpAndByte(.get_method, @intCast(data.index));
         self.writeOpAndByte(.closure, 1);
+    }
+
+    fn breakInstr(self: *Self, data: ?rir.Index) Error!void {
+        if (data) |instr| {
+            try self.compileInstr(instr);
+            self.writeOp(.store_blk_val);
+        }
+
+        self.breaks.append(self.manager.allocator, self.emitJump(.jump)) catch oom();
     }
 
     // TODO: protect cast

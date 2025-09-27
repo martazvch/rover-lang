@@ -282,6 +282,13 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             }, false);
             try self.closeKey(.block, comma);
         },
+        .@"break" => |e| {
+            if (e.expr) |data| {
+                try self.openKey(@tagName(expr.*), .block);
+                try self.renderExpr(data, false);
+                try self.closeKey(.block, comma);
+            } else try self.emptyKey("break", .block, comma);
+        },
         .closure => |*e| try self.renderFnDecl("", e, comma),
         .extractor => |*e| {
             try self.openKey(@tagName(expr.*), .block);

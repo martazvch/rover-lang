@@ -745,15 +745,16 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 /// Parses expressions (prefix + sufix)
 fn parseExpr(self: *Self) Error!*Expr {
     const expr = try switch (self.prev(.tag)) {
-        .left_brace => self.blockExpr(),
-        .left_bracket => self.array(),
-        .@"if" => self.ifExpr(),
-        .minus, .not => self.unary(),
+        .@"break" => self.breakExpr(),
         .false => self.literal(.bool),
         .float => self.literal(.float),
+        .@"if" => self.ifExpr(),
         .identifier => self.literal(.identifier),
         .int => self.literal(.int),
+        .left_brace => self.blockExpr(),
+        .left_bracket => self.array(),
         .left_paren => self.leftParenExprStart(),
+        .minus, .not => self.unary(),
         .null => self.literal(.null),
         .pipe => self.closure(),
         .@"return" => self.returnExpr(),
@@ -835,6 +836,21 @@ fn block(self: *Self) Error!struct { *Expr, bool } {
     } };
 
     return .{ expr, has_callable };
+}
+
+fn breakExpr(self: *Self) Error!*Expr {
+    const kw = self.token_idx - 1;
+    const expr = self.allocator.create(Expr) catch oom();
+
+    expr.* = .{ .@"break" = .{
+        .kw = kw,
+        .expr = if (self.check(.new_line) or self.check(.right_brace) or self.check(.@"else"))
+            null
+        else
+            try self.parsePrecedenceExpr(0),
+    } };
+
+    return expr;
 }
 
 fn closure(self: *Self) Error!*Expr {

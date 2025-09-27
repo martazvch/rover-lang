@@ -1,0 +1,56 @@
+fn main() {
+    // No braces
+    var z = if true do 1 else 2
+    print z // expect: 1
+
+    var y = if false do return else 3
+    print y // expect: 3
+
+    var x = if true do 23 else return
+    print x // expect: 23
+
+    // With blocks
+    var a = if true {break 5} else 12
+    print a // expect: 5
+
+    var b = if false do 5 else {break 8}
+    print b // expect: 8
+
+    var c = if false {break 5} else {break 21}
+    print c // expect: 21
+
+    var d = if { break true } do 5 + 6 else {
+        break 1
+    }
+    print d // expect: 11
+
+    var e = if { break not true } { break 5 + 6 } else {
+        var tmp = 1
+        print tmp // expect: 1
+        tmp = 5
+        print tmp // expect: 5
+        break a + b + tmp
+    }
+    print e // expect: 18
+
+    var f = if {
+        var tmp = "garbage"
+        break 5 == 5
+    } {
+        var tmp = "other trash"
+        _ = tmp == "trash"
+        break -5
+    } else -10
+
+    print f // expect: -5
+
+    var g = if not not true do 6/2 else 0
+    print g // expect: 3
+
+    var h = if if true do true else false {
+        var tmp = 3
+        break tmp + e
+    } else -8
+
+    print h // expect: 21
+}

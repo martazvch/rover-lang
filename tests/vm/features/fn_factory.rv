@@ -35,7 +35,7 @@ fn factory4(arg: float) -> fn(float, bool) -> float {
         if cond and value > a do return 56.
         if not cond and value < a do return 80.
 
-        123.
+        return 123.
     }
 
     return capture

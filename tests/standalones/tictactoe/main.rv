@@ -17,8 +17,8 @@ struct Cell {
 
     fn toString(self) -> str {
         self.checkValidity()
-        "[" + {
-            if self.played {if self.marker == 1 do "x" else "o"} else " "
+        return "[" + {
+            break if self.played {break if self.marker == 1 do "x" else "o"} else " "
         } + "]"
     }
 }
@@ -28,7 +28,7 @@ struct Grid {
     dim: int,
 
     fn init(dim=3) -> Self {
-        Self{
+        return Self{
             cells=[
                 [Cell{}, Cell{}, Cell{}],
                 [Cell{}, Cell{}, Cell{}],

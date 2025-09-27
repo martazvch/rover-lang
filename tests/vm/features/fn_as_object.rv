@@ -1,13 +1,13 @@
 fn add(a: int, b: int) -> int {
-    a + b
+    return a + b
 }
 
 fn called(arg1: int, arg2: bool) -> int {
-    if arg2 { arg1 } else 45
+    return if arg2 do arg1 else 45
 }
 
 fn call(func: fn(int, bool) -> int, arg1: int, arg2: bool) -> int {
-    func(arg1, arg2)
+    return func(arg1, arg2)
 }
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
     var arg1 = 9
 
     fn sub(a: int, b: float) -> float {
-        a - b
+        return a - b
     }
 
     var f2 = sub

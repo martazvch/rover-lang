@@ -3,7 +3,7 @@ struct Foo {
 }
 
 fn getIdx() -> int {
-    2
+    return 2
 }
 
 fn main() {

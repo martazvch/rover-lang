@@ -12,7 +12,7 @@ fn main() {
 
         var tmp: str = if false do return a + 2 else {
             var local = 56.4
-            "champ"
+            break "champ"
         }
 
         print tmp // expect: "champ"
@@ -21,11 +21,11 @@ fn main() {
         if false do return 8
 
         return if true {
-            if true {
-                return { 1 } // expect: 1
+            break if true {
+                return { break 1 } // expect: 1
             } else 5
         } else {
-            if false {
+            break if false {
                 return if true { return 4 } else 3
             } else 8
         }
@@ -37,7 +37,7 @@ fn main() {
     fn shortcut(arg: float) -> float {
         if true { return arg }
         print "should not be seen"
-        4.5
+        return 4.5
     }
 
     print shortcut(8.5) // expect: 8.5
@@ -46,7 +46,7 @@ fn main() {
     fn shortcut_bis(arg: float) -> float {
         if false {} else { return arg }
         print "should not be seen"
-        0.01
+        return 0.01
     }
 
     print shortcut_bis(-18.5) // expect: -18.5
@@ -54,11 +54,11 @@ fn main() {
     // Complicated nested
     fn nested() -> int {
         return if false {
-            if true {
-                return { 1 }
+            break if true {
+                return { break 1 }
             } else 5
         } else {
-            if true {
+            break if true {
                 return if false { return 4 } else 3
             } else 8
         }
@@ -66,3 +66,4 @@ fn main() {
 
     print nested() // expect: 3
 }
+

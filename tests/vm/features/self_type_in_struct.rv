@@ -2,7 +2,7 @@ struct Vec2 {
     x: int, y: int,
 
     fn new(x: int, y: int) -> Self {
-        Self { x, y }
+        return Self { x, y }
     }
 }
 

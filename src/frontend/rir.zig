@@ -20,6 +20,7 @@ pub const Instruction = struct {
         bool: bool,
         box: Index,
         bound_method: BoundMethod,
+        @"break": ?Index,
         call: Call,
         cast_to_float: Index,
         discard: Index,
@@ -100,6 +101,7 @@ pub const Instruction = struct {
         instrs: []const Index,
         pop_count: u8,
         is_expr: bool,
+        // ret_slot: ?usize,
     };
     pub const BoundMethod = struct { structure: Index, index: usize };
     pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool };

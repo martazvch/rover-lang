@@ -7,18 +7,18 @@ struct Foo {
 struct Bar {
     value = 10
 
-    fn static(b: bool) -> int { 3 }
+    fn static(b: bool) -> int { return 3 }
 
     fn method(self, b: bool) -> int {
-        self.value
+        return self.value
     }
 
     fn importFuncFromMethod(self) -> fn(bool) -> int {
-        math.getInt2
+        return math.getInt2
     }
 }
 
-fn copy(b: bool) -> int { 5 }
+fn copy(b: bool) -> int { return 5 }
 
 fn argsCallConv(arg1: fn(bool)->int, arg2: fn(bool)->int, arg3: fn(bool)->int) {
     print arg1(true)

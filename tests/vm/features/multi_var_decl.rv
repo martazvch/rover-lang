@@ -1,6 +1,6 @@
 // Multiple variables declaration
 
-fn get_bool() -> bool { true }
+fn get_bool() -> bool { return true }
 fn needs_bool(arg: bool) {}
 
 fn main() {

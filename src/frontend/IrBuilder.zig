@@ -52,6 +52,17 @@ pub fn wrapInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Dat
     return self.instructions.len - 1;
 }
 
+pub fn wrapInstrInplace(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data), index: usize) void {
+    if (@FieldType(Instruction.Data, @tagName(instr)) != rir.Index) {
+        @compileError("Can only wrap instructions that have a single instruction as a payload");
+    }
+
+    const prev_offset = self.instructions.items(.offset)[index];
+
+    const wrap = @unionInit(Instruction.Data, @tagName(instr), index);
+    self.instructions.set(index, .{ .data = wrap, .offset = prev_offset });
+}
+
 /// Converts instructions offsets to line numbers
 pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
     const offsets = self.instructions.items(.offset);

@@ -2,7 +2,7 @@ fn naked_return(a: int) {}
 fn naked_explicit_return(a: int) { return }
 
 fn glob_add(a: int, b: float) -> str {
-    if a + b < 12 do "under" else "above"
+    return if a + b < 12 do "under" else "above"
 }
 
 fn main() {
@@ -25,7 +25,7 @@ fn main() {
         var tmp = 1
         var local = arg1 + tmp
 
-        if glob_add(tmp, local) == "under" do arg2 else arg1
+        return if glob_add(tmp, local) == "under" do arg2 else arg1
     }
 
     // Tests: implicit cast of return in 'if'

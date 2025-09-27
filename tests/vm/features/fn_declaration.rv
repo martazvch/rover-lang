@@ -5,7 +5,7 @@ var tmp = 1
 
 // Implicit return
 fn sub() -> int {
-    56
+    return 56
 }
 
 fn main() {
@@ -33,7 +33,7 @@ fn main() {
     // With args, to see if it compiles well too and that args dosen't mess up stack
     fn fn1(a: int) {}
     fn fn2(a: int, b: float) -> str {
-        "booo"
+        return "booo"
     }
 
     // Trailing comma

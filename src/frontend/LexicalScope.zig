@@ -9,6 +9,8 @@ const Interner = @import("../Interner.zig");
 const InternerIdx = Interner.Index;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
+const InstrIndex = @import("rir.zig").Index;
+const Span = @import("Lexer.zig").Span;
 const oom = @import("../utils.zig").oom;
 
 const Self = @This();
@@ -25,6 +27,12 @@ pub const Variable = struct {
     pub const Index = usize;
 };
 
+pub const Break = struct {
+    instr: InstrIndex,
+    type: *const Type,
+    span: Span,
+};
+
 pub const Symbol = struct { type: *const Type, index: usize };
 pub const ExternSymbol = struct { module_index: usize, symbol: Symbol };
 
@@ -37,23 +45,28 @@ current: *Scope,
 builtins: AutoHashMapUnmanaged(InternerIdx, *const Type),
 symbol_count: usize,
 
-pub const empty: Self = .{ .scopes = .{}, .current = undefined, .builtins = .{}, .symbol_count = 0 };
+pub const empty: Self = .{ .scopes = .empty, .current = undefined, .builtins = .{}, .symbol_count = 0 };
 
 pub const Scope = struct {
+    name: ?InternerIdx,
     variables: VariableMap = .empty,
     forwarded: VariableMap = .empty,
     symbols: SymbolArrMap = .empty,
     extern_symbols: ExternMap = .empty,
     /// First is the interned identifier and second is the interned module's path key of module interner
     modules: AutoHashMapUnmanaged(InternerIdx, *const Type) = .empty,
+    breaks: ArrayList(Break) = .empty,
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
     offset: usize,
 };
 
-pub fn open(self: *Self, allocator: Allocator, offset_from_parent: bool) void {
-    const offset = if (offset_from_parent) self.current.variables.count() + self.current.offset else 0;
-    var scope: Scope = .{ .offset = offset };
+// pub fn open(self: *Self, allocator: Allocator, offset_from_parent: bool) void {
+// pub fn open(self: *Self, allocator: Allocator, fn_body: bool, name: ?InternerIdx) void {
+pub fn open(self: *Self, allocator: Allocator, fn_body: bool, name: ?InternerIdx) void {
+    // TODO: invert name and usage
+    const offset = if (fn_body) self.current.variables.count() + self.current.offset else 0;
+    var scope: Scope = .{ .name = name, .offset = offset };
 
     // If variables have been forwarded, for declare them now
     if (self.scopes.items.len > 0) {
@@ -72,14 +85,14 @@ pub fn open(self: *Self, allocator: Allocator, offset_from_parent: bool) void {
     self.updateCurrent();
 }
 
-pub fn close(self: *Self) usize {
+pub fn close(self: *Self) struct { usize, []const Break } {
     const popped = self.scopes.pop().?;
     self.updateCurrent();
-    return popped.variables.count();
+    return .{ popped.variables.count(), popped.breaks.items };
 }
 
 pub fn initGlobalScope(self: *Self, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
-    self.open(allocator, false);
+    self.open(allocator, false, null);
     const builtins = std.meta.fields(TypeInterner.Cache);
     self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
@@ -232,6 +245,29 @@ pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
     return null;
 }
 
+pub fn addBreak(self: *Self, allocator: Allocator, brk: Break, label: ?InternerIdx) error{UnknownLabel}!void {
+    const lbl = label orelse {
+        self.current.breaks.append(allocator, brk) catch oom();
+        return;
+    };
+
+    var i = self.scopes.items.len;
+
+    while (i > 0) {
+        i -= 1;
+        const scope = &self.scopes.items[i];
+
+        if (scope.name) |sn| {
+            if (sn != lbl) continue;
+
+            scope.breaks.append(allocator, brk) catch oom();
+        }
+
+        return error.UnknownLabel;
+    }
+}
+
+// TODO: shouldn't it be in type interner?
 pub fn getType(self: *Self, name: InternerIdx) ?*const Type {
     if (self.builtins.get(name)) |builtin| {
         return builtin;

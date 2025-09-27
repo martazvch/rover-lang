@@ -68,6 +68,7 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .bool => |data| self.boolInstr(data),
         .box => |data| self.indexInstr("Box", data),
         .bound_method => |data| self.boundMethod(data),
+        .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
         .cast_to_float => |index| self.indexInstr("Cast to float", index),
         .discard => |index| self.indexInstr("Discard", index),
@@ -163,6 +164,7 @@ fn binop(self: *Self, data: *const Instruction.Binop) void {
 }
 
 fn block(self: *Self, data: *const Instruction.Block) void {
+    // self.indentAndPrintSlice("[Block pop count: {}, is_expr: {}]", .{ data.pop_count, data.ret_slot != null });
     self.indentAndPrintSlice("[Block pop count: {}, is_expr: {}]", .{ data.pop_count, data.is_expr });
 
     self.indent_level += 1;
@@ -181,6 +183,15 @@ fn boundMethod(self: *Self, data: Instruction.BoundMethod) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr(data.structure);
+}
+
+fn breakInstr(self: *Self, data: ?rir.Index) void {
+    self.indentAndAppendSlice("[Break]");
+    if (data) |instr| {
+        self.indent_level += 1;
+        defer self.indent_level -= 1;
+        self.parseInstr(instr);
+    }
 }
 
 fn discard(self: *Self) void {
