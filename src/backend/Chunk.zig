@@ -60,7 +60,6 @@ pub const OpCode = enum(u8) {
     array_set,
     array_set_chain,
     box,
-    // brk,
     call,
     call_native,
     cast_to_float,
@@ -120,7 +119,6 @@ pub const OpCode = enum(u8) {
     push_true,
     ret,
     ret_naked,
-    ret_scope,
     set_field,
     set_global,
     set_local,
@@ -131,6 +129,5 @@ pub const OpCode = enum(u8) {
     struct_lit,
     sub_float,
     sub_int,
-    swap,
     unbox,
 };

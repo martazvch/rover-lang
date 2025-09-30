@@ -426,12 +426,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 self.stack.top = frame.slots - 1;
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
-            .ret_scope => {
-                const locals_count = frame.readByte();
-                const res = self.stack.pop();
-                self.stack.top -= locals_count;
-                self.stack.push(res);
-            },
             .set_field => {
                 const field_idx = frame.readByte();
                 const instance = self.stack.pop().obj.as(Obj.Instance);
@@ -471,13 +465,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .sub_int => {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
-            },
-            .swap => {
-                const a = self.stack.peekRef(0);
-                const b = self.stack.peekRef(1);
-                const tmp = a.*;
-                a.* = b.*;
-                b.* = tmp;
             },
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }

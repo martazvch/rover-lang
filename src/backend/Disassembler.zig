@@ -122,7 +122,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .push_true => self.simpleInstruction(writer, "push_true", offset),
         .ret => self.simpleInstruction(writer, "ret", offset),
         .ret_naked => self.simpleInstruction(writer, "ret_naked", offset),
-        .ret_scope => self.indexInstruction(writer, "ret_scope", offset),
         .set_field => self.indexInstruction(writer, "set_field", offset),
         .set_global => self.indexInstruction(writer, "set_global", offset),
         .set_local => self.indexInstruction(writer, "set_local", offset),
@@ -133,7 +132,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .struct_lit => self.indexInstruction(writer, "struct_lit", offset),
         .sub_float => self.simpleInstruction(writer, "sub_float", offset),
         .sub_int => self.simpleInstruction(writer, "sub_int", offset),
-        .swap => self.simpleInstruction(writer, "swap", offset),
         .unbox => self.simpleInstruction(writer, "unbox", offset),
     } catch oom();
 }

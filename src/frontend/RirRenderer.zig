@@ -257,8 +257,8 @@ fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     };
 
     self.indentAndPrintSlice(
-        "[{s} declaration {s}, return kind: {t}]",
-        .{ fn_kind, fn_name, data.return_kind },
+        "[{s} declaration {s}{s}]",
+        .{ fn_kind, fn_name, if (data.returns) ", returns" else "" },
     );
 
     self.indent_level += 1;

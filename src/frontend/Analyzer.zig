@@ -37,16 +37,12 @@ const Context = struct {
     fn_type: ?*const Type,
     struct_type: ?*const Type,
     decl_type: ?*const Type,
-    // allow_partial: bool,
-    // returns: bool,
     in_call: bool,
 
     pub const empty: Context = .{
         .fn_type = null,
         .struct_type = null,
         .decl_type = null,
-        // .allow_partial = true,
-        // .returns = false,
         .in_call = false,
     };
 
@@ -254,6 +250,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
         .field => |*e| b: {
             const field_result = try self.field(e, ctx);
             if (field_result.ti.is_sym) return self.err(.assign_to_struct_fn, span);
+
             // Resolving methods without call result in a bound method
             if (field_result.ti.type.* == .function and field_result.ti.type.function.kind == .bound) {
                 return self.err(.assign_to_struct_fn, span);
@@ -264,6 +261,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
         .array_access => try self.analyzeExprInfos(node.assigne, true, ctx),
         else => return self.err(.invalid_assign_target, span),
     };
+
     const assigne = maybe_assigne orelse return self.err(.invalid_assign_target, span);
     const coerce = try self.performTypeCoercion(assigne.ti.type, value_res.ti.type, false, self.ast.getSpan(node.value));
 
@@ -276,12 +274,7 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
 }
 
 fn discard(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
-    const span = self.ast.getSpan(expr);
-    _ = span; // autofix
     const res = try self.analyzeExprInfos(expr, true, ctx);
-
-    // if (res.ti.type.is(.void)) return self.err(.void_discard, span);
-
     return self.irb.wrapInstr(.discard, res.instr);
 }
 
@@ -334,18 +327,14 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     }
 
     return self.irb.addInstr(
-        .{
-            .fn_decl = .{
-                .kind = if (is_closure) .closure else .{ .symbol = sym.index },
-                .name = name,
-                .body = body_instrs,
-                .defaults = param_res.defaults,
-                .captures = captures,
-                // .return_kind = if (ctx.returns) .explicit else if (fn_type.return_type.is(.void)) .implicit_void else .implicit_value,
-                // TODO: maybe remove?
-                .return_kind = if (returns) .explicit else if (fn_type.return_type.is(.void)) .implicit_void else .implicit_value,
-            },
-        },
+        .{ .fn_decl = .{
+            .kind = if (is_closure) .closure else .{ .symbol = sym.index },
+            .name = name,
+            .body = body_instrs,
+            .defaults = param_res.defaults,
+            .captures = captures,
+            .returns = returns,
+        } },
         span.start,
     );
 }
@@ -485,13 +474,7 @@ fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr,
 }
 
 fn print(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
-    const span = self.ast.getSpan(expr);
-    _ = span; // autofix
     const res = try self.analyzeExpr(expr, true, ctx);
-
-    // TODO: just 'produces no value' error is enough
-    // if (res.type.is(.void)) return self.err(.void_value, span);
-
     return self.irb.wrapInstr(.print, res.instr);
 }
 
@@ -1172,7 +1155,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
                 .body = body_instrs,
                 .defaults = param_res.defaults,
                 .captures = captures,
-                .return_kind = if (returns) .explicit else if (interned_type.is(.void)) .implicit_void else .implicit_value,
+                .returns = returns,
             } },
             offset,
         ),

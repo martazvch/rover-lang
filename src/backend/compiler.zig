@@ -600,12 +600,7 @@ const Compiler = struct {
             try compiler.compileInstr(instr);
         }
 
-        if (data.return_kind == .implicit_value) {
-            compiler.writeOp(.ret);
-        } else if (data.return_kind == .implicit_void) {
-            compiler.writeOp(.ret_naked);
-        }
-
+        compiler.writeOp(if (data.returns) .ret else .ret_naked);
         return compiler.end();
     }
 

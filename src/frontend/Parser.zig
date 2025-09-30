@@ -518,11 +518,19 @@ fn parseType(self: *Self) Error!*Ast.Type {
         } else {
             ty.* = .{ .scalar = self.token_idx - 1 };
         }
-    } else if (self.match(.left_bracket)) {
+    }
+    // Array
+    else if (self.match(.left_bracket)) {
         const openning = self.token_idx - 1;
         try self.expect(.right_bracket, .missing_bracket_array_type);
         ty.* = .{ .array = .{ .openning = openning, .child = try self.parseType() } };
-    } else if (self.match(.@"fn")) {
+    }
+    // Inline union
+    else if (self.match(.pipe)) {
+        //
+    }
+    // Function
+    else if (self.match(.@"fn")) {
         var span: Span = .{ .start = self.token_idx - 1, .end = undefined };
 
         var params: ArrayList(*Ast.Type) = .empty;
@@ -549,7 +557,9 @@ fn parseType(self: *Self) Error!*Ast.Type {
             .return_type = return_type,
             .span = span,
         } };
-    } else if (self.match(.question_mark)) {
+    }
+    // Optional
+    else if (self.match(.question_mark)) {
         ty.* = .{ .optional = .{ .token = self.token_idx - 1, .child = try self.parseType() } };
     } else {
         return self.errAtCurrent(.expect_type_name);

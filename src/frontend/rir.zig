@@ -1,7 +1,5 @@
-// TODO: remove heap
-pub const Scope = enum { builtin, global, heap, local };
+pub const Scope = enum { builtin, global, local };
 pub const Type = enum(u2) { float, int };
-pub const ReturnKind = enum(u2) { explicit, implicit_value, implicit_void };
 pub const RcAction = enum { increment, cow, none };
 
 pub const Index = usize;
@@ -112,7 +110,7 @@ pub const Instruction = struct {
         body: []const Index,
         defaults: []const Index,
         captures: []const Capture,
-        return_kind: ReturnKind,
+        returns: bool,
 
         pub const Kind = union(enum) { closure, symbol: usize };
         pub const Capture = struct { index: usize, local: bool };
