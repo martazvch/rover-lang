@@ -283,11 +283,15 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .@"break" => |e| {
-            if (e.expr) |data| {
-                try self.openKey(@tagName(expr.*), .block);
-                try self.renderExpr(data, false);
-                try self.closeKey(.block, comma);
-            } else try self.emptyKey("break", .block, comma);
+            if (e.label == null and e.expr == null) {
+                try self.emptyKey("break", .block, comma);
+                return;
+            }
+
+            try self.openKey(@tagName(expr.*), .block);
+            if (e.label) |label| try self.pushKeyValue("label", self.ast.toSource(label), e.expr != null);
+            if (e.expr) |data| try self.renderExpr(data, false);
+            try self.closeKey(.block, comma);
         },
         .closure => |*e| try self.renderFnDecl("", e, comma),
         .extractor => |*e| {
@@ -403,9 +407,14 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
 
 fn renderBlock(self: *Self, block: *const Ast.Block, comma: bool) !void {
     if (block.nodes.len == 0) {
-        try self.emptyKey("block", .list, comma);
+        if (block.label) |label| {
+            try self.openKey("block", .list);
+            try self.pushKeyValue("label", self.spanToSrc(label), false);
+            try self.closeKey(.list, comma);
+        } else try self.emptyKey("block", .list, comma);
     } else {
         try self.openKey("block", .list);
+        if (block.label) |label| try self.pushKeyValue("label", self.spanToSrc(label), true);
         for (block.nodes, 0..) |*data, i| {
             try self.renderNode(data, i != block.nodes.len - 1);
         }

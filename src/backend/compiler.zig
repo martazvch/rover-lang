@@ -123,10 +123,29 @@ pub const CompilationManager = struct {
 const Compiler = struct {
     manager: *CompilationManager,
     function: *Obj.Function,
-    breaks: ArrayList(usize),
+    block_stack: BlockStack,
     state: State = .{},
 
     const Self = @This();
+    const BlockStack = struct {
+        stack: ArrayList(Breaks),
+
+        const Breaks = ArrayList(usize);
+        pub const empty: BlockStack = .{ .stack = .empty };
+
+        pub fn open(self: *BlockStack, allocator: Allocator) void {
+            self.stack.append(allocator, .empty) catch oom();
+        }
+
+        pub fn close(self: *BlockStack) Breaks {
+            return self.stack.pop().?;
+        }
+
+        /// Depth is generated from bottom to top in *Analyzer*
+        pub fn add(self: *BlockStack, allocator: Allocator, instr: usize, depth: usize) void {
+            self.stack.items[self.stack.items.len - 1 - depth].append(allocator, instr) catch oom();
+        }
+    };
     const Error = error{Err} || Chunk.Error || std.posix.WriteError;
 
     const CompilerReport = GenReport(CompilerMsg);
@@ -152,7 +171,7 @@ const Compiler = struct {
                 default_count,
                 module_index,
             ),
-            .breaks = .empty,
+            .block_stack = .empty,
         };
     }
 
@@ -481,25 +500,15 @@ const Compiler = struct {
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {
-        // if (data.is_expr) self.writeOp(.push_null);
+        self.block_stack.open(self.manager.allocator);
 
         for (data.instrs) |instr| {
             try self.compileInstr(instr);
         }
 
-        // if (data.is_expr) {
-        //     self.writeOpAndByte(.ret_scope, data.pop_count);
-        // } else {
-        // //     // PERF: horrible perf, just emit a stack.top -= count
-        // for (0..data.pop_count) |_| {
-        //     self.writeOp(.pop);
-        // }
-        // }
-
-        for (self.breaks.items) |b| {
+        for (self.block_stack.close().items) |b| {
             try self.patchJump(b);
         }
-        self.breaks.clearRetainingCapacity();
 
         // PERF: horrible perf, just emit a stack.top -= count
         for (0..data.pop_count) |_| {
@@ -521,13 +530,13 @@ const Compiler = struct {
         self.writeOpAndByte(.closure, 1);
     }
 
-    fn breakInstr(self: *Self, data: ?rir.Index) Error!void {
-        if (data) |instr| {
+    fn breakInstr(self: *Self, data: Instruction.Break) Error!void {
+        if (data.instr) |instr| {
             try self.compileInstr(instr);
             self.writeOp(.store_blk_val);
         }
 
-        self.breaks.append(self.manager.allocator, self.emitJump(.jump)) catch oom();
+        self.block_stack.add(self.manager.allocator, self.emitJump(.jump), data.depth);
     }
 
     // TODO: protect cast

@@ -258,7 +258,7 @@ fn fnDecl(self: *Self) Error!Node {
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
 
-    const body, const has_callable = try self.block();
+    const body, const has_callable = try self.block(null);
 
     return .{ .fn_decl = .{
         .name = name,
@@ -746,12 +746,13 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
 fn parseExpr(self: *Self) Error!*Expr {
     const expr = try switch (self.prev(.tag)) {
         .@"break" => self.breakExpr(),
+        .colon => self.labelledBlock(),
         .false => self.literal(.bool),
         .float => self.literal(.float),
         .@"if" => self.ifExpr(),
         .identifier => self.literal(.identifier),
         .int => self.literal(.int),
-        .left_brace => self.blockExpr(),
+        .left_brace => (try self.block(null)).@"0",
         .left_bracket => self.array(),
         .left_paren => self.leftParenExprStart(),
         .minus, .not => self.unary(),
@@ -798,15 +799,28 @@ fn array(self: *Self) Error!*Expr {
     return expr;
 }
 
+/// Parses either a labelled or not block
 fn blockExpr(self: *Self) Error!*Expr {
-    const body, _ = try self.block();
+    if (self.match(.colon)) return self.labelledBlock();
+
+    const body, _ = try self.block(null);
 
     return body;
 }
 
+/// Parses a labelled block assuming we're passed ':'
+fn labelledBlock(self: *Self) Error!*Expr {
+    if (!self.match(.identifier)) return self.errAtCurrent(.non_ident_label);
+
+    const label = self.token_idx - 1;
+    if (!self.match(.left_brace)) return self.errAtCurrent(.missing_brace_after_label);
+
+    return (try self.block(label)).@"0";
+}
+
 /// Returns the block expression and a flag to indicate if a function or closure was
 /// defined in it
-fn block(self: *Self) Error!struct { *Expr, bool } {
+fn block(self: *Self, label: ?TokenIndex) Error!struct { *Expr, bool } {
     const openning_brace = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
     var exprs: ArrayList(Node) = .empty;
@@ -831,6 +845,7 @@ fn block(self: *Self) Error!struct { *Expr, bool } {
 
     try self.expectOrErrAtToken(.right_brace, .unclosed_brace, openning_brace);
     expr.* = .{ .block = .{
+        .label = label,
         .nodes = exprs.toOwnedSlice(self.allocator) catch oom(),
         .span = .{ .start = self.token_spans[openning_brace].start, .end = self.prev(.span).start },
     } };
@@ -840,10 +855,12 @@ fn block(self: *Self) Error!struct { *Expr, bool } {
 
 fn breakExpr(self: *Self) Error!*Expr {
     const kw = self.token_idx - 1;
+    const label = try self.parseLabel();
     const expr = self.allocator.create(Expr) catch oom();
 
     expr.* = .{ .@"break" = .{
         .kw = kw,
+        .label = label,
         .expr = if (self.check(.new_line) or self.check(.right_brace) or self.check(.@"else"))
             null
         else
@@ -851,6 +868,16 @@ fn breakExpr(self: *Self) Error!*Expr {
     } };
 
     return expr;
+}
+
+/// Parses a label if possible, otherwise returns `null`
+fn parseLabel(self: *Self) Error!?TokenIndex {
+    if (self.match(.colon)) {
+        if (!self.match(.identifier)) return self.errAtCurrent(.non_ident_label);
+        return self.token_idx - 1;
+    }
+
+    return null;
 }
 
 fn closure(self: *Self) Error!*Expr {
@@ -863,10 +890,12 @@ fn closure(self: *Self) Error!*Expr {
     self.skipNewLines();
     try self.expect(.left_brace, .expect_brace_before_fn_body);
 
+    const body, _ = try self.block(null);
+
     expr.* = .{ .closure = .{
         .name = opening,
         .params = args,
-        .body = (try self.blockExpr()).block,
+        .body = body.block,
         .return_type = return_type,
         .has_callable = false,
         .is_closure = true,

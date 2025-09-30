@@ -44,8 +44,15 @@ scopes: ArrayList(Scope),
 current: *Scope,
 builtins: AutoHashMapUnmanaged(InternerIdx, *const Type),
 symbol_count: usize,
+// block_count: usize,
 
-pub const empty: Self = .{ .scopes = .empty, .current = undefined, .builtins = .{}, .symbol_count = 0 };
+pub const empty: Self = .{
+    .scopes = .empty,
+    .current = undefined,
+    .builtins = .{},
+    .symbol_count = 0,
+    // .block_count = 0,
+};
 
 pub const Scope = struct {
     name: ?InternerIdx,
@@ -59,14 +66,19 @@ pub const Scope = struct {
     /// Offset to apply to any index in this scope. Correspond to the numbers of locals
     /// in parent scopes (represents stack at runtime)
     offset: usize,
+    /// It means you can't go to upper scope from this one
+    barrier: bool,
 };
 
-// pub fn open(self: *Self, allocator: Allocator, offset_from_parent: bool) void {
-// pub fn open(self: *Self, allocator: Allocator, fn_body: bool, name: ?InternerIdx) void {
-pub fn open(self: *Self, allocator: Allocator, fn_body: bool, name: ?InternerIdx) void {
-    // TODO: invert name and usage
-    const offset = if (fn_body) self.current.variables.count() + self.current.offset else 0;
-    var scope: Scope = .{ .name = name, .offset = offset };
+/// Opens a new scope. It can be the scope of a symbol like a function, closure or structure
+/// declaration. In that case, **barrier** should be `true` as you can access outter scope from
+/// those and the name should be `null`.
+/// Otherwise, you can name the scope as it might just be a regular block
+pub fn open(self: *Self, allocator: Allocator, barrier: bool, name: ?InternerIdx) void {
+    // if (barrier) self.block_count += 1;
+    const offset = if (barrier) 0 else self.current.variables.count() + self.current.offset;
+
+    var scope: Scope = .{ .name = name, .offset = offset, .barrier = barrier };
 
     // If variables have been forwarded, for declare them now
     if (self.scopes.items.len > 0) {
@@ -92,7 +104,7 @@ pub fn close(self: *Self) struct { usize, []const Break } {
 }
 
 pub fn initGlobalScope(self: *Self, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
-    self.open(allocator, false, null);
+    self.open(allocator, true, null);
     const builtins = std.meta.fields(TypeInterner.Cache);
     self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
@@ -245,26 +257,26 @@ pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
     return null;
 }
 
-pub fn addBreak(self: *Self, allocator: Allocator, brk: Break, label: ?InternerIdx) error{UnknownLabel}!void {
-    const lbl = label orelse {
-        self.current.breaks.append(allocator, brk) catch oom();
-        return;
-    };
+pub fn getScopeByName(self: *const Self, label: ?InstrIndex) error{UnknownLabel}!struct { *Scope, usize } {
+    const lbl = label orelse return .{ self.current, 0 };
 
     var i = self.scopes.items.len;
+    var depth: usize = 0;
 
-    while (i > 0) {
+    while (i > 0) : (depth += 1) {
         i -= 1;
         const scope = &self.scopes.items[i];
 
+        // It means we hit a function or structure's declaration scope
+        if (scope.barrier) break;
+
         if (scope.name) |sn| {
             if (sn != lbl) continue;
-
-            scope.breaks.append(allocator, brk) catch oom();
+            return .{ scope, depth };
         }
-
-        return error.UnknownLabel;
     }
+
+    return error.UnknownLabel;
 }
 
 // TODO: shouldn't it be in type interner?

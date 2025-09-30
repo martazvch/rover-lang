@@ -185,9 +185,9 @@ fn boundMethod(self: *Self, data: Instruction.BoundMethod) void {
     self.parseInstr(data.structure);
 }
 
-fn breakInstr(self: *Self, data: ?rir.Index) void {
-    self.indentAndAppendSlice("[Break]");
-    if (data) |instr| {
+fn breakInstr(self: *Self, data: Instruction.Break) void {
+    self.indentAndPrintSlice("[Break depth: {}]", .{data.depth});
+    if (data.instr) |instr| {
         self.indent_level += 1;
         defer self.indent_level -= 1;
         self.parseInstr(instr);

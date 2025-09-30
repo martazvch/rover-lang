@@ -1,0 +1,49 @@
+fn main() {
+    // Nested unnamed blocks, break outer from inner
+    :outer {
+        {
+            print "A" // expect A
+            break :outer
+            print "B"
+        }
+        print "C"
+    }
+    print "D" // expect D
+
+    // Labelled block with value, break inside inner block
+    var x = :val {
+        {
+            break :val 42
+        }
+        break :val 99
+    }
+    print x // expect 42
+
+   // Conditional break in labelled block
+    var y = :val {
+        if true do break :val 10
+        else break :val 20
+    }
+    print y // expect 10
+
+    var n = :num {
+        if false do break :num 5
+        print "fallthrough" // expect fallthrough
+        break :num 7
+    }
+    print n // expect 7
+
+    // Multiple levels of labels
+    :a {
+        :b {
+            :c {
+                print "start" // expect start
+                break :b
+                print "never"
+            }
+            print "after c"
+        }
+        print "after b" // expect after b
+    }
+    print "after a"
+}

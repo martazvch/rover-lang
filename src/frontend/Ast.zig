@@ -139,6 +139,7 @@ pub const ArrayAccess = struct {
 };
 
 pub const Block = struct {
+    label: ?TokenIndex,
     nodes: []Node,
     span: Span,
 };
@@ -151,6 +152,7 @@ pub const Binop = struct {
 
 pub const Break = struct {
     kw: TokenIndex,
+    label: ?TokenIndex,
     expr: ?*Expr,
 };
 

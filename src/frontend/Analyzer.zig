@@ -299,7 +299,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     // Forward declaration in outer scope for recursion
     var sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
-    self.scope.open(self.allocator, false, null);
+    self.scope.open(self.allocator, true, null);
     errdefer _ = self.scope.close();
 
     self.containers.append(self.allocator, self.ast.toSource(node.name));
@@ -653,7 +653,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
     ty.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
     ty.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
 
-    self.scope.open(self.allocator, false, null);
+    self.scope.open(self.allocator, true, null);
     defer _ = self.scope.close();
 
     self.containers.append(self.allocator, self.ast.toSource(node.name));
@@ -805,8 +805,6 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
         var val_type = val_res.ti.type;
         var val_instr = val_res.instr;
 
-        // if (val_type.is(.void)) return self.err(.void_value, span);
-
         if (!final_type.is(.void) and final_type != val_type) {
             // If new value can't be cast to current array type
             if (val_type.canCastTo(final_type)) {
@@ -899,7 +897,7 @@ fn expectArrayIndex(self: *Self, expr: *const Expr, ctx: *Context) Error!InstrIn
 
 // TODO: handle dead code eleminitaion so that it can be used in function's body?
 fn block(self: *Self, expr: *const Ast.Block, exp_val: bool, ctx: *Context) Result {
-    self.scope.open(self.allocator, true, null);
+    self.scope.open(self.allocator, false, self.internLabel(expr.label));
 
     var instrs: ArrayList(InstrIndex) = .empty;
     instrs.ensureTotalCapacity(self.allocator, expr.nodes.len) catch oom();
@@ -941,28 +939,20 @@ fn block(self: *Self, expr: *const Ast.Block, exp_val: bool, ctx: *Context) Resu
         .newType(final_type),
         if (cf == .@"return") .@"return" else .none,
         self.irb.addInstr(
-            .{
-                .block = .{
-                    .instrs = instrs.toOwnedSlice(self.allocator) catch oom(),
-                    // .pop_count = @intCast(self.scope.close()),
-                    .pop_count = @intCast(pop_count),
-                    .is_expr = !final_type.is(.void),
-                },
-            },
+            .{ .block = .{
+                .instrs = instrs.toOwnedSlice(self.allocator) catch oom(),
+                .pop_count = @intCast(pop_count),
+                .is_expr = !final_type.is(.void),
+            } },
             self.ast.getSpan(expr).start,
         ),
     );
 }
 
-// fn compareBreakToDecl(self: *Self, brk: LexScope.Break, ctx: *const Context) Error!*const Type {
-//     if (ctx.decl_type) |decl| {
-//         const coerce = try self.performTypeCoercion(decl, brk.type, false, brk.span);
-//         if (coerce.cast) self.irb.wrapInstrInplace(.cast_to_float, brk.instr);
-//         return coerce.type;
-//     }
-//
-//     return brk.type;
-// }
+fn internLabel(self: *Self, label: ?Ast.TokenIndex) ?InternerIdx {
+    const lbl = label orelse return null;
+    return self.interner.intern(self.ast.toSource(lbl));
+}
 
 fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
     const lhs = try self.analyzeExprInfos(expr.lhs, true, ctx);
@@ -1139,17 +1129,19 @@ fn breakExpr(self: *Self, expr: *const Ast.Break, exp_val: bool, ctx: *Context) 
         break :brk .{ res.type, res.instr };
     };
 
-    const instr = self.irb.addInstr(.{ .@"break" = expr_instr }, span.start);
-    self.scope.addBreak(self.allocator, .{ .instr = instr, .type = ty, .span = span }, null) catch {
-        // TODO: error
-        @panic("Unknown named block");
-    };
+    const scope, const depth = self.scope.getScopeByName(self.internLabel(expr.label)) catch return self.err(
+        .{ .undeclared_block_label = .{ .name = self.ast.toSource(expr.label.?) } },
+        self.ast.getSpan(expr.label.?),
+    );
+
+    const instr = self.irb.addInstr(.{ .@"break" = .{ .instr = expr_instr, .depth = depth } }, span.start);
+    scope.breaks.append(self.allocator, .{ .instr = instr, .type = ty, .span = span }) catch oom();
 
     return .fromTypeCf(ty, .@"break", instr);
 }
 
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
-    self.scope.open(self.allocator, false, null);
+    self.scope.open(self.allocator, true, null);
     defer _ = self.scope.close();
 
     const captures = try self.loadFunctionCaptures(&expr.meta.captures);
@@ -1168,24 +1160,20 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     const offset = span.start;
 
     ctx.fn_type = interned_type;
-    // const body_instrs = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
     const body_instrs, const returns = try self.fnBody(expr.body.nodes, &closure_type, span, ctx);
 
     // TODO: protect the cast
     return .fromType(
         interned_type,
         self.irb.addInstr(
-            .{
-                .fn_decl = .{
-                    .kind = .closure,
-                    .name = null,
-                    .body = body_instrs,
-                    .defaults = param_res.defaults,
-                    .captures = captures,
-                    // .return_kind = if (ctx.returns) .explicit else if (interned_type.is(.void)) .implicit_void else .implicit_value,
-                    .return_kind = if (returns) .explicit else if (interned_type.is(.void)) .implicit_void else .implicit_value,
-                },
-            },
+            .{ .fn_decl = .{
+                .kind = .closure,
+                .name = null,
+                .body = body_instrs,
+                .defaults = param_res.defaults,
+                .captures = captures,
+                .return_kind = if (returns) .explicit else if (interned_type.is(.void)) .implicit_void else .implicit_value,
+            } },
             offset,
         ),
     );
@@ -1528,9 +1516,6 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
 
     pure = pure and then_res.ti.comp_time;
 
-    // const then_ret = ctx.returns;
-    // ctx.returns = false;
-
     var else_cf: ?InstrInfos.ControlFlow = null;
     var else_ty: ?*const Type = null;
     var else_instr: ?InstrIndex = null;
@@ -1540,10 +1525,8 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
         else_instr = if (else_res.ti.heap) self.irb.wrapInstr(.incr_rc, else_res.instr) else else_res.instr;
 
         pure = pure and else_res.ti.comp_time;
-        // else_cf = ctx.returns;
         else_cf = else_res.cf;
         else_ty = else_res.ti.type;
-        // } else if (!ctx.allow_partial) {
     } else if (exp_val) {
         return self.err(
             .{ .missing_else_clause = .{ .if_type = self.getTypeName(then_res.ti.type) } },
@@ -1551,15 +1534,10 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
         );
     }
 
-    // const branch_res = try self.mergeIfBranch(then_res.ti.type, then_ret, else_ty, else_cf, expr, ctx);
     const branch_res = try self.mergeIfBranch(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, ctx);
 
     if (branch_res.cast_then) then_res.instr = self.irb.wrapInstr(.cast_to_float, then_res.instr);
     if (branch_res.cast_else) else_instr = self.irb.wrapInstr(.cast_to_float, else_instr.?);
-
-    // The whole instructions returns out of scope
-    // ctx.returns = then_ret and else_cf;
-    // ctx.returns = then_res.cf.returns() and else_cf;
 
     return .newCf(
         .{ .type = branch_res.type, .comp_time = pure },
@@ -1589,13 +1567,13 @@ fn mergeIfBranch(
 
     const then_span = self.ast.getSpan(expr.then);
 
-    const then_res = try self.checkBranchReturn(then_ty, then_cf, then_span, ctx);
+    const then_res = try self.checkBranchReturn(then_ty, then_cf);
     if (then_res.cast) res.cast_then = true;
 
     const else_type = else_ty orelse return res;
     const else_span = self.ast.getSpan(expr.@"else".?);
 
-    const else_res = try self.checkBranchReturn(else_type, else_cf.?, else_span, ctx);
+    const else_res = try self.checkBranchReturn(else_type, else_cf.?);
     if (else_res.cast) res.cast_else = true;
 
     // Type checking. We don't use perform type coercion because the function check against a
@@ -1651,35 +1629,11 @@ fn mergeIfBranch(
         );
     }
 
-    // return .{ .type = if (then_cf.returns() and else_cf.?.returns()) self.ti.getCached(.never) else final };
-    return .{ .type = if (then_cf == .@"return" and else_cf.? == .@"return") self.ti.getCached(.never) else final };
+    return .{ .type = if (then_cf.exitScope() and else_cf.?.exitScope()) self.ti.getCached(.never) else final };
 }
 
-fn checkBranchReturn(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow, span: Span, ctx: *const Context) Error!TypeCoherence {
-    _ = span; // autofix
-    _ = ctx; // autofix
-    // if (cf == .@"return") {
-    //     const expected = ctx.fn_type.?.function.return_type;
-    //     const res = try self.performTypeCoercion(expected, ty, true, span);
-    //     return .{ .type = self.ti.getCached(.void), .cast = res.cast };
-    // } else if (cf == .@"break") {
-    //     var t = ty;
-    //
-    //     if (ctx.decl_type) |decl| {
-    //         if (ty != decl) {
-    //             const res = try self.performTypeCoercion(decl, ty, false, span);
-    //             t = res.type;
-    //             return .{ .type = self.ti.getCached(.void), .cast = res.cast };
-    //         }
-    //     }
-    //
-    //     return .{ .type = self.ti.getCached(.void), .cast = false };
-    // }
-    if (cf.exitScope()) {
-        return .{ .type = self.ti.getCached(.void), .cast = false };
-    }
-
-    return .{ .type = ty, .cast = false };
+fn checkBranchReturn(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow) Error!TypeCoherence {
+    return .{ .type = if (cf.exitScope()) self.ti.getCached(.void) else ty, .cast = false };
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {

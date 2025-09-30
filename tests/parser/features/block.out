@@ -31,5 +31,12 @@
                 }
             }
         }
+    ],
+    "block": [
+        "label": "blk",
+        "print": {
+            "literal": "yes"
+        }
     ]
 }
+

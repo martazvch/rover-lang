@@ -1,0 +1,4 @@
+break
+break 2
+break :b
+break :b 2
