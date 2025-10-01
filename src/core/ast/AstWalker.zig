@@ -4,9 +4,9 @@ const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const Interner = @import("../Interner.zig");
+const Interner = @import("misc").Interner;
 const InternerIdx = Interner.Index;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 const Ast = @import("Ast.zig");
 
 allocator: Allocator,

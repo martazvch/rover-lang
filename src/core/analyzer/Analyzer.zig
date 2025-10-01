@@ -6,24 +6,24 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const FieldEnum = std.meta.FieldEnum;
 
-const Interner = @import("../Interner.zig");
+const Interner = @import("misc").Interner;
 const InternerIdx = Interner.Index;
-const Pipeline = @import("../Pipeline.zig");
-const GenReport = @import("../reporter.zig").GenReport;
-const Sb = @import("../StringBuilder.zig");
-const oom = @import("../utils.zig").oom;
+const Pipeline = @import("../../Pipeline.zig");
+const GenReport = @import("misc").reporter.GenReport;
+const Sb = @import("misc").StringBuilder;
+const oom = @import("misc").oom;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("Ast.zig");
+const Ast = @import("../ast/Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
 const Importer = @import("Importer.zig");
-const IrBuilder = @import("IrBuilder.zig");
+const IrBuilder = @import("../ir/IrBuilder.zig");
 const LexScope = @import("LexicalScope.zig");
-const rir = @import("rir.zig");
+const rir = @import("../ir/rir.zig");
 const InstrIndex = rir.Index;
 const Instruction = rir.Instruction;
-const Span = @import("Lexer.zig").Span;
-const TokenTag = @import("Lexer.zig").Token.Tag;
+const Span = @import("../parser/Lexer.zig").Span;
+const TokenTag = @import("../parser/Lexer.zig").Token.Tag;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
 
@@ -171,12 +171,12 @@ pub fn init(allocator: Allocator, pipeline: *Pipeline, module_name: InternerIdx)
 }
 
 fn err(self: *Self, kind: AnalyzerMsg, span: Span) Error {
-    self.errs.append(self.allocator, AnalyzerReport.err(kind, span)) catch oom();
+    self.errs.append(self.allocator, AnalyzerReport.err(kind, span.start, span.end)) catch oom();
     return error.Err;
 }
 
 fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
-    self.warns.append(self.allocator, AnalyzerReport.warn(kind, span)) catch oom();
+    self.warns.append(self.allocator, AnalyzerReport.warn(kind, span.start, span.end)) catch oom();
 }
 
 pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_main: bool) AnalyzedModule {

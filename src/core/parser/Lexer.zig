@@ -4,9 +4,9 @@ const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 const expect = std.testing.expect;
 
-const GenReport = @import("../reporter.zig").GenReport;
+const GenReport = @import("misc").reporter.GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 source: [:0]const u8,
 index: usize,
@@ -197,7 +197,7 @@ pub fn lex(self: *Self, source: [:0]const u8) void {
 }
 
 fn errorAt(self: *Self, tag: LexerMsg, token: *const Token) void {
-    const report = LexerReport.err(tag, token.span);
+    const report = LexerReport.err(tag, token.span.start, token.span.end);
     self.errs.append(self.allocator, report) catch oom();
 }
 

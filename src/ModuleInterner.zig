@@ -1,10 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const AnalyzedModule = @import("frontend/Analyzer.zig").AnalyzedModule;
-const CompiledModule = @import("backend/compiler.zig").CompiledModule;
-const InternerIndex = @import("Interner.zig").Index;
-const oom = @import("utils.zig").oom;
+const AnalyzedModule = @import("core/analyzer/Analyzer.zig").AnalyzedModule;
+const CompiledModule = @import("core/compiler/compiler.zig").CompiledModule;
+const InternerIndex = @import("misc").Interner.Index;
+const oom = @import("misc").oom;
 
 const Self = @This();
 

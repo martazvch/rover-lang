@@ -5,7 +5,7 @@ const MultiArrayList = std.MultiArrayList;
 
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 const Self = @This();
 pub const Mode = union(enum) {

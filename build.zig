@@ -38,9 +38,16 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("std/std.zig"),
     });
 
+    const misc_mod = b.createModule(.{
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path("src/misc/misc.zig"),
+    });
+
     const clap = b.dependency("clap", .{});
     exe.root_module.addImport("clap", clap.module("clap"));
     exe.root_module.addImport("rover-std", rover_std_mod);
+    exe.root_module.addImport("misc", misc_mod);
     exe.root_module.addOptions("options", options);
 
     b.installArtifact(exe);

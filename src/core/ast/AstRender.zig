@@ -4,7 +4,7 @@ const ArrayList = std.ArrayList;
 const assert = std.debug.assert;
 
 const Ast = @import("Ast.zig");
-const Span = @import("Lexer.zig").Span;
+const Span = @import("../parser/Lexer.zig").Span;
 
 allocator: Allocator = undefined,
 ast: *const Ast,

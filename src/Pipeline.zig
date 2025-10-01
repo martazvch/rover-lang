@@ -4,38 +4,37 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const options = @import("options");
 
-const Compiler = @import("backend/compiler.zig").Compiler;
-const CompiledModule = @import("backend/compiler.zig").CompiledModule;
-const CompilationManager = @import("backend/compiler.zig").CompilationManager;
-const Disassembler = @import("backend/Disassembler.zig");
-const Analyzer = @import("frontend/Analyzer.zig");
-const AnalyzerMsg = @import("frontend/analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("frontend/Ast.zig");
-const AstRender = @import("frontend/AstRender.zig");
-const Walker = @import("frontend/AstWalker.zig");
-const Lexer = @import("frontend/Lexer.zig");
-const LexerMsg = @import("frontend/lexer_msg.zig").LexerMsg;
-const LexicalScope = @import("frontend/LexicalScope.zig");
-const Parser = @import("frontend/Parser.zig");
-const ParserMsg = @import("frontend/parser_msg.zig").ParserMsg;
-const Sb = @import("StringBuilder.zig");
-const RirRenderer = @import("frontend/RirRenderer.zig");
-const TypeInterner = @import("frontend/types.zig").TypeInterner;
-const reportAll = @import("reporter.zig").reportAll;
-const Interner = @import("Interner.zig");
+const Compiler = @import("core/compiler/compiler.zig").Compiler;
+const CompiledModule = @import("core/compiler/compiler.zig").CompiledModule;
+const CompilationManager = @import("core/compiler/compiler.zig").CompilationManager;
+const Disassembler = @import("core/compiler/Disassembler.zig");
+const Analyzer = @import("core/analyzer/Analyzer.zig");
+const AnalyzerMsg = @import("core/analyzer/analyzer_msg.zig").AnalyzerMsg;
+const Ast = @import("core/ast/Ast.zig");
+const AstRender = @import("core/ast/AstRender.zig");
+const Walker = @import("core/ast/AstWalker.zig");
+const Lexer = @import("core/parser/Lexer.zig");
+const LexerMsg = @import("core/parser/lexer_msg.zig").LexerMsg;
+const LexicalScope = @import("core/analyzer/LexicalScope.zig");
+const Parser = @import("core/parser/Parser.zig");
+const ParserMsg = @import("core/parser/parser_msg.zig").ParserMsg;
+const Sb = @import("misc").StringBuilder;
+const RirRenderer = @import("core/ir/RirRenderer.zig");
+const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
+const reportAll = @import("misc").reporter.reportAll;
+const Interner = @import("misc").Interner;
 const ModuleInterner = @import("ModuleInterner.zig");
-const oom = @import("utils.zig").oom;
-const Obj = @import("runtime/Obj.zig");
-const Value = @import("runtime/values.zig").Value;
-const Config = @import("runtime/Vm.zig").Config;
-const Vm = @import("runtime/Vm.zig");
+const oom = @import("misc").oom;
+const Obj = @import("core/runtime/Obj.zig");
+const Value = @import("core/runtime/values.zig").Value;
+const Config = @import("core/runtime/Vm.zig").Config;
+const Vm = @import("core/runtime/Vm.zig");
 
 vm: *Vm,
 allocator: Allocator,
 ctx: *Context,
 analyzer: Analyzer,
 instr_count: usize,
-code_count: usize,
 is_sub: bool,
 
 const Self = @This();
@@ -69,7 +68,6 @@ pub fn init(allocator: Allocator, vm: *Vm, ctx: *Context) Self {
         .ctx = ctx,
         .analyzer = undefined,
         .instr_count = 0,
-        .code_count = 0,
         .is_sub = false,
     };
 }
@@ -116,7 +114,6 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     }
     if (self.analyzer.errs.items.len > 0) {
         try reportAll(AnalyzerMsg, self.analyzer.errs.items, !options.test_mode, file_name, source);
-        // self.instr_count = self.analyzer.ir_builder.count();
         self.instr_count = self.analyzer.irb.count();
         return error.ExitOnPrint;
     }
@@ -137,8 +134,6 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     );
 
     const compiled_module = try compiler.compile(
-        // self.instr_count,
-        // self.analyzer.ir_builder.instructions.items(.data),
         self.analyzer.irb.instructions.items(.data)[self.instr_count..],
         self.analyzer.irb.roots.items[self.instr_count..],
         self.analyzer.irb.computeLineFromOffsets(source)[self.instr_count..],
@@ -179,7 +174,6 @@ fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *
 
     var rir_renderer = RirRenderer.init(
         allocator,
-        // analyzer.ir_builder.instructions.items(.data)[start..],
         analyzer.irb.instructions.items(.data)[start..],
         &self.ctx.interner,
     );

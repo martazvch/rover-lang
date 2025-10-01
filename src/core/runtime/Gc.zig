@@ -6,8 +6,8 @@ const ArrayList = std.ArrayList;
 
 const options = @import("options");
 
-const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
-const oom = @import("../utils.zig").oom;
+const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
+const oom = @import("misc").oom;
 const Obj = @import("Obj.zig");
 const Array = Obj.Array;
 const Function = Obj.Function;

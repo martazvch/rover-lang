@@ -5,9 +5,9 @@ const builtin = @import("builtin");
 
 const Terminal = @import("terminal/Terminal.zig");
 const WinTerm = @import("terminal/WinTerm.zig");
-const Pipeline = @import("../Pipeline.zig");
-const Vm = @import("Vm.zig");
-const oom = @import("../utils.zig").oom;
+const Pipeline = @import("../../Pipeline.zig");
+const Vm = @import("../../core/runtime/Vm.zig");
+const oom = @import("misc").oom;
 
 const Self = @This();
 const Prompts = ArrayList([:0]const u8);

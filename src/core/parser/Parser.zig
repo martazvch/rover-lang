@@ -5,15 +5,15 @@ const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 const FieldEnum = std.meta.FieldEnum;
 
-const GenReport = @import("../reporter.zig").GenReport;
-const Ast = @import("Ast.zig");
+const GenReport = @import("misc").reporter.GenReport;
+const Ast = @import("../ast/Ast.zig");
 const Expr = Ast.Expr;
 const Node = Ast.Node;
 const TokenIndex = Ast.TokenIndex;
 const ParserMsg = @import("parser_msg.zig").ParserMsg;
 const Span = @import("Lexer.zig").Span;
 const Token = @import("Lexer.zig").Token;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 source: []const u8,
 errs: ArrayList(ParserReport),
@@ -198,7 +198,8 @@ fn errAt(self: *Self, token: TokenIndex, error_kind: ParserMsg) Error {
 
     self.ctx.panic_mode = true;
 
-    const report = ParserReport.err(error_kind, self.token_spans[token]);
+    const span = self.token_spans[token];
+    const report = ParserReport.err(error_kind, span.start, span.end);
     self.errs.append(self.allocator, report) catch oom();
 
     return error.Err;
@@ -213,7 +214,7 @@ fn errAtSpan(self: *Self, span: Span, error_kind: ParserMsg) Error {
 
     self.ctx.panic_mode = true;
 
-    const report = ParserReport.err(error_kind, span);
+    const report = ParserReport.err(error_kind, span.start, span.end);
     self.errs.append(self.allocator, report) catch oom();
 
     return error.Err;

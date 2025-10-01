@@ -6,10 +6,10 @@ const Writer = std.Io.Writer;
 
 const options = @import("options");
 
-const Chunk = @import("../backend/Chunk.zig");
-const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
-const NativeFn = @import("../std/meta.zig").NativeFn;
-const oom = @import("../utils.zig").oom;
+const Chunk = @import("../compiler/Chunk.zig");
+const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
+const NativeFn = @import("../../std/meta.zig").NativeFn;
+const oom = @import("misc").oom;
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
 

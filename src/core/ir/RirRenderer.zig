@@ -3,16 +3,16 @@ const ArrayList = std.ArrayList;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
-const Interner = @import("../Interner.zig");
-const oom = @import("../utils.zig").oom;
-const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
-const Ast = @import("Ast.zig");
-const Node = @import("Ast.zig").Node;
+const Interner = @import("misc").Interner;
+const oom = @import("misc").oom;
+const AnalyzerReport = @import("../analyzer/Analyzer.zig").AnalyzerReport;
+const Ast = @import("../ast/Ast.zig");
+const Node = Ast.Node;
 const rir = @import("rir.zig");
 const Instruction = rir.Instruction;
 const Type = rir.Type;
-const Span = @import("Lexer.zig").Span;
-const Token = @import("Lexer.zig").Token;
+const Span = @import("../parser/Lexer.zig").Span;
+const Token = @import("../parser/Lexer.zig").Token;
 
 const Labels = struct { depth: usize, msg: []const u8 };
 

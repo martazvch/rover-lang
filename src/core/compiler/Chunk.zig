@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const Value = @import("../runtime/values.zig").Value;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 allocator: Allocator,
 code: ArrayList(u8),

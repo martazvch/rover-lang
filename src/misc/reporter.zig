@@ -5,8 +5,6 @@ const assert = std.debug.assert;
 const Writer = std.Io.Writer;
 const builtin = @import("builtin");
 
-const Span = @import("frontend/Lexer.zig").Span;
-
 const BoxChar = enum {
     BottomLeft,
     BottomRight,
@@ -286,13 +284,13 @@ pub fn GenReport(comptime T: type) type {
         }
 
         /// Creates an error associated with the tag
-        pub fn err(report: T, span: Span) Self {
-            return Self.init(report, .@"error", span.start, span.end);
+        pub fn err(report: T, start: usize, end: usize) Self {
+            return Self.init(report, .@"error", start, end);
         }
 
         /// Creates warning associated with the tag
-        pub fn warn(report: T, span: Span) Self {
-            return Self.init(report, .warning, span.start, span.end);
+        pub fn warn(report: T, start: usize, end: usize) Self {
+            return Self.init(report, .warning, start, end);
         }
 
         pub fn getMsg(self: *const Self, writer: anytype) !void {

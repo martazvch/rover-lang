@@ -5,10 +5,10 @@ const builtin = @import("builtin");
 
 const clap = @import("clap");
 
-const oom = @import("utils.zig").oom;
+const oom = @import("misc").oom;
 const Pipeline = @import("Pipeline.zig");
-const Repl = @import("runtime/Repl.zig");
-const Vm = @import("runtime/Vm.zig");
+const Repl = @import("commands/repl/Repl.zig");
+const Vm = @import("core/runtime/Vm.zig");
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 

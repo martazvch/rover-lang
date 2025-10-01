@@ -4,11 +4,11 @@ const Writer = std.Io.Writer;
 
 const options = @import("options");
 
-const Chunk = @import("../backend/Chunk.zig");
+const Chunk = @import("../compiler/Chunk.zig");
 const OpCode = Chunk.OpCode;
-const CompiledModule = @import("../backend/compiler.zig").CompiledModule;
-const Disassembler = @import("../backend/Disassembler.zig");
-const oom = @import("../utils.zig").oom;
+const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
+const Disassembler = @import("../compiler/Disassembler.zig");
+const oom = @import("misc").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const Table = @import("Table.zig");

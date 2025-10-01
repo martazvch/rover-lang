@@ -1,10 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Ast = @import("Ast.zig");
+const Ast = @import("../ast/Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
-const Sb = @import("../StringBuilder.zig");
-const oom = @import("../utils.zig").oom;
+const Sb = @import("misc").StringBuilder;
+const oom = @import("misc").oom;
 
 const Self = @This();
 pub const Result = union(enum) {
@@ -46,10 +46,8 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
 
             const file = cwd.openFile(file_name, .{}) catch {
                 const owned_name = allocator.dupe(u8, file_name) catch oom();
-                return .{ .err = .err(
-                    .{ .missing_file_in_module = .{ .file = owned_name } },
-                    ast.getSpan(part),
-                ) };
+                const span = ast.getSpan(part);
+                return .{ .err = .err(.{ .missing_file_in_module = .{ .file = owned_name } }, span.start, span.end) };
             };
             defer file.close();
 
@@ -64,7 +62,10 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
 
             return .{ .ok = .{ .name = file_name, .path = sb.renderAlloc(allocator), .content = buf } };
         } else {
-            cwd = cwd.openDir(name, .{}) catch return .{ .err = .err(.{ .unknown_module = .{ .name = name } }, ast.getSpan(part)) };
+            cwd = cwd.openDir(name, .{}) catch {
+                const span = ast.getSpan(part);
+                return .{ .err = .err(.{ .unknown_module = .{ .name = name } }, span.start, span.end) };
+            };
             sb.append(allocator, std.fs.path.sep_str);
             sb.append(allocator, name);
         }

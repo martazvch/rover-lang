@@ -4,7 +4,7 @@ const Writer = std.Io.Writer;
 
 const Obj = @import("Obj.zig");
 const Vm = @import("Vm.zig");
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 pub const Value = union(enum) {
     bool: bool,

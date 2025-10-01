@@ -1,9 +1,9 @@
 const std = @import("std");
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
-const Span = @import("Lexer.zig").Span;
-const Token = @import("Lexer.zig").Token;
-const InternerIndex = @import("../Interner.zig").Index;
+const Span = @import("../parser/Lexer.zig").Span;
+const Token = @import("../parser/Lexer.zig").Token;
+const InternerIndex = @import("misc").Interner.Index;
 
 source: [:0]const u8,
 token_tags: []const Token.Tag,

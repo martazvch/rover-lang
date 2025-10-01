@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 
 const Obj = @import("../runtime/Obj.zig");
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Module = @import("compiler.zig").CompiledModule;

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 
 pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },

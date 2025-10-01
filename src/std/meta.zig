@@ -1,5 +1,5 @@
-const Value = @import("../runtime/values.zig").Value;
-const Type = @import("../frontend/types.zig").Type;
+const Value = @import("../core/runtime/values.zig").Value;
+const Type = @import("../core/analyzer/types.zig").Type;
 
 pub const NativeFn = *const fn ([]const Value) Value;
 

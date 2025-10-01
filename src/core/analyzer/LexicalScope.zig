@@ -5,13 +5,13 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const AnalyzedModule = @import("Analyzer.zig").AnalyzedModule;
-const Interner = @import("../Interner.zig");
+const Interner = @import("misc").Interner;
 const InternerIdx = Interner.Index;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
-const InstrIndex = @import("rir.zig").Index;
-const Span = @import("Lexer.zig").Span;
-const oom = @import("../utils.zig").oom;
+const InstrIndex = @import("../ir/rir.zig").Index;
+const Span = @import("../parser/Lexer.zig").Span;
+const oom = @import("misc").oom;
 
 const Self = @This();
 

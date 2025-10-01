@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const oom = @import("../utils.zig").oom;
+const oom = @import("misc").oom;
 const String = @import("Obj.zig").String;
 const Value = @import("values.zig").Value;
 
