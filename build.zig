@@ -81,7 +81,17 @@ pub fn build(b: *std.Build) !void {
     // -------
     const test_step = b.step("test", "Run unit tests");
 
-    // Tester
+    // Unit tests
+    const exe_tests = b.addTest(.{ .root_module = exe.root_module });
+    const run_exe_tests = b.addRunArtifact(exe_tests);
+    test_step.dependOn(&run_exe_tests.step);
+
+    // Unit tests on misc module
+    const misc_tests = b.addTest(.{ .root_module = misc_mod });
+    const run_misc_tests = b.addRunArtifact(misc_tests);
+    test_step.dependOn(&run_misc_tests.step);
+
+    // Custom unit tests runner for language
     const tester_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
@@ -97,6 +107,7 @@ pub fn build(b: *std.Build) !void {
     const run_tester = b.addRunArtifact(tester_exe);
     run_tester.step.dependOn(&install_tester.step);
     run_tester.step.dependOn(b.getInstallStep());
+
     test_step.dependOn(&run_tester.step);
 
     if (b.args) |args|

@@ -94,3 +94,7 @@ pub fn main() !void {
         // try repl.run();
     }
 }
+
+test {
+    _ = @import("core/analyzer/types.zig");
+}

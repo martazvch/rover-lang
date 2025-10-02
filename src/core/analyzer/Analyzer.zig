@@ -448,7 +448,7 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
 
     if (!returns and !fn_type.return_type.is(.void)) {
         const span = if (body.len == 0) name_span else self.ast.getSpan(body[body.len - 1]);
-        return self.err(.{ .fn_expect_value = .{ .expect = self.getTypeName(fn_type.return_type) } }, span);
+        return self.err(.{ .fn_expect_value = .{ .expect = self.typeName(fn_type.return_type) } }, span);
     }
 
     // If no errors and different types
@@ -703,7 +703,7 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
                 if (res.ti.type.canCastTo(struct_field.type)) {
                     res.instr = self.irb.wrapInstr(.cast_to_float, res.instr);
                 } else return self.err(
-                    .{ .default_value_type_mismatch = .new(self.getTypeName(struct_field.type), self.getTypeName(res.ti.type), .field) },
+                    .{ .default_value_type_mismatch = .new(self.typeName(struct_field.type), self.typeName(res.ti.type), .field) },
                     self.ast.getSpan(f.name),
                 );
             }
@@ -722,7 +722,7 @@ fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) StmtResult {
     const cond_res = try self.analyzeExpr(node.condition, true, ctx);
 
     if (!cond_res.type.is(.bool)) return self.err(
-        .{ .non_bool_cond = .{ .what = "while", .found = self.getTypeName(cond_res.type) } },
+        .{ .non_bool_cond = .{ .what = "while", .found = self.typeName(cond_res.type) } },
         span,
     );
 
@@ -730,7 +730,7 @@ fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) StmtResult {
 
     // TODO: when changing rules on last expression in block, useless error
     if (!body_res.ti.type.is(.void)) return self.err(
-        .{ .non_void_while = .{ .found = self.getTypeName(body_res.ti.type) } },
+        .{ .non_void_while = .{ .found = self.typeName(body_res.ti.type) } },
         self.ast.getSpan(node.body),
     );
 
@@ -802,7 +802,7 @@ fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
                     }
                     backpatched = true;
                 } else return self.err(
-                    .{ .array_elem_different_type = .{ .found1 = self.getTypeName(final_type), .found2 = self.getTypeName(val_type) } },
+                    .{ .array_elem_different_type = .{ .found1 = self.typeName(final_type), .found2 = self.typeName(val_type) } },
                     span,
                 );
             }
@@ -836,7 +836,7 @@ fn arrayAccess(self: *Self, expr: *const Ast.ArrayAccess, ctx: *Context) Result 
     };
 
     if (!arr_res.type.is(.array)) return self.err(
-        .{ .non_array_indexing = .{ .found = self.getTypeName(arr_res.type) } },
+        .{ .non_array_indexing = .{ .found = self.typeName(arr_res.type) } },
         self.ast.getSpan(expr.array),
     );
 
@@ -871,7 +871,7 @@ fn expectArrayIndex(self: *Self, expr: *const Expr, ctx: *Context) Error!InstrIn
     const res = try self.analyzeExpr(expr, true, ctx);
 
     if (res.type != self.ti.cache.int) return self.err(
-        .{ .non_integer_index = .{ .found = self.getTypeName(res.type) } },
+        .{ .non_integer_index = .{ .found = self.typeName(res.type) } },
         self.ast.getSpan(expr),
     );
 
@@ -970,15 +970,15 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
         switch (expr.op) {
             .plus, .slash, .star, .minus => {
                 const lhs_instr, const rhs_instr, const ty = self.binopArithmeticCoercion(lhs, rhs) catch |e| return switch (e) {
-                    error.NonNumLsh => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(lhs.ti.type) } }, lhs_span),
-                    error.NonNumRhs => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(rhs.ti.type) } }, rhs_span),
+                    error.NonNumLsh => self.err(.{ .invalid_arithmetic = .{ .found = self.typeName(lhs.ti.type) } }, lhs_span),
+                    error.NonNumRhs => self.err(.{ .invalid_arithmetic = .{ .found = self.typeName(rhs.ti.type) } }, rhs_span),
                 };
                 break :instr .{ getArithmeticOp(expr.op, ty), lhs_instr, rhs_instr, ty };
             },
             .greater_equal, .greater, .less_equal, .less => {
                 const lhs_instr, const rhs_instr, const ty = self.binopArithmeticCoercion(lhs, rhs) catch |e| return switch (e) {
-                    error.NonNumLsh => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(lhs.ti.type) } }, lhs_span),
-                    error.NonNumRhs => self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(rhs.ti.type) } }, rhs_span),
+                    error.NonNumLsh => self.err(.{ .invalid_arithmetic = .{ .found = self.typeName(lhs.ti.type) } }, lhs_span),
+                    error.NonNumRhs => self.err(.{ .invalid_arithmetic = .{ .found = self.typeName(rhs.ti.type) } }, rhs_span),
                 };
 
                 if (lhs_type.is(.float) or rhs_type.is(.float)) self.warn(.float_equal, self.ast.getSpan(expr));
@@ -987,10 +987,10 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
             },
             .equal_equal, .bang_equal => {
                 const lhs_instr, const rhs_instr, const ty = self.binopComparisonCoercion(lhs, rhs) catch |e| return switch (e) {
-                    error.NonNullLhs => self.err(.{ .non_null_comp_optional = .{ .found = self.getTypeName(lhs_type) } }, lhs_span),
-                    error.NonNullRhs => self.err(.{ .non_null_comp_optional = .{ .found = self.getTypeName(rhs_type) } }, rhs_span),
+                    error.NonNullLhs => self.err(.{ .non_null_comp_optional = .{ .found = self.typeName(lhs_type) } }, lhs_span),
+                    error.NonNullRhs => self.err(.{ .non_null_comp_optional = .{ .found = self.typeName(rhs_type) } }, rhs_span),
                     error.Invalid => self.err(
-                        .{ .invalid_comparison = .{ .found1 = self.getTypeName(lhs_type), .found2 = self.getTypeName(rhs_type) } },
+                        .{ .invalid_comparison = .{ .found1 = self.typeName(lhs_type), .found2 = self.typeName(rhs_type) } },
                         self.ast.getSpan(expr),
                     ),
                 };
@@ -1000,8 +1000,8 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
                 break :instr .{ getComparisonOp(expr.op, ty), lhs_instr, rhs_instr, self.ti.getCached(.bool) };
             },
             .@"and", .@"or" => {
-                if (!lhs_type.is(.bool)) return self.err(.{ .invalid_logical = .{ .found = self.getTypeName(lhs_type) } }, lhs_span);
-                if (!rhs_type.is(.bool)) return self.err(.{ .invalid_logical = .{ .found = self.getTypeName(rhs_type) } }, rhs_span);
+                if (!lhs_type.is(.bool)) return self.err(.{ .invalid_logical = .{ .found = self.typeName(lhs_type) } }, lhs_span);
+                if (!rhs_type.is(.bool)) return self.err(.{ .invalid_logical = .{ .found = self.typeName(rhs_type) } }, rhs_span);
 
                 break :instr .{ if (expr.op == .@"and") .@"and" else .@"or", lhs.instr, rhs.instr, self.ti.getCached(.bool) };
             },
@@ -1192,7 +1192,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
         .module => |ty| return self.moduleAccess(expr.field, ty),
         .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.ti.is_sym, ctx),
         else => return self.err(
-            .{ .non_struct_field_access = .{ .found = self.getTypeName(struct_res.ti.type) } },
+            .{ .non_struct_field_access = .{ .found = self.typeName(struct_res.ti.type) } },
             span,
         ),
     };
@@ -1489,7 +1489,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
 
     // We can continue to analyze if the condition isn't a bool
     if (!cond_res.ti.type.is(.bool)) self.err(
-        .{ .non_bool_cond = .{ .what = "if", .found = self.getTypeName(cond_res.ti.type) } },
+        .{ .non_bool_cond = .{ .what = "if", .found = self.typeName(cond_res.ti.type) } },
         span,
     ) catch {};
 
@@ -1512,7 +1512,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
         else_ty = else_res.ti.type;
     } else if (exp_val) {
         return self.err(
-            .{ .missing_else_clause = .{ .if_type = self.getTypeName(then_res.ti.type) } },
+            .{ .missing_else_clause = .{ .if_type = self.typeName(then_res.ti.type) } },
             self.ast.getSpan(expr),
         );
     }
@@ -1607,7 +1607,7 @@ fn mergeIfBranch(
 
         // Otherwise, error
         else return self.err(
-            .{ .type_mismatch = .{ .expect = self.getTypeName(then_res.type), .found = self.getTypeName(else_res.type) } },
+            .{ .type_mismatch = .{ .expect = self.typeName(then_res.type), .found = self.typeName(else_res.type) } },
             else_span,
         );
     }
@@ -1805,10 +1805,10 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
     const ty = rhs.ti.type;
 
     if (op == .not and !ty.is(.bool)) {
-        return self.err(.{ .invalid_unary = .{ .found = self.getTypeName(ty) } }, span);
+        return self.err(.{ .invalid_unary = .{ .found = self.typeName(ty) } }, span);
     }
     if (op == .minus and !ty.isNumeric()) {
-        return self.err(.{ .invalid_arithmetic = .{ .found = self.getTypeName(ty) } }, span);
+        return self.err(.{ .invalid_arithmetic = .{ .found = self.typeName(ty) } }, span);
     }
 
     return .new(
@@ -1859,7 +1859,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
             const module_type = module_infos.type;
 
             if (!module_type.is(.module)) return self.err(
-                .{ .dot_type_on_non_mod = .{ .found = self.getTypeName(module_type) } },
+                .{ .dot_type_on_non_mod = .{ .found = self.typeName(module_type) } },
                 self.ast.getSpan(module_token),
             );
 
@@ -1913,6 +1913,16 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
 
             return found_type;
         },
+        .@"union" => |u| {
+            var types = ArrayList(*const Type).initCapacity(self.allocator, u.len) catch oom();
+
+            types.ensureTotalCapacity(self.allocator, u.len) catch oom();
+            for (u) |child| {
+                types.appendAssumeCapacity(try self.checkAndGetType(child, ctx));
+            }
+
+            return self.ti.intern(.{ .@"union" = .{ .types = types.toOwnedSlice(self.allocator) catch oom() } });
+        },
         .self => if (ctx.struct_type) |struct_type| struct_type else self.err(.self_outside_struct, self.ast.getSpan(t)),
     };
 }
@@ -1928,14 +1938,15 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
         return if (decl.is(.optional))
             .{ .type = decl, .cast = false }
         else
-            self.err(.{ .null_assign_to_non_optional = .{ .expect = self.getTypeName(decl) } }, span);
+            self.err(.{ .null_assign_to_non_optional = .{ .expect = self.typeName(decl) } }, span);
     }
 
     // If this is 'never', it means we ended with a control flow in which all branches returned
     // In that case, the type has already been tested against function's type
+    // TODO: are we really using this?
     if (value.is(.never)) return .{ .type = decl, .cast = false };
 
-    // If we don't assign an optional, extract the chgild type from declaration
+    // If we don't assign an optional, extract the child type from declaration
     var current_decl = if (decl.is(.optional)) decl.optional else decl;
     // Then if it's the same, return it
     if (current_decl == value) return .{ .type = decl, .cast = false };
@@ -1946,6 +1957,11 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
                 error.mismatch => break :check,
                 else => |narrowed| return narrowed,
             };
+        } else if (current_decl.is(.@"union") or value.is(.@"union")) {
+            return checkUnionType(current_decl, value) catch self.err(
+                .{ .type_not_in_union = .{ .expect = self.typeName(current_decl), .found = self.typeName(value) } },
+                span,
+            );
         } else if (value.is(.function)) {
             return self.checkFunctionEq(current_decl, value) catch break :check;
         }
@@ -1977,7 +1993,7 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
     }
 
     return self.err(
-        .{ .type_mismatch = .{ .expect = self.getTypeName(decl), .found = self.getTypeName(value) } },
+        .{ .type_mismatch = .{ .expect = self.typeName(decl), .found = self.typeName(value) } },
         span,
     );
 }
@@ -1987,6 +2003,7 @@ fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!Typ
     // Functions function's return types like: 'fn add() -> fn(int) -> int' don't have a declaration
     // There is also the case when assigning to a variable and infering type like: var bound = foo.method
     // Here, we want `bound` to be an anonymus function, it loses all declaration infos because it's a runtime value
+    // TODO: put outside to centralize all the void decl -> infer from value mechanism
     if (decl.is(.void)) return .{
         .type = if (value.function.loc != null)
             self.ti.intern(.{ .function = value.function.toAnon(self.allocator) })
@@ -2011,21 +2028,45 @@ fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!Typ
 
     return error.Err;
 }
+/// Checks if two different types (with at least one of them being an unoion) fits in one or the other
+fn checkUnionType(decl: *const Type, value: *const Type) Error!TypeCoherence {
+    // TODO: put the check void on decl in the caller
+    if (decl.is(.void)) {
+        return .{ .type = value, .cast = false };
+    }
+
+    // Only declaration is an union
+    if (!value.is(.@"union")) {
+        if (decl.@"union".contains(value)) {
+            return .{ .type = decl, .cast = false };
+        }
+    }
+    // Value is an union but not declaration
+    else if (!decl.is(.@"union")) {
+        return error.Err;
+    }
+    // Both are unions
+    else if (decl.@"union".containsSubset(&value.@"union")) {
+        return .{ .type = decl, .cast = false };
+    }
+
+    return error.Err;
+}
 
 /// Try to infer array value type from variable's declared type
 fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span) (Error || error{mismatch})!TypeCoherence {
-    const depth_value, const child_value = value.array.getDepthAndChild();
+    const depth_value, const child_value = value.array.depthAndChild();
 
     check: {
         if (decl.is(.void)) {
             // Empty array like: []
             if (child_value.is(.void)) {
                 // No type declared and empty array like: var a = [], else infer from declaration
-                return self.err(.cant_infer_arary_type, span);
+                return self.err(.cant_infer_array_type, span);
             }
         } else {
             if (!decl.is(.array)) break :check;
-            const depth_decl, const child_decl = decl.array.getDepthAndChild();
+            const depth_decl, const child_decl = decl.array.depthAndChild();
             if (depth_value != depth_decl) break :check;
             if (!child_value.is(.void)) {
                 if (depth_value != depth_decl or child_value != child_decl) break :check;
@@ -2038,8 +2079,8 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
     return error.mismatch;
 }
 
-fn getTypeName(self: *const Self, ty: *const Type) []const u8 {
-    return ty.toString(self.allocator, &self.scope, self.module_name, self.interner, &self.pipeline.ctx.module_interner);
+fn typeName(self: *const Self, ty: *const Type) []const u8 {
+    return ty.toString(self.allocator, self.interner);
 }
 
 pub fn getDeclOrVoid(self: *const Self, ctx: *const Context) *const Type {

@@ -60,9 +60,10 @@ pub fn getKey(self: *const Self, index: Index) ?[]const u8 {
 test "intern" {
     const testing = @import("std").testing;
     const expect = testing.expect;
+    const allocator = testing.allocator;
 
-    var interner = Self.init(testing.allocator);
-    defer interner.deinit();
+    var interner = Self.init(allocator);
+    defer interner.deinit(allocator);
 
     try expect(interner.intern("first") == 0);
     try expect(interner.intern("second") == 1);

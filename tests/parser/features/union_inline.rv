@@ -1,0 +1,3 @@
+var a: int|bool|str
+var b: bool | []Vec2 | fn(int) -> float
+

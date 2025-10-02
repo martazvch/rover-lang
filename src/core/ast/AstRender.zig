@@ -228,6 +228,12 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
         },
         .optional => |t| try buf.print(self.allocator, "?{s}", .{try self.renderType(t.child)}),
         .scalar => |t| try buf.appendSlice(self.allocator, self.spanToSrc(t)),
+        .@"union" => |types| {
+            for (types, 0..) |t, i| {
+                try buf.appendSlice(self.allocator, try self.renderType(t));
+                if (i < types.len - 1) try buf.appendSlice(self.allocator, "|");
+            }
+        },
         .self => try buf.appendSlice(self.allocator, "Self"),
     }
 

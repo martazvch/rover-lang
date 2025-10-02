@@ -15,7 +15,7 @@ pub const AnalyzerMsg = union(enum) {
     block_all_path_dont_return,
     call_method_on_type: struct { name: []const u8 },
     call_static_on_instance: struct { name: []const u8 },
-    cant_infer_arary_type,
+    cant_infer_array_type,
     dead_code,
     default_value_type_mismatch: struct {
         expect: []const u8,
@@ -58,6 +58,7 @@ pub const AnalyzerMsg = union(enum) {
     too_many_locals,
     too_many_types,
     type_mismatch: struct { expect: []const u8, found: []const u8 },
+    type_not_in_union: struct { expect: []const u8, found: []const u8 },
     undeclared_field_access: struct { name: []const u8 },
     undeclared_block_label: struct { name: []const u8 },
     undeclared_type: struct { found: []const u8 },
@@ -98,7 +99,7 @@ pub const AnalyzerMsg = union(enum) {
             .block_all_path_dont_return => writer.writeAll("all paths of block expression don't return a value"),
             .call_method_on_type => |e| writer.print("method '{s}' called on a type", .{e.name}),
             .call_static_on_instance => |e| writer.print("static function '{s}' called on an instance", .{e.name}),
-            .cant_infer_arary_type => writer.writeAll("can't infer array type with empty array and not declared type"),
+            .cant_infer_array_type => writer.writeAll("can't infer array type with empty array and not declared type"),
             .dead_code => writer.print("unreachable code", .{}),
             .default_value_type_mismatch => |e| writer.print(
                 "{s}'s default value doesn't match {s}'s type, expect '{s}' but found '{s}'",
@@ -138,6 +139,7 @@ pub const AnalyzerMsg = union(enum) {
             .too_many_fn_args => |e| writer.print("expect maximum {} arguments but found {}", .{ e.expect, e.found }),
             .too_many_types => writer.writeAll("too many types declared, maximum is 268435455"),
             .type_mismatch => |e| writer.print("type mismatch, expect type '{s}' but found '{s}' ", .{ e.expect, e.found }),
+            .type_not_in_union => |e| writer.print("type `{s}' is not part of union '{s}'", .{ e.found, e.expect }),
             .undeclared_field_access => |e| writer.print("field '{s}' isn't part of structure's definition", .{e.name}),
             .undeclared_block_label => |e| writer.print("no block labelled '{s}' found in scope", .{e.name}),
             .undeclared_type => |e| writer.print("undeclared type '{s}'", .{e.found}),
@@ -167,7 +169,7 @@ pub const AnalyzerMsg = union(enum) {
             .big_self_outside_struct => writer.writeAll("used outside a structure"),
             .block_all_path_dont_return => writer.writeAll("this block"),
             .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
-            .cant_infer_arary_type => writer.writeAll("empty arrays don't convey any type information"),
+            .cant_infer_array_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
@@ -198,6 +200,7 @@ pub const AnalyzerMsg = union(enum) {
             .return_outside_fn, .self_outside_struct => writer.writeAll("here"),
             .too_many_locals, .too_many_types => writer.writeAll("this is the exceding one"),
             .type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
+            .type_not_in_union => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .undeclared_field_access, .undeclared_type, .undeclared_var, .use_uninit_var => writer.writeAll("here"),
             .undeclared_block_label => writer.writeAll("this label"),
             .unknow_char_escape => writer.writeAll("unknown character to espace"),
@@ -227,7 +230,7 @@ pub const AnalyzerMsg = union(enum) {
             .call_method_on_type, .call_static_on_instance => writer.writeAll(
                 "static functions can only be called on types and methods can only be called on instances",
             ),
-            .cant_infer_arary_type => writer.writeAll(
+            .cant_infer_array_type => writer.writeAll(
                 \\can't extract any type information from an empty array '[]'. you must either declare a type in variable's
                 \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
                 \\Also, doing 'var arr: []int = []' is equivalent to 'var arr: []int'.
@@ -284,7 +287,7 @@ pub const AnalyzerMsg = union(enum) {
             .too_many_locals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),
             .too_many_fn_args => writer.writeAll("refer to the function's definition to correct the call"),
             .too_many_types => writer.writeAll("it's a compiler limitation but the code shouldn't anyway have that much types. Try rethink you code"),
-            .type_mismatch => writer.writeAll("refer to definition to return the correct type"),
+            .type_mismatch, .type_not_in_union => writer.writeAll("refer to definition to return the correct type"),
             .undeclared_field_access => writer.writeAll("refer to structure's definition to see available fields or modify it"),
             .undeclared_block_label => writer.writeAll("maybe just a typo?"),
             .undeclared_type => writer.writeAll("consider declaring or importing the type before use"),

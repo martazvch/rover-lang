@@ -502,6 +502,7 @@ fn parseType(self: *Self) Error!*Ast.Type {
     const ty = self.allocator.create(Ast.Type) catch oom();
 
     if (self.isIdentOrType()) {
+        // Namespaced type
         if (self.check(.dot)) {
             var tokens: ArrayList(TokenIndex) = .empty;
             tokens.append(self.allocator, self.token_idx - 1) catch oom();
@@ -516,7 +517,9 @@ fn parseType(self: *Self) Error!*Ast.Type {
             if (self.check(.float)) return self.errAtCurrent(.non_ident_in_type);
 
             ty.* = .{ .fields = tokens.toOwnedSlice(self.allocator) catch oom() };
-        } else {
+        }
+        // Regular type
+        else {
             ty.* = .{ .scalar = self.token_idx - 1 };
         }
     }
@@ -525,10 +528,6 @@ fn parseType(self: *Self) Error!*Ast.Type {
         const openning = self.token_idx - 1;
         try self.expect(.right_bracket, .missing_bracket_array_type);
         ty.* = .{ .array = .{ .openning = openning, .child = try self.parseType() } };
-    }
-    // Inline union
-    else if (self.match(.pipe)) {
-        //
     }
     // Function
     else if (self.match(.@"fn")) {
@@ -562,8 +561,24 @@ fn parseType(self: *Self) Error!*Ast.Type {
     // Optional
     else if (self.match(.question_mark)) {
         ty.* = .{ .optional = .{ .token = self.token_idx - 1, .child = try self.parseType() } };
-    } else {
+    }
+    // Unknown
+    else {
         return self.errAtCurrent(.expect_type_name);
+    }
+
+    // Inline union
+    if (self.check(.pipe)) {
+        var types: ArrayList(*Ast.Type) = .empty;
+        types.append(self.allocator, ty) catch oom();
+
+        while (self.match(.pipe)) {
+            types.append(self.allocator, try self.parseType()) catch oom();
+        }
+
+        const u = self.allocator.create(Ast.Type) catch oom();
+        u.* = .{ .@"union" = types.toOwnedSlice(self.allocator) catch oom() };
+        return u;
     }
 
     return ty;

@@ -22,6 +22,7 @@ pub const Type = union(enum) {
     module: InternerIdx,
     optional: *const Type,
     structure: Structure,
+    @"union": Union,
 
     pub const Array = struct {
         child: *const Type,
@@ -50,7 +51,7 @@ pub const Type = union(enum) {
             return null;
         }
 
-        pub fn getDepthAndChild(self: *const Array) struct { usize, *const Type } {
+        pub fn depthAndChild(self: *const Array) struct { usize, *const Type } {
             var dep: usize = 1;
             var child = self.child;
 
@@ -139,6 +140,29 @@ pub const Type = union(enum) {
         }
     };
 
+    pub const Union = struct {
+        types: []*const Type,
+
+        /// Checks wether a type is contained in the union
+        pub fn contains(self: *const Union, other: *const Type) bool {
+            for (self.types) |ty| {
+                if (other == ty) return true;
+            }
+            return false;
+        }
+
+        /// Checks if an union is a subset a the union
+        pub fn containsSubset(self: *const Union, other: *const Union) bool {
+            sub: for (other.types) |sub| {
+                for (self.types) |ty| {
+                    if (sub == ty) continue :sub;
+                }
+                return false;
+            }
+            return true;
+        }
+    };
+
     pub fn is(self: *const Type, tag: std.meta.Tag(Type)) bool {
         return std.meta.activeTag(self.*) == tag;
     }
@@ -155,9 +179,10 @@ pub const Type = union(enum) {
         return self.is(.function);
     }
 
+    // TODO: values in unions can be heap...
     pub fn isHeap(self: *const Type) bool {
         return switch (self.*) {
-            .void, .int, .float, .bool, .str, .null, .function => false,
+            .void, .int, .float, .bool, .str, .null, .function, .@"union" => false,
             else => true,
         };
     }
@@ -170,7 +195,7 @@ pub const Type = union(enum) {
         return if (self.is(.optional)) self.optional else null;
     }
 
-    pub fn hash(self: Type, hasher: anytype) void {
+    pub fn hash(self: Type, allocator: Allocator, hasher: anytype) void {
         const asBytes = std.mem.asBytes;
 
         comptime {
@@ -187,41 +212,52 @@ pub const Type = union(enum) {
 
         switch (self) {
             .never, .void, .int, .float, .bool, .str, .null => {},
-            .array => |ty| ty.child.hash(hasher),
+            .array => |ty| ty.child.hash(allocator, hasher),
             .function => |ty| {
                 if (ty.loc) |loc| {
                     hasher.update(asBytes(&loc.name));
                     hasher.update(asBytes(&loc.container));
                 } else {
                     for (ty.params.values()) |param| {
-                        param.type.hash(hasher);
+                        param.type.hash(allocator, hasher);
                     }
-                    ty.return_type.hash(hasher);
+                    ty.return_type.hash(allocator, hasher);
                 }
             },
             .module => |interned| hasher.update(asBytes(&interned)),
-            .optional => |child| child.hash(hasher),
+            .optional => |child| child.hash(allocator, hasher),
             .structure => |ty| {
                 if (ty.loc) |loc| {
                     hasher.update(asBytes(&loc.name));
                     hasher.update(asBytes(&loc.container));
                 } else {
                     for (ty.fields.values()) |f| {
-                        f.type.hash(hasher);
+                        f.type.hash(allocator, hasher);
                     }
                 }
+            },
+            .@"union" => |u| {
+                var uniques: AutoArrayHashMapUnmanaged(*const Type, void) = .empty;
+                uniques.ensureTotalCapacity(allocator, u.types.len) catch oom();
+
+                for (u.types) |ty| {
+                    if (uniques.contains(ty)) continue;
+                    uniques.putAssumeCapacity(ty, {});
+                }
+
+                // We sort as we want equality between for ex: int|bool and bool|int
+                std.sort.heap(*const Type, uniques.keys(), {}, struct {
+                    fn lessThan(_: void, a: *const Type, b: *const Type) bool {
+                        return @intFromPtr(a) < @intFromPtr(b);
+                    }
+                }.lessThan);
+
+                for (uniques.keys()) |ty| ty.hash(allocator, hasher);
             },
         }
     }
 
-    pub fn toString(
-        self: *const Type,
-        allocator: Allocator,
-        scope: *const LexicalScope,
-        current_mod: usize,
-        interner: *const Interner,
-        module_interner: *const ModuleInterner,
-    ) []const u8 {
+    pub fn toString(self: *const Type, allocator: Allocator, interner: *const Interner) []const u8 {
         var res: std.ArrayList(u8) = .empty;
         var writer = res.writer(allocator);
 
@@ -229,23 +265,23 @@ pub const Type = union(enum) {
             .never, .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
                 writer.writeAll("[]") catch oom();
-                writer.writeAll(ty.child.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
+                writer.writeAll(ty.child.toString(allocator, interner)) catch oom();
             },
             .function => |ty| {
                 writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
-                    writer.writeAll(p.type.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
+                    writer.writeAll(p.type.toString(allocator, interner)) catch oom();
                     if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();
                 }
                 writer.writeAll(") -> ") catch oom();
-                writer.writeAll(ty.return_type.toString(allocator, scope, current_mod, interner, module_interner)) catch oom();
+                writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
             },
             .module => |interned| {
                 const name = interner.getKey(interned).?;
                 writer.print("module: {s}", .{name}) catch oom();
             },
             .optional => |opt| {
-                writer.print("?{s}", .{opt.toString(allocator, scope, current_mod, interner, module_interner)}) catch oom();
+                writer.print("?{s}", .{opt.toString(allocator, interner)}) catch oom();
             },
             .structure => |ty| {
                 if (ty.loc) |loc| {
@@ -256,11 +292,17 @@ pub const Type = union(enum) {
                     for (ty.fields.keys(), ty.fields.values(), 0..) |k, v, i| {
                         writer.print("{s}: {s}{s}", .{
                             interner.getKey(k).?,
-                            v.type.toString(allocator, scope, current_mod, interner, module_interner),
+                            v.type.toString(allocator, interner),
                             if (i < ty.fields.count() - 1) ", " else "",
                         }) catch oom();
                     }
                     writer.writeAll("}") catch oom();
+                }
+            },
+            .@"union" => |u| {
+                for (u.types, 0..) |ty, i| {
+                    writer.writeAll(ty.toString(allocator, interner)) catch oom();
+                    if (i < u.types.len - 1) writer.writeAll("|") catch oom();
                 }
             },
         }
@@ -327,7 +369,7 @@ pub const TypeInterner = struct {
 
     pub fn intern(self: *TypeInterner, ty: Type) *Type {
         var hasher = std.hash.Wyhash.init(0);
-        ty.hash(&hasher);
+        ty.hash(self.arena.allocator(), &hasher);
         const hash = hasher.final();
 
         if (self.interned.get(hash)) |interned| {
@@ -341,3 +383,20 @@ pub const TypeInterner = struct {
         return new_type;
     }
 };
+
+test "inline union" {
+    const expect = std.testing.expect;
+
+    var ti: TypeInterner = .init(std.testing.allocator);
+    defer ti.deinit();
+    ti.cacheFrequentTypes();
+
+    const union1 = @constCast(&[_]*const Type{ ti.intern(.int), ti.intern(.bool) });
+    const union2 = @constCast(&[_]*const Type{ ti.intern(.bool), ti.intern(.int) });
+
+    try expect(ti.intern(.{ .@"union" = .{ .types = union1 } }) == ti.intern(.{ .@"union" = .{ .types = union1 } }));
+    try expect(ti.intern(.{ .@"union" = .{ .types = union2 } }) == ti.intern(.{ .@"union" = .{ .types = union2 } }));
+
+    try expect(ti.intern(.{ .@"union" = .{ .types = union1 } }) == ti.intern(.{ .@"union" = .{ .types = union2 } }));
+    try expect(ti.intern(.{ .@"union" = .{ .types = union2 } }) == ti.intern(.{ .@"union" = .{ .types = union1 } }));
+}
