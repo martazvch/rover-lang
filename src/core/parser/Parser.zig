@@ -350,7 +350,8 @@ fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
 fn fnReturnType(self: *Self) Error!?*Ast.Type {
     return if (self.match(.small_arrow))
         self.parseType()
-    else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.float_kw))
+        // else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.float_kw))
+    else if (self.check(.identifier) or self.check(.bool))
         self.errAtCurrent(.expect_arrow_before_fn_type)
     else
         null;
@@ -585,7 +586,8 @@ fn parseType(self: *Self) Error!*Ast.Type {
 }
 
 fn isIdentOrType(self: *Self) bool {
-    return self.match(.identifier) or self.match(.float_kw) or self.match(.int_kw) or self.match(.str_kw) or self.match(.bool);
+    // return self.match(.identifier) or self.match(.float_kw) or self.match(.int_kw) or self.match(.str_kw) or self.match(.bool);
+    return self.match(.identifier) or self.match(.str_kw) or self.match(.bool);
 }
 
 fn discard(self: *Self) Error!Node {
@@ -1043,13 +1045,20 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
     var expr = prefixExpr;
 
     while (true) {
+        // Field
         if (self.match(.dot)) {
             expr = try self.field(expr);
-        } else if (self.match(.left_paren)) {
+        }
+        // Call
+        else if (self.match(.left_paren)) {
             expr = try self.finishCall(expr);
-        } else if (self.match(.left_bracket)) {
+        }
+        // Array access
+        else if (self.match(.left_bracket)) {
             expr = try self.arrayAccess(expr);
-        } else if (self.check(.left_brace)) {
+        }
+        // Structure literal
+        else if (self.check(.left_brace)) {
             if (self.ctx.in_cond and !self.ctx.in_group) {
                 return expr;
             }
@@ -1057,17 +1066,30 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 
             // Can't chain them, break the loop
             return self.structLiteral(expr);
-        } else if (self.check(.extractor)) {
+        }
+        // Extractor
+        else if (self.check(.extractor)) {
             if (!self.ctx.can_extract) return self.errAtCurrent(.invalid_extract_ctx);
             self.token_idx += 1;
 
             // Can't chain them, break the loop
             return self.extractor(expr);
-        } else break;
+        }
+        // Cast
+        // else if (self.match(.as)) {
+        //     return self.cast(expr);
+        // }
+        else break;
     }
 
     return expr;
 }
+
+// fn cast(self: *Self, expr: *Expr) Error!*Expr {
+//     const res = self.allocator.create(Expr) catch oom();
+//     res.* = .{ .cast = .{ .expr = expr, .type = try self.parseType() } };
+//     return res;
+// }
 
 fn extractor(self: *Self, expr: *Expr) Error!*Expr {
     const res = self.allocator.create(Expr) catch oom();

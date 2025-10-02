@@ -1,13 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 
 const options = @import("options");
 
+const State = @import("State.zig");
 const Compiler = @import("core/compiler/compiler.zig").Compiler;
 const CompiledModule = @import("core/compiler/compiler.zig").CompiledModule;
 const CompilationManager = @import("core/compiler/compiler.zig").CompilationManager;
-const Disassembler = @import("core/compiler/Disassembler.zig");
 const Analyzer = @import("core/analyzer/Analyzer.zig");
 const AnalyzerMsg = @import("core/analyzer/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("core/ast/Ast.zig");
@@ -18,21 +17,14 @@ const LexerMsg = @import("core/parser/lexer_msg.zig").LexerMsg;
 const LexicalScope = @import("core/analyzer/LexicalScope.zig");
 const Parser = @import("core/parser/Parser.zig");
 const ParserMsg = @import("core/parser/parser_msg.zig").ParserMsg;
-const Sb = @import("misc").StringBuilder;
 const RirRenderer = @import("core/ir/RirRenderer.zig");
-const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
 const reportAll = @import("misc").reporter.reportAll;
-const Interner = @import("misc").Interner;
-const ModuleInterner = @import("ModuleInterner.zig");
 const oom = @import("misc").oom;
-const Obj = @import("core/runtime/Obj.zig");
-const Value = @import("core/runtime/values.zig").Value;
-const Config = @import("core/runtime/Vm.zig").Config;
 const Vm = @import("core/runtime/Vm.zig");
 
 vm: *Vm,
 allocator: Allocator,
-ctx: *Context,
+state: *State,
 analyzer: Analyzer,
 instr_count: usize,
 is_sub: bool,
@@ -40,32 +32,11 @@ is_sub: bool,
 const Self = @This();
 const Error = error{ExitOnPrint};
 
-pub const Context = struct {
-    config: Config,
-    interner: Interner,
-    type_interner: TypeInterner,
-    path_builder: Sb,
-    module_interner: ModuleInterner,
-
-    pub fn new(allocator: Allocator, config: Config) Context {
-        var ctx: Context = .{
-            .config = config,
-            .interner = .init(allocator),
-            .type_interner = .init(allocator),
-            .path_builder = .empty,
-            .module_interner = .init(allocator),
-        };
-        ctx.type_interner.cacheFrequentTypes();
-
-        return ctx;
-    }
-};
-
-pub fn init(allocator: Allocator, vm: *Vm, ctx: *Context) Self {
+pub fn init(allocator: Allocator, vm: *Vm, state: *State) Self {
     return .{
         .vm = vm,
         .allocator = allocator,
-        .ctx = ctx,
+        .state = state,
         .analyzer = undefined,
         .instr_count = 0,
         .is_sub = false,
@@ -75,10 +46,10 @@ pub fn init(allocator: Allocator, vm: *Vm, ctx: *Context) Self {
 /// Runs the pipeline
 // TODO: could only need full path
 pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
-    const path_interned = self.ctx.interner.intern(path);
+    const path_interned = self.state.interner.intern(path);
     self.analyzer = .init(self.allocator, self, path_interned);
     // Initiliaze the path builder
-    self.ctx.path_builder.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch oom());
+    self.state.path_builder.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch oom());
 
     // Lexer
     var lexer = Lexer.init(self.allocator);
@@ -95,13 +66,13 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     var parser: Parser = .init(self.allocator);
     var ast = parser.parse(source, token_slice.items(.tag), token_slice.items(.span));
 
-    var walker: Walker = .init(self.allocator, &self.ctx.interner, &ast);
+    var walker: Walker = .init(self.allocator, &self.state.interner, &ast);
     walker.walk();
 
     if (parser.errs.items.len > 0) {
         try reportAll(ParserMsg, parser.errs.items, !options.test_mode, file_name, source);
         return error.ExitOnPrint;
-    } else if (self.ctx.config.print_ast) {
+    } else if (self.state.config.print_ast) {
         try printAst(self.allocator, &ast);
         if (options.test_mode) return error.ExitOnPrint;
     }
@@ -117,7 +88,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         self.instr_count = self.analyzer.irb.count();
         return error.ExitOnPrint;
     }
-    if (self.ctx.config.print_ir) {
+    if (self.state.config.print_ir) {
         try self.printIr(self.allocator, file_name, &self.analyzer, self.instr_count);
         if (options.test_mode and !self.is_sub) return error.ExitOnPrint;
     }
@@ -127,8 +98,8 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         self.vm.allocator,
         file_name,
         self.vm,
-        &self.ctx.interner,
-        if (!self.ctx.config.print_bytecode) .none else if (options.test_mode) .@"test" else .normal,
+        &self.state.interner,
+        if (!self.state.config.print_bytecode) .none else if (options.test_mode) .@"test" else .normal,
         self.analyzer.scope.current.variables.count(),
         self.analyzer.scope.symbol_count,
     );
@@ -138,20 +109,20 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         self.analyzer.irb.roots.items[self.instr_count..],
         self.analyzer.irb.computeLineFromOffsets(source)[self.instr_count..],
         self.analyzer.main,
-        self.ctx.module_interner.compiled.count(),
+        self.state.module_interner.compiled.count(),
     );
 
     self.instr_count = self.analyzer.irb.count();
-    self.ctx.module_interner.add(path_interned, analyzed_module, compiled_module);
+    self.state.module_interner.add(path_interned, analyzed_module, compiled_module);
 
-    return if (options.test_mode and self.ctx.config.print_bytecode and !self.is_sub)
+    return if (options.test_mode and self.state.config.print_bytecode and !self.is_sub)
         return error.ExitOnPrint
     else
         compiled_module;
 }
 
 pub fn createSubPipeline(self: *Self) Self {
-    var pipeline: Self = .init(self.allocator, self.vm, self.ctx);
+    var pipeline: Self = .init(self.allocator, self.vm, self.state);
     pipeline.is_sub = true;
     return pipeline;
 }
@@ -175,7 +146,7 @@ fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *
     var rir_renderer = RirRenderer.init(
         allocator,
         analyzer.irb.instructions.items(.data)[start..],
-        &self.ctx.interner,
+        &self.state.interner,
     );
     try stdout.writeAll(try rir_renderer.renderIr(file_name, self.analyzer.irb.roots.items[start..]));
 }

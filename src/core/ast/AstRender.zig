@@ -299,6 +299,14 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             if (e.expr) |data| try self.renderExpr(data, false);
             try self.closeKey(.block, comma);
         },
+        // .cast => |*e| {
+        //     try self.openKey(@tagName(expr.*), .block);
+        //     try self.openKey("expr", .block);
+        //     try self.renderExpr(e.expr, false);
+        //     try self.closeKey(.block, true);
+        //     try self.pushKeyValue("type", try self.renderType(e.type), false);
+        //     try self.closeKey(.block, comma);
+        // },
         .closure => |*e| try self.renderFnDecl("", e, comma),
         .extractor => |*e| {
             try self.openKey(@tagName(expr.*), .block);

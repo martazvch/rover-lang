@@ -4,13 +4,11 @@ const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const AnalyzedModule = @import("Analyzer.zig").AnalyzedModule;
-const Interner = @import("misc").Interner;
-const InternerIdx = Interner.Index;
+const InternerIdx = @import("misc").Interner.Index;
 const Type = @import("types.zig").Type;
-const TypeInterner = @import("types.zig").TypeInterner;
 const InstrIndex = @import("../ir/rir.zig").Index;
 const Span = @import("../parser/Lexer.zig").Span;
+const State = @import("../../State.zig");
 const oom = @import("misc").oom;
 
 const Self = @This();
@@ -43,15 +41,15 @@ pub const ExternMap = AutoHashMapUnmanaged(InternerIdx, ExternSymbol);
 scopes: ArrayList(Scope),
 current: *Scope,
 builtins: AutoHashMapUnmanaged(InternerIdx, *const Type),
+natives: AutoHashMapUnmanaged(InternerIdx, Symbol),
 symbol_count: usize,
-// block_count: usize,
 
 pub const empty: Self = .{
     .scopes = .empty,
     .current = undefined,
-    .builtins = .{},
+    .builtins = .empty,
+    .natives = .empty,
     .symbol_count = 0,
-    // .block_count = 0,
 };
 
 pub const Scope = struct {
@@ -103,13 +101,22 @@ pub fn close(self: *Self) struct { usize, []const Break } {
     return .{ popped.variables.count(), popped.breaks.items };
 }
 
-pub fn initGlobalScope(self: *Self, allocator: Allocator, interner: *Interner, type_interner: *const TypeInterner) void {
+pub fn initGlobalScope(self: *Self, allocator: Allocator, state: *State) void {
     self.open(allocator, true, null);
-    const builtins = std.meta.fields(TypeInterner.Cache);
+    const builtins = std.meta.fields(@TypeOf(state.type_interner.cache));
     self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
     inline for (builtins) |builtin| {
-        self.builtins.putAssumeCapacity(interner.intern(builtin.name), @field(type_interner.cache, builtin.name));
+        self.builtins.putAssumeCapacity(state.interner.intern(builtin.name), @field(state.type_interner.cache, builtin.name));
+    }
+
+    self.natives.ensureTotalCapacity(allocator, @intCast(state.native_reg.meta.count())) catch oom();
+    var it = state.native_reg.meta.iterator();
+    while (it.next()) |entry| {
+        self.natives.putAssumeCapacity(entry.key_ptr.*, .{
+            .index = self.natives.count(),
+            .type = state.type_interner.intern(.{ .function = entry.value_ptr.* }),
+        });
     }
 }
 
@@ -235,6 +242,10 @@ pub fn getExternSymbol(self: *const Self, name: InternerIdx) ?*ExternSymbol {
     }
 
     return null;
+}
+
+pub fn getBuiltinSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
+    return self.natives.getPtr(name);
 }
 
 pub fn declareModule(self: *Self, allocator: Allocator, name: InternerIdx, ty: *const Type) void {

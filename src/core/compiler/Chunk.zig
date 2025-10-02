@@ -100,6 +100,7 @@ pub const OpCode = enum(u8) {
     load_blk_val,
     load_extern_sym,
     load_sym,
+    load_builtin,
     loop,
     mul_float,
     mul_int,

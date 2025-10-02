@@ -8,7 +8,7 @@ const options = @import("options");
 
 const Chunk = @import("../compiler/Chunk.zig");
 const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
-const NativeFn = @import("../../std/meta.zig").NativeFn;
+const NativeFn = @import("../builtins/ffi.zig").NativeFn;
 const oom = @import("misc").oom;
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
@@ -139,7 +139,7 @@ pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
         },
         .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
         .module => try writer.print("<module {s}>", .{self.as(Module).module.name}),
-        .native_fn => try writer.print("<native fn>", .{}),
+        .native_fn => try writer.print("<native fn {s}>", .{self.as(NativeFunction).name}),
         .string => try writer.print("{s}", .{self.as(String).chars}),
         .structure => try writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
     }
@@ -153,7 +153,7 @@ pub fn log(self: *Obj) void {
         .function => std.debug.print("<fn {s}>", .{self.as(Function).name.chars}),
         .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
         .module => std.debug.print("<module {s}>", .{self.as(Module).module.name}),
-        .native_fn => std.debug.print("<native fn>", .{}),
+        .native_fn => std.debug.print("<native function {s}>", .{self.as(NativeFunction).name}),
         .string => std.debug.print("{s}", .{self.as(String).chars}),
         .structure => std.debug.print("<structure {s}>", .{self.as(Structure).name.chars}),
     }
@@ -325,6 +325,8 @@ pub const Function = struct {
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
         obj.module_index = module_index;
 
+        if (options.log_gc) obj.asObj().log();
+
         return obj;
     }
 
@@ -400,12 +402,14 @@ pub const Box = struct {
 
 pub const NativeFunction = struct {
     obj: Obj,
+    name: []const u8,
     function: NativeFn,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, function: NativeFn) *Self {
+    pub fn create(vm: *Vm, name: []const u8, function: NativeFn) *Self {
         const obj = Obj.allocate(vm, Self, .native_fn);
+        obj.name = name;
         obj.function = function;
 
         if (options.log_gc) {

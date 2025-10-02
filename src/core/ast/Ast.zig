@@ -115,6 +115,7 @@ pub const Expr = union(enum) {
     block: Block,
     binop: Binop,
     @"break": Break,
+    // cast: Cast,
     closure: FnDecl,
     extractor: Extractor,
     field: Field,
@@ -156,6 +157,11 @@ pub const Break = struct {
     label: ?TokenIndex,
     expr: ?*Expr,
 };
+
+// pub const Cast = struct {
+//     expr: *Expr,
+//     type: *Type,
+// };
 
 pub const Extractor = struct {
     expr: *Expr,
@@ -292,6 +298,10 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
             .start = self.token_spans[node.kw].start,
             .end = self.getSpan(e).end,
         } else self.token_spans[node.kw],
+        // Cast => .{
+        //     .start = self.getSpan(node.expr).start,
+        //     .end = self.getSpan(node.type).end,
+        // },
         Extractor => .{
             .start = self.getSpan(node.expr).start,
             .end = self.token_spans[node.alias].end,

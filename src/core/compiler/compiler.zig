@@ -8,12 +8,10 @@ const Disassembler = @import("Disassembler.zig");
 const rir = @import("../ir/rir.zig");
 const Instruction = rir.Instruction;
 const Interner = @import("misc").Interner;
-const ModuleInterner = @import("../../ModuleInterner.zig");
 const GenReport = @import("misc").reporter.GenReport;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
-// const NativeFn = @import("../std/meta.zig").NativeFn;
 const oom = @import("misc").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
@@ -44,7 +42,6 @@ pub const CompiledModule = struct {
 pub const CompilationManager = struct {
     allocator: Allocator,
     vm: *Vm,
-    // natives: []const NativeFn,
     interner: *const Interner,
     compiler: Compiler,
     errs: ArrayList(CompilerReport),
@@ -63,7 +60,6 @@ pub const CompilationManager = struct {
         name: []const u8,
         vm: *Vm,
         interner: *const Interner,
-        // natives: []const NativeFn,
         render_mode: Disassembler.RenderMode,
         global_count: usize,
         symbol_count: usize,
@@ -72,7 +68,6 @@ pub const CompilationManager = struct {
             .allocator = allocator,
             .vm = vm,
             .interner = interner,
-            // .natives = natives,
             .compiler = undefined,
             .errs = .empty,
             .instr_data = undefined,
@@ -339,6 +334,8 @@ const Compiler = struct {
             .@"if" => |*data| self.ifInstr(data),
             .int => |data| self.intInstr(data),
             .incr_rc => |index| self.wrappedInstr(.incr_ref, index),
+            // TODO: protect the cast
+            .load_builtin => |index| self.writeOpAndByte(.load_builtin, @intCast(index)),
             .load_symbol => |*data| self.loadSymbol(data),
             .multiple_var_decl => |*data| self.multipleVarDecl(data),
             .null => self.nullInstr(),
@@ -576,7 +573,10 @@ const Compiler = struct {
         try self.compileInstr(data.callee);
         try self.compileArgs(data.args);
         // TODO: protect cast
-        self.writeOpAndByte(.call, @as(u8, @intCast(data.args.len)) + @intFromBool(data.implicit_first));
+        self.writeOpAndByte(
+            if (data.native) .call_native else .call,
+            @as(u8, @intCast(data.args.len)) + @intFromBool(data.implicit_first),
+        );
     }
 
     fn compileArgs(self: *Self, args: []const Instruction.Arg) Error!void {

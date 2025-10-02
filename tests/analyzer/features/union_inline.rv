@@ -1,0 +1,7 @@
+fn main() {
+    var a: int|bool
+    var b: bool|int = 1
+    b = true
+    a = b
+}
+

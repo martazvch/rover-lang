@@ -81,6 +81,7 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .int => |data| self.intInstr(data),
         .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
+        .load_builtin => |index| self.indexInstr("Builtin symbol", index),
         .multiple_var_decl => |*data| self.multipleVarDecl(data),
         .null => self.indentAndAppendSlice("[Null]"),
         .pop => |index| self.indexInstr("Pop", index),
@@ -213,7 +214,7 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndAppendSlice("[Fn call]");
+    self.indentAndAppendSlice(if (data.native) "[Native fn call]" else "[Fn call]");
 
     self.indent_level += 1;
     defer self.indent_level -= 1;

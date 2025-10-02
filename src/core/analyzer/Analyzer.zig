@@ -11,6 +11,7 @@ const InternerIdx = Interner.Index;
 const Pipeline = @import("../../Pipeline.zig");
 const GenReport = @import("misc").reporter.GenReport;
 const Sb = @import("misc").StringBuilder;
+const Set = @import("misc").Set;
 const oom = @import("misc").oom;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("../ast/Ast.zig");
@@ -144,28 +145,31 @@ module_name: InternerIdx,
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
 pub fn init(allocator: Allocator, pipeline: *Pipeline, module_name: InternerIdx) Self {
+    var scope: LexScope = .empty;
+    scope.initGlobalScope(allocator, pipeline.state);
+
     return .{
         .allocator = allocator,
         .pipeline = pipeline,
-        .interner = &pipeline.ctx.interner,
-        .path = &pipeline.ctx.path_builder,
+        .interner = &pipeline.state.interner,
+        .path = &pipeline.state.path_builder,
         .containers = .empty,
-        .ti = &pipeline.ctx.type_interner,
+        .ti = &pipeline.state.type_interner,
         .ast = undefined,
         .errs = .empty,
         .warns = .empty,
-        .scope = .empty,
+        .scope = scope,
         .irb = .init(allocator),
         .main = null,
 
         .module_name = module_name,
         .cached_names = .{
-            .empty = pipeline.ctx.interner.intern(""),
-            .main = pipeline.ctx.interner.intern("main"),
-            .std = pipeline.ctx.interner.intern("std"),
-            .self = pipeline.ctx.interner.intern("self"),
-            .Self = pipeline.ctx.interner.intern("Self"),
-            .init = pipeline.ctx.interner.intern("init"),
+            .empty = pipeline.state.interner.intern(""),
+            .main = pipeline.state.interner.intern("main"),
+            .std = pipeline.state.interner.intern("std"),
+            .self = pipeline.state.interner.intern("self"),
+            .Self = pipeline.state.interner.intern("Self"),
+            .init = pipeline.state.interner.intern("init"),
         },
     };
 }
@@ -181,7 +185,6 @@ fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
 
 pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_main: bool) AnalyzedModule {
     self.ast = ast;
-    self.scope.initGlobalScope(self.allocator, self.interner, self.ti);
     var ctx: Context = .empty;
 
     // Excluding file extension
@@ -504,7 +507,7 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
     // TODO: don't check only path but path + name?
     const interned = self.interner.intern(file_infos.path);
 
-    if (!self.pipeline.ctx.module_interner.analyzed.contains(interned)) {
+    if (!self.pipeline.state.module_interner.analyzed.contains(interned)) {
         var pipeline = self.pipeline.createSubPipeline();
         // TODO: proper error handling, for now just print errors and exit
         _ = pipeline.run(file_infos.name, file_infos.path, file_infos.content) catch {
@@ -513,8 +516,8 @@ fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
     }
 
     if (node.items) |items| {
-        const mod = self.pipeline.ctx.module_interner.analyzed.get(interned).?;
-        const mod_index = self.pipeline.ctx.module_interner.analyzed.getIndex(interned).?;
+        const mod = self.pipeline.state.module_interner.analyzed.get(interned).?;
+        const mod_index = self.pipeline.state.module_interner.analyzed.getIndex(interned).?;
 
         for (items) |item| {
             const item_name = self.interner.intern(self.ast.toSource(item.item));
@@ -749,6 +752,7 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
         .block => |*e| self.block(e, exp_val, ctx),
         .binop => |*e| self.binop(e, ctx),
         .@"break" => |*e| self.breakExpr(e, exp_val, ctx),
+        // .cast => |e| self.castExpr(e, ctx),
         .closure => |*e| self.closure(e, ctx),
         .extractor => |*e| self.extractor(e, ctx),
         .field => |*e| self.field(e, ctx),
@@ -1123,6 +1127,16 @@ fn breakExpr(self: *Self, expr: *const Ast.Break, exp_val: bool, ctx: *Context) 
     return .fromTypeCf(ty, .@"break", instr);
 }
 
+// fn castExpr(self: *Self, expr: Ast.Cast, ctx: *Context) Result {
+//     const instr = try self.analyzeExpr(expr, true, ctx);
+//     _ = instr; // autofix
+//     const ty = try self.checkAndGetType(expr.type, ctx);
+//
+//     if (!ty.isNumeric()) {
+//         @panic("Can only cast numeric types");
+//     }
+// }
+
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     self.scope.open(self.allocator, true, null);
     defer _ = self.scope.close();
@@ -1255,12 +1269,12 @@ fn moduleAccess(self: *Self, field_tk: Ast.TokenIndex, module_idx: InternerIdx) 
     const text = self.ast.toSource(field_tk);
 
     const field_name = self.interner.intern(text);
-    const module = self.pipeline.ctx.module_interner.getAnalyzed(module_idx).?;
+    const module = self.pipeline.state.module_interner.getAnalyzed(module_idx).?;
     const sym = module.symbols.get(field_name) orelse return self.err(
         .{ .missing_symbol_in_module = .{ .module = module.name, .symbol = text } },
         span,
     );
-    const index = self.pipeline.ctx.module_interner.analyzed.getIndex(module_idx).?;
+    const index = self.pipeline.state.module_interner.analyzed.getIndex(module_idx).?;
 
     // TODO: protect the cast
     return .new(
@@ -1294,7 +1308,12 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     return .fromType(
         callee.type.function.return_type,
         self.irb.addInstr(
-            .{ .call = .{ .callee = callee.instr, .args = args_res, .implicit_first = callee.type.function.kind == .method } },
+            .{ .call = .{
+                .callee = callee.instr,
+                .args = args_res,
+                .implicit_first = callee.type.function.kind == .method,
+                .native = callee.type.function.kind == .native,
+            } },
             span.start,
         ),
     );
@@ -1414,6 +1433,10 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
         return .{ .type = res.sym.type, .kind = .symbol, .instr = res.instr };
     }
 
+    if (self.builtinSymbol(sym_name, span)) |res| {
+        return .{ .type = res.sym.type, .kind = .symbol, .instr = res.instr };
+    }
+
     if (self.scope.getModule(name)) |mod| {
         return .{ .type = mod, .kind = .module, .instr = 0 };
     }
@@ -1481,6 +1504,20 @@ fn externSymbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?struct { 
     };
 }
 
+/// Tries to find a symbol in scopes and returns it while emitting an instruction
+fn builtinSymbol(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *LexScope.Symbol, instr: InstrIndex } {
+    const sym = self.scope.getBuiltinSymbol(name) orelse return null;
+
+    // TODO: protect cast
+    return .{
+        .sym = sym,
+        .instr = self.irb.addInstr(.{ .load_builtin = @intCast(sym.index) }, span.start),
+    };
+}
+
+// For if, we have to check coehrence of the branches because it can be used as a direct expression like:
+//  var a = if true do 4 else null // results in a ?int
+// When the branches are scopes, types are checked by the block expression
 fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.condition);
 
@@ -1518,13 +1555,17 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
     }
 
     const branch_res = try self.mergeIfBranch(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, ctx);
+    std.log.debug("Res: {any}", .{branch_res.type.@"union".types});
+    // const branch_res = try self.mergeIfBranch(then_res.ti.type, then_res.cf, else_ty, else_cf, ctx);
 
-    if (branch_res.cast_then) then_res.instr = self.irb.wrapInstr(.cast_to_float, then_res.instr);
-    if (branch_res.cast_else) else_instr = self.irb.wrapInstr(.cast_to_float, else_instr.?);
+    // if (branch_res.cast_then) then_res.instr = self.irb.wrapInstr(.cast_to_float, then_res.instr);
+    // if (branch_res.cast_else) else_instr = self.irb.wrapInstr(.cast_to_float, else_instr.?);
 
     return .newCf(
         .{ .type = branch_res.type, .comp_time = pure },
+        // .{ .type = branch_res, .comp_time = pure },
         if (branch_res.type.is(.never)) .@"return" else .none,
+        // if (branch_res.is(.never)) .@"return" else .none,
         self.irb.addInstr(
             .{ .@"if" = .{ .cond = cond_res.instr, .then = then_res.instr, .@"else" = else_instr } },
             span.start,
@@ -1543,80 +1584,104 @@ fn mergeIfBranch(
     expr: *const Ast.If,
     ctx: *const Context,
 ) Error!IfBranchRes {
+    // ) Error!*const Type {
     // Always take declaration as truth
-    var final = self.getDeclOrVoid(ctx);
+    // var final = self.getDeclOrVoid(ctx);
+    const final = self.getDeclOrVoid(ctx);
     // TODO: Res is not really used...
     var res: IfBranchRes = .{ .type = final };
 
-    const then_span = self.ast.getSpan(expr.then);
-
-    const then_res = try self.checkBranchReturn(then_ty, then_cf);
+    // const then_res = try self.checkBranchReturn(then_ty, then_cf);
+    const then_res = try self.checkBranch(then_ty, then_cf, self.ast.getSpan(expr.then), ctx);
+    res.type = then_res.type;
     if (then_res.cast) res.cast_then = true;
 
     const else_type = else_ty orelse return res;
+    // const else_type = else_ty orelse return then_res.type;
     const else_span = self.ast.getSpan(expr.@"else".?);
 
-    const else_res = try self.checkBranchReturn(else_type, else_cf.?);
+    const else_res = try self.checkBranch(else_type, else_cf.?, else_span, ctx);
     if (else_res.cast) res.cast_else = true;
+
+    // No need to get cast information as 'break' and 'return' already handles it
+    if (then_cf.exitScope() and else_cf.?.exitScope()) return .{ .type = self.ti.getCached(.never) };
+
+    res.type = self.mergeTypes(&.{ then_res.type, else_res.type });
+    return res;
 
     // Type checking. We don't use perform type coercion because the function check against a
     // declaration. Here, we don't have any reference/declaration, the two branches must be coherent
-    {
-        // Here, as the declaration can be 'void' like: var a = if true do 5 else 8.5
-        // even after type coercion against declaration we have to check the branches together
-        if (then_res.type == else_res.type) {
-            final = then_res.type;
-        }
+    // {
+    //     // Here, as the declaration can be 'void' like: var a = if true do 5 else 8.5
+    //     // even after type coercion against declaration we have to check the branches together
+    //     if (then_res.type == else_res.type) {
+    //         final = then_res.type;
+    //     }
+    //
+    //     // If then returned but we are here, only else is producing a type
+    //     // BUG: what if else returns too?
+    //     else if (then_cf == .@"return") {
+    //         final = else_res.type;
+    //     }
+    //     // If else returned but not then, then is producing a value
+    //     else if (else_cf.? == .@"return") {
+    //         final = then_res.type;
+    //     }
+    //
+    //     // Check if they can cast to each other
+    //     else if (else_res.type.canCastTo(then_res.type)) {
+    //         final = then_res.type;
+    //         res.cast_else = true;
+    //     } else if (then_res.type.canCastTo(else_res.type)) {
+    //         final = else_res.type;
+    //         res.cast_then = true;
+    //     }
+    //
+    //     // Check if there is a nullable coercion possible
+    //     else if (then_res.type.is(.null) and !else_res.type.is(.null)) {
+    //         final = self.ti.intern(.{ .optional = else_res.type });
+    //     }
+    //     // Check if there is a nullable coercion possible
+    //     else if (else_res.type.is(.null) and !then_res.type.is(.null)) {
+    //         final = self.ti.intern(.{ .optional = then_res.type });
+    //     }
+    //
+    //     // Otherwise, error
+    //     else return self.err(
+    //         .{ .type_mismatch = .{ .expect = self.typeName(then_res.type), .found = self.typeName(else_res.type) } },
+    //         else_span,
+    //     );
+    // }
 
-        // If then returned but we are here, only else is producing a type
-        // BUG: what if else returns too?
-        else if (then_cf == .@"return") {
-            final = else_res.type;
-        }
-        // If else returned but not then, then is producing a value
-        else if (else_cf.? == .@"return") {
-            final = then_res.type;
-        }
+    // const merged = self.mergeTypes(&.{ then_ty, else_type });
+    // _ = merged; // autofix
+    //
+    // // return .{ .type = if (then_cf.exitScope() and else_cf.?.exitScope()) self.ti.getCached(.never) else final };
+    // return if (then_cf.exitScope() and else_cf.?.exitScope()) self.ti.getCached(.never) else final;
+}
 
-        // If both branch don't return a value, error
-        else if (then_res.type.is(.void) and !else_res.type.is(.void)) {
-            return self.err(.void_value, then_span);
-        }
-        // Check same condition
-        else if (else_res.type.is(.void) and !then_res.type.is(.void)) {
-            return self.err(.void_value, else_span);
-        }
+/// Given a slice a types, creates an union or return a scalar type if slice length is one
+fn mergeTypes(self: *Self, types: []const *const Type) *const Type {
+    var set = Set(*const Type).fromSlice(self.allocator, types) catch oom();
 
-        // Check if they can cast to each other
-        else if (else_res.type.canCastTo(then_res.type)) {
-            final = then_res.type;
-            res.cast_else = true;
-        } else if (then_res.type.canCastTo(else_res.type)) {
-            final = else_res.type;
-            res.cast_then = true;
-        }
+    const values = set.values();
+    if (values.len == 1) return values[0];
 
-        // Check if there is a nullable coercion possible
-        else if (then_res.type.is(.null) and !else_res.type.is(.null)) {
-            final = self.ti.intern(.{ .optional = else_res.type });
-        }
-        // Check if there is a nullable coercion possible
-        else if (else_res.type.is(.null) and !then_res.type.is(.null)) {
-            final = self.ti.intern(.{ .optional = then_res.type });
-        }
+    const optional = set.remove(self.ti.getCached(.null));
+    const ty = self.ti.intern(.{ .@"union" = .{ .types = set.toOwned() } });
 
-        // Otherwise, error
-        else return self.err(
-            .{ .type_mismatch = .{ .expect = self.typeName(then_res.type), .found = self.typeName(else_res.type) } },
-            else_span,
-        );
-    }
+    return if (optional) self.ti.intern(.{ .optional = ty }) else ty;
+}
 
-    return .{ .type = if (then_cf.exitScope() and else_cf.?.exitScope()) self.ti.getCached(.never) else final };
+fn checkBranch(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow, span: Span, ctx: *const Context) Error!TypeCoherence {
+    if (cf.exitScope()) return .{ .type = self.ti.getCached(.never) };
+    const decl = ctx.decl_type orelse return .{ .type = ty };
+
+    return try self.performTypeCoercion(decl, ty, false, span);
 }
 
 fn checkBranchReturn(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow) Error!TypeCoherence {
-    return .{ .type = if (cf.exitScope()) self.ti.getCached(.void) else ty, .cast = false };
+    return .{ .type = if (cf.exitScope()) self.ti.getCached(.never) else ty, .cast = false };
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
@@ -1771,9 +1836,6 @@ fn returnExpr(self: *Self, expr: *const Ast.Return, ctx: *Context) Result {
     const fn_type = ctx.fn_type orelse return self.err(.return_outside_fn, span);
     const ty = fn_type.function.return_type;
 
-    // errdefer ctx.returns = false;
-    // defer ctx.returns = true;
-
     const exp = expr.expr orelse return .{
         .ti = .newType(self.ti.getCached(.void)),
         .cf = .@"return",
@@ -1864,7 +1926,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
             );
 
             // If `identifier` returned no error and it's a module, safe unwrap
-            const module = self.pipeline.ctx.module_interner.getAnalyzed(module_type.module).?;
+            const module = self.pipeline.state.module_interner.getAnalyzed(module_type.module).?;
 
             const symbol_token = fields[1];
             const symbol_name = self.interner.intern(self.ast.toSource(symbol_token));

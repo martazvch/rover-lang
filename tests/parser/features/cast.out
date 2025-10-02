@@ -1,0 +1,29 @@
+{
+    "var_decl": {
+        "name": "a",
+        "type": {},
+        "value": {
+            "cast": {
+                "expr": {
+                    "literal": "4"
+                },
+                "type": "float"
+            }
+        }
+    },
+    "var_decl": {
+        "name": "b",
+        "type": {},
+        "value": {
+            "cast": {
+                "expr": {
+                    "array": [
+                        "literal": "1",
+                        "literal": "2"
+                    ]
+                },
+                "type": "Vec2"
+            }
+        }
+    }
+}

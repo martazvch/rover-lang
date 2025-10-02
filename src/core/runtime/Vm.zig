@@ -13,6 +13,8 @@ const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
+const State = @import("../../State.zig");
+const NativeFn = @import("../builtins/ffi.zig").NativeFn;
 
 gc: Gc,
 stack: Stack,
@@ -25,6 +27,7 @@ gc_alloc: Allocator,
 strings: Table,
 objects: ?*Obj,
 modules: []CompiledModule,
+natives: []Value,
 
 /// Holds default variables of current call
 // TODO: put inside the frame too
@@ -33,15 +36,7 @@ r3: []Value = undefined,
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
 
-pub const Config = struct {
-    embedded: bool = false,
-    print_ast: bool = false,
-    print_bytecode: bool = false,
-    static_analyzis: bool = false,
-    print_ir: bool = false,
-};
-
-pub fn init(self: *Self, allocator: Allocator, config: Config) void {
+pub fn init(self: *Self, allocator: Allocator, state: *const State) void {
     self.arena_comptime = .init(allocator);
     self.allocator = self.arena_comptime.allocator();
 
@@ -55,13 +50,23 @@ pub fn init(self: *Self, allocator: Allocator, config: Config) void {
     self.frame_stack = .empty;
     self.objects = null;
 
+    self.createNatives(state);
+
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
     // but the count is coherent of what is expected below, for example
     // for function call we exit if the frame stack count == 1. In REPL
     // it would be always true
-    if (config.embedded) {
+    if (state.config.embedded) {
         self.frame_stack.count += 1;
+    }
+}
+
+fn createNatives(self: *Self, state: *const State) void {
+    self.natives = self.allocator.alloc(Value, state.native_reg.funcs.items.len) catch oom();
+
+    for (state.native_reg.funcs.items, 0..) |func, i| {
+        self.natives[i] = .makeObj(Obj.NativeFunction.create(self, func.name, func.func).asObj());
     }
 }
 
@@ -229,12 +234,12 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
             },
             .call_native => {
-                // const args_count = frame.readByte();
-                // const native = self.stack.peekRef(args_count).obj.as(NativeFunction).function;
-                // const result = native((self.stack.top - args_count)[0..args_count]);
-                //
-                // self.stack.top -= args_count + 1;
-                // self.stack.push(result);
+                const args_count = frame.readByte();
+                const native = self.stack.peekRef(args_count).obj.as(Obj.NativeFunction).function;
+                const result = native.call((self.stack.top - args_count)[0..args_count]);
+
+                self.stack.top -= args_count + 1;
+                if (result) |res| self.stack.push(res);
             },
             .cast_to_float => self.stack.peekRef(0).* = Value.makeFloat(@floatFromInt(self.stack.peekRef(0).int)),
             .closure => {
@@ -358,6 +363,10 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const symbol = module.symbols[symbol_index];
                 self.stack.push(symbol);
                 self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
+            },
+            .load_builtin => {
+                const symbol_idx = frame.readByte();
+                self.stack.push(self.natives[symbol_idx]);
             },
             .load_sym => {
                 const symbol_idx = frame.readByte();

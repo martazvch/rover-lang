@@ -6,6 +6,7 @@ const builtin = @import("builtin");
 const clap = @import("clap");
 
 const oom = @import("misc").oom;
+const State = @import("State.zig");
 const Pipeline = @import("Pipeline.zig");
 const Repl = @import("commands/repl/Repl.zig");
 const Vm = @import("core/runtime/Vm.zig");
@@ -48,7 +49,7 @@ pub fn main() !void {
 
     if (res.args.help != 0) return clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
 
-    const config: Vm.Config = .{
+    const config: State.Config = .{
         .print_ast = res.args.@"print-ast" == 1,
         .print_bytecode = res.args.@"print-bytecode" == 1,
         .static_analyzis = res.args.@"static-analyzis" == 1,
@@ -70,23 +71,25 @@ pub fn main() !void {
         defer allocator.free(buf);
         _ = try file.readAll(buf);
 
-        var vm: Vm = undefined;
-        vm.init(allocator, config);
-        defer vm.deinit();
-
         var arena = std.heap.ArenaAllocator.init(allocator);
         const arena_alloc = arena.allocator();
         defer arena.deinit();
 
-        var ctx: Pipeline.Context = .new(arena_alloc, config);
-        var pipeline: Pipeline = .init(arena_alloc, &vm, &ctx);
+        var state: State = .new(arena_alloc, config);
+        state.registerNatives(arena_alloc, @import("core/builtins/builtins.zig"));
+
+        var vm: Vm = undefined;
+        vm.init(allocator, &state);
+        defer vm.deinit();
+
+        var pipeline: Pipeline = .init(arena_alloc, &vm, &state);
 
         const module = pipeline.run(f, ".", buf) catch |e| switch (e) {
             error.ExitOnPrint => return,
             else => return e,
         };
 
-        try vm.run(module, ctx.module_interner.compiled.values());
+        try vm.run(module, state.module_interner.compiled.values());
     } else {
         // var repl: Repl = undefined;
         // defer repl.deinit(allocator);

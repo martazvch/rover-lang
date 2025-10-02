@@ -41,13 +41,11 @@ pub const Token = struct {
         .{ "else", .@"else" },
         .{ "error", .@"error" },
         .{ "false", .false },
-        .{ "float", .float_kw },
         .{ "fn", .@"fn" },
         .{ "for", .@"for" },
         .{ "if", .@"if" },
         .{ "ifnull", .if_null },
         .{ "in", .in },
-        .{ "int", .int_kw },
         .{ "not", .not },
         .{ "null", .null },
         .{ "or", .@"or" },
@@ -612,13 +610,13 @@ test "keywords" {
     defer lexer.deinit();
     lexer.lex(
         \\\and else false for fn if in null or print return 
-        \\\self struct true var while not int float str do use break
+        \\\self struct true var while not str do use break
     );
 
     const res = [_]Token.Tag{
         .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .in,       .null, .@"or",  .print,
-        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .int_kw, .float_kw,
-        .str_kw,    .do,       .use,   .@"break",  .eof,
+        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .str_kw, .do,
+        .use,       .@"break", .eof,
     };
 
     for (0..res.len) |i| {

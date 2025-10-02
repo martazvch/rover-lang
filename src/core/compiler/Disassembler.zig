@@ -102,6 +102,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .lt_int => self.simpleInstruction(writer, "lt_int", offset),
         .load_blk_val => self.simpleInstruction(writer, "load_blk_val", offset),
         .load_extern_sym => self.indexExternInstruction(writer, "load_extern_sym", offset),
+        .load_builtin => self.indexInstruction(writer, "load_builtin", offset),
         .load_sym => self.loadSymbol(writer, offset),
         .loop => self.jumpInstruction(writer, "loop", -1, offset),
         .mul_float => self.simpleInstruction(writer, "mul_float", offset),

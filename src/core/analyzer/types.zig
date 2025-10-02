@@ -7,6 +7,7 @@ const Interner = @import("misc").Interner;
 const InternerIdx = Interner.Index;
 const ModuleInterner = @import("../../ModuleInterner.zig");
 const oom = @import("misc").oom;
+const Set = @import("misc").Set;
 const LexicalScope = @import("LexicalScope.zig");
 
 pub const Type = union(enum) {
@@ -68,12 +69,13 @@ pub const Type = union(enum) {
 
     pub const Function = struct {
         loc: ?Loc,
-        params: AutoArrayHashMapUnmanaged(InternerIdx, Parameter),
+        params: ParamsMap,
         return_type: *const Type,
         kind: Kind,
 
-        pub const Kind = enum { normal, method, bound };
+        pub const Kind = enum { normal, method, bound, native };
         pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
+        pub const ParamsMap = AutoArrayHashMapUnmanaged(InternerIdx, Parameter);
 
         pub fn proto(self: *const Function, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -141,7 +143,7 @@ pub const Type = union(enum) {
     };
 
     pub const Union = struct {
-        types: []*const Type,
+        types: []const *const Type,
 
         /// Checks wether a type is contained in the union
         pub fn contains(self: *const Union, other: *const Type) bool {
@@ -237,22 +239,17 @@ pub const Type = union(enum) {
                 }
             },
             .@"union" => |u| {
-                var uniques: AutoArrayHashMapUnmanaged(*const Type, void) = .empty;
-                uniques.ensureTotalCapacity(allocator, u.types.len) catch oom();
-
-                for (u.types) |ty| {
-                    if (uniques.contains(ty)) continue;
-                    uniques.putAssumeCapacity(ty, {});
-                }
+                var set = Set(*const Type).fromSlice(allocator, u.types) catch oom();
+                defer set.deinit(allocator);
 
                 // We sort as we want equality between for ex: int|bool and bool|int
-                std.sort.heap(*const Type, uniques.keys(), {}, struct {
+                set.sort(struct {
                     fn lessThan(_: void, a: *const Type, b: *const Type) bool {
                         return @intFromPtr(a) < @intFromPtr(b);
                     }
                 }.lessThan);
 
-                for (uniques.keys()) |ty| ty.hash(allocator, hasher);
+                for (set.values()) |ty| ty.hash(allocator, hasher);
             },
         }
     }
@@ -391,8 +388,8 @@ test "inline union" {
     defer ti.deinit();
     ti.cacheFrequentTypes();
 
-    const union1 = @constCast(&[_]*const Type{ ti.intern(.int), ti.intern(.bool) });
-    const union2 = @constCast(&[_]*const Type{ ti.intern(.bool), ti.intern(.int) });
+    const union1 = &[_]*const Type{ ti.intern(.int), ti.intern(.bool) };
+    const union2 = &[_]*const Type{ ti.intern(.bool), ti.intern(.int) };
 
     try expect(ti.intern(.{ .@"union" = .{ .types = union1 } }) == ti.intern(.{ .@"union" = .{ .types = union1 } }));
     try expect(ti.intern(.{ .@"union" = .{ .types = union2 } }) == ti.intern(.{ .@"union" = .{ .types = union2 } }));
