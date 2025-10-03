@@ -65,7 +65,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .box => self.simpleInstruction(writer, "box", offset),
         .call => self.indexInstruction(writer, "call", offset),
         .call_native => self.indexInstruction(writer, "call_native", offset),
-        .cast_to_float => self.simpleInstruction(writer, "cast_to_float", offset),
         .closure => self.indexInstruction(writer, "closure", offset),
         .constant => self.constantInstruction(writer, "constant", offset),
         .def_global => self.indexInstruction(writer, "def_global", offset),

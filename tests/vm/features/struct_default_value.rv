@@ -19,10 +19,10 @@ struct Vec2 {
 
 
 fn main() {
-    var v = Vec2 { a = 1, b = 2, y = true }
+    var v = Vec2 { a = 1.2, b = 2.4, y = true }
     v.display()
 
 
-    v = Vec2 { y = false, x = 7, a = 3, w = "Tom",  b = 99 }
+    v = Vec2 { y = false, x = 7, a = 3.3, w = "Tom",  b = 99.99 }
     v.display()
 }

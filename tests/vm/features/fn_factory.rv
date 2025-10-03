@@ -28,10 +28,10 @@ fn factory3() -> fn() -> int {
     return capture
 }
 
-fn factory4(arg: float) -> fn(float, bool) -> float {
+fn factory4(arg: int) -> fn(int, bool) -> float {
     var a = arg
 
-    fn capture(value: float, cond: bool) -> float {
+    fn capture(value: int, cond: bool) -> float {
         if cond and value > a do return 56.
         if not cond and value < a do return 80.
 

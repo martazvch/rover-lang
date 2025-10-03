@@ -70,7 +70,6 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .bound_method => |data| self.boundMethod(data),
         .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
-        .cast_to_float => |index| self.indexInstr("Cast to float", index),
         .discard => |index| self.indexInstr("Discard", index),
         .extractor => |index| self.indexInstr("Extractor", index),
         .field => |*data| self.getField(data, false),

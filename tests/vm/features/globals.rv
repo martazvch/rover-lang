@@ -2,7 +2,7 @@
 var name = "Adri"
 var age = "24"
 
-var lhs = 34
+var lhs = 34.
 var rhs = -.5
 
 fn main() {

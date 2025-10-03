@@ -189,6 +189,7 @@ pub const Type = union(enum) {
         };
     }
 
+    // TODO: remove now that casts are explicit
     pub fn canCastTo(self: *const Type, other: *const Type) bool {
         return self.is(.int) and other.is(.float);
     }

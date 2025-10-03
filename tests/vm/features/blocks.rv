@@ -24,7 +24,7 @@ fn main() {
 
     {
         var tmp = 67
-        var b = 87 - 6.
+        var b = 87. - 6.
         print b // expect: 81
     }
 

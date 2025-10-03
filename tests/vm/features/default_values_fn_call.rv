@@ -52,7 +52,7 @@ fn main() {
     function(arg2=11, arg3=1.1, arg1=111, noval="seventh")
 
     // Static
-    Foo.staticFn("first", 10, 20, 245)
+    Foo.staticFn("first", 10, 20, 245.2)
     Foo.staticFn("second")
     Foo.staticFn("third", 80)
     Foo.staticFn("fourth", arg3=1234.56)

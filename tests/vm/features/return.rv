@@ -1,5 +1,5 @@
 fn get_nb() -> int { return 5 }
-fn mul(a: int) -> float { return a * get_nb() }
+fn mul(a: int) -> int { return a * get_nb() }
 fn naked() {
     print "oui"
     return

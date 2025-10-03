@@ -20,13 +20,13 @@ fn main() {
     // local function
     var arg1 = 9
 
-    fn sub(a: int, b: float) -> float {
+    fn sub(a: int, b: int) -> int {
         return a - b
     }
 
     var f2 = sub
     print name // expect: "theprimeagen"
-    var arg2 = 2.5
+    var arg2 = 2
 
     print f2(arg1, arg2) // expect: 6.5
 

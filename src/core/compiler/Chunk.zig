@@ -62,7 +62,6 @@ pub const OpCode = enum(u8) {
     box,
     call,
     call_native,
-    cast_to_float,
     closure,
     constant,
     def_global,

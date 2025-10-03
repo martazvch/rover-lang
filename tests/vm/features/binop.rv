@@ -14,10 +14,10 @@ fn main() {
     print -6. + 2.000 - 1.// expect: -5
     print 0.2 / -.2 // expect: -1
 
-    // Ints and floats
-    print 1 + .6 // expect: 1.6
-    print 0.7 * -5 // expect: -3.5
-    print 1 + 6 / 2. * .5 // expect: 2.5
+    // Ints
+    print 1 + 6 // expect: 7
+    print 7 * -5 // expect: -35
+    print 1 + 6 / 2 * 5 // expect: 16
 
     // Strings
     print "Tom is " + "poor" // expect: "Tom is poor"

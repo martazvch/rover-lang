@@ -241,7 +241,6 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 self.stack.top -= args_count + 1;
                 if (result) |res| self.stack.push(res);
             },
-            .cast_to_float => self.stack.peekRef(0).* = Value.makeFloat(@floatFromInt(self.stack.peekRef(0).int)),
             .closure => {
                 const captures_count = frame.readByte();
                 const closure = Obj.Closure.create(

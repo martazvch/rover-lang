@@ -18,7 +18,7 @@ fn introduce() {
 }
 
 struct Square {
-    side: float,
+    side: int,
     middle: Point,
 
     fn moveCenter(self, pt: Point) -> Point {

@@ -10,16 +10,16 @@ fn main() {
     print not not false // expect: false
 
     print 1 == 1 // expect: true
-    print -1.5 == -3./2 // expect: true
-    print 1. == 1 // expect: true
+    print -1.5 == -3./2. // expect: true
+    print 1. == 1. // expect: true
 
     print -5 != 3 // expect: true
     print -6 != 6 // expect: true
 
     print -1 < 1 // expect: true
-    print -3. <= -3 // expect: true
+    print -3. <= -3. // expect: true
     print 0.5 > .2 // expect: true
-    print -8 >= -9.1 // expect: true
+    print -8. >= -9.1 // expect: true
 
     print "foo " == "foo " // expect: true
     print "f o o" == "f oo" // expect: false

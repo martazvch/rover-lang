@@ -20,7 +20,6 @@ pub const Instruction = struct {
         bound_method: BoundMethod,
         @"break": Break,
         call: Call,
-        cast_to_float: Index,
         discard: Index,
         extractor: Index,
         field: Field,

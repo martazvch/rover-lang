@@ -1,7 +1,7 @@
 // Here, we test that the discard dosen't corrupt the stack
 
 fn main() {
-    var nb1 = 10
+    var nb1 = 10.
     var nb2: float = -.5
 
     _ = nb1 * nb2

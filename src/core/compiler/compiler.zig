@@ -319,7 +319,6 @@ const Compiler = struct {
             .bound_method => |data| self.boundMethod(data),
             .@"break" => |data| self.breakInstr(data),
             .call => |*data| self.fnCall(data),
-            .cast_to_float => |index| self.wrappedInstr(.cast_to_float, index),
             .discard => |index| self.wrappedInstr(.pop, index),
 
             // In case of an extractor, we don't replace top of stack with the bool result of
