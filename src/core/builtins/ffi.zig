@@ -57,7 +57,8 @@ pub fn GenNative(func: anytype) type {
             if (T == Value) return value;
 
             return switch (@typeInfo(T)) {
-                .int => value.Int,
+                .float => value.float,
+                .int => value.int,
                 .bool => value.bool,
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(T)),
             };
@@ -65,6 +66,7 @@ pub fn GenNative(func: anytype) type {
 
         fn toValue(value: anytype) Value {
             return switch (@typeInfo(@TypeOf(value))) {
+                .float => .{ .float = value },
                 .int => .{ .int = value },
                 .bool => .{ .bool = value },
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(@TypeOf(value))),

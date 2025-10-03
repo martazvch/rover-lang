@@ -350,7 +350,6 @@ fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
 fn fnReturnType(self: *Self) Error!?*Ast.Type {
     return if (self.match(.small_arrow))
         self.parseType()
-        // else if (self.check(.identifier) or self.check(.bool) or self.check(.int_kw) or self.check(.float_kw))
     else if (self.check(.identifier) or self.check(.bool))
         self.errAtCurrent(.expect_arrow_before_fn_type)
     else
@@ -586,7 +585,6 @@ fn parseType(self: *Self) Error!*Ast.Type {
 }
 
 fn isIdentOrType(self: *Self) bool {
-    // return self.match(.identifier) or self.match(.float_kw) or self.match(.int_kw) or self.match(.str_kw) or self.match(.bool);
     return self.match(.identifier) or self.match(.str_kw) or self.match(.bool);
 }
 
@@ -1074,22 +1072,11 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 
             // Can't chain them, break the loop
             return self.extractor(expr);
-        }
-        // Cast
-        // else if (self.match(.as)) {
-        //     return self.cast(expr);
-        // }
-        else break;
+        } else break;
     }
 
     return expr;
 }
-
-// fn cast(self: *Self, expr: *Expr) Error!*Expr {
-//     const res = self.allocator.create(Expr) catch oom();
-//     res.* = .{ .cast = .{ .expr = expr, .type = try self.parseType() } };
-//     return res;
-// }
 
 fn extractor(self: *Self, expr: *Expr) Error!*Expr {
     const res = self.allocator.create(Expr) catch oom();

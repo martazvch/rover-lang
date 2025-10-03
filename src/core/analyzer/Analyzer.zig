@@ -237,7 +237,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
     defer snapshot.restore();
     const span = self.ast.getSpan(node.assigne);
 
-    // ctx.allow_partial = false;
     var value_res = try self.analyzeExprInfos(node.value, true, ctx);
 
     const maybe_assigne: ?InstrInfos = switch (node.assigne.*) {
@@ -752,7 +751,6 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
         .block => |*e| self.block(e, exp_val, ctx),
         .binop => |*e| self.binop(e, ctx),
         .@"break" => |*e| self.breakExpr(e, exp_val, ctx),
-        // .cast => |e| self.castExpr(e, ctx),
         .closure => |*e| self.closure(e, ctx),
         .extractor => |*e| self.extractor(e, ctx),
         .field => |*e| self.field(e, ctx),
@@ -1126,16 +1124,6 @@ fn breakExpr(self: *Self, expr: *const Ast.Break, exp_val: bool, ctx: *Context) 
 
     return .fromTypeCf(ty, .@"break", instr);
 }
-
-// fn castExpr(self: *Self, expr: Ast.Cast, ctx: *Context) Result {
-//     const instr = try self.analyzeExpr(expr, true, ctx);
-//     _ = instr; // autofix
-//     const ty = try self.checkAndGetType(expr.type, ctx);
-//
-//     if (!ty.isNumeric()) {
-//         @panic("Can only cast numeric types");
-//     }
-// }
 
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     self.scope.open(self.allocator, true, null);
@@ -1555,7 +1543,6 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
     }
 
     const branch_res = try self.mergeIfBranch(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, ctx);
-    std.log.debug("Res: {any}", .{branch_res.type.@"union".types});
     // const branch_res = try self.mergeIfBranch(then_res.ti.type, then_res.cf, else_ty, else_cf, ctx);
 
     // if (branch_res.cast_then) then_res.instr = self.irb.wrapInstr(.cast_to_float, then_res.instr);
