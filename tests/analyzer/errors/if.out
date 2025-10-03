@@ -1,7 +1,4 @@
 non_bool_cond, if, int
 missing_else_clause, int
 missing_else_clause, float
-type_mismatch, int, str
 void_value
-type_mismatch, float, str
-type_mismatch, int, str

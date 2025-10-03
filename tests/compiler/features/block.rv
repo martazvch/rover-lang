@@ -1,8 +1,5 @@
 fn main() {
-    // Here, the scope returns a value -> SCOPE_RETURN
-    // but the scope is invoked without assigning the value
-    // A OP_POP will be triggered as an expression statement
-    _ = {5}
+    _ = {break 5}
     { var a = 5 }
     { var a: int }
 
@@ -15,7 +12,7 @@ fn main() {
 
     var a: int = {
         var nb = 7
-        nb
+        break nb
     }
 
     var b: int = {
@@ -23,6 +20,6 @@ fn main() {
         var other = "just chillin"
         var nb = 7
         var sneaky = 90
-        nb
+        break nb
     }
 }

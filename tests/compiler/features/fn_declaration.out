@@ -8,11 +8,6 @@ ret_naked
 constant index 0, value 5
 ret
 
--- castInt --
-constant index 0, value 4
-cast_to_float
-ret
-
 -- div --
 ret_naked
 
@@ -20,5 +15,5 @@ ret_naked
 ret_naked
 
 -- global scope --
-load_sym index 4, <function main>
+load_sym index 3, <function main>
 call index 0

@@ -2,28 +2,35 @@
     - default values
     [Int 0]
     [Int 0]
-    [Function declaration init, return kind: implicit_value]
-        [Structure literal]
-            - structure
-            [Load symbol 0]
-            - args
-            [Default field 0]
-            [Default field 1]
+
+    [Function declaration init, returns]
+        [Return]
+            [Structure literal]
+                - structure
+                [Load symbol 0]
+                - args
+                [Default field 0]
+                [Default field 1]
+
 [Structure declaration Bar]
-    [Function declaration init, return kind: implicit_value]
-        [Structure literal]
-            - structure
-            [Load symbol 2]
-            - args
-            [Array]
-                [Bool true]
-[Function declaration main, return kind: implicit_void]
+    [Function declaration init, returns]
+        [Return]
+            [Structure literal]
+                - structure
+                [Load symbol 2]
+                - args
+                [Array]
+                    [Bool true]
+
+[Function declaration main]
     [Structure declaration Baz]
         - default values
         [Bool true]
-        [Function declaration init, return kind: implicit_value]
-            [Structure literal]
-                - structure
-                [Load symbol 5]
-                - args
-                [Bool false]
+
+        [Function declaration init, returns]
+            [Return]
+                [Structure literal]
+                    - structure
+                    [Load symbol 5]
+                    - args
+                    [Bool false]

@@ -3,9 +3,7 @@
 -- main --
 load_sym index 0, <structure Vec2>
 constant index 0, value 1
-cast_to_float
 constant index 1, value 2
-cast_to_float
 get_default index 0
 push_true
 get_default index 1
@@ -14,9 +12,7 @@ struct_lit index 6
 
 load_sym index 0, <structure Vec2>
 constant index 2, value 3
-cast_to_float
 constant index 3, value 99
-cast_to_float
 constant index 4, value 7
 push_false
 get_default index 1

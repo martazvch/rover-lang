@@ -1,4 +1,4 @@
-fn sub() -> bool { false }
+fn sub() -> bool { return false }
 
 fn main() {
     var a, b = 1 * (56 - 2), sub()

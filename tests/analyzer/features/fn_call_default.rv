@@ -6,15 +6,15 @@ use .data.math
 struct Foo {
     value = 8
 
-    fn static(a = 5) -> int { 3 }
+    fn static(a = 5) -> int { return 3 }
 
     fn method(self, a = 5) -> int {
-        self.value
+        return self.value
     }
 }
 
 fn copy(a = 5) -> int {
-    5
+    return 5
 }
 
 fn default(c: str, a, b = 7, d, e: bool=false) { }

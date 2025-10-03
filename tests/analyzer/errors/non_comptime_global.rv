@@ -1,10 +1,10 @@
 // Global
-fn trash() -> int { 5 }
+fn trash() -> int { return 5 }
 
 var a = trash()
 
 // Function default
-fn getValue() -> int { 5 }
+fn getValue() -> int { return 5 }
 fn func(a = getValue()) {}
 
 // Structure default

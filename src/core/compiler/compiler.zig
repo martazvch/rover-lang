@@ -599,7 +599,8 @@ const Compiler = struct {
             try compiler.compileInstr(instr);
         }
 
-        compiler.writeOp(if (data.returns) .ret else .ret_naked);
+        // If the function doesn't return by itself, we emit one naked return
+        if (!data.returns) compiler.writeOp(.ret_naked);
         return compiler.end();
     }
 

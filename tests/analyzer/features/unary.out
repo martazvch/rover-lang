@@ -1,4 +1,4 @@
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Discard]
         [Unary minus]
             [Float 6.7]

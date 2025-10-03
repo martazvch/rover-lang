@@ -1,9 +1,10 @@
 [Structure declaration Human]
-    [Function declaration speak, return kind: implicit_void]
+    [Function declaration speak]
         [Print]
             [Field access 1]
                 [Variable index: 0, scope: local]
-    [Function declaration getOld, return kind: implicit_value]
+
+    [Function declaration getOld, returns]
         [Binop type: add_int]
             [Field access 0]
                 [Variable index: 0, scope: local]
@@ -11,9 +12,11 @@
         [Field assignment]
             [Field access 0]
                 [Variable index: 0, scope: local]
-        [Field access 0]
-            [Variable index: 0, scope: local]
-[Function declaration main, return kind: implicit_void]
+        [Return]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
@@ -21,18 +24,24 @@
             - args
             [Int 5]
             [String Tom]
+
     [Variable declaration index: 1, scope: local]
         [Null]
+
     [Variable declaration index: 2, scope: local]
         [Bound method, method index: 0]
             [Variable index: 0, scope: local]
+
     [Variable declaration index: 3, scope: local]
         [Null]
+
     [Variable declaration index: 4, scope: local]
         [Bound method, method index: 1]
             [Variable index: 0, scope: local]
+
     [Fn call]
         [Variable index: 2, scope: local]
+
     [Discard]
         [Fn call]
             [Variable index: 4, scope: local]

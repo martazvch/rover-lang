@@ -8,7 +8,7 @@ struct Human {
 
     fn getOld(self, amount: int) -> int {
         self.age = self.age + amount
-        self.age
+        return self.age
     }
 }
 

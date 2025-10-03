@@ -1,5 +1,5 @@
-[Function declaration dead_code, return kind: explicit]
+[Function declaration dead_code, returns]
     [Variable declaration index: 0, scope: local]
         [Int 1]
     [Return]
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]

@@ -3,7 +3,7 @@ struct Vec2 {
     y: int,
 
     fn len(self) -> int {
-        self.x + self.y
+        return self.x + self.y
     }
 }
 
@@ -12,10 +12,10 @@ fn introduce() {
 }
 
 fn getVecFromPos(x: int, y: int) -> Vec2 {
-    Vec2{ x, y }
+    return Vec2{ x, y }
 }
 
-fn getInt() -> int { 12 }
+fn getInt() -> int { return 12 }
 
-fn getIntDef(a = 5) -> int { 12 }
+fn getIntDef(a = 5) -> int { return 12 }
 

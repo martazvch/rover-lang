@@ -1,34 +1,43 @@
 [Structure declaration Vec1]
-    [Function declaration new, return kind: implicit_value]
-        [Structure literal]
-            - structure
-            [Load symbol 0]
-            - args
-            [Variable index: 0, scope: local]
-[Function declaration main, return kind: implicit_void]
-    [Structure declaration Point]
-    [Structure declaration Vec2]
-        [Function declaration new, return kind: implicit_value]
+    [Function declaration new, returns]
+        [Return]
             [Structure literal]
                 - structure
-                [Load symbol 4]
+                [Load symbol 0]
                 - args
                 [Variable index: 0, scope: local]
-                [Variable index: 1, scope: local]
+
+[Function declaration main]
+    [Structure declaration Point]
+
+    [Structure declaration Vec2]
+        [Function declaration new, returns]
+            [Return]
+                [Structure literal]
+                    - structure
+                    [Load symbol 4]
+                    - args
+                    [Variable index: 0, scope: local]
+                    [Variable index: 1, scope: local]
+
     [Variable declaration index: 0, scope: local]
         [Fn call]
             [Method access 0]
                 [Load symbol 0]
             - args
             [Int 5]
+
     [Variable declaration index: 1, scope: local]
         [Method access 0]
             [Load symbol 0]
+
     [Fn call]
         [Variable index: 1, scope: local]
         - args
         [Int 65]
+
     [Assignment index: 0, scope: local, cow]
+
     [Variable declaration index: 2, scope: local]
         [Fn call]
             [Method access 0]
@@ -36,9 +45,11 @@
             - args
             [Int 12]
             [Int 99]
+
     [Variable declaration index: 3, scope: local]
         [Method access 0]
             [Load symbol 4]
+
     [Fn call]
         [Variable index: 3, scope: local]
         - args

@@ -1,4 +1,4 @@
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Block pop count: 2, is_expr: true]
             [Variable declaration index: 0, scope: local]
@@ -9,4 +9,5 @@
                 [Variable index: 0, scope: local]
                 [Int 5]
             [Assignment index: 1, scope: local]
-            [Variable index: 0, scope: local]
+            [Break depth: 0]
+                [Variable index: 0, scope: local]

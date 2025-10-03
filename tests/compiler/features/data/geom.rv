@@ -18,13 +18,13 @@ fn introduce() {
 }
 
 struct Square {
-    side: float,
+    side: int,
     middle: Point,
 
     fn moveCenter(self, pt: Point) -> Point {
         self.middle.x = self.middle.x + pt.x
         self.middle.y = self.middle.y + pt.y
 
-        self.middle
+        return self.middle
     }
 }

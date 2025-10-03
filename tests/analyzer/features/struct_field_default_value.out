@@ -3,16 +3,14 @@
     [Int 8]
     [String yup]
     [String yup]
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0]
             - args
-            [Cast to float]
-                [Int 1]
-            [Cast to float]
-                [Int 2]
+            [Float 1]
+            [Float 2]
             [Default field 0]
             [Bool true]
             [Default field 1]
@@ -21,10 +19,8 @@
         - structure
         [Load symbol 0]
         - args
-        [Cast to float]
-            [Int 3]
-        [Cast to float]
-            [Int 99]
+        [Float 3]
+        [Float 99]
         [Int 7]
         [Bool false]
         [Default field 1]

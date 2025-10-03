@@ -6,7 +6,7 @@ fn main() {
     {
         fn another_bool(a: int, b: str) -> bool {
             var tmp = 5
-            true or false
+            return true or false
         }
     }
 
@@ -14,7 +14,7 @@ fn main() {
     fn add1(a:int, b:float) {
         fn sub(a:int) -> str {
             print a
-            "yes"
+            return "yes"
         }
 
         _ = sub(1)
@@ -23,7 +23,7 @@ fn main() {
 
 // Return kinds
 fn add1() { return }
-fn add2() -> int { 5 }
+fn add2() -> int { return 5 }
 fn add3()  {  }
 fn add4() -> int { return 5 }
 
@@ -31,4 +31,4 @@ fn add4() -> int { return 5 }
 fn default(c: str, a, b = 7, d, e: bool=false) {}
 
 // Cast return
-fn castInt() -> float { 4 }
+fn castInt() -> float { return 4.5 }

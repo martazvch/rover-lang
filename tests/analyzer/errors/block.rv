@@ -10,9 +10,6 @@ fn main() {
         var empty: bool
     }
 
-    // Unused value
-    {5}
-
     // Invalid type
     var a: int = {
         var nb = 7.5

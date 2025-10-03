@@ -19,7 +19,7 @@ fn main() {
     print d + 65.1
 
     // Check if variable isn't available in outer scope
-    var ok: ?float = 9
+    var ok: ?float = 9.
     if ok :: v {}
     print v
 }

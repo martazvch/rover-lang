@@ -6,7 +6,7 @@ struct Poly {
     pt: Point,
 
     fn clone(self) -> Self {
-        Poly{pt=Point{x=1, y=2}}
+        return Poly{ pt=Point{ x=1, y=2 } }
     }
 }
 
@@ -31,8 +31,8 @@ fn main() {
     var structs = [structure.poly.pt]
 
     ref2 = (structure.poly.pt)
-    ref2 = { { structure.poly.pt } }
-    ref2 = { ( { ( structure.poly.pt ) } ) }
+    ref2 = { break { break structure.poly.pt } }
+    ref2 = { break ( { break ( structure.poly.pt ) } ) }
 
     ref2 = if true do return else poly.pt
     ref2 = if true do poly.pt else return

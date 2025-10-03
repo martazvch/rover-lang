@@ -1,55 +1,67 @@
 [Structure declaration Vec2]
-    [Function declaration len, return kind: implicit_value]
-        [Binop type: add_int]
-            [Field access 0]
-                [Variable index: 0, scope: local]
-            [Field access 1]
-                [Variable index: 0, scope: local]
-[Function declaration introduce, return kind: implicit_void]
+    [Function declaration len, returns]
+        [Return]
+            [Binop type: add_int]
+                [Field access 0]
+                    [Variable index: 0, scope: local]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+[Function declaration introduce]
     [Print]
         [String This is a mathematical module]
-[Function declaration getVecFromPos, return kind: implicit_value]
-    [Structure literal]
-        - structure
-        [Load symbol 0]
-        - args
-        [Variable index: 0, scope: local]
-        [Variable index: 1, scope: local]
-[Function declaration getInt, return kind: implicit_value]
-    [Int 12]
-[Function declaration getIntDefault, return kind: implicit_value]
+[Function declaration getVecFromPos, returns]
+    [Return]
+        [Structure literal]
+            - structure
+            [Load symbol 0]
+            - args
+            [Variable index: 0, scope: local]
+            [Variable index: 1, scope: local]
+[Function declaration getInt, returns]
+    [Return]
+        [Int 12]
+[Function declaration getIntDefault, returns]
     - default params
     [Int 9]
     - body
-    [Variable index: 0, scope: local]
+    [Return]
+        [Variable index: 0, scope: local]
 
 // -- main.rv
 [Structure declaration Foo]
     - default values
     [Int 8]
-    [Function declaration static, return kind: implicit_value]
+
+    [Function declaration static, returns]
         - default params
         [Int 5]
         - body
-        [Int 3]
-    [Function declaration method, return kind: implicit_value]
+        [Return]
+            [Int 3]
+
+    [Function declaration method, returns]
         - default params
         [Int 5]
         - body
-        [Field access 0]
-            [Variable index: 0, scope: local]
-[Function declaration copy, return kind: implicit_value]
+        [Return]
+            [Field access 0]
+                [Variable index: 0, scope: local]
+
+[Function declaration copy, returns]
     - default params
     [Int 5]
     - body
-    [Int 5]
-[Function declaration default, return kind: implicit_void]
+    [Return]
+        [Int 5]
+
+[Function declaration default]
     - default params
     [Int 7]
     [Int 7]
     [Bool false]
     [Bool false]
-[Function declaration main, return kind: implicit_void]
+
+[Function declaration main]
     [Fn call]
         [Load symbol 4]
         - args

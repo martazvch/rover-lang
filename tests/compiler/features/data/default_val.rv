@@ -14,6 +14,6 @@ struct Def {
     }
 }
 
-fn getInt(a=56) -> int { a }
+fn getInt(a=56) -> int { return a }
 
 

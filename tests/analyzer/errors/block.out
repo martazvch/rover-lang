@@ -1,3 +1,3 @@
-void_value
-type_mismatch, int, void
-type_mismatch, int, float
+block_all_path_dont_return
+block_all_path_dont_return
+block_all_path_dont_return

@@ -1,6 +1,0 @@
-fn main() {
-    var noval: float
-    noval = 1
-
-    var val: float = 1 + 6
-}

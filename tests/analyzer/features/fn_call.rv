@@ -11,6 +11,6 @@ fn main() {
 
     // Arg cast
     fn div(a: float, b: int, c: float, d: float, e: str) {}
-    div(2, 3, 45, 67., "yup")
-    mul(2, 3, 45, true, "yup")
+    div(2., 3, 45., 67., "yup")
+    mul(2, 3., 45., true, "yup")
 }

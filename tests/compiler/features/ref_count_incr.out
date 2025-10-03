@@ -74,24 +74,30 @@ set_local index 5
 get_local index 2
 get_field index 0
 get_field index 0
-ret_scope index 0
-ret_scope index 0
-incr_ref
+store_blk_val
+jump 95 -> 98
+load_blk_val
+store_blk_val
+jump 100 -> 103
+load_blk_val
 set_local index 5
 
 get_local index 2
 get_field index 0
 get_field index 0
-ret_scope index 0
-ret_scope index 0
-incr_ref
+store_blk_val
+jump 113 -> 116
+load_blk_val
+store_blk_val
+jump 118 -> 121
+load_blk_val
 set_local index 5
 
 push_true
-jump_false 115 -> 123
+jump_false 125 -> 133
 pop
 ret_naked
-jump 120 -> 129
+jump 130 -> 139
 pop
 get_local index 1
 get_field index 0
@@ -99,12 +105,12 @@ incr_ref
 set_local index 5
 
 push_true
-jump_false 132 -> 144
+jump_false 142 -> 154
 pop
 get_local index 1
 get_field index 0
 incr_ref
-jump 141 -> 146
+jump 151 -> 156
 pop
 ret_naked
 set_local index 5

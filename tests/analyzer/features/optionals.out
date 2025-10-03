@@ -1,4 +1,4 @@
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Int 8]
     [Variable declaration index: 1, scope: local]

@@ -1,6 +1,8 @@
 -- main --
 constant index 0, value 5
-ret_scope index 0
+store_blk_val
+jump 3 -> 6
+load_blk_val
 pop
 
 constant index 1, value 5
@@ -22,15 +24,24 @@ pop
 
 constant index 6, value 7
 get_local index 0
-ret_scope index 1
+store_blk_val
+jump 33 -> 36
+pop
 
+load_blk_val
 constant index 7, value 67
 constant index 8, value just chillin
 constant index 9, value 7
 constant index 10, value 90
 get_local index 3
-ret_scope index 4
+store_blk_val
+jump 49 -> 52
+pop
+pop
+pop
+pop
 
+load_blk_val
 ret_naked
 
 -- global scope --

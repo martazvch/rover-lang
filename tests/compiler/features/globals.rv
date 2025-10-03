@@ -3,7 +3,7 @@ var number = 15.6 + .6
 
 var name = "Blender"
 
-number = 90
+number = 90.
 name = "Best software"
 
 fn main() {}

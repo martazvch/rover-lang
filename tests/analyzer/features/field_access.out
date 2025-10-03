@@ -1,6 +1,6 @@
 [Structure declaration Pet]
 [Structure declaration Human]
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure

@@ -4,7 +4,7 @@
     [String .]
 [Variable declaration index: 2, scope: global]
     [String sneaky]
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Block pop count: 3, is_expr: false]
         [Variable declaration index: 0, scope: local]
             [Float 1.5]

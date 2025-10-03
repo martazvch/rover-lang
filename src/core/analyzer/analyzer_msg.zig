@@ -6,7 +6,6 @@ pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_param: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
-    array_elem_different_type: struct { found1: []const u8, found2: []const u8 },
     array_mismatch_dim: struct { declared: usize, accessed: usize },
     assign_to_constant: struct { name: []const u8 },
     assign_to_struct_fn,
@@ -77,7 +76,6 @@ pub const AnalyzerMsg = union(enum) {
     },
     use_uninit_var: struct { name: []const u8 },
     void_array,
-    void_discard,
     void_param,
     void_value,
 
@@ -87,10 +85,6 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
-            .array_elem_different_type => |e| writer.print(
-                "elements of an array must share the same type, found '{s}' and '{s}'",
-                .{ e.found1, e.found2 },
-            ),
             .array_mismatch_dim => |e| writer.print("trying to access dimension {} of a {}-dimensions array", .{ e.accessed, e.declared }),
             .assign_to_constant => |e| writer.print("can't assign to constant variable '{s}'", .{e.name}),
             .assign_to_struct_fn => writer.writeAll("can't assign to structure's functions"),
@@ -114,7 +108,7 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_arithmetic => |e| writer.print("invalid arithmetic operation on type '{s}'", .{e.found}),
             .invalid_assign_target => writer.writeAll("invalid assignment target"),
             .invalid_call_target => writer.writeAll("invalid call target, can only call functions and methods"),
-            .invalid_comparison => |e| writer.print("invalid comparison between types '{s}' and '{s}'", .{ e.found1, e.found1 }),
+            .invalid_comparison => |e| writer.print("invalid comparison between types '{s}' and '{s}'", .{ e.found1, e.found2 }),
             .invalid_logical => writer.writeAll("logical operators must be used with booleans"),
             .invalid_unary => writer.writeAll("invalid unary operation"),
             .missing_symbol_in_module => |e| writer.print("no symbol named '{s}' in module '{s}'", .{ e.symbol, e.module }),
@@ -152,7 +146,6 @@ pub const AnalyzerMsg = union(enum) {
             .non_comptime_default => |e| writer.print("only compilation time expressions are allowed for {s}", .{e.kind}),
             .use_uninit_var => |e| writer.print("variable '{s}' is used uninitialized", .{e.name}),
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
-            .void_discard => writer.writeAll("trying to discard a non value"),
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_value => writer.writeAll("value is of type 'void'"),
         };
@@ -161,7 +154,6 @@ pub const AnalyzerMsg = union(enum) {
     pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .already_declared_param => writer.writeAll("this name"),
-            .array_elem_different_type => writer.writeAll("this expression doesn't share previous type"),
             .array_mismatch_dim => writer.writeAll("this array access is wrong"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
@@ -207,7 +199,6 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_module, .unknown_struct_field => writer.writeAll("this name"),
             .unknown_param, .void_param => writer.writeAll("this parameter"),
             .void_array => writer.writeAll("declared here"),
-            .void_discard => writer.writeAll("this expression produces no value"),
             .void_value => writer.writeAll("this expression produces no value"),
         };
     }
@@ -218,7 +209,6 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared_field,
             .already_declared_param,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
-            .array_elem_different_type => writer.writeAll("modify array declaration values or use another construct"),
             .array_mismatch_dim => writer.writeAll("refer to variable's definition to get array's dimension"),
             .assign_to_struct_fn => writer.writeAll("it is not allowed to modify structures' functions at runtime"),
             .assign_to_constant => writer.writeAll(
@@ -243,7 +233,6 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
             .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),
-            .void_discard => writer.writeAll("remove the discard"),
             .float_equal => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like

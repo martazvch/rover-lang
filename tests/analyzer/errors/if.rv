@@ -1,24 +1,10 @@
 fn main() {
     _ = if {
         var tmp = 62
-        tmp
-    } do 1.5 else {4.}
+        break tmp
+    } do 1.5 else 4.
 
-    var res = if true {1}
+    var res = if true {break 1}
     var res2 = if true do -5.5
-
     var res3 = if true {1} else {"pipou"}
-    var res4 = if true {} else {
-        56. / 3.5
-    }
-
-    var res5 = if true do 1+2 else if false { 4.1 } else "dragon"
-
-    var res6 = if (true) {
-        24 / 2
-    } else if (true) do 5
-    else {
-        "you know"
-    }
 }
-

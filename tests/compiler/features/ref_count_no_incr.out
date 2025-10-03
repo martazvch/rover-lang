@@ -74,8 +74,14 @@ get_field index 0
 get_method index 0
 call index 1
 get_field index 0
-ret_scope index 0
-ret_scope index 0
+
+store_blk_val
+jump 105 -> 108
+load_blk_val
+store_blk_val
+jump 110 -> 113
+load_blk_val
+
 set_local index 5
 
 get_local index 2
@@ -83,15 +89,21 @@ get_field index 0
 get_method index 0
 call index 1
 get_field index 0
-ret_scope index 0
-ret_scope index 0
+
+store_blk_val
+jump 127 -> 130
+load_blk_val
+store_blk_val
+jump 132 -> 135
+load_blk_val
+
 set_local index 5
 
 push_true
-jump_false 127 -> 135
+jump_false 139 -> 147
 pop
 ret_naked
-jump 132 -> 144
+jump 144 -> 156
 pop
 get_local index 1
 get_method index 0
@@ -100,13 +112,13 @@ get_field index 0
 set_local index 5
 
 push_true
-jump_false 147 -> 162
+jump_false 159 -> 174
 pop
 get_local index 1
 get_method index 0
 call index 1
 get_field index 0
-jump 159 -> 164
+jump 171 -> 176
 pop
 ret_naked
 set_local index 5

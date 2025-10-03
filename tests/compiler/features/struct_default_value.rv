@@ -6,7 +6,7 @@ struct Vec2 {
 }
 
 fn main() {
-    var v = Vec2 { a = 1, b = 2, y = true }
-    v = Vec2 { y = false, x = 7, a = 3, w = "Tom",  b = 99 }
+    var v = Vec2 { a = 1., b = 2., y = true }
+    v = Vec2 { y = false, x = 7, a = 3., w = "Tom",  b = 99. }
 }
 

@@ -9,15 +9,15 @@ struct Foo {
 struct Bar {
     value = 0
 
-    fn static() -> int { 3 }
+    fn static() -> int { return 3 }
 
     fn method(self) -> int {
-        self.value
+        return self.value
     }
 }
 
 fn copy() -> int {
-    5
+    return 5
 }
 
 fn main() {

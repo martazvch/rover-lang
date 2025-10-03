@@ -29,7 +29,6 @@ sub_int
 pop
 
 constant index 10, value 12
-cast_to_float
 constant index 11, value 56
 neg_float
 mul_float
@@ -53,8 +52,7 @@ pop
 
 constant index 18, value 6.789
 constant index 19, value 1
-neg_int
-cast_to_float
+neg_float
 div_float
 pop
 
@@ -75,7 +73,6 @@ gt_float
 pop
 
 constant index 26, value 5
-cast_to_float
 constant index 27, value 3
 ge_float
 pop
@@ -124,7 +121,6 @@ pop
 
 constant index 44, value 5
 constant index 45, value 3
-cast_to_float
 ne_float
 pop
 

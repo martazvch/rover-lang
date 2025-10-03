@@ -76,20 +76,20 @@ def test(name: str, errs_path: str, tests_path: str, skip=[]):
 
 success = test(
     "Parser",
-    os.path.join(os.getcwd(), "src", "frontend", "parser_msg.zig"),
+    os.path.join(os.getcwd(), "src", "core", "parser", "parser_msg.zig"),
     os.path.join(os.getcwd(), "tests", "parser")
 )
 
 success = test(
     "Analyzer",
-    os.path.join(os.getcwd(), "src", "frontend", "analyzer_msg.zig"),
+    os.path.join(os.getcwd(), "src", "core", "analyzer", "analyzer_msg.zig"),
     os.path.join(os.getcwd(), "tests", "analyzer"),
     ["too_many_types"]
 ) and success
 
 success = test(
     "Compiler",
-    os.path.join(os.getcwd(), "src", "backend", "compiler_msg.zig"),
+    os.path.join(os.getcwd(), "src", "core", "compiler", "compiler_msg.zig"),
     os.path.join(os.getcwd(), "tests", "compiler")
 ) and success
 

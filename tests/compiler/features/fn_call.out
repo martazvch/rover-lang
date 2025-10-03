@@ -4,10 +4,6 @@ ret_naked
 -- add1 --
 ret_naked
 
--- add2 --
-get_local index 1
-ret
-
 -- add3 --
 get_local index 0
 ret
@@ -35,5 +31,5 @@ call index 2
 ret_naked
 
 -- global scope --
-load_sym index 6, <function main>
+load_sym index 5, <function main>
 call index 0

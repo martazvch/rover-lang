@@ -1,4 +1,4 @@
-[Function declaration main, return kind: implicit_void]
+[Function declaration main]
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
@@ -16,7 +16,7 @@
             [Int 5]
         - else:
             [Return]
-    [Function declaration func, return kind: explicit]
+    [Function declaration func, returns]
         [Print]
             [If]
             - condition:
@@ -39,7 +39,8 @@
                 [Block pop count: 1, is_expr: true]
                     [Variable declaration index: 0, scope: local]
                         [Float 56.4]
-                    [String champ]
+                    [Break depth: 0]
+                        [String champ]
         [If]
         - condition:
             [Bool true]
@@ -56,28 +57,34 @@
                     - condition:
                         [Bool true]
                     - then:
-                        [Block pop count: 0, is_expr: true]
-                            [Return]
-                                [Block pop count: 0, is_expr: true]
-                                    [Int 1]
+                        [Block pop count: 0, is_expr: false]
+                            [Pop]
+                                [Return]
+                                    [Block pop count: 0, is_expr: true]
+                                        [Break depth: 0]
+                                            [Int 1]
                     - else:
-                        [Int 5]
+                        [Break depth: 0]
+                            [Int 5]
             - else:
                 [Block pop count: 0, is_expr: true]
                     [If]
                     - condition:
                         [Bool false]
                     - then:
-                        [Block pop count: 0, is_expr: true]
-                            [Return]
-                                [If]
-                                - condition:
-                                    [Bool true]
-                                - then:
-                                    [Block pop count: 0, is_expr: true]
-                                        [Return]
-                                            [Int 4]
-                                - else:
-                                    [Int 3]
+                        [Block pop count: 0, is_expr: false]
+                            [Pop]
+                                [Return]
+                                    [If]
+                                    - condition:
+                                        [Bool true]
+                                    - then:
+                                        [Block pop count: 0, is_expr: false]
+                                            [Pop]
+                                                [Return]
+                                                    [Int 4]
+                                    - else:
+                                        [Int 3]
                     - else:
-                        [Int 8]
+                        [Break depth: 0]
+                            [Int 8]

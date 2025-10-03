@@ -1,22 +1,28 @@
-[Function declaration add, return kind: implicit_value]
-    [If]
-    - condition:
-        [Bool true]
-    - then:
-        [Int 1]
-    - else:
-        [Int 5]
-[Function declaration add1, return kind: implicit_value]
-    [If]
-    - condition:
-        [Bool false]
-    - then:
-        [Block pop count: 0, is_expr: true]
+[Function declaration add, returns]
+    [Return]
+        [If]
+        - condition:
+            [Bool true]
+        - then:
             [Int 1]
-    - else:
-        [Block pop count: 0, is_expr: true]
+        - else:
             [Int 5]
-[Function declaration add2, return kind: implicit_value]
+
+[Function declaration add1, returns]
+    [Return]
+        [If]
+        - condition:
+            [Bool false]
+        - then:
+            [Block pop count: 0, is_expr: true]
+                [Break depth: 0]
+                    [Int 1]
+        - else:
+            [Block pop count: 0, is_expr: true]
+                [Break depth: 0]
+                    [Int 5]
+
+[Function declaration add2, returns]
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
@@ -26,8 +32,10 @@
                 [Int 1]
         - else:
             [Int 5]
-    [Variable index: 0, scope: local]
-[Function declaration add3, return kind: implicit_value]
+    [Return]
+        [Variable index: 0, scope: local]
+
+[Function declaration add3, returns]
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
@@ -37,8 +45,10 @@
         - else:
             [Return]
                 [Int 5]
-    [Variable index: 0, scope: local]
-[Function declaration add4, return kind: explicit]
+    [Return]
+        [Variable index: 0, scope: local]
+
+[Function declaration add4, returns]
     [If]
     - condition:
         [Bool true]
@@ -48,7 +58,8 @@
     - else:
         [Return]
             [Int 5]
-[Function declaration add5, return kind: explicit]
+
+[Function declaration add5, returns]
     [Return]
         [If]
         - condition:
@@ -57,7 +68,8 @@
             [Int 1]
         - else:
             [Int 5]
-[Function declaration add6, return kind: explicit]
+
+[Function declaration add6, returns]
     [Return]
         [If]
         - condition:
@@ -67,7 +79,8 @@
                 [Int 1]
         - else:
             [Int 5]
-[Function declaration add7, return kind: explicit]
+
+[Function declaration add7, returns]
     [Return]
         [If]
         - condition:
@@ -77,7 +90,8 @@
         - else:
             [Return]
                 [Int 5]
-[Function declaration add8, return kind: explicit]
+
+[Function declaration add8, returns]
     [Return]
         [If]
         - condition:
@@ -88,4 +102,5 @@
         - else:
             [Return]
                 [Int 5]
-[Function declaration main, return kind: implicit_void]
+
+[Function declaration main]

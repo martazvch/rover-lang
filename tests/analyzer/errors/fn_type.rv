@@ -1,5 +1,5 @@
 fn factory(arg: fn() -> int) -> bool {
-    arg()
+    return arg()
 }
 
 fn factory2() -> fn() -> int {

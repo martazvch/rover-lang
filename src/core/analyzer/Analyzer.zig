@@ -432,25 +432,24 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         final_type = res.ti.type;
         returns = res.cf == .@"return";
 
-        if (returns and !last) {
-            self.warn(.dead_code, self.ast.getSpan(n));
-            break;
-        }
-
         // If last expression produced a value and that it wasn't the last one we pop it
         if (!last and !final_type.is(.void) and !res.ti.type.is(.never)) {
             instrs.appendAssumeCapacity(self.irb.wrapPreviousInstr(.pop));
         } else {
             instrs.appendAssumeCapacity(res.instr);
         }
+
+        if (returns and !last) {
+            self.warn(.dead_code, self.ast.getSpan(n));
+            break;
+        }
     }
 
-    if (!returns and !fn_type.return_type.is(.void)) {
+    // If you had an error, we don't even check this
+    if (err_count == self.errs.items.len and !returns and !fn_type.return_type.is(.void)) {
         const span = if (body.len == 0) name_span else self.ast.getSpan(body[body.len - 1]);
         return self.err(.{ .fn_expect_value = .{ .expect = self.typeName(fn_type.return_type) } }, span);
     }
-
-    if (err_count != self.errs.items.len) return error.Err;
 
     return .{ instrs.toOwnedSlice(self.allocator) catch oom(), returns };
 }
@@ -758,35 +757,22 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
 }
 
 fn array(self: *Self, expr: *const Ast.Array, ctx: *Context) Result {
-    var final_type = self.ti.getCached(.void);
     var pure = true;
-
-    var values: ArrayList(InstrIndex) = .empty;
-    values.ensureUnusedCapacity(self.allocator, expr.values.len) catch oom();
+    var values = ArrayList(InstrIndex).initCapacity(self.allocator, expr.values.len) catch oom();
+    var types: Set(*const Type) = .empty;
 
     for (expr.values) |val| {
-        const span = self.ast.getSpan(val);
-
         const val_res = try self.analyzeExprInfos(val, true, ctx);
-        const val_type = val_res.ti.type;
         var val_instr = val_res.instr;
-
-        if (!final_type.is(.void) and final_type != val_type) {
-            // TODO: No type coercion?
-            return self.err(
-                .{ .array_elem_different_type = .{ .found1 = self.typeName(final_type), .found2 = self.typeName(val_type) } },
-                span,
-            );
-        }
+        types.add(self.allocator, val_res.ti.type) catch oom();
 
         self.checkWrap(&val_instr, val_res.ti.heap);
-        final_type = val_type;
         pure = pure and val_res.ti.comp_time;
         values.appendAssumeCapacity(val_instr);
     }
 
     return .new(
-        .{ .type = self.ti.intern(.{ .array = .{ .child = final_type } }), .comp_time = pure },
+        .{ .type = self.ti.intern(.{ .array = .{ .child = self.mergeTypes(types.toOwned()) } }), .comp_time = pure },
         self.irb.addInstr(
             .{ .array = .{ .values = values.toOwnedSlice(self.allocator) catch oom() } },
             self.ast.getSpan(expr).start,
@@ -849,7 +835,6 @@ fn expectArrayIndex(self: *Self, expr: *const Expr, ctx: *Context) Error!InstrIn
     return res.instr;
 }
 
-// TODO: handle dead code eleminitaion so that it can be used in function's body?
 fn block(self: *Self, expr: *const Ast.Block, exp_val: bool, ctx: *Context) Result {
     self.scope.open(self.allocator, false, self.internLabel(expr.label));
 
@@ -861,7 +846,6 @@ fn block(self: *Self, expr: *const Ast.Block, exp_val: bool, ctx: *Context) Resu
 
     for (expr.nodes) |*node| {
         errdefer _ = self.scope.close();
-
         var res = try self.analyzeNodeInfos(node, ctx);
         pure = pure and res.ti.comp_time;
 
@@ -877,28 +861,32 @@ fn block(self: *Self, expr: *const Ast.Block, exp_val: bool, ctx: *Context) Resu
         }
     }
 
-    if (exp_val and cf == .none) return self.err(.block_all_path_dont_return, self.ast.getSpan(expr));
-
     const pop_count, const breaks = self.scope.close();
-    var final_type = ctx.decl_type orelse self.ti.getCached(.void);
+    const final = ty: {
+        // If the block partially returns, if we expect a value it's an error otherwise we
+        // choose the safe option to return void
+        if (cf == .none) {
+            if (exp_val) {
+                return self.err(.block_all_path_dont_return, self.ast.getSpan(expr));
+            }
 
-    // TODO: use mergeTypes?
-    for (breaks) |b| {
-        // const coerce = try self.performTypeCoercion(final_type, b.type, false, b.span);
-        // final_type = coerce.type;
-        final_type = try self.performTypeCoercion(final_type, b.type, false, b.span);
-        // if (coerce.cast) self.irb.wrapInstrInplace(.cast_to_float, b.instr);
-    }
+            break :ty self.ti.getCached(.void);
+        }
+
+        // Else we merge all possibilities
+        var types = Set(*const Type).fromSlice(self.allocator, breaks) catch oom();
+        break :ty self.mergeTypes(types.toOwned());
+    };
 
     // TODO: protect cast
     return .newCf(
-        .newType(final_type),
+        .newType(final),
         if (cf == .@"return") .@"return" else .none,
         self.irb.addInstr(
             .{ .block = .{
                 .instrs = instrs.toOwnedSlice(self.allocator) catch oom(),
                 .pop_count = @intCast(pop_count),
-                .is_expr = !final_type.is(.void),
+                .is_expr = !final.is(.void),
             } },
             self.ast.getSpan(expr).start,
         ),
@@ -1003,7 +991,6 @@ fn binopArithmeticCoercion(
     const lhs_type = lhs.ti.type;
     const rhs_type = rhs.ti.type;
 
-    if (lhs_type == rhs_type) return .{ lhs.instr, rhs.instr, lhs_type };
     if (!lhs_type.isNumeric()) return error.NonNumLsh;
     if (!rhs_type.isNumeric()) return error.NonNumRhs;
 
@@ -1081,9 +1068,10 @@ fn breakExpr(self: *Self, expr: *const Ast.Break, exp_val: bool, ctx: *Context) 
     );
 
     const instr = self.irb.addInstr(.{ .@"break" = .{ .instr = expr_instr, .depth = depth } }, span.start);
-    scope.breaks.append(self.allocator, .{ .instr = instr, .type = ty, .span = span }) catch oom();
+    scope.breaks.append(self.allocator, ty) catch oom();
 
-    return .fromTypeCf(ty, .@"break", instr);
+    // Break always return void because its value escapes scope
+    return .fromTypeCf(self.ti.getCached(.void), .@"break", instr);
 }
 
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
@@ -1503,7 +1491,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
         );
     }
 
-    const branch_res = try self.checkIfBranches(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, ctx);
+    const branch_res = try self.checkIfBranches(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, exp_val, ctx);
 
     return .newCf(
         .{ .type = branch_res, .comp_time = pure },
@@ -1522,13 +1510,13 @@ fn checkIfBranches(
     else_ty: ?*const Type,
     else_cf: ?InstrInfos.ControlFlow,
     expr: *const Ast.If,
+    exp_val: bool,
     ctx: *const Context,
 ) Error!*const Type {
-    const then_res = try self.checkBranch(then_ty, then_cf, self.ast.getSpan(expr.then), ctx);
+    const then_res = try self.checkBranch(then_ty, then_cf, exp_val, self.ast.getSpan(expr.then), ctx);
 
     const else_type = else_ty orelse return then_res;
-    const else_span = self.ast.getSpan(expr.@"else".?);
-    const else_res = try self.checkBranch(else_type, else_cf.?, else_span, ctx);
+    const else_res = try self.checkBranch(else_type, else_cf.?, exp_val, self.ast.getSpan(expr.@"else".?), ctx);
 
     // No need to get cast information as 'break' and 'return' already handles it
     if (then_cf.exitScope() and else_cf.?.exitScope()) return self.ti.getCached(.never);
@@ -1536,24 +1524,16 @@ fn checkIfBranches(
     return self.mergeTypes(&.{ then_res, else_res });
 }
 
-/// Given a slice a types, creates an union or return a scalar type if slice length is one
-fn mergeTypes(self: *Self, types: []const *const Type) *const Type {
-    var set = Set(*const Type).fromSlice(self.allocator, types) catch oom();
-
-    // Void can be in union, it just means a path, branch or value didn't produce anything
-    _ = set.remove(self.ti.getCached(.void));
-
-    const values = set.values();
-    if (values.len == 1) return values[0];
-
-    const optional = set.remove(self.ti.getCached(.null));
-    const ty = self.ti.intern(.{ .@"union" = .{ .types = set.toOwned() } });
-
-    return if (optional) self.ti.intern(.{ .optional = ty }) else ty;
-}
-
-fn checkBranch(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow, span: Span, ctx: *const Context) Error!*const Type {
+fn checkBranch(
+    self: *Self,
+    ty: *const Type,
+    cf: InstrInfos.ControlFlow,
+    exp_val: bool,
+    span: Span,
+    ctx: *const Context,
+) Error!*const Type {
     if (cf.exitScope()) return self.ti.getCached(.void);
+    if (exp_val and ty.is(.void)) return self.err(.void_value, span);
     const decl = ctx.decl_type orelse return ty;
 
     return try self.performTypeCoercion(decl, ty, false, span);
@@ -1861,6 +1841,23 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
     };
 }
 
+/// Given a slice a types, creates an union or return a scalar type if slice length is one
+fn mergeTypes(self: *Self, types: []const *const Type) *const Type {
+    var set = Set(*const Type).fromSlice(self.allocator, types) catch oom();
+
+    // Void can be in union, it just means a path, branch or value didn't produce anything
+    _ = set.remove(self.ti.getCached(.void));
+    const values = set.values();
+
+    if (values.len == 0) return self.ti.getCached(.void);
+    if (values.len == 1) return values[0];
+
+    const optional = set.remove(self.ti.getCached(.null));
+    const ty = self.ti.intern(.{ .@"union" = .{ .types = set.toOwned() } });
+
+    return if (optional) self.ti.intern(.{ .optional = ty }) else ty;
+}
+
 /// Checks for `void` values, array inference, cast and function type generation
 /// The goal is to see if the two types are equivalent and if so, make the transformations needed
 fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_explicit_void: bool, span: Span) Error!*const Type {
@@ -1890,10 +1887,13 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
                 else => |narrowed| return narrowed,
             };
         } else if (current_decl.is(.@"union") or value.is(.@"union")) {
-            return checkUnionType(current_decl, value) catch self.err(
-                .{ .type_not_in_union = .{ .expect = self.typeName(current_decl), .found = self.typeName(value) } },
-                span,
-            );
+            return checkUnionType(current_decl, value) catch |e| switch (e) {
+                error.Mismatch => break :check,
+                error.NotInUnion => self.err(
+                    .{ .type_not_in_union = .{ .expect = self.typeName(current_decl), .found = self.typeName(value) } },
+                    span,
+                ),
+            };
         } else if (value.is(.function)) {
             return self.checkFunctionEq(current_decl, value) catch break :check;
         }
@@ -1953,7 +1953,7 @@ fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!*co
     return error.Err;
 }
 /// Checks if two different types (with at least one of them being an unoion) fits in one or the other
-fn checkUnionType(decl: *const Type, value: *const Type) Error!*const Type {
+fn checkUnionType(decl: *const Type, value: *const Type) error{ Mismatch, NotInUnion }!*const Type {
     // TODO: put the check void on decl in the caller
     if (decl.is(.void)) {
         return value;
@@ -1967,14 +1967,14 @@ fn checkUnionType(decl: *const Type, value: *const Type) Error!*const Type {
     }
     // Value is an union but not declaration
     else if (!decl.is(.@"union")) {
-        return error.Err;
+        return error.Mismatch;
     }
     // Both are unions
     else if (decl.@"union".containsSubset(&value.@"union")) {
         return decl;
     }
 
-    return error.Err;
+    return error.NotInUnion;
 }
 
 /// Try to infer array value type from variable's declared type

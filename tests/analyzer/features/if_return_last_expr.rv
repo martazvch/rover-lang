@@ -1,19 +1,19 @@
 fn add() -> int {
-    if true do 1 else 5
+    return if true do 1 else 5
 }
 
 fn add1() -> int {
-    if false { 1 } else { 5 }
+    return if false { break 1 } else { break 5 }
 }
 
 fn add2() -> int {
     var trash = if true do return 1 else 5
-    trash
+    return trash
 }
 
 fn add3() -> int {
     var trash = if true do 1 else return 5
-    trash
+    return trash
 }
 
 fn add4() -> int {

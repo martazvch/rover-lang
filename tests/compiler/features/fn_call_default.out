@@ -143,7 +143,6 @@ constant index 20, value first
 constant index 21, value 10
 constant index 22, value 20
 constant index 23, value 245
-cast_to_float
 call index 4
 
 load_sym index 4, <structure Foo>

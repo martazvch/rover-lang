@@ -25,11 +25,13 @@ pub const Variable = struct {
     pub const Index = usize;
 };
 
-pub const Break = struct {
-    instr: InstrIndex,
-    type: *const Type,
-    span: Span,
-};
+// pub const Break = struct {
+//     instr: InstrIndex,
+//     type: *const Type,
+//     span: Span,
+// };
+
+pub const Break = *const Type;
 
 pub const Symbol = struct { type: *const Type, index: usize };
 pub const ExternSymbol = struct { module_index: usize, symbol: Symbol };

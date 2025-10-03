@@ -14,7 +14,7 @@ struct Poly {
 
     fn clone(self) -> Self {
         // self
-        Poly{pt=Point{x=1, y=2}}
+        return Poly{pt=Point{x=1, y=2}}
     }
 }
 

@@ -3,6 +3,6 @@ fn main() {
         var nb = 7
         var c = 56
         c = nb - 5
-        nb
+        break nb
     }
 }

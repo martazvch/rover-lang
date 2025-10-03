@@ -2,7 +2,7 @@ struct Vec1 {
     x: int
 
     fn new(x: int) -> Vec1 {
-        Vec1 { x }
+        return Vec1 { x }
     }
 }
 
@@ -13,7 +13,7 @@ fn main() {
         x: int, y: int,
 
         fn new(x: int, y: int) -> Vec2 {
-            Vec2 { x, y }
+            return Vec2 { x, y }
         }
     }
 

@@ -9,7 +9,7 @@ fn main() {
 
         var tmp: str = if true do return a + 2 else {
             var local = 56.4
-            "champ"
+            break "champ"
         }
 
         // If without else but not as last stmt
@@ -17,12 +17,12 @@ fn main() {
 
         return if true {
             if true {
-                return { 1 }
-            } else 5
+                return { break 1 }
+            } else break 5
         } else {
             if false {
                 return if true { return 4 } else 3
-            } else 8
+            } else break 8
         }
     }
 }

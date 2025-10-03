@@ -10,7 +10,6 @@ get_local index 0
 load_sym index 1, <function sub>
 call index 0
 mul_int
-cast_to_float
 ret
 
 -- main --

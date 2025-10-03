@@ -1,7 +1,7 @@
 fn main() {
     // First error, retuns an int
     var a = if true { return 1 } else 4
-    // Second, same with str
+    // Second, same with str and no block
     var b = if false do 5 else return "oui"
 
     // If without else in non-partial context
@@ -13,29 +13,30 @@ fn main() {
 
         var tmp: str = if true do return a + 2 else {
             var local = 56.4
-            if false do "champ"
+            if false do break "champ"
         }
 
+        // Raises no error
         return if true {
             if true {
-                return { 1. }
-            } else 5
+                return { break 1 }
+            } else break 5
         } else {
             if false {
                 return if true { return 4 } else 3
-            } else 8
+            } else break 8
         }
     }
 
     fn func2() -> int {
         return if true {
             if true {
-                return { 1 }
-            } else 5
+                return 1
+            } else break 5
         } else {
             if false {
                 return if true { return 4 } else 3.6
-            } else 8
+            } else break 8
         }
     }
 }

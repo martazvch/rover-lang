@@ -1,29 +1,39 @@
+// math.rv
 [Structure declaration Vec2]
-    [Function declaration len, return kind: implicit_value]
-        [Binop type: add_int]
-            [Field access 0]
-                [Variable index: 0, scope: local]
-            [Field access 1]
-                [Variable index: 0, scope: local]
-[Function declaration introduce, return kind: implicit_void]
+    [Function declaration len, returns]
+        [Return]
+            [Binop type: add_int]
+                [Field access 0]
+                    [Variable index: 0, scope: local]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+
+[Function declaration introduce]
     [Print]
         [String This is a mathematical module]
-[Function declaration getVecFromPos, return kind: implicit_value]
-    [Structure literal]
-        - structure
-        [Load symbol 0]
-        - args
-        [Variable index: 0, scope: local]
-        [Variable index: 1, scope: local]
-[Function declaration getInt, return kind: implicit_value]
-    [Int 12]
-[Function declaration getIntDefault, return kind: implicit_value]
+
+[Function declaration getVecFromPos, returns]
+    [Return]
+        [Structure literal]
+            - structure
+            [Load symbol 0]
+            - args
+            [Variable index: 0, scope: local]
+            [Variable index: 1, scope: local]
+
+[Function declaration getInt, returns]
+    [Return]
+        [Int 12]
+
+[Function declaration getIntDefault, returns]
     - default params
     [Int 9]
     - body
-    [Variable index: 0, scope: local]
+    [Return]
+        [Variable index: 0, scope: local]
 
-[Function declaration main, return kind: implicit_void]
+// test.rv
+[Function declaration main]
     [Block pop count: 4, is_expr: false]
         [Fn call]
             [Load symbol 2 of module 0]

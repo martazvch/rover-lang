@@ -8,10 +8,7 @@ missing_else_clause, int
 type_mismatch, int, float
 
 // Partial if for tmp
-missing_else_clause, str
-
-// Nested if
-type_mismatch, int, float
+void_value
 
 // Func 2, very nested type error
 type_mismatch, int, float
