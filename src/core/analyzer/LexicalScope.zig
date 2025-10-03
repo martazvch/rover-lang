@@ -9,6 +9,7 @@ const Type = @import("types.zig").Type;
 const InstrIndex = @import("../ir/rir.zig").Index;
 const Span = @import("../parser/Lexer.zig").Span;
 const State = @import("../../State.zig");
+const RevIterator = @import("misc").RevIterator;
 const oom = @import("misc").oom;
 
 const Self = @This();
@@ -24,12 +25,6 @@ pub const Variable = struct {
 
     pub const Index = usize;
 };
-
-// pub const Break = struct {
-//     instr: InstrIndex,
-//     type: *const Type,
-//     span: Span,
-// };
 
 pub const Break = *const Type;
 
@@ -75,7 +70,6 @@ pub const Scope = struct {
 /// those and the name should be `null`.
 /// Otherwise, you can name the scope as it might just be a regular block
 pub fn open(self: *Self, allocator: Allocator, barrier: bool, name: ?InternerIdx) void {
-    // if (barrier) self.block_count += 1;
     const offset = if (barrier) 0 else self.current.variables.count() + self.current.offset;
 
     var scope: Scope = .{ .name = name, .offset = offset, .barrier = barrier };
@@ -174,18 +168,18 @@ pub fn declareVarInFutureScope(self: *Self, allocator: Allocator, name: Interner
 
 /// Tries to retreive a variable from scopes and the local offset of its scope
 pub fn getVariable(self: *const Self, name: InternerIdx) ?struct { *Variable, usize } {
-    var i = self.scopes.items.len;
-
-    while (i > 0) {
-        i -= 1;
-        const scope = &self.scopes.items[i];
-
+    var it = self.iterator();
+    while (it.next()) |scope| {
         if (scope.variables.getPtr(name)) |variable| {
             return .{ variable, scope.offset };
         }
     }
 
     return null;
+}
+
+fn iterator(self: *const Self) RevIterator(Scope) {
+    return .init(self.scopes.items);
 }
 
 /// Forward declares a symbol without incrementing global symbol count
@@ -203,12 +197,8 @@ pub fn removeSymbolFromScope(self: *Self, name: InternerIdx) ?Symbol {
 }
 
 pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
-    var i = self.scopes.items.len;
-
-    while (i > 0) {
-        i -= 1;
-        const scope = &self.scopes.items[i];
-
+    var it = self.iterator();
+    while (it.next()) |scope| {
         if (scope.symbols.getPtr(name)) |sym| {
             return sym;
         }
@@ -232,12 +222,8 @@ pub fn declareExternSymbol(
 }
 
 pub fn getExternSymbol(self: *const Self, name: InternerIdx) ?*ExternSymbol {
-    var i = self.scopes.items.len;
-
-    while (i > 0) {
-        i -= 1;
-        const scope = &self.scopes.items[i];
-
+    var it = self.iterator();
+    while (it.next()) |scope| {
         if (scope.extern_symbols.getPtr(name)) |ext| {
             return ext;
         }
@@ -254,14 +240,9 @@ pub fn declareModule(self: *Self, allocator: Allocator, name: InternerIdx, ty: *
     self.current.modules.put(allocator, name, ty) catch oom();
 }
 
-// TODO: merge all iterators in this file
 pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
-    var i = self.scopes.items.len;
-
-    while (i > 0) {
-        i -= 1;
-        const scope = &self.scopes.items[i];
-
+    var it = self.iterator();
+    while (it.next()) |scope| {
         if (scope.modules.get(name)) |ty| {
             return ty;
         }
@@ -273,14 +254,10 @@ pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
 pub fn getScopeByName(self: *const Self, label: ?InstrIndex) error{UnknownLabel}!struct { *Scope, usize } {
     const lbl = label orelse return .{ self.current, 0 };
 
-    var i = self.scopes.items.len;
     var depth: usize = 0;
-
-    while (i > 0) : (depth += 1) {
-        i -= 1;
-        const scope = &self.scopes.items[i];
-
-        // It means we hit a function or structure's declaration scope
+    var it = self.iterator();
+    while (it.next()) |scope| : (depth += 1) {
+        // We hit a function or structure's declaration scope
         if (scope.barrier) break;
 
         if (scope.name) |sn| {

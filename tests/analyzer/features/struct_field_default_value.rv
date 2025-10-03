@@ -3,6 +3,7 @@ struct Vec2 {
     x = 8,
     y: bool,
     z, w: str = "yup",
+    c: ?int = 3,
 }
 
 fn main() {

@@ -3,6 +3,7 @@
     [Int 8]
     [String yup]
     [String yup]
+    [Int 3]
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
@@ -15,6 +16,7 @@
             [Bool true]
             [Default field 1]
             [Default field 2]
+            [Default field 3]
     [Structure literal]
         - structure
         [Load symbol 0]
@@ -25,4 +27,5 @@
         [Bool false]
         [Default field 1]
         [Default field 2]
+        [Default field 3]
     [Assignment index: 0, scope: local, cow]

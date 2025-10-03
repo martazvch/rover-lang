@@ -175,6 +175,13 @@ fn warn(self: *Self, kind: AnalyzerMsg, span: Span) void {
     self.warns.append(self.allocator, AnalyzerReport.warn(kind, span.start, span.end)) catch oom();
 }
 
+fn replacePrevErr(self: *Self, new_err: AnalyzerMsg, span: Span) Error {
+    const last = &self.errs.items[self.errs.items.len - 1];
+    last.* = AnalyzerReport.err(new_err, span.start, span.end);
+
+    return error.Err;
+}
+
 pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_main: bool) AnalyzedModule {
     self.ast = ast;
     var ctx: Context = .empty;
@@ -672,13 +679,12 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 
             if (struct_field.type.is(.void)) struct_field.type = res.ti.type;
 
-            // TODO: no typeCoercion?
-            if (res.ti.type != struct_field.type) {
-                return self.err(
+            _ = self.performTypeCoercion(struct_field.type, res.ti.type, false, self.ast.getSpan(f.name)) catch {
+                return self.replacePrevErr(
                     .{ .default_value_type_mismatch = .new(self.typeName(struct_field.type), self.typeName(res.ti.type), .field) },
                     self.ast.getSpan(f.name),
                 );
-            }
+            };
 
             default_fields.append(self.allocator, res.instr) catch oom();
         }
