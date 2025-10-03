@@ -695,11 +695,16 @@ fn print(self: *Self) Error!Node {
 }
 
 fn whileStmt(self: *Self) Error!Node {
-    const save = self.ctx.in_cond;
-    self.ctx.in_cond = true;
-    errdefer self.ctx.in_cond = save;
+    const save_in_cond = self.ctx.setAndGetPrevious(.in_cond, true);
+    const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
+    defer {
+        self.ctx.in_cond = save_in_cond;
+        self.ctx.can_extract = save_extract;
+    }
+    errdefer self.ctx.in_cond = save_in_cond;
+
     const cond = try self.parsePrecedenceExpr(0);
-    self.ctx.in_cond = save;
+    self.ctx.in_cond = save_in_cond;
 
     const body = if (self.matchAndSkip(.left_brace))
         try self.blockExpr()

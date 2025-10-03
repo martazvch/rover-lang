@@ -3,5 +3,24 @@ fn main() {
     var b: bool|int = 1
     b = true
     a = b
+
+    // In array
+    var arr = [1, true]
+    arr[0] = false
+    arr[0] = 1
+
+    var arr2: []str|float = [4.5, 6.7, "yep"]
+    arr2[0] = "maybe"
+    arr2[0] = 6.9
+
+    // In optional
+    var opt: ?int|float = 3
+    opt = 6.7
+    opt = null
+    opt = 1
+
+    var optUnion: ?int|float = 6
+    var optInt: ?int = 7
+    optUnion = optInt
 }
 

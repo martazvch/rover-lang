@@ -184,7 +184,7 @@ pub const Type = union(enum) {
     // TODO: values in unions can be heap...
     pub fn isHeap(self: *const Type) bool {
         return switch (self.*) {
-            .void, .int, .float, .bool, .str, .null, .function, .@"union" => false,
+            .void, .int, .float, .bool, .str, .null, .function, .optional, .@"union" => false,
             else => true,
         };
     }

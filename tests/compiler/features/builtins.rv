@@ -1,0 +1,7 @@
+fn main() {
+    var a: int = int(5.6)
+    a = int(5)
+    var b: float = float(6)
+    b = float(6.4)
+}
+

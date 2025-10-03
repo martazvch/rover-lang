@@ -9,5 +9,3 @@ invalid_unary, ?bool
 
 null_assign_to_non_optional, float
 invalid_arithmetic, ?float
-
-undeclared_var, v

@@ -1,0 +1,2 @@
+undeclared_block_label, b
+type_mismatch, int, float|int

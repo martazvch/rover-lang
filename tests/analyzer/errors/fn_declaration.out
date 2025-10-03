@@ -2,4 +2,5 @@ void_param
 already_declared_param, arg1
 type_mismatch, int, bool
 type_mismatch, void, int
+fn_expect_value, int
 already_declared, bis

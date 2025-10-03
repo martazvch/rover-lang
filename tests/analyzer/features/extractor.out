@@ -1,0 +1,22 @@
+[Function declaration getValue, returns]
+    [Return]
+        [Float 5]
+[Function declaration main]
+    [If]
+    - condition:
+        [Extractor]
+            [Fn call]
+                [Load symbol 0]
+    - then:
+        [Block pop count: 1, is_expr: false]
+            [Print]
+                [Variable index: 0, scope: local]
+    [While]
+    - condition:
+        [Extractor]
+            [Fn call]
+                [Load symbol 0]
+    - body:
+        [Block pop count: 1, is_expr: false]
+            [Print]
+                [Variable index: 0, scope: local]

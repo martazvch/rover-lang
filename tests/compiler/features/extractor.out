@@ -1,0 +1,36 @@
+-- getValue --
+constant index 0, value 5
+ret
+
+-- main --
+load_sym index 0, <function getValue>
+call index 0
+ne_null_push
+jump_false 5 -> 16
+pop
+get_local index 0
+print
+pop
+jump 13 -> 18
+
+// Pops if condition and lhs of extractor
+pop
+pop
+
+// While
+load_sym index 0, <function getValue>
+call index 0
+ne_null_push
+jump_false 23 -> 34
+pop
+get_local index 0
+print
+pop
+loop 31 -> 18
+pop
+
+ret_naked
+
+-- global scope --
+load_sym index 1, <function main>
+call index 0

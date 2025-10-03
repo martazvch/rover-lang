@@ -71,3 +71,25 @@
             [Load symbol 0]
             - args
             [Array]
+
+    // array of nullable
+    [Variable declaration index: 6, scope: local]
+        [Array]
+            [Int 1]
+            [Int 2]
+    [Int 2]
+    [Array assignment]
+        - index
+        [Int 1]
+        - array
+        [Variable index: 6, scope: local]
+    [Null]
+    [Array assignment]
+        - index
+        [Int 1]
+        - array
+        [Variable index: 6, scope: local]
+    [Array]
+        [Int 1]
+        [Null]
+    [Assignment index: 6, scope: local, cow]

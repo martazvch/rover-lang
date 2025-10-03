@@ -1,0 +1,22 @@
+fn getValue() -> ?float { return 5. }
+fn getNull() -> ?int { return null }
+
+fn get2(value: int) -> ?int {
+    return if value < 5 do value else null
+}
+
+fn main() {
+    if getValue() :: v {
+        print v
+    }
+
+    if getNull() :: n {
+        print "here"
+    }
+
+    var i = 0
+    while get2(i) :: v {
+        print v
+        i += 1
+    }
+}

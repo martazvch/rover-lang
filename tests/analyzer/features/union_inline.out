@@ -7,3 +7,51 @@
     [Assignment index: 1, scope: local]
     [Variable index: 1, scope: local]
     [Assignment index: 0, scope: local]
+    [Variable declaration index: 2, scope: local]
+        [Array]
+            [Int 1]
+            [Bool true]
+    [Bool false]
+    [Array assignment]
+        - index
+        [Int 0]
+        - array
+        [Variable index: 2, scope: local]
+    [Int 1]
+    [Array assignment]
+        - index
+        [Int 0]
+        - array
+        [Variable index: 2, scope: local]
+    [Variable declaration index: 3, scope: local]
+        [Array]
+            [Float 4.5]
+            [Float 6.7]
+            [String yep]
+    [String maybe]
+    [Array assignment]
+        - index
+        [Int 0]
+        - array
+        [Variable index: 3, scope: local]
+    [Float 6.9]
+    [Array assignment]
+        - index
+        [Int 0]
+        - array
+        [Variable index: 3, scope: local]
+    [Variable declaration index: 4, scope: local]
+        [Int 3]
+    [Float 6.7]
+    [Assignment index: 4, scope: local]
+    [Null]
+    [Assignment index: 4, scope: local]
+    [Int 1]
+    [Assignment index: 4, scope: local]
+
+    [Variable declaration index: 5, scope: local]
+        [Int 6]
+    [Variable declaration index: 6, scope: local]
+        [Int 7]
+    [Variable index: 6, scope: local]
+    [Assignment index: 5, scope: local]

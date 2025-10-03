@@ -1,0 +1,9 @@
+fn getValue() -> float { return 6.5 }
+fn main() {
+    // Check if variable isn't available in outer scope
+    var ok: ?float = 9.
+    if ok :: v {}
+    print v
+
+    if getValue() :: e {}
+}

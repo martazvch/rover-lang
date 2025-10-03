@@ -80,7 +80,7 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
         .int => |data| self.intInstr(data),
         .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
-        .load_builtin => |index| self.indexInstr("Builtin symbol", index),
+        .load_builtin => |index| self.indentAndPrintSlice("[Builtin symbol: {}]", .{index}),
         .multiple_var_decl => |*data| self.multipleVarDecl(data),
         .null => self.indentAndAppendSlice("[Null]"),
         .pop => |index| self.indexInstr("Pop", index),

@@ -37,13 +37,11 @@ pub const AnalyzedModule = struct {
 const Context = struct {
     fn_type: ?*const Type,
     struct_type: ?*const Type,
-    decl_type: ?*const Type,
     in_call: bool,
 
     pub const empty: Context = .{
         .fn_type = null,
         .struct_type = null,
-        .decl_type = null,
         .in_call = false,
     };
 
@@ -61,12 +59,6 @@ const Context = struct {
         @field(self, @tagName(f)) = value;
 
         return prev;
-    }
-
-    /// Sets the declaration type only if the type is not `void`
-    pub fn setDecl(self: *Context, decl: *const Type) void {
-        if (decl.is(.void)) return;
-        self.decl_type = decl;
     }
 
     pub fn snapshot(self: *Context) ContextSnapshot {
@@ -560,9 +552,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) StmtResu
     const span = self.ast.getSpan(node.name);
     const name = try self.internIfNotInCurrentScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
-
-    ctx.setDecl(checked_type);
-    defer ctx.decl_type = null;
 
     var comp_time = false;
 
@@ -1117,8 +1106,10 @@ fn extractor(self: *Self, expr: *const Ast.Extractor, ctx: *Context) Result {
     const span = self.ast.getSpan(expr);
     const expr_ty = try self.analyzeExpr(expr.expr, true, ctx);
 
-    // TODO: error
-    const ty = expr_ty.type.getChildIfOptional() orelse @panic("Extract non optional");
+    const ty = expr_ty.type.getChildIfOptional() orelse return self.err(
+        .{ .extract_non_optional = .{ .found = self.typeName(expr_ty.type) } },
+        span,
+    );
 
     // TODO: be sure that it's in the correct scope
     const binding = try self.internIfNotInCurrentScope(expr.alias);
@@ -1491,7 +1482,7 @@ fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result
         );
     }
 
-    const branch_res = try self.checkIfBranches(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, exp_val, ctx);
+    const branch_res = try self.checkIfBranches(then_res.ti.type, then_res.cf, else_ty, else_cf, expr, exp_val);
 
     return .newCf(
         .{ .type = branch_res, .comp_time = pure },
@@ -1511,12 +1502,11 @@ fn checkIfBranches(
     else_cf: ?InstrInfos.ControlFlow,
     expr: *const Ast.If,
     exp_val: bool,
-    ctx: *const Context,
 ) Error!*const Type {
-    const then_res = try self.checkBranch(then_ty, then_cf, exp_val, self.ast.getSpan(expr.then), ctx);
+    const then_res = try self.checkBranch(then_ty, then_cf, exp_val, self.ast.getSpan(expr.then));
 
     const else_type = else_ty orelse return then_res;
-    const else_res = try self.checkBranch(else_type, else_cf.?, exp_val, self.ast.getSpan(expr.@"else".?), ctx);
+    const else_res = try self.checkBranch(else_type, else_cf.?, exp_val, self.ast.getSpan(expr.@"else".?));
 
     // No need to get cast information as 'break' and 'return' already handles it
     if (then_cf.exitScope() and else_cf.?.exitScope()) return self.ti.getCached(.never);
@@ -1524,19 +1514,11 @@ fn checkIfBranches(
     return self.mergeTypes(&.{ then_res, else_res });
 }
 
-fn checkBranch(
-    self: *Self,
-    ty: *const Type,
-    cf: InstrInfos.ControlFlow,
-    exp_val: bool,
-    span: Span,
-    ctx: *const Context,
-) Error!*const Type {
+fn checkBranch(self: *Self, ty: *const Type, cf: InstrInfos.ControlFlow, exp_val: bool, span: Span) Error!*const Type {
     if (cf.exitScope()) return self.ti.getCached(.void);
     if (exp_val and ty.is(.void)) return self.err(.void_value, span);
-    const decl = ctx.decl_type orelse return ty;
 
-    return try self.performTypeCoercion(decl, ty, false, span);
+    return ty;
 }
 
 fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
@@ -1847,13 +1829,11 @@ fn mergeTypes(self: *Self, types: []const *const Type) *const Type {
 
     // Void can be in union, it just means a path, branch or value didn't produce anything
     _ = set.remove(self.ti.getCached(.void));
-    const values = set.values();
 
-    if (values.len == 0) return self.ti.getCached(.void);
-    if (values.len == 1) return values[0];
+    if (set.count() == 0) return self.ti.getCached(.void);
 
     const optional = set.remove(self.ti.getCached(.null));
-    const ty = self.ti.intern(.{ .@"union" = .{ .types = set.toOwned() } });
+    const ty = if (set.count() == 1) set.values()[0] else self.ti.intern(.{ .@"union" = .{ .types = set.toOwned() } });
 
     return if (optional) self.ti.intern(.{ .optional = ty }) else ty;
 }
@@ -1872,51 +1852,38 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
 
     // If this is 'never', it means we ended with a control flow in which all branches returned
     // In that case, the type has already been tested against function's type
-    // TODO: are we really using this?
     if (value.is(.never)) return decl;
 
-    // If we don't assign an optional, extract the child type from declaration
-    var current_decl = if (decl.is(.optional)) decl.optional else decl;
-    // Then if it's the same, return it
-    if (current_decl == value) return decl;
+    if (decl.is(.optional)) {
+        _ = try self.performTypeCoercion(decl.optional, if (value.is(.optional)) value.optional else value, decl_explicit_void, span);
+        return decl;
+    }
 
     check: {
         if (value.is(.array)) {
-            return self.checkArrayType(current_decl, value, span) catch |e| switch (e) {
+            return self.checkArrayType(decl, value, span) catch |e| switch (e) {
                 error.mismatch => break :check,
                 else => |narrowed| return narrowed,
             };
-        } else if (current_decl.is(.@"union") or value.is(.@"union")) {
-            return checkUnionType(current_decl, value) catch |e| switch (e) {
+        } else if (decl.is(.@"union")) {
+            return checkUnionType(decl, value) catch |e| return switch (e) {
                 error.Mismatch => break :check,
                 error.NotInUnion => self.err(
-                    .{ .type_not_in_union = .{ .expect = self.typeName(current_decl), .found = self.typeName(value) } },
+                    .{ .type_not_in_union = .{ .expect = self.typeName(decl), .found = self.typeName(value) } },
                     span,
                 ),
             };
         } else if (value.is(.function)) {
-            return self.checkFunctionEq(current_decl, value) catch break :check;
+            return self.checkFunctionEq(decl, value) catch break :check;
         }
 
-        // TODO: proper error handling
-        if (value.is(.module)) @panic("Can't use modules in expressions");
-
-        if (current_decl.is(.void)) {
+        // We check after the other because above checks need the information about a potential void declaration
+        if (decl.is(.void)) {
             // If a void in declaration is an explicit expected type, we can't allow any value
             // Used for example when a function doesn't declare any return type
             if (decl_explicit_void and !value.is(.void)) break :check;
-
-            current_decl = value;
-        } else if (current_decl != value) {
-            break :check;
+            return value;
         }
-
-        // We wrap again the non-optional
-        if (decl.is(.optional)) {
-            current_decl = self.ti.intern(.{ .optional = current_decl });
-        }
-
-        return current_decl;
     }
 
     return self.err(
@@ -1991,10 +1958,16 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
         } else {
             if (!decl.is(.array)) break :check;
             const depth_decl, const child_decl = decl.array.depthAndChild();
+
+            const current_decl = if (child_decl.is(.optional)) child_decl.optional else child_decl;
+
             if (depth_value != depth_decl) break :check;
             if (!child_value.is(.void)) {
-                if (depth_value != depth_decl or child_value != child_decl) break :check;
+                // if (depth_value != depth_decl or child_value != child_decl) break :check;
+                if (depth_value != depth_decl or child_value != current_decl) break :check;
             }
+
+            return decl;
         }
 
         return value;
@@ -2005,10 +1978,6 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
 
 fn typeName(self: *const Self, ty: *const Type) []const u8 {
     return ty.toString(self.allocator, self.interner);
-}
-
-pub fn getDeclOrVoid(self: *const Self, ctx: *const Context) *const Type {
-    return ctx.decl_type orelse self.ti.getCached(.void);
 }
 
 fn declareVariable(

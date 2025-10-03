@@ -31,4 +31,10 @@ fn main() {
     lateEmptyArr = []
 
     var ff = Foo{arr=[]}
+
+    var arrOpt: []?int = [1, 2]
+    arrOpt[1] = 2
+    arrOpt[1] = null
+
+    arrOpt = [1, null]
 }

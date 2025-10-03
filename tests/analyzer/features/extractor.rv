@@ -1,0 +1,11 @@
+fn getValue() -> ?float { return 5. }
+
+fn main() {
+    if getValue() :: v {
+        print v
+    }
+
+    while getValue() :: v {
+        print v
+    }
+}

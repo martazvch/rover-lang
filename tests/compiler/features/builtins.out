@@ -1,0 +1,24 @@
+-- main --
+load_builtin index 0
+constant index 0, value 5.6
+call_native index 1
+
+load_builtin index 0
+constant index 1, value 5
+call_native index 1
+set_local index 0
+
+load_builtin index 1
+constant index 2, value 6
+call_native index 1
+
+load_builtin index 1
+constant index 3, value 6.4
+call_native index 1
+set_local index 1
+
+ret_naked
+
+-- global scope --
+load_sym index 0, <function main>
+call index 0

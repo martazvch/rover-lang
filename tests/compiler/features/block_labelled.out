@@ -1,0 +1,44 @@
+//---- test.rv ----
+
+-- main --
+push_true
+jump_false 1 -> 11
+pop
+jump 5 -> 36
+jump 8 -> 12
+pop
+
+push_true
+jump_false 13 -> 23
+pop
+jump 17 -> 39
+jump 20 -> 24
+pop
+push_true
+jump_false 25 -> 35
+pop
+jump 29 -> 39
+jump 32 -> 36
+pop
+
+jump 36 -> 39
+
+push_true
+jump_false 40 -> 53
+pop
+constant index 0, value 4.5
+store_blk_val
+jump 47 -> 60
+jump 50 -> 54
+pop
+
+constant index 1, value 4.5
+store_blk_val
+jump 57 -> 60
+load_blk_val
+
+ret_naked
+
+-- global scope --
+load_sym index 0, <function main>
+call index 0

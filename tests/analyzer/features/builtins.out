@@ -1,0 +1,21 @@
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Native fn call]
+            [Builtin symbol: 0]
+            - args
+            [Float 5.6]
+    [Native fn call]
+        [Builtin symbol: 0]
+        - args
+        [Int 5]
+    [Assignment index: 0, scope: local]
+    [Variable declaration index: 1, scope: local]
+        [Native fn call]
+            [Builtin symbol: 1]
+            - args
+            [Int 6]
+    [Native fn call]
+        [Builtin symbol: 1]
+        - args
+        [Float 6.4]
+    [Assignment index: 1, scope: local]

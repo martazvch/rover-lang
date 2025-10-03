@@ -772,6 +772,8 @@ const Compiler = struct {
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {
+        self.block_stack.open(self.manager.allocator);
+
         const loop_start = self.getChunk().code.items.len;
 
         try self.compileInstr(data.cond);
@@ -779,12 +781,26 @@ const Compiler = struct {
 
         // If true
         self.writeOp(.pop);
-        try self.compileInstr(data.body);
+
+        const body = self.manager.instr_data[data.body].block;
+
+        for (body.instrs) |instr| {
+            try self.compileInstr(instr);
+        }
+
+        for (0..body.pop_count) |_| {
+            self.writeOp(.pop);
+        }
+
         try self.emitLoop(loop_start);
 
         try self.patchJump(exit_jump);
         // If false
         self.writeOp(.pop);
+
+        for (self.block_stack.close().items) |b| {
+            try self.patchJump(b);
+        }
     }
 
     fn compileDefaultValue(self: *Self, instr: rir.Index) Error!Value {

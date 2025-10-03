@@ -1,0 +1,21 @@
+fn main() {
+    :outer {
+        :inner {
+            {
+                if true do break
+                if true do break :outer
+                if true do break :inner
+            }
+            break :inner
+        }
+    }
+
+    var a: float = :value {
+        {
+            if true do break :value 4.5
+        }
+
+        break :value 4.5
+    }
+}
+
