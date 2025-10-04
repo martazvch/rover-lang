@@ -225,7 +225,7 @@ fn synchronize(self: *Self) void {
 
     while (!self.check(.eof)) {
         switch (self.token_tags[self.token_idx]) {
-            .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .use, .@"var", .@"while" => return,
+            .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .use, .@"var", .when, .@"while" => return,
             else => self.advance(),
         }
     }
@@ -348,9 +348,9 @@ fn fnParams(self: *Self, is_closure: bool) Error![]Ast.VarDecl {
 }
 
 fn fnReturnType(self: *Self) Error!?*Ast.Type {
-    return if (self.match(.small_arrow))
+    return if (self.match(.arrow_small))
         self.parseType()
-    else if (self.check(.identifier) or self.check(.bool))
+    else if (self.check(.identifier))
         self.errAtCurrent(.expect_arrow_before_fn_type)
     else
         null;
@@ -501,7 +501,7 @@ fn expectTypeOrEmpty(self: *Self) Error!?*Ast.Type {
 fn parseType(self: *Self) Error!*Ast.Type {
     const ty = self.allocator.create(Ast.Type) catch oom();
 
-    if (self.isIdentOrType()) {
+    if (self.match(.identifier)) {
         // Namespaced type
         if (self.check(.dot)) {
             var tokens: ArrayList(TokenIndex) = .empty;
@@ -543,9 +543,9 @@ fn parseType(self: *Self) Error!*Ast.Type {
 
         try self.expect(.right_paren, .expect_paren_after_fn_params);
 
-        const return_type = if (self.match(.small_arrow))
+        const return_type = if (self.match(.arrow_small))
             try self.parseType()
-        else if (self.isIdentOrType())
+        else if (self.match(.identifier))
             return self.errAtCurrent(.expect_arrow_before_fn_type)
         else
             null;
@@ -582,10 +582,6 @@ fn parseType(self: *Self) Error!*Ast.Type {
     }
 
     return ty;
-}
-
-fn isIdentOrType(self: *Self) bool {
-    return self.match(.identifier) or self.match(.str_kw) or self.match(.bool);
 }
 
 fn discard(self: *Self) Error!Node {
@@ -695,18 +691,17 @@ fn print(self: *Self) Error!Node {
 }
 
 fn whileStmt(self: *Self) Error!Node {
-    const save_in_cond = self.ctx.setAndGetPrevious(.in_cond, true);
-    const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
-    defer {
-        self.ctx.in_cond = save_in_cond;
-        self.ctx.can_extract = save_extract;
-    }
-    errdefer self.ctx.in_cond = save_in_cond;
+    const cond = cond: {
+        const save_in_cond = self.ctx.setAndGetPrevious(.in_cond, true);
+        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
+        defer {
+            self.ctx.in_cond = save_in_cond;
+            self.ctx.can_extract = save_extract;
+        }
+        break :cond try self.parsePrecedenceExpr(0);
+    };
 
-    const cond = try self.parsePrecedenceExpr(0);
-    self.ctx.in_cond = save_in_cond;
-
-    const body = if (self.matchAndSkip(.left_brace))
+    const body = if (self.isAtBlock())
         try self.blockExpr()
     else
         return self.errAtCurrent(.expect_brace_after_while_cond);
@@ -749,7 +744,6 @@ fn parsePrecedenceExpr(self: *Self, prec_min: i8) Error!*Expr {
         if (next_rule.prec < prec_min) break;
 
         if (next_rule.prec == banned_prec) {
-            // TODO: why not support it like Python for example?
             return self.errAtCurrent(.chaining_cmp_op);
         }
 
@@ -793,6 +787,7 @@ fn parseExpr(self: *Self) Error!*Expr {
         .self => self.literal(.self),
         .string => self.literal(.string),
         .true => self.literal(.bool),
+        .when => self.when(),
         else => {
             const span = self.token_spans[self.token_idx - 1];
             return self.errAtPrev(.{ .expect_expr = .{ .found = span.text(self.source) } });
@@ -830,9 +825,15 @@ fn array(self: *Self) Error!*Expr {
     return expr;
 }
 
+/// Checks wethre we are at a left brace or a colon for labelled and unlabelled blocks
+/// It advances token_idx if matched
+fn isAtBlock(self: *Self) bool {
+    return self.match(.left_brace) or self.match(.colon);
+}
+
 /// Parses either a labelled or not block
 fn blockExpr(self: *Self) Error!*Expr {
-    if (self.match(.colon)) return self.labelledBlock();
+    if (self.prev(.tag) == .colon) return self.labelledBlock();
 
     const body, _ = try self.block(null);
 
@@ -952,12 +953,12 @@ fn ifExpr(self: *Self) Error!*Expr {
     self.skipNewLines();
 
     // TODO: Warning for unnecessary 'do' if there is a block after
-    const then: Node = if (self.matchAndSkip(.left_brace))
+    const then: Node = if (self.isAtBlock())
         .{ .expr = try self.blockExpr() }
     else if (self.matchAndSkip(.do))
         try self.declaration()
     else
-        return self.errAtPrev(.{ .expect_brace_or_do = .{ .what = "if" } });
+        return self.errAtPrev(.{ .expect_block_or_do = .{ .what = "if" } });
 
     self.skipNewLines();
 
@@ -1005,8 +1006,9 @@ fn leftParenExprStart(self: *Self) Error!*Expr {
                 .end = self.current(.span).start,
             },
         } };
-        // Tuple
-    } else if (self.match(.comma)) {
+    }
+    // Tuple
+    else if (self.match(.comma)) {
         unreachable;
     } else return self.errAt(start, .unclosed_paren);
 
@@ -1041,6 +1043,60 @@ fn unary(self: *Self) Error!*Expr {
     expr.* = .{ .unary = .{ .op = self.token_idx - 2, .expr = try self.parseExpr() } };
 
     return expr;
+}
+
+fn when(self: *Self) Error!*Expr {
+    const kw = self.token_idx - 1;
+    const expr = self.allocator.create(Expr) catch oom();
+
+    std.log.debug("Gonna parse value", .{});
+    const value = value: {
+        const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
+        defer self.ctx.in_cond = save_cond;
+        break :value try self.parsePrecedenceExpr(0);
+    };
+    std.log.debug("Parsed value", .{});
+
+    self.skipNewLines();
+    try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
+    self.skipNewLines();
+
+    var arms: ArrayList(Ast.Arm) = .empty;
+
+    while (!self.check(.eof) and !self.check(.right_brace)) {
+        arms.append(self.allocator, try self.patternMatchArm()) catch oom();
+        try self.expect(.new_line, .expect_new_line_pm_arm);
+        self.skipNewLines();
+    }
+
+    // TODO: error
+    try self.expect(.right_brace, undefined);
+
+    expr.* = .{ .when = .{
+        .kw = kw,
+        .expr = value,
+        .arms = arms.toOwnedSlice(self.allocator) catch oom(),
+    } };
+
+    return expr;
+}
+
+fn patternMatchArm(self: *Self) Error!Ast.Arm {
+    std.log.debug("Gonna parse", .{});
+    const pattern = pattern: {
+        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
+        defer self.ctx.in_cond = save_extract;
+        break :pattern try self.parsePrecedenceExpr(0);
+    };
+    std.log.debug("Arm parsed", .{});
+
+    // TODO: error
+    try self.expect(.arrow_big, undefined);
+
+    return .{
+        .pattern = pattern,
+        .body = try self.statement(),
+    };
 }
 
 // Parses postfix expressions: calls, member access

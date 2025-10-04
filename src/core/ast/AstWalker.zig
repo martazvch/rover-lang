@@ -214,7 +214,6 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             }
         },
         .@"break" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),
-        // .cast => |e| self.captureFromExpr(e.expr, ctx),
         .fn_call => |*e| {
             self.captureFromExpr(e.callee, ctx);
             for (e.args) |arg| {
@@ -245,5 +244,11 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             }
         },
         .unary => |e| self.captureFromExpr(e.expr, ctx),
+        .when => |*e| {
+            self.captureFromExpr(e.expr, ctx);
+            for (e.arms) |*arm| {
+                self.captureFromNode(&arm.body, ctx);
+            }
+        },
     }
 }

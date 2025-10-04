@@ -99,5 +99,6 @@ pub fn main() !void {
 }
 
 test {
+    _ = @import("core/parser/Lexer.zig");
     _ = @import("core/analyzer/types.zig");
 }

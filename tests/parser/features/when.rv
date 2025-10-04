@@ -1,0 +1,7 @@
+when getValue() {
+    int :: i => print i
+    float => {
+        print "im a float"
+    }
+}
+

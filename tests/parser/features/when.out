@@ -1,0 +1,41 @@
+{
+    "when": {
+        "expression": {
+            "fn_call": {
+                "callee": {
+                    "literal": "getValue"
+                },
+                "args": []
+            }
+        },
+        "arms": [
+            {
+                "pattern": {
+                    "extractor": {
+                        "expr": {
+                            "literal": "int"
+                        },
+                        "alias": "i"
+                    }
+                },
+                "body": {
+                    "print": {
+                        "literal": "i"
+                    }
+                }
+            },
+            {
+                "pattern": {
+                    "literal": "float"
+                },
+                "body": {
+                    "block": [
+                        "print": {
+                            "literal": "im a float"
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}

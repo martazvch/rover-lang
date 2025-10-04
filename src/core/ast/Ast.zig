@@ -126,6 +126,7 @@ pub const Expr = union(enum) {
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
+    when: When,
 };
 
 pub const Array = struct {
@@ -214,6 +215,17 @@ pub const FieldAndValue = struct {
 pub const Unary = struct {
     op: TokenIndex,
     expr: *Expr,
+};
+
+pub const When = struct {
+    kw: TokenIndex,
+    expr: *Expr,
+    arms: []Arm,
+};
+
+pub const Arm = struct {
+    pattern: *Expr,
+    body: Node,
 };
 
 /// Can be used with any `*Node`, `*Expr` or a `token index`
@@ -312,6 +324,10 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
         StructLiteral => self.getSpan(node.structure),
         Unary => .{
             .start = self.token_spans[node.op].start,
+            .end = self.getSpan(node.expr).end,
+        },
+        When => .{
+            .start = self.token_spans[node.kw].start,
             .end = self.getSpan(node.expr).end,
         },
         else => @compileError("Trying to get span on a non Node object and not usize"),
