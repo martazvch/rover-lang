@@ -63,16 +63,18 @@ pub const Scope = struct {
     offset: usize,
     /// It means you can't go to upper scope from this one
     barrier: bool,
+    /// This scopes is expected to return a value
+    exp_val: bool,
 };
 
 /// Opens a new scope. It can be the scope of a symbol like a function, closure or structure
 /// declaration. In that case, **barrier** should be `true` as you can access outter scope from
 /// those and the name should be `null`.
 /// Otherwise, you can name the scope as it might just be a regular block
-pub fn open(self: *Self, allocator: Allocator, barrier: bool, name: ?InternerIdx) void {
+pub fn open(self: *Self, allocator: Allocator, name: ?InternerIdx, barrier: bool, exp_val: bool) void {
     const offset = if (barrier) 0 else self.current.variables.count() + self.current.offset;
 
-    var scope: Scope = .{ .name = name, .offset = offset, .barrier = barrier };
+    var scope: Scope = .{ .name = name, .offset = offset, .barrier = barrier, .exp_val = exp_val };
 
     // If variables have been forwarded, for declare them now
     if (self.scopes.items.len > 0) {
@@ -98,7 +100,7 @@ pub fn close(self: *Self) struct { usize, []const Break } {
 }
 
 pub fn initGlobalScope(self: *Self, allocator: Allocator, state: *State) void {
-    self.open(allocator, true, null);
+    self.open(allocator, null, true, false);
     const builtins = std.meta.fields(@TypeOf(state.type_interner.cache));
     self.builtins.ensureUnusedCapacity(allocator, builtins.len) catch oom();
 
@@ -178,10 +180,6 @@ pub fn getVariable(self: *const Self, name: InternerIdx) ?struct { *Variable, us
     return null;
 }
 
-fn iterator(self: *const Self) RevIterator(Scope) {
-    return .init(self.scopes.items);
-}
-
 /// Forward declares a symbol without incrementing global symbol count
 pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx) *Symbol {
     self.current.symbols.put(allocator, name, .{ .type = undefined, .index = self.symbol_count }) catch oom();
@@ -251,8 +249,9 @@ pub fn getModule(self: *const Self, name: InternerIdx) ?*const Type {
     return null;
 }
 
-pub fn getScopeByName(self: *const Self, label: ?InstrIndex) error{UnknownLabel}!struct { *Scope, usize } {
-    const lbl = label orelse return .{ self.current, 0 };
+/// Returns the index (start from 0) and the depth (start from scopes.len) of the scope if found
+pub fn getScopeByName(self: *const Self, label: ?InstrIndex) error{UnknownLabel}!struct { usize, usize } {
+    const lbl = label orelse return .{ self.scopes.items.len - 1, 0 };
 
     var depth: usize = 0;
     var it = self.iterator();
@@ -262,7 +261,7 @@ pub fn getScopeByName(self: *const Self, label: ?InstrIndex) error{UnknownLabel}
 
         if (scope.name) |sn| {
             if (sn != lbl) continue;
-            return .{ scope, depth };
+            return .{ self.scopes.items.len - 1 - depth, depth };
         }
     }
 
@@ -287,4 +286,8 @@ pub fn isVarOrSymInCurrentScope(self: *const Self, name: InternerIdx) bool {
 
 pub fn isModuleImported(self: *const Self, name: InternerIdx) bool {
     return self.getModule(name) != null;
+}
+
+fn iterator(self: *const Self) RevIterator(Scope) {
+    return .init(self.scopes.items);
 }

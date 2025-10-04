@@ -8,7 +8,7 @@ missing_else_clause, int
 type_mismatch, int, float
 
 // Partial if for tmp
-void_value
+block_all_path_dont_return
 
 // Func 2, very nested type error
 type_mismatch, int, float

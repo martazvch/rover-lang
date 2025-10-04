@@ -46,4 +46,41 @@ fn main() {
         print "after b" // expect after b
     }
     print "after a"
+
+    // If then with do
+    var z = if true do :b { 
+        {
+            {
+                break :b 1
+            }
+        }
+        break 4
+    } else 3
+    print z // expect 1
+
+    // If then without do
+    z = if true :b {
+        {
+            break :b 6
+        }
+        break 0 // mandatory for now
+    } else :b { break :b 8 }
+    print z // expect 6
+
+    // If else
+    z = if false :b {
+        {
+            break :b 6
+        }
+        break 0 // mandatory for now
+    } else :b { break :b 8 }
+    print z // expect 8
+
+    // While
+    var i = 0
+    while true :b {
+        if i == 5 do break
+        i += 1
+    }
+    print i // expect 5
 }

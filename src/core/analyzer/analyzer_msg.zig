@@ -12,6 +12,7 @@ pub const AnalyzerMsg = union(enum) {
     assign_type,
     big_self_outside_struct,
     block_all_path_dont_return,
+    break_val_in_non_val_block,
     call_method_on_type: struct { name: []const u8 },
     call_static_on_instance: struct { name: []const u8 },
     cant_infer_array_type,
@@ -50,7 +51,6 @@ pub const AnalyzerMsg = union(enum) {
     non_null_comp_optional: struct { found: []const u8 },
     non_struct_field_access: struct { found: []const u8 },
     non_struct_struct_literal,
-    non_void_while: struct { found: []const u8 },
     null_assign_to_non_optional: struct { expect: []const u8 },
     return_outside_fn,
     self_outside_struct,
@@ -92,6 +92,7 @@ pub const AnalyzerMsg = union(enum) {
             .assign_type => writer.writeAll("trying to assign a type"),
             .big_self_outside_struct => writer.writeAll("can't use 'Self' outside a structure"),
             .block_all_path_dont_return => writer.writeAll("all paths of block expression don't return a value"),
+            .break_val_in_non_val_block => writer.writeAll("can't return a value from this scope"),
             .call_method_on_type => |e| writer.print("method '{s}' called on a type", .{e.name}),
             .call_static_on_instance => |e| writer.print("static function '{s}' called on an instance", .{e.name}),
             .cant_infer_array_type => writer.writeAll("can't infer array type with empty array and not declared type"),
@@ -127,7 +128,6 @@ pub const AnalyzerMsg = union(enum) {
             .non_null_comp_optional => |e| writer.print("can't compare anything else than 'null' to optional type, found '{s}'", .{e.found}),
             .non_struct_field_access => writer.writeAll("attempting to access a field on a non structure type"),
             .non_struct_struct_literal => writer.writeAll("structure literal syntax is for structure type "),
-            .non_void_while => writer.writeAll("'while' statements can't return a value"),
             .null_assign_to_non_optional => |e| writer.print("can't assign 'null' to non-optional type '{s}'", .{e.expect}),
             .return_outside_fn => writer.writeAll("return outside of a function"),
             .self_outside_struct => writer.writeAll("only structure's methods can refer to 'self'"),
@@ -162,6 +162,7 @@ pub const AnalyzerMsg = union(enum) {
             .assign_type => writer.writeAll("This is a type, not a value"),
             .big_self_outside_struct => writer.writeAll("used outside a structure"),
             .block_all_path_dont_return => writer.writeAll("this block"),
+            .break_val_in_non_val_block => writer.writeAll("can't have this expression"),
             .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
             .cant_infer_array_type => writer.writeAll("empty arrays don't convey any type information"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
@@ -190,7 +191,6 @@ pub const AnalyzerMsg = union(enum) {
             .non_null_comp_optional => writer.writeAll("this is not 'null' literal"),
             .non_struct_field_access => |e| writer.print("expect a structure but found '{s}'", .{e.found}),
             .non_struct_struct_literal => writer.writeAll("this is not a structure"),
-            .non_void_while => |e| writer.print("'while' body produces a value of type '{s}'", .{e.found}),
             .null_assign_to_non_optional => writer.writeAll("this is not an optinal type"),
             .return_outside_fn, .self_outside_struct => writer.writeAll("here"),
             .too_many_locals, .too_many_types => writer.writeAll("this is the exceding one"),
@@ -220,6 +220,10 @@ pub const AnalyzerMsg = union(enum) {
             .assign_type => writer.writeAll("types aren't assignable to variables"),
             .big_self_outside_struct => writer.writeAll("'Self' can only be used in structure to refer to the current structure's type"),
             .block_all_path_dont_return => writer.writeAll("when using a block as an expression, all paths must return a value"),
+            .break_val_in_non_val_block => writer.writeAll(
+                \\you are either trying to return a value from a non expression block (like a 'while' body) or the block
+                \\isn't used in an expression
+            ),
             .call_method_on_type, .call_static_on_instance => writer.writeAll(
                 "static functions can only be called on types and methods can only be called on instances",
             ),
@@ -270,7 +274,6 @@ pub const AnalyzerMsg = union(enum) {
             .non_null_comp_optional => writer.writeAll("replace the compared value with 'null' literal or change the condition"),
             .non_struct_field_access => writer.writeAll("refer to variable's definition to know its type"),
             .non_struct_struct_literal => writer.writeAll("refer to type's definition"),
-            .non_void_while => writer.writeAll("use '_' to ignore the value or modify the body"),
             .null_assign_to_non_optional => writer.writeAll("only optional types declared with '?' can be assigned 'null'"),
             .return_outside_fn => writer.writeAll(
                 "return statements are only allow to exit a function's body. " ++

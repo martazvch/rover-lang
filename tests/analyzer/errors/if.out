@@ -1,4 +1,4 @@
 non_bool_cond, if, int
 missing_else_clause, int
 missing_else_clause, float
-void_value
+block_all_path_dont_return

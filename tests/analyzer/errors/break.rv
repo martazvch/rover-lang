@@ -1,0 +1,9 @@
+fn main() {
+    {
+        break 4
+    }
+
+    :b {
+        break :b 5
+    }
+}

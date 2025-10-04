@@ -37,6 +37,20 @@ store_blk_val
 jump 57 -> 60
 load_blk_val
 
+push_true
+jump_false 62 -> 82
+pop
+constant index 2, value 1
+store_blk_val
+jump 69 -> 78
+constant index 3, value 4
+store_blk_val
+jump 75 -> 78
+load_blk_val
+jump 79 -> 85
+pop
+constant index 4, value 3
+
 ret_naked
 
 -- global scope --

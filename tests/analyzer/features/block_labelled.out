@@ -30,3 +30,18 @@
                         [Float 4.5]
             [Break depth: 0]
                 [Float 4.5]
+
+    [Variable declaration index: 1, scope: local]
+        [If]
+        - condition:
+            [Bool true]
+        - then:
+            [Block pop count: 0, is_expr: true]
+                [Block pop count: 0, is_expr: false]
+                    [Block pop count: 0, is_expr: false]
+                        [Break depth: 2]
+                            [Int 1]
+                [Break depth: 0]
+                    [Int 4]
+        - else:
+            [Int 3]

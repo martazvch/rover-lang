@@ -1,4 +1,4 @@
-expect_brace_or_do, if
+expect_block_or_do, if
 expect_expr, =
 expect_new_line
 

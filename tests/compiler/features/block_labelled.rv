@@ -17,5 +17,14 @@ fn main() {
 
         break :value 4.5
     }
+
+    var b = if true do :b { 
+        {
+            {
+                break :b 1
+            }
+        }
+        break 4
+    } else 3
 }
 
