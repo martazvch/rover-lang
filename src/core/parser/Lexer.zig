@@ -35,7 +35,6 @@ pub const Token = struct {
     const keywords = std.StaticStringMap(Tag).initComptime(.{
         .{ "and", .@"and" },
         .{ "as", .as },
-        .{ "bool", .bool },
         .{ "break", .@"break" },
         .{ "do", .do },
         .{ "else", .@"else" },
@@ -44,28 +43,27 @@ pub const Token = struct {
         .{ "fn", .@"fn" },
         .{ "for", .@"for" },
         .{ "if", .@"if" },
-        .{ "ifnull", .if_null },
-        .{ "in", .in },
         .{ "not", .not },
         .{ "null", .null },
         .{ "or", .@"or" },
         .{ "print", .print },
         .{ "return", .@"return" },
         .{ "self", .self },
-        .{ "str", .str_kw },
         .{ "struct", .@"struct" },
         .{ "true", .true },
         .{ "use", .use },
         .{ "var", .@"var" },
         .{ "while", .@"while" },
+        .{ "when", .when },
     });
 
     pub const Tag = enum {
         @"and",
+        arrow_small,
+        arrow_big,
         as,
         bang,
         bang_equal,
-        bool,
         @"break",
         colon,
         comma,
@@ -84,17 +82,13 @@ pub const Token = struct {
         extractor,
         false,
         float,
-        float_kw,
         @"fn",
         @"for",
         greater,
         greater_equal,
         identifier,
         @"if",
-        if_null,
-        in,
         int,
-        int_kw,
         left_brace,
         left_bracket,
         left_paren,
@@ -119,16 +113,15 @@ pub const Token = struct {
         self,
         slash,
         slash_equal,
-        small_arrow,
         star,
         star_equal,
-        str_kw,
         string,
         @"struct",
         true,
         underscore,
         use,
         @"var",
+        when,
         @"while",
 
         leading_zeroes,
@@ -262,7 +255,7 @@ pub fn next(self: *Self) Token {
                     switch (self.source[self.index]) {
                         '>' => {
                             self.index += 1;
-                            res.tag = .small_arrow;
+                            res.tag = .arrow_small;
                         },
                         '=' => {
                             self.index += 1;
@@ -408,6 +401,10 @@ pub fn next(self: *Self) Token {
                     res.tag = .equal_equal;
                     self.index += 1;
                 },
+                '>' => {
+                    self.index += 1;
+                    res.tag = .arrow_big;
+                },
                 else => res.tag = .equal,
             }
         },
@@ -543,7 +540,7 @@ pub fn next(self: *Self) Token {
 //  Tests
 // ------------
 test "ident and strings" {
-    var lexer = Self.initstd.testing.allocator;
+    var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     lexer.lex("foo bar variable  truth");
 
@@ -592,11 +589,10 @@ test "tokens" {
     lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=[]|?::");
 
     const res = [_]Token.Tag{
-        .left_paren,    .right_paren,   .left_brace, .right_brace, .dot,          .colon,
-        .comma,         .equal,         .bang,       .less,        .greater,      .less_equal,
-        .greater_equal, .bang_equal,    .plus,       .minus,       .star,         .slash,
-        .plus_equal,    .minus_equal,   .star_equal, .slash_equal, .left_bracket, .right_bracket,
-        .pipe,          .question_mark, .extractor,
+        .left_paren,    .right_paren, .left_brace, .right_brace, .dot,          .colon,
+        .comma,         .equal,       .bang,       .less,        .greater,      .less_equal,
+        .greater_equal, .bang_equal,  .plus,       .minus,       .star,         .slash,
+        .plus_equal,    .minus_equal, .star_equal, .slash_equal, .left_bracket, .right_bracket,
     };
 
     for (0..res.len) |i| {
@@ -609,14 +605,15 @@ test "keywords" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
     lexer.lex(
-        \\\and else false for fn if in null or print return 
-        \\\self struct true var while not str do use break
+        \\\and else false for fn if null or print return 
+        \\\self struct true var while not do use break when
+        \\\as
     );
 
     const res = [_]Token.Tag{
-        .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .in,       .null, .@"or",  .print,
-        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,  .str_kw, .do,
-        .use,       .@"break", .eof,
+        .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .null,     .@"or", .print,
+        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,   .do,
+        .use,       .@"break", .when,  .new_line,  .as,    .eof,
     };
 
     for (0..res.len) |i| {
@@ -662,11 +659,11 @@ test "underscore" {
 test "arrow" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    lexer.lex("- > -5> >- -< ->");
+    lexer.lex("- > -5> >- -< -> =>");
 
     const res = [_]Token.Tag{
-        .minus, .greater, .minus,       .int, .greater, .greater, .minus,
-        .minus, .less,    .small_arrow,
+        .minus, .greater, .minus,       .int,       .greater, .greater, .minus,
+        .minus, .less,    .arrow_small, .arrow_big,
     };
 
     for (0..res.len) |i| {

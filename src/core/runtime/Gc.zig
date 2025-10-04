@@ -13,7 +13,6 @@ const Array = Obj.Array;
 const Function = Obj.Function;
 const Structure = Obj.Structure;
 const Instance = Obj.Instance;
-const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
 
@@ -64,7 +63,8 @@ pub fn collect(self: *Self) Allocator.Error!void {
 
     try self.markRoots();
     try self.traceRef();
-    tableRemoveWhite(&self.vm.strings);
+    self.markStrings(&self.vm.strings);
+
     self.sweep();
 
     self.next_gc = self.bytes_allocated * GROW_FACTOR;
@@ -92,18 +92,20 @@ fn markRoots(self: *Self) Allocator.Error!void {
     }
 }
 
-fn markModule(self: *Self, module: *CompiledModule) void {
-    errdefer oom();
-
-    try self.markArray(module.globals);
-    try self.markArray(module.symbols);
-    try self.markObject(module.function.asObj());
-}
-
 fn traceRef(self: *Self) Allocator.Error!void {
     while (self.grays.items.len > 0) {
         const obj = self.grays.pop().?;
         try self.blackenObject(obj);
+    }
+}
+
+fn markStrings(self: *Self, strings: *const std.AutoHashMap(usize, *Obj.String)) void {
+    var it = strings.iterator();
+
+    while (it.next()) |entry| {
+        if (!entry.value_ptr.*.asObj().is_marked) {
+            _ = self.vm.strings.remove(entry.key_ptr.*);
+        }
     }
 }
 
@@ -144,15 +146,6 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             }
         },
         .module, .native_fn, .string => {},
-    }
-}
-
-/// Removes weak references of strings in the hashmap
-fn tableRemoveWhite(table: *Table) void {
-    for (table.entries) |*entry| {
-        if (entry.key) |string| {
-            if (!string.asObj().is_marked) _ = table.delete(string);
-        }
     }
 }
 

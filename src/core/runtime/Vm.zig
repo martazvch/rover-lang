@@ -11,7 +11,6 @@ const Disassembler = @import("../compiler/Disassembler.zig");
 const oom = @import("misc").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
-const Table = @import("Table.zig");
 const Value = @import("values.zig").Value;
 const State = @import("../../State.zig");
 const NativeFn = @import("../builtins/ffi.zig").NativeFn;
@@ -23,8 +22,7 @@ ip: [*]u8,
 allocator: Allocator,
 arena_comptime: std.heap.ArenaAllocator,
 gc_alloc: Allocator,
-// TODO: not Zig's hashmap?
-strings: Table,
+strings: std.AutoHashMap(usize, *Obj.String),
 objects: ?*Obj,
 modules: []CompiledModule,
 natives: []Value,

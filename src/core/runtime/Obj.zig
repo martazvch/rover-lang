@@ -247,7 +247,8 @@ pub const String = struct {
         // as a root
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
-        _ = vm.strings.set(obj, Value.null_);
+        // _ = vm.strings.set(obj, Value.null_);
+        vm.strings.put(hash, obj) catch oom();
 
         if (options.log_gc) obj.asObj().log();
 
@@ -257,9 +258,14 @@ pub const String = struct {
     /// **Warning**: Meant to be used at compile time only
     pub fn copy(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
-        const interned = vm.strings.findString(str, hash);
+        // const interned = vm.strings.findString(str, hash);
+        //
+        // if (interned) |i| return i;
 
-        if (interned) |i| return i;
+        const gop = vm.strings.getOrPut(hash) catch oom();
+        if (gop.found_existing) {
+            return gop.value_ptr.*;
+        }
 
         const chars = vm.allocator.alloc(u8, str.len) catch oom();
         @memcpy(chars, str);
@@ -268,7 +274,8 @@ pub const String = struct {
         obj.chars = chars;
         obj.hash = hash;
 
-        _ = vm.strings.set(obj, Value.null_);
+        // _ = vm.strings.set(obj, Value.null_);
+        gop.value_ptr.* = obj;
 
         return obj;
     }
@@ -277,11 +284,15 @@ pub const String = struct {
     // the memory and return the interned one
     pub fn take(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
-        const interned = vm.strings.findString(str, hash);
+        // const interned = vm.strings.findString(str, hash);
+        //
+        // if (interned) |i| {
+        //     vm.gc_alloc.free(str);
+        //     return i;
+        // }
 
-        if (interned) |i| {
-            vm.gc_alloc.free(str);
-            return i;
+        if (vm.strings.get(hash)) |interned| {
+            return interned;
         }
 
         return String.create(vm, str, hash);
