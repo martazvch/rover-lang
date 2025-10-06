@@ -1,0 +1,76 @@
+struct Iterator {
+    items: []int,
+    len: int,
+    count = 0,
+
+    fn next(self) -> ?int {
+        if self.count == self.len do return null
+        self.count += 1
+        return self.items[self.count - 1]
+    }
+}
+
+struct Data {
+    first: []int,
+    second: []int,
+
+    fn init() -> Self {
+        return Self{ first=[], second=[] }
+    }
+
+    fn initWithData(first: []int, second: []int) -> Self {
+        return Self{ first, second }
+    }
+
+    fn iterator(self, cat: str) -> Iterator {
+        return Iterator{ items=if cat == "first" do self.first else self.second, len=3 }
+    }
+}
+
+fn main() {
+    var first = [1, 2, 3]
+    var second = [4, 5, 6]
+    
+    var data = Data{ first, second }
+
+    print "Test 1"
+    var it = data.iterator("first")
+    while it.next() :: v {
+        print v // expect 1, 2, 3
+    }
+
+    print "Test 2"
+    it = data.iterator("second")
+    while it.next() :: v {
+        print v // expect 4, 5, 6
+    }
+
+    print "Test 3"
+    data = Data.init()
+    data.first = [12, 34, 56]
+    data.second = [78, 91, 23]
+
+    it = data.iterator("first")
+    while it.next() :: v {
+        print v // expect 12, 34, 56 
+    }
+
+    print "Test 4"
+    it = data.iterator("second")
+    while it.next() :: v {
+        print v // expect 78, 91, 23 
+    }
+
+    print "Test 5"
+    data = Data.initWithData(second=[120, 340, 560], first=[780, 910, 230])
+    it = data.iterator("first")
+    while it.next() :: v {
+        print v // expect 780, 910, 230 
+    }
+
+    print "Test 6"
+    it = data.iterator("second")
+    while it.next() :: v {
+        print v // expect 120, 340, 560 
+    }
+}

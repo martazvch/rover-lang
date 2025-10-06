@@ -203,19 +203,18 @@ const Tester = struct {
         while (try walker.next()) |entry| {
             if (entry.kind != .directory) continue;
 
-            // If not a child of current directory
-            if (entry.dir.fd == cwd.fd) {
-                // If specific file asked
-                if (self.config.file) |f| {
-                    if (!std.mem.eql(u8, entry.basename, f)) {
-                        continue;
-                    }
-                    specific_tested = true;
+            // If specific file asked
+            if (self.config.file) |f| {
+                if (!std.mem.eql(u8, entry.basename, f)) {
+                    continue;
                 }
-                cwd = try cwd.openDir(entry.path, .{});
-                self.testFile(&cwd, .standalone, "main.rv", "features") catch continue;
-                cwd = try cwd.openDir("..", .{});
+                specific_tested = true;
             }
+            cwd = try cwd.openDir(entry.path, .{});
+            defer cwd = cwd.openDir("..", .{}) catch unreachable;
+
+            var buf: [1024]u8 = undefined;
+            self.testFile(&cwd, .standalone, try std.fmt.bufPrint(&buf, "{s}.rv", .{entry.basename}), "features") catch continue;
         }
 
         if (self.config.file != null and !specific_tested) {
