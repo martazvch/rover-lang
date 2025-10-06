@@ -106,17 +106,17 @@ fn TokenFieldType(kind: anytype) type {
 }
 
 /// `kind` should be `.tag` or `.span`
-inline fn prev(self: *const Self, kind: anytype) TokenFieldType(kind) {
+fn prev(self: *const Self, kind: anytype) TokenFieldType(kind) {
     return self.getTkField(kind, self.token_idx - 1);
 }
 
 /// `kind` should be `.tag` or `.span`
-inline fn current(self: *const Self, kind: anytype) TokenFieldType(kind) {
+fn current(self: *const Self, kind: anytype) TokenFieldType(kind) {
     return self.getTkField(kind, self.token_idx);
 }
 
 /// `kind` should be `.tag` or `.span`
-inline fn getTkField(self: *const Self, kind: anytype, idx: usize) TokenFieldType(kind) {
+fn getTkField(self: *const Self, kind: anytype, idx: usize) TokenFieldType(kind) {
     return switch (kind) {
         .span => self.token_spans[idx],
         .tag => self.token_tags[idx],
@@ -124,7 +124,7 @@ inline fn getTkField(self: *const Self, kind: anytype, idx: usize) TokenFieldTyp
     };
 }
 
-inline fn advance(self: *Self) void {
+fn advance(self: *Self) void {
     self.token_idx += 1;
 }
 
@@ -1049,16 +1049,15 @@ fn when(self: *Self) Error!*Expr {
     const kw = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
 
-    std.log.debug("Gonna parse value", .{});
     const value = value: {
         const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
         defer self.ctx.in_cond = save_cond;
         break :value try self.parsePrecedenceExpr(0);
     };
-    std.log.debug("Parsed value", .{});
 
     self.skipNewLines();
     try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
+    const opening_brace = self.token_idx - 1;
     self.skipNewLines();
 
     var arms: ArrayList(Ast.Arm) = .empty;
@@ -1069,8 +1068,7 @@ fn when(self: *Self) Error!*Expr {
         self.skipNewLines();
     }
 
-    // TODO: error
-    try self.expect(.right_brace, undefined);
+    try self.expectOrErrAtToken(.right_brace, .unclosed_brace, opening_brace);
 
     expr.* = .{ .when = .{
         .kw = kw,
@@ -1082,16 +1080,13 @@ fn when(self: *Self) Error!*Expr {
 }
 
 fn patternMatchArm(self: *Self) Error!Ast.Arm {
-    std.log.debug("Gonna parse", .{});
     const pattern = pattern: {
         const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
         defer self.ctx.in_cond = save_extract;
         break :pattern try self.parsePrecedenceExpr(0);
     };
-    std.log.debug("Arm parsed", .{});
 
-    // TODO: error
-    try self.expect(.arrow_big, undefined);
+    try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
 
     return .{
         .pattern = pattern,

@@ -5,5 +5,9 @@ when value {
 }
 
 when value {
+    int {}
+}
+
+when value {
 
 
