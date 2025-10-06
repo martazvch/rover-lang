@@ -27,6 +27,9 @@ get_local index 0
 print
 pop
 loop 31 -> 18
+
+// Pops if condition and lhs of extractor
+pop
 pop
 
 ret_naked

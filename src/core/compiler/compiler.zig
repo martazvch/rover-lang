@@ -772,6 +772,7 @@ const Compiler = struct {
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {
+        const is_extractor = self.manager.instr_data[data.cond] == .extractor;
         self.block_stack.open(self.manager.allocator);
 
         const loop_start = self.getChunk().code.items.len;
@@ -797,6 +798,9 @@ const Compiler = struct {
         try self.patchJump(exit_jump);
         // If false
         self.writeOp(.pop);
+        // If the condition was an extractor, the variable tested against `null` is still on
+        // top of stack so we have to remove it (see `extractor` function)
+        if (is_extractor) self.writeOp(.pop);
 
         for (self.block_stack.close().items) |b| {
             try self.patchJump(b);
