@@ -122,7 +122,6 @@ pub const Expr = union(enum) {
     grouping: Grouping,
     @"if": If,
     literal: Literal,
-    named_arg: NamedArg,
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
@@ -170,12 +169,12 @@ pub const Field = struct {
 
 pub const FnCall = struct {
     callee: *Expr,
-    args: []*Expr,
-};
+    args: []const Arg,
 
-pub const NamedArg = struct {
-    name: TokenIndex,
-    value: *Expr,
+    pub const Arg = struct {
+        name: ?TokenIndex,
+        value: *Expr,
+    };
 };
 
 pub const Grouping = struct {
@@ -316,10 +315,6 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
         Grouping => node.span,
         If => self.getSpan(node.if_token),
         Literal => self.token_spans[node.idx],
-        NamedArg => .{
-            .start = self.token_spans[node.name].start,
-            .end = self.getSpan(node.value).end,
-        },
         Return => self.token_spans[node.kw],
         StructLiteral => self.getSpan(node.structure),
         Unary => .{

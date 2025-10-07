@@ -217,7 +217,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
         .fn_call => |*e| {
             self.captureFromExpr(e.callee, ctx);
             for (e.args) |arg| {
-                self.captureFromExpr(arg, ctx);
+                self.captureFromExpr(arg.value, ctx);
             }
         },
         .closure => |*e| self.functionCaptures(e, ctx),
@@ -235,7 +235,6 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             const interned = self.interner.intern(self.ast.toSource(e.idx));
             ctx.resolveCapture(self.allocator, interned);
         },
-        .named_arg => |e| self.captureFromExpr(e.value, ctx),
         .@"return" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),
         .struct_literal => |e| {
             self.captureFromExpr(e.structure, ctx);

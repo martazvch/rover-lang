@@ -1171,7 +1171,7 @@ fn field(self: *Self, expr: *Expr) Error!*Expr {
 fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
     const call_expr = self.allocator.create(Expr) catch oom();
 
-    var args: ArrayList(*Expr) = .empty;
+    var args: ArrayList(Ast.FnCall.Arg) = .empty;
     args.ensureTotalCapacity(self.allocator, 256) catch oom();
     var named_started = false;
 
@@ -1183,18 +1183,16 @@ fn finishCall(self: *Self, expr: *Expr) Error!*Expr {
         if (args.items.len == 255)
             return self.errAtCurrent(.{ .too_many_fn_args = .{ .what = "argument" } });
 
-        const param_expr = if (self.check(.identifier) and self.token_tags[self.token_idx + 1] == .equal) b: {
+        const param_name, const param_expr = if (self.check(.identifier) and self.token_tags[self.token_idx + 1] == .equal) b: {
             named_started = true;
             self.token_idx += 2;
-            const tmp = self.allocator.create(Expr) catch oom();
-            tmp.* = .{ .named_arg = .{ .name = self.token_idx - 2, .value = try self.parsePrecedenceExpr(0) } };
-            break :b tmp;
+            break :b .{ self.token_idx - 2, try self.parsePrecedenceExpr(0) };
         } else b: {
             if (named_started) return self.errAtCurrent(.positional_after_default_param);
-            break :b try self.parsePrecedenceExpr(0);
+            break :b .{ null, try self.parsePrecedenceExpr(0) };
         };
 
-        args.appendAssumeCapacity(param_expr);
+        args.appendAssumeCapacity(.{ .name = param_name, .value = param_expr });
 
         self.skipNewLines();
         if (!self.match(.comma)) break;

@@ -720,7 +720,6 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
         .grouping => |*e| self.analyzeExprInfos(e.expr, exp_val, ctx),
         .@"if" => |*e| self.ifExpr(e, exp_val, ctx),
         .literal => |*e| self.literal(e, ctx),
-        .named_arg => unreachable,
         .@"return" => |*e| self.returnExpr(e, ctx),
         .struct_literal => |*e| self.structLiteral(e, ctx),
         .unary => |*e| self.unary(e, ctx),
@@ -1248,7 +1247,7 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     );
 }
 
-fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Span, ctx: *Context) Error![]const Instruction.Arg {
+fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Function, err_span: Span, ctx: *Context) Error![]const Instruction.Arg {
     var proto = ty.proto(self.allocator);
     const param_count = proto.count();
     const params = ty.params.values()[@intFromBool(ty.kind == .method)..];
@@ -1270,41 +1269,37 @@ fn fnArgsList(self: *Self, args: []*Expr, ty: *const Type.Function, err_span: Sp
 
     for (args, 0..) |arg, i| {
         var param_info: *const Type.Function.Parameter = undefined;
+        var value = try self.analyzeExpr(arg.value, true, ctx);
+        const span = self.ast.getSpan(arg.value);
 
-        var value, const index, const value_span = value: {
-            switch (arg.*) {
-                .named_arg => |na| {
-                    if (ty.kind == .bound) return self.err(.named_arg_in_bounded, self.ast.getSpan(na.name));
+        const index = value: {
+            if (arg.name) |param_name| {
+                if (ty.kind == .bound) return self.err(.named_arg_in_bounded, self.ast.getSpan(param_name));
 
-                    const name = self.interner.intern(self.ast.toSource(na.name));
-                    const gop = proto.getOrPutAssumeCapacity(name);
+                const name = self.interner.intern(self.ast.toSource(param_name));
+                const gop = proto.getOrPutAssumeCapacity(name);
 
-                    if (gop.value_ptr.done) return self.err(
-                        .{ .duplicate_param = .{ .name = self.ast.toSource(na.name) } },
-                        self.ast.getSpan(na.name),
-                    );
-                    gop.value_ptr.done = true;
+                if (gop.value_ptr.done) return self.err(
+                    .{ .duplicate_param = .{ .name = self.ast.toSource(param_name) } },
+                    self.ast.getSpan(param_name),
+                );
+                gop.value_ptr.done = true;
 
-                    param_info = ty.params.getPtr(name) orelse return self.err(
-                        .{ .unknown_param = .{ .name = self.ast.toSource(na.name) } },
-                        self.ast.getSpan(na.name),
-                    );
+                param_info = ty.params.getPtr(name) orelse return self.err(
+                    .{ .unknown_param = .{ .name = self.ast.toSource(param_name) } },
+                    self.ast.getSpan(param_name),
+                );
 
-                    const value_type = try self.analyzeExpr(na.value, true, ctx);
+                break :value gop.index;
+            } else {
+                param_info = &params[i];
+                proto_values[i].done = true;
 
-                    break :value .{ value_type, gop.index, self.ast.getSpan(na.value) };
-                },
-                else => {
-                    const value_type = try self.analyzeExpr(arg, true, ctx);
-                    param_info = &params[i];
-                    proto_values[i].done = true;
-
-                    break :value .{ value_type, i, self.ast.getSpan(arg) };
-                },
+                break :value i;
             }
         };
 
-        _ = try self.performTypeCoercion(param_info.type, value.type, false, value_span);
+        _ = try self.performTypeCoercion(param_info.type, value.type, false, span);
 
         self.checkWrap(&value.instr, false);
         if (param_info.captured) value.instr = self.irb.wrapPreviousInstr(.box);
