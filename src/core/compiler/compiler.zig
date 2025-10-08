@@ -437,6 +437,7 @@ const Compiler = struct {
 
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(data);
+        if (data.op == .eq_null or data.op == .ne_null) return self.nullBinop(data);
 
         try self.compileInstr(data.lhs);
         try self.compileInstr(data.rhs);
@@ -451,7 +452,6 @@ const Compiler = struct {
                 .eq_bool => .eq_bool,
                 .eq_float => .eq_float,
                 .eq_int => .eq_int,
-                .eq_null => .eq_null,
                 .eq_str => .eq_str,
                 .ge_float => .ge_float,
                 .ge_int => .ge_int,
@@ -467,7 +467,6 @@ const Compiler = struct {
                 .ne_bool => .ne_bool,
                 .ne_float => .ne_float,
                 .ne_int => .ne_int,
-                .ne_null => .ne_null,
                 .ne_str => .ne_str,
                 .sub_float => .sub_float,
                 .sub_int => .sub_int,
@@ -495,6 +494,11 @@ const Compiler = struct {
             },
             else => unreachable,
         }
+    }
+
+    fn nullBinop(self: *Self, data: *const Instruction.Binop) Error!void {
+        try self.compileInstr(data.lhs);
+        self.writeOp(if (data.op == .eq_null) .eq_null else .ne_null);
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {

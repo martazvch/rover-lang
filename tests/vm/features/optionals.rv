@@ -1,8 +1,14 @@
 fn main() {
     var a: ?int = null
 
-    if a == null { print "yes" }
-    if null == a { print "yes" }
-    if a != null {} else { print "yes" }
-    if null != a {} else { print "yes" }
+    if a == null { print 1 }
+    if null == a { print 2 }
+    if a != null { print 3 }
+    if null != a { print 4 }
+
+    var b: ?float = 4.5
+    if b != null { print 5 }
+    if null != b { print 6 }
+    if b == null { print 7 }
+    if null == b { print 8 }
 }

@@ -1,0 +1,20 @@
+fn main() {
+    var a: ?int = 1
+
+    if a == null {
+        print "oui"
+    }
+
+    if null == a {
+        print "oui"
+    }
+
+    if a != null {
+        print "oui"
+    }
+
+    if null != a {
+        print "oui"
+    }
+}
+

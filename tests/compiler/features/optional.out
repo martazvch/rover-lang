@@ -1,0 +1,39 @@
+-- main --
+constant index 0, value 1
+get_local index 0
+eq_null
+jump_false 5 -> 15
+pop
+constant index 1, value oui
+print
+jump 12 -> 16
+pop
+get_local index 0
+eq_null
+jump_false 19 -> 29
+pop
+constant index 2, value oui
+print
+jump 26 -> 30
+pop
+get_local index 0
+ne_null
+jump_false 33 -> 43
+pop
+constant index 3, value oui
+print
+jump 40 -> 44
+pop
+get_local index 0
+ne_null
+jump_false 47 -> 57
+pop
+constant index 4, value oui
+print
+jump 54 -> 58
+pop
+ret_naked
+
+-- global scope --
+load_sym index 0, <function main>
+call index 0

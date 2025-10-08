@@ -10,40 +10,6 @@ print
 jump 13 -> 17
 pop
 
-push_null
-
-get_local index 0
-push_null
-eq_null
-jump_false 22 -> 29
-pop
-jump 26 -> 30
-pop
-
-get_local index 0
-push_null
-eq_null
-jump_false 34 -> 41
-pop
-jump 38 -> 42
-pop
-
-get_local index 0
-push_null
-ne_null
-jump_false 46 -> 53
-pop
-jump 50 -> 54
-pop
-
-get_local index 0
-push_null
-ne_null
-jump_false 58 -> 65
-pop
-jump 62 -> 66
-pop
-
 ret_naked
 
 -- global scope --
