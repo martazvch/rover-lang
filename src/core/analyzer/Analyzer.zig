@@ -6,15 +6,9 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const FieldEnum = std.meta.FieldEnum;
 
-const Interner = @import("misc").Interner;
-const InternerIdx = Interner.Index;
 const Pipeline = @import("../../Pipeline.zig");
-const GenReport = @import("misc").reporter.GenReport;
-const Sb = @import("misc").StringBuilder;
-const Set = @import("misc").Set;
-const oom = @import("misc").oom;
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("../ast/Ast.zig");
+const Ast = @import("../parser/Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
 const Importer = @import("Importer.zig");
@@ -27,6 +21,14 @@ const Span = @import("../parser/Lexer.zig").Span;
 const TokenTag = @import("../parser/Lexer.zig").Token.Tag;
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
+
+const misc = @import("misc");
+const Interner = misc.Interner;
+const InternerIdx = Interner.Index;
+const GenReport = misc.reporter.GenReport;
+const Sb = misc.StringBuilder;
+const Set = misc.Set;
+const oom = misc.oom;
 
 pub const AnalyzedModule = struct {
     name: []const u8,

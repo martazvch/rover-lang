@@ -1,11 +1,14 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Interner = @import("misc").Interner;
-const oom = @import("misc").oom;
+
 const ffi = @import("core/builtins/ffi.zig");
 const Type = @import("core/analyzer/types.zig").Type;
 const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
+
+const misc = @import("misc");
+const Interner = misc.Interner;
+const oom = misc.oom;
 
 meta: std.AutoArrayHashMapUnmanaged(Interner.Index, Type.Function),
 funcs: ArrayList(struct { name: []const u8, func: ffi.NativeFn }),

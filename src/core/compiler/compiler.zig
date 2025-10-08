@@ -7,15 +7,17 @@ const FieldEnum = std.meta.FieldEnum;
 const Disassembler = @import("Disassembler.zig");
 const rir = @import("../ir/rir.zig");
 const Instruction = rir.Instruction;
-const Interner = @import("misc").Interner;
-const GenReport = @import("misc").reporter.GenReport;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
-const oom = @import("misc").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const CompilerMsg = @import("compiler_msg.zig").CompilerMsg;
+
+const misc = @import("misc");
+const Interner = misc.Interner;
+const GenReport = misc.reporter.GenReport;
+const oom = misc.oom;
 
 pub const CompiledModule = struct {
     // TODO: useless?

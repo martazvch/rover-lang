@@ -4,13 +4,15 @@ const ArrayList = std.ArrayList;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const InternerIdx = @import("misc").Interner.Index;
 const Type = @import("types.zig").Type;
 const InstrIndex = @import("../ir/rir.zig").Index;
 const Span = @import("../parser/Lexer.zig").Span;
 const State = @import("../../State.zig");
-const RevIterator = @import("misc").RevIterator;
-const oom = @import("misc").oom;
+
+const misc = @import("misc");
+const InternerIdx = misc.Interner.Index;
+const RevIterator = misc.RevIterator;
+const oom = misc.oom;
 
 const Self = @This();
 

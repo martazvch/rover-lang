@@ -4,9 +4,11 @@ const MultiArrayList = std.MultiArrayList;
 const Allocator = std.mem.Allocator;
 const expect = std.testing.expect;
 
-const GenReport = @import("misc").reporter.GenReport;
 const LexerMsg = @import("lexer_msg.zig").LexerMsg;
-const oom = @import("misc").oom;
+
+const misc = @import("misc");
+const GenReport = misc.reporter.GenReport;
+const oom = misc.oom;
 
 source: [:0]const u8,
 index: usize,

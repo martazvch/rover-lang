@@ -1,10 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Ast = @import("../ast/Ast.zig");
+const Ast = @import("../parser/Ast.zig");
 const AnalyzerReport = @import("Analyzer.zig").AnalyzerReport;
-const Sb = @import("misc").StringBuilder;
-const oom = @import("misc").oom;
+
+const misc = @import("misc");
+const Sb = misc.StringBuilder;
+const oom = misc.oom;
 
 const Self = @This();
 pub const Result = union(enum) {

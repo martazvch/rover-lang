@@ -32,12 +32,6 @@ pub fn build(b: *std.Build) !void {
         .root_module = rover_mod,
     });
 
-    const rover_std_mod = b.createModule(.{
-        .optimize = optimize,
-        .target = target,
-        .root_source_file = b.path("std/std.zig"),
-    });
-
     const misc_mod = b.createModule(.{
         .optimize = optimize,
         .target = target,
@@ -46,7 +40,6 @@ pub fn build(b: *std.Build) !void {
 
     const clap = b.dependency("clap", .{});
     exe.root_module.addImport("clap", clap.module("clap"));
-    exe.root_module.addImport("rover-std", rover_std_mod);
     exe.root_module.addImport("misc", misc_mod);
     exe.root_module.addOptions("options", options);
 
@@ -70,7 +63,6 @@ pub fn build(b: *std.Build) !void {
         .root_module = rover_mod,
     });
     exe_check.root_module.addImport("clap", clap.module("clap"));
-    exe_check.root_module.addImport("rover-std", rover_std_mod);
     exe_check.root_module.addOptions("options", options);
 
     const check = b.step("check", "Check if foo compiles");

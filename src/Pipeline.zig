@@ -9,18 +9,20 @@ const CompiledModule = @import("core/compiler/compiler.zig").CompiledModule;
 const CompilationManager = @import("core/compiler/compiler.zig").CompilationManager;
 const Analyzer = @import("core/analyzer/Analyzer.zig");
 const AnalyzerMsg = @import("core/analyzer/analyzer_msg.zig").AnalyzerMsg;
-const Ast = @import("core/ast/Ast.zig");
-const AstRender = @import("core/ast/AstRender.zig");
-const Walker = @import("core/ast/AstWalker.zig");
+const Ast = @import("core/parser/Ast.zig");
+const AstRender = @import("core/parser/AstRender.zig");
+const Walker = @import("core/parser/AstWalker.zig");
 const Lexer = @import("core/parser/Lexer.zig");
 const LexerMsg = @import("core/parser/lexer_msg.zig").LexerMsg;
 const LexicalScope = @import("core/analyzer/LexicalScope.zig");
 const Parser = @import("core/parser/Parser.zig");
 const ParserMsg = @import("core/parser/parser_msg.zig").ParserMsg;
-const RirRenderer = @import("core/ir/RirRenderer.zig");
-const reportAll = @import("misc").reporter.reportAll;
-const oom = @import("misc").oom;
+const IrRenderer = @import("core/ir/IrRenderer.zig");
 const Vm = @import("core/runtime/Vm.zig");
+
+const misc = @import("misc");
+const reportAll = misc.reporter.reportAll;
+const oom = misc.oom;
 
 vm: *Vm,
 allocator: Allocator,
@@ -143,7 +145,7 @@ fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *
     const stdout = &stdout_writer.interface;
     defer stdout.flush() catch unreachable;
 
-    var rir_renderer = RirRenderer.init(
+    var rir_renderer = IrRenderer.init(
         allocator,
         analyzer.irb.instructions.items(.data)[start..],
         &self.state.interner,

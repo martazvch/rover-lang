@@ -1,11 +1,13 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Interner = @import("misc").Interner;
 const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
-const Sb = @import("misc").StringBuilder;
 const ModuleInterner = @import("ModuleInterner.zig");
 const NativeRegister = @import("NativesRegister.zig");
+
+const misc = @import("misc");
+const Interner = misc.Interner;
+const Sb = misc.StringBuilder;
 
 config: Config,
 interner: Interner,

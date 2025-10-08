@@ -3,12 +3,14 @@ const Allocator = std.mem.Allocator;
 const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
-const Interner = @import("misc").Interner;
 const InternerIdx = Interner.Index;
 const ModuleInterner = @import("../../ModuleInterner.zig");
-const oom = @import("misc").oom;
-const Set = @import("misc").Set;
 const LexicalScope = @import("LexicalScope.zig");
+
+const misc = @import("misc");
+const Interner = misc.Interner;
+const Set = misc.Set;
+const oom = misc.oom;
 
 pub const Type = union(enum) {
     never,

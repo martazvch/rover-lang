@@ -6,7 +6,7 @@ const MultiArrayList = std.MultiArrayList;
 const FieldEnum = std.meta.FieldEnum;
 
 const GenReport = @import("misc").reporter.GenReport;
-const Ast = @import("../ast/Ast.zig");
+const Ast = @import("Ast.zig");
 const Expr = Ast.Expr;
 const Node = Ast.Node;
 const TokenIndex = Ast.TokenIndex;
