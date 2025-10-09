@@ -334,6 +334,18 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref => self.stack.peekRef(0).obj.ref_count += 1,
+            .is_bool => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .bool),
+            .is_float => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .float),
+            .is_int => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .int),
+            .is_str => {
+                const top = self.stack.peekRef(0);
+                if (top.* != .obj) top.* = .false_;
+                self.stack.peekRef(0).* = .makeBool(top.obj.kind == .string);
+            },
+            .is_type => {
+                const type_id = frame.readShort();
+                self.stack.peekRef(0).* = .makeBool(self.stack.peek(0).obj.type_id == type_id);
+            },
             .jump => {
                 const jump = frame.readShort();
                 frame.ip += jump;

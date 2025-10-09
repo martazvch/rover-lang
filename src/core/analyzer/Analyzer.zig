@@ -12,15 +12,17 @@ const Ast = @import("../parser/Ast.zig");
 const Node = Ast.Node;
 const Expr = Ast.Expr;
 const Importer = @import("Importer.zig");
-const IrBuilder = @import("../ir/IrBuilder.zig");
+const IrBuilder = @import("IrBuilder.zig");
 const LexScope = @import("LexicalScope.zig");
-const rir = @import("../ir/rir.zig");
-const InstrIndex = rir.Index;
-const Instruction = rir.Instruction;
+const ir = @import("ir.zig");
+const InstrIndex = ir.Index;
+const Instruction = ir.Instruction;
 const Span = @import("../parser/Lexer.zig").Span;
 const TokenTag = @import("../parser/Lexer.zig").Token.Tag;
+
 const Type = @import("types.zig").Type;
 const TypeInterner = @import("types.zig").TypeInterner;
+const TypeIds = @import("types.zig").TypeIds;
 
 const misc = @import("misc");
 const Interner = misc.Interner;
@@ -642,7 +644,8 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
     return self.irb.addInstr(
         .{ .struct_decl = .{
             .name = name,
-            .index = sym.index,
+            .sym_index = sym.index,
+            .type_id = self.ti.typeId(interned_type),
             .fields_count = node.fields.len,
             .default_fields = default_fields,
             .functions = funcs.toOwnedSlice(self.allocator) catch oom(),
@@ -725,7 +728,7 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
         .@"return" => |*e| self.returnExpr(e, ctx),
         .struct_literal => |*e| self.structLiteral(e, ctx),
         .unary => |*e| self.unary(e, ctx),
-        .when => unreachable,
+        .when => |*e| self.when(e, exp_val, ctx),
     };
 
     if (exp_val and res.ti.type.is(.void)) {
@@ -1714,6 +1717,42 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
                 .instr = rhs.instr,
             } },
             span.start,
+        ),
+    );
+}
+
+fn when(self: *Self, expr: *const Ast.When, exp_val: bool, ctx: *Context) Result {
+    const value = try self.analyzeExpr(expr.expr, true, ctx);
+
+    if (!value.type.is(.@"union")) {
+        @panic("Warning, 'when' on non-union");
+    }
+
+    var types: Set(*const Type) = .empty;
+    var arms = ArrayList(Instruction.When.Arm).initCapacity(self.allocator, expr.arms.len) catch oom();
+
+    for (expr.arms) |*arm| {
+        const ty = try self.checkAndGetType(arm.type, ctx);
+
+        if (!value.type.@"union".contains(ty)) {
+            @panic("Type not in union");
+        }
+
+        const body = try self.analyzeNode(&arm.body, exp_val, ctx);
+
+        if (body.ti.type.is(.void) and exp_val) {
+            @panic("Not all branhces return a value");
+        }
+
+        types.add(self.allocator, body.ti.type) catch oom();
+        arms.appendAssumeCapacity(.{ .type_id = self.ti.typeId(ty), .body = body.instr });
+    }
+
+    return .fromType(
+        self.mergeTypes(types.toOwned()),
+        self.irb.addInstr(
+            .{ .when = .{ .expr = value.instr, .arms = arms.toOwnedSlice(self.allocator) catch oom() } },
+            self.ast.getSpan(expr).start,
         ),
     );
 }

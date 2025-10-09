@@ -1060,10 +1060,10 @@ fn when(self: *Self) Error!*Expr {
     const opening_brace = self.token_idx - 1;
     self.skipNewLines();
 
-    var arms: ArrayList(Ast.Arm) = .empty;
+    var arms: ArrayList(Ast.When.Arm) = .empty;
 
     while (!self.check(.eof) and !self.check(.right_brace)) {
-        arms.append(self.allocator, try self.patternMatchArm()) catch oom();
+        arms.append(self.allocator, try self.whenArm()) catch oom();
         try self.expect(.new_line, .expect_new_line_pm_arm);
         self.skipNewLines();
     }
@@ -1079,17 +1079,19 @@ fn when(self: *Self) Error!*Expr {
     return expr;
 }
 
-fn patternMatchArm(self: *Self) Error!Ast.Arm {
-    const pattern = pattern: {
-        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
-        defer self.ctx.in_cond = save_extract;
-        break :pattern try self.parsePrecedenceExpr(0);
-    };
+fn whenArm(self: *Self) Error!Ast.When.Arm {
+    // const pattern = pattern: {
+    //     const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
+    //     defer self.ctx.in_cond = save_extract;
+    //     break :pattern try self.parsePrecedenceExpr(0);
+    // };
 
+    const ty = try self.parseType();
     try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
 
     return .{
-        .pattern = pattern,
+        // .pattern = pattern,
+        .type = ty,
         .body = try self.statement(),
     };
 }

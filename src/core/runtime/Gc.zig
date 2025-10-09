@@ -145,7 +145,7 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
                 try self.markObject(m.asObj());
             }
         },
-        .module, .native_fn, .string => {},
+        .native_fn, .string => {},
     }
 }
 

@@ -5,6 +5,8 @@ pub const RcAction = enum { increment, cow, none };
 pub const Index = usize;
 pub const IndexVoid = @import("std").math.maxInt(Index);
 
+pub const TypeId = @import("types.zig").TypeId;
+
 pub const Instruction = struct {
     data: Data,
     offset: usize,
@@ -42,6 +44,7 @@ pub const Instruction = struct {
         unary: Unary,
         unbox: Index,
         var_decl: VarDecl,
+        when: When,
         @"while": While,
 
         noop, // Used only by 'use' statements as they don't produce any instructions
@@ -136,7 +139,8 @@ pub const Instruction = struct {
     pub const StructDecl = struct {
         // Interner index
         name: usize,
-        index: usize,
+        sym_index: usize,
+        type_id: TypeId,
         fields_count: usize,
         default_fields: []const Index,
         functions: []const Index,
@@ -160,6 +164,12 @@ pub const Instruction = struct {
     pub const Variable = struct {
         index: u64,
         scope: Scope,
+    };
+    pub const When = struct {
+        expr: Index,
+        arms: []const Arm,
+
+        pub const Arm = struct { type_id: TypeId, body: Index };
     };
     pub const While = struct { cond: Index, body: Index };
 };

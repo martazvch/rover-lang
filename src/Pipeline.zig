@@ -17,7 +17,7 @@ const LexerMsg = @import("core/parser/lexer_msg.zig").LexerMsg;
 const LexicalScope = @import("core/analyzer/LexicalScope.zig");
 const Parser = @import("core/parser/Parser.zig");
 const ParserMsg = @import("core/parser/parser_msg.zig").ParserMsg;
-const IrRenderer = @import("core/ir/IrRenderer.zig");
+const IrRenderer = @import("core/analyzer/IrRenderer.zig");
 const Vm = @import("core/runtime/Vm.zig");
 
 const misc = @import("misc");
@@ -145,10 +145,10 @@ fn printIr(self: *Self, allocator: Allocator, file_name: []const u8, analyzer: *
     const stdout = &stdout_writer.interface;
     defer stdout.flush() catch unreachable;
 
-    var rir_renderer = IrRenderer.init(
+    var ir_renderer = IrRenderer.init(
         allocator,
         analyzer.irb.instructions.items(.data)[start..],
         &self.state.interner,
     );
-    try stdout.writeAll(try rir_renderer.renderIr(file_name, self.analyzer.irb.roots.items[start..]));
+    try stdout.writeAll(try ir_renderer.renderIr(file_name, self.analyzer.irb.roots.items[start..]));
 }

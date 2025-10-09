@@ -157,11 +157,13 @@ pub const Type = union(enum) {
 
         /// Checks if an union is a subset a the union
         pub fn containsSubset(self: *const Union, other: *const Union) bool {
-            sub: for (other.types) |sub| {
-                for (self.types) |ty| {
-                    if (sub == ty) continue :sub;
-                }
-                return false;
+            // sub: for (other.types) |sub| {
+            for (other.types) |sub| {
+                if (!self.contains(sub)) return false;
+                // for (self.types) |ty| {
+                //     if (sub == ty) continue :sub;
+                // }
+                // return false;
             }
             return true;
         }
@@ -311,16 +313,25 @@ pub const Type = union(enum) {
     }
 };
 
+pub const TypeId = u16;
+pub const TypeIds = Set(*const Type);
+
 pub const TypeInterner = struct {
     arena: std.heap.ArenaAllocator,
-    interned: AutoHashMapUnmanaged(u64, *Type) = .{},
+    interned: AutoHashMapUnmanaged(u64, *Type),
+    ids: Set(*const Type),
     cache: Cache,
 
     const CacheList: []const Type = &.{ .never, .int, .float, .bool, .str, .null, .void };
     pub const Cache = CreateCache(CacheList);
 
     pub fn init(allocator: Allocator) TypeInterner {
-        return .{ .arena = std.heap.ArenaAllocator.init(allocator), .cache = undefined };
+        return .{
+            .arena = std.heap.ArenaAllocator.init(allocator),
+            .interned = .empty,
+            .ids = .empty,
+            .cache = undefined,
+        };
     }
 
     pub fn deinit(self: *TypeInterner) void {
@@ -380,7 +391,16 @@ pub const TypeInterner = struct {
         new_type.* = ty;
         self.interned.put(self.arena.allocator(), hash, new_type) catch oom();
 
+        self.ids.add(self.arena.allocator(), new_type) catch oom();
+
         return new_type;
+    }
+
+    /// Gets type's id
+    // TODO: protect cast
+    pub fn typeId(self: *const TypeInterner, ty: *const Type) TypeId {
+        // Safe unwrap because in `intern` we add every new type in `ids`
+        return @intCast(self.ids.getIndex(ty).?);
     }
 };
 

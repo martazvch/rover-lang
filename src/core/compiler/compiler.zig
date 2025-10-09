@@ -5,8 +5,8 @@ const Allocator = std.mem.Allocator;
 const FieldEnum = std.meta.FieldEnum;
 
 const Disassembler = @import("Disassembler.zig");
-const rir = @import("../ir/rir.zig");
-const Instruction = rir.Instruction;
+const ir = @import("../analyzer/ir.zig");
+const Instruction = ir.Instruction;
 const Obj = @import("../runtime/Obj.zig");
 const Value = @import("../runtime/values.zig").Value;
 const Vm = @import("../runtime/Vm.zig");
@@ -83,7 +83,7 @@ pub const CompilationManager = struct {
     pub fn compile(
         self: *Self,
         instr_data: []const Instruction.Data,
-        roots: []const rir.Index,
+        roots: []const ir.Index,
         instr_lines: []const usize,
         main_index: ?usize,
         module_index: usize,
@@ -307,7 +307,7 @@ const Compiler = struct {
         return self.function;
     }
 
-    fn compileInstr(self: *Self, instr: rir.Index) Error!void {
+    fn compileInstr(self: *Self, instr: ir.Index) Error!void {
         self.manager.line = self.manager.instr_lines[instr];
 
         try switch (self.manager.instr_data[instr]) {
@@ -546,7 +546,7 @@ const Compiler = struct {
         self.writeOpAndByte(if (data.local) .get_capt_local else .get_capt_frame, @intCast(data.index));
     }
 
-    fn cast(self: *Self, typ: rir.Type) Error!void {
+    fn cast(self: *Self, typ: ir.Type) Error!void {
         switch (typ) {
             .float => self.writeOp(.cast_to_float, self.getLineNumber()),
             .int => unreachable,
@@ -712,6 +712,7 @@ const Compiler = struct {
         var structure = Obj.Structure.create(
             self.manager.vm,
             Obj.String.copy(self.manager.vm, self.manager.interner.getKey(data.name).?),
+            data.type_id,
             data.fields_count,
             data.default_fields.len,
             &.{},
@@ -720,7 +721,7 @@ const Compiler = struct {
         // We forward declare the structure in the globals because when disassembling the
         // structure's method, they need to refer to the object. Only the name can be refered to
         // TODO: Create a placeholder that has only the name?
-        self.addSymbol(data.index, Value.makeObj(structure.asObj()));
+        self.addSymbol(data.sym_index, Value.makeObj(structure.asObj()));
 
         // We compile each default value and as we know there are pure
         for (data.default_fields, 0..) |def, i| {
@@ -738,7 +739,7 @@ const Compiler = struct {
 
         structure.methods = funcs.toOwnedSlice(self.manager.vm.allocator) catch oom();
         const struct_obj = Value.makeObj(structure.asObj());
-        self.addSymbol(data.index, struct_obj);
+        self.addSymbol(data.sym_index, struct_obj);
     }
 
     fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) Error!void {
@@ -813,7 +814,7 @@ const Compiler = struct {
         }
     }
 
-    fn compileDefaultValue(self: *Self, instr: rir.Index) Error!Value {
+    fn compileDefaultValue(self: *Self, instr: ir.Index) Error!Value {
         return switch (self.manager.instr_data[instr]) {
             .int => |val| Value.makeInt(val),
             .float => |val| Value.makeFloat(val),

@@ -8,9 +8,9 @@ const oom = @import("misc").oom;
 const AnalyzerReport = @import("../analyzer/Analyzer.zig").AnalyzerReport;
 const Ast = @import("../parser/Ast.zig");
 const Node = Ast.Node;
-const rir = @import("rir.zig");
-const Instruction = rir.Instruction;
-const Type = rir.Type;
+const ir = @import("ir.zig");
+const Instruction = ir.Instruction;
+const Type = ir.Type;
 const Span = @import("../parser/Lexer.zig").Span;
 const Token = @import("../parser/Lexer.zig").Token;
 
@@ -58,7 +58,7 @@ pub fn renderIr(self: *Self, file_name: []const u8, roots: []const usize) Error!
     return self.tree.items;
 }
 
-fn parseInstr(self: *Self, instr: rir.Index) void {
+fn parseInstr(self: *Self, instr: ir.Index) void {
     switch (self.instrs[instr]) {
         .array => |*data| self.array(data),
         .array_access => |*data| self.arrayAccess(data, false, false),
@@ -98,7 +98,7 @@ fn parseInstr(self: *Self, instr: rir.Index) void {
     }
 }
 
-fn indexInstr(self: *Self, name: []const u8, index: rir.Index) void {
+fn indexInstr(self: *Self, name: []const u8, index: ir.Index) void {
     self.indentAndPrintSlice("[{s}]", .{name});
     self.indent_level += 1;
     defer self.indent_level -= 1;

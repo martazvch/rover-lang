@@ -379,7 +379,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.openKey("arms", .list);
             for (n.arms, 0..) |arm, i| {
                 try self.openAnonKey(.block);
-                try self.renderSingleExpr("pattern", arm.pattern, .block, true);
+                try self.pushKeyValue("type", try self.renderType(arm.type), true);
                 try self.renderSingleNode("body", &arm.body, .block, false);
                 try self.closeKey(.block, i < n.arms.len - 1);
             }

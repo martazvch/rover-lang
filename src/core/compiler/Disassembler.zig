@@ -92,6 +92,11 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .gt_float => self.simpleInstruction(writer, "gt_float", offset),
         .gt_int => self.simpleInstruction(writer, "gt_int", offset),
         .incr_ref => self.simpleInstruction(writer, "incr_ref", offset),
+        .is_bool => self.simpleInstruction(writer, "is_bool", offset),
+        .is_float => self.simpleInstruction(writer, "is_float", offset),
+        .is_int => self.simpleInstruction(writer, "is_int", offset),
+        .is_str => self.simpleInstruction(writer, "is_str", offset),
+        .is_type => self.indexInstruction(writer, "is_type", offset),
         .jump => self.jumpInstruction(writer, "jump", 1, offset),
         .jump_false => self.jumpInstruction(writer, "jump_false", 1, offset),
         .jump_true => self.jumpInstruction(writer, "jump_true", 1, offset),
@@ -265,17 +270,4 @@ fn getMember(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writ
     }
 
     return local_offset;
-}
-
-fn invokeInstruction(self: *Self, writer: *Writer, text: []const u8, offset: usize) Writer.Error!usize {
-    const arity = self.chunk.code.items[offset + 1];
-    const obj_idx = self.chunk.code.items[offset + 2];
-
-    if (self.render_mode == .@"test") {
-        try writer.print("{s} arity {}, method index {}\n", .{ text, arity, obj_idx });
-    } else {
-        try writer.print("{s:<20} arity {:>4}, method index {:>4}\n", .{ text, arity, obj_idx });
-    }
-
-    return offset + 3;
 }

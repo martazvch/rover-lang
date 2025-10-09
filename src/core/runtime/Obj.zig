@@ -6,6 +6,7 @@ const Writer = std.Io.Writer;
 
 const options = @import("options");
 
+const TypeId = @import("../analyzer/types.zig").TypeId;
 const Chunk = @import("../compiler/Chunk.zig");
 const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
 const NativeFn = @import("../builtins/ffi.zig").NativeFn;
@@ -15,6 +16,7 @@ const Vm = @import("Vm.zig");
 
 kind: Kind,
 next: ?*Obj,
+type_id: TypeId,
 is_marked: bool = false,
 ref_count: usize = 0,
 
@@ -26,19 +28,32 @@ const Kind = enum {
     closure,
     function,
     instance,
-    module,
     native_fn,
     string,
     structure,
+
+    pub fn fromType(T: type) Kind {
+        return switch (T) {
+            Array => .array,
+            Box => .box,
+            Closure => .closure,
+            Function => .function,
+            Instance => .instance,
+            NativeFunction => .native_fn,
+            String => .string,
+            Structure => .structure,
+            else => @compileError(@typeName(T) ++ " isn't a runtime object type"),
+        };
+    }
 };
 
 // TODO: report a runtime error for OOM
-pub fn allocate(vm: *Vm, comptime T: type, kind: Kind) *T {
+pub fn allocate(vm: *Vm, comptime T: type, type_id: TypeId) *T {
     comptime assert(@hasField(T, "obj"));
     comptime assert(@hasDecl(T, "asObj"));
 
     const ptr = vm.gc_alloc.create(T) catch oom();
-    ptr.obj = .{ .kind = kind, .next = vm.objects };
+    ptr.obj = .{ .kind = .fromType(T), .next = vm.objects, .type_id = type_id };
 
     vm.objects = &ptr.obj;
 
@@ -49,16 +64,16 @@ pub fn allocate(vm: *Vm, comptime T: type, kind: Kind) *T {
     return ptr;
 }
 
-/// Another version of allocation but fon't register the object into the VM linked list.
+/// Another version of allocation but don't register the object into the VM linked list.
 /// Used for objects that live for ever like symbols which are created at compile time
 /// Dedicated function so that we don't add a bool check at runtime when allocating with `allocate`
 // TODO: report a runtime error for OOM
-fn allocateComptime(vm: *Vm, comptime T: type, kind: Kind) *T {
+fn allocateComptime(vm: *Vm, comptime T: type, type_id: TypeId) *T {
     comptime assert(@hasField(T, "obj"));
     comptime assert(@hasDecl(T, "asObj"));
 
     const ptr = vm.allocator.create(T) catch oom();
-    ptr.obj = .{ .kind = kind, .next = null };
+    ptr.obj = .{ .kind = .fromType(T), .next = null, .type_id = type_id };
 
     if (comptime options.log_gc) {
         std.debug.print("{*} allocate {} bytes for: ", .{ ptr, @sizeOf(T) });
@@ -72,7 +87,7 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .array => self.as(Array).deepCopy(vm).asObj(),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .box, .closure, .function, .module, .native_fn, .string, .structure => self,
+        .box, .closure, .function, .native_fn, .string, .structure => self,
     };
 }
 
@@ -89,7 +104,6 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
             const instance = self.as(Instance);
             instance.deinit(vm.gc_alloc);
         },
-        .module => self.as(Module).deinit(vm.gc_alloc),
         .native_fn => {
             const function = self.as(NativeFunction);
             function.deinit(vm.gc_alloc);
@@ -138,7 +152,6 @@ pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
             try writer.print("<function {s}>", .{function.name.chars});
         },
         .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
-        .module => try writer.print("<module {s}>", .{self.as(Module).module.name}),
         .native_fn => try writer.print("<native fn {s}>", .{self.as(NativeFunction).name}),
         .string => try writer.print("{s}", .{self.as(String).chars}),
         .structure => try writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
@@ -152,7 +165,6 @@ pub fn log(self: *Obj) void {
         .closure => std.debug.print("<closure {s}>", .{self.as(Closure).function.name.chars}),
         .function => std.debug.print("<fn {s}>", .{self.as(Function).name.chars}),
         .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
-        .module => std.debug.print("<module {s}>", .{self.as(Module).module.name}),
         .native_fn => std.debug.print("<native function {s}>", .{self.as(NativeFunction).name}),
         .string => std.debug.print("{s}", .{self.as(String).chars}),
         .structure => std.debug.print("<structure {s}>", .{self.as(Structure).name.chars}),
@@ -163,7 +175,6 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
-        .module => self.as(Module).module.globals[index].obj.as(Function).default_values,
         .structure => self.as(Structure).default_values,
         else => unreachable,
     };
@@ -183,7 +194,7 @@ pub const Array = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, values: []Value) *Self {
-        const obj = Obj.allocate(vm, Self, .array);
+        const obj = Obj.allocate(vm, Self, undefined);
         obj.values = .empty;
 
         vm.gc.pushTmpRoot(obj.asObj());
@@ -238,7 +249,7 @@ pub const String = struct {
 
     // PERF: flexible array member: https://craftinginterpreters.com/strings.html#challenges
     fn create(vm: *Vm, str: []const u8, hash: u32) *String {
-        var obj = Obj.allocate(vm, Self, .string);
+        var obj = Obj.allocate(vm, Self, undefined);
         obj.chars = str;
         obj.hash = hash;
 
@@ -247,7 +258,6 @@ pub const String = struct {
         // as a root
         vm.gc.pushTmpRoot(obj.asObj());
         defer vm.gc.popTmpRoot();
-        // _ = vm.strings.set(obj, Value.null_);
         vm.strings.put(hash, obj) catch oom();
 
         if (options.log_gc) obj.asObj().log();
@@ -258,10 +268,6 @@ pub const String = struct {
     /// **Warning**: Meant to be used at compile time only
     pub fn copy(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
-        // const interned = vm.strings.findString(str, hash);
-        //
-        // if (interned) |i| return i;
-
         const gop = vm.strings.getOrPut(hash) catch oom();
         if (gop.found_existing) {
             return gop.value_ptr.*;
@@ -270,11 +276,10 @@ pub const String = struct {
         const chars = vm.allocator.alloc(u8, str.len) catch oom();
         @memcpy(chars, str);
 
-        var obj = Obj.allocateComptime(vm, Self, .string);
+        var obj = Obj.allocateComptime(vm, Self, undefined);
         obj.chars = chars;
         obj.hash = hash;
 
-        // _ = vm.strings.set(obj, Value.null_);
         gop.value_ptr.* = obj;
 
         return obj;
@@ -284,13 +289,6 @@ pub const String = struct {
     // the memory and return the interned one
     pub fn take(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
-        // const interned = vm.strings.findString(str, hash);
-        //
-        // if (interned) |i| {
-        //     vm.gc_alloc.free(str);
-        //     return i;
-        // }
-
         if (vm.strings.get(hash)) |interned| {
             return interned;
         }
@@ -329,7 +327,7 @@ pub const Function = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: *String, default_count: usize, module_index: usize) *Self {
-        const obj = Obj.allocateComptime(vm, Self, .function);
+        const obj = Obj.allocateComptime(vm, Self, undefined);
         obj.arity = 0;
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
@@ -362,7 +360,7 @@ pub const Closure = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, function: *Function, captures: []Value) *Self {
-        const obj = Obj.allocate(vm, Self, .closure);
+        const obj = Obj.allocate(vm, Self, undefined);
         vm.gc.pushTmpRoot(&obj.obj);
         defer vm.gc.popTmpRoot();
 
@@ -394,7 +392,7 @@ pub const Box = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, value: Value) *Self {
-        const obj = Obj.allocate(vm, Self, .box);
+        const obj = Obj.allocate(vm, Self, undefined);
         obj.value = value;
 
         if (options.log_gc) obj.asObj().log();
@@ -419,7 +417,7 @@ pub const NativeFunction = struct {
     const Self = @This();
 
     pub fn create(vm: *Vm, name: []const u8, function: NativeFn) *Self {
-        const obj = Obj.allocate(vm, Self, .native_fn);
+        const obj = Obj.allocate(vm, Self, undefined);
         obj.name = name;
         obj.function = function;
 
@@ -448,8 +446,8 @@ pub const Structure = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *String, field_count: usize, default_count: usize, methods: []*Function) *Self {
-        const obj = Obj.allocateComptime(vm, Self, .structure);
+    pub fn create(vm: *Vm, name: *String, type_id: TypeId, field_count: usize, default_count: usize, methods: []*Function) *Self {
+        const obj = Obj.allocateComptime(vm, Self, type_id);
         obj.name = name;
         obj.field_count = field_count;
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
@@ -482,7 +480,7 @@ pub const Instance = struct {
         // Fields first for GC because other wise allocating fields after creation
         // of the instance may trigger GC in between
         const alloc_fields = vm.gc_alloc.alloc(Value, parent.field_count) catch oom();
-        const obj = Obj.allocate(vm, Self, .instance);
+        const obj = Obj.allocate(vm, Self, undefined);
 
         obj.parent = parent;
         obj.fields = alloc_fields;
@@ -513,30 +511,6 @@ pub const Instance = struct {
 
     pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.free(self.fields);
-        allocator.destroy(self);
-    }
-};
-
-pub const Module = struct {
-    obj: Obj,
-    module: *CompiledModule,
-
-    const Self = @This();
-
-    pub fn create(vm: *Vm, module: *CompiledModule) *Self {
-        const obj = Obj.allocate(vm, Self, .module);
-        obj.module = module;
-
-        if (options.log_gc) obj.asObj().log();
-
-        return obj;
-    }
-
-    pub fn asObj(self: *Self) *Obj {
-        return &self.obj;
-    }
-
-    pub fn deinit(self: *Self, allocator: Allocator) void {
         allocator.destroy(self);
     }
 };

@@ -3,8 +3,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const MultiArrayList = std.MultiArrayList;
 
-const rir = @import("rir.zig");
-const Instruction = rir.Instruction;
+const ir = @import("ir.zig");
+const Instruction = ir.Instruction;
 const oom = @import("misc").oom;
 
 const Self = @This();
@@ -16,7 +16,7 @@ pub const Mode = union(enum) {
 
 allocator: Allocator,
 instructions: MultiArrayList(Instruction),
-roots: ArrayList(rir.Index),
+roots: ArrayList(ir.Index),
 
 pub fn init(allocator: Allocator) Self {
     return .{ .allocator = allocator, .instructions = .empty, .roots = .empty };
@@ -31,7 +31,7 @@ pub fn addInstr(self: *Self, instr_data: Instruction.Data, offset: usize) usize 
     return self.instructions.len - 1;
 }
 
-pub fn addRootInstr(self: *Self, index: rir.Index) void {
+pub fn addRootInstr(self: *Self, index: ir.Index) void {
     self.roots.append(self.allocator, index) catch oom();
 }
 
@@ -40,7 +40,7 @@ pub fn wrapPreviousInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruc
 }
 
 pub fn wrapInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data), index: usize) usize {
-    if (@FieldType(Instruction.Data, @tagName(instr)) != rir.Index) {
+    if (@FieldType(Instruction.Data, @tagName(instr)) != ir.Index) {
         @compileError("Can only wrap instructions that have a single instruction as a payload");
     }
 
@@ -53,7 +53,7 @@ pub fn wrapInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Dat
 }
 
 pub fn wrapInstrInplace(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data), index: usize) void {
-    if (@FieldType(Instruction.Data, @tagName(instr)) != rir.Index) {
+    if (@FieldType(Instruction.Data, @tagName(instr)) != ir.Index) {
         @compileError("Can only wrap instructions that have a single instruction as a payload");
     }
 

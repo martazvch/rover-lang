@@ -5,7 +5,7 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const Type = @import("types.zig").Type;
-const InstrIndex = @import("../ir/rir.zig").Index;
+const InstrIndex = @import("ir.zig").Index;
 const Span = @import("../parser/Lexer.zig").Span;
 const State = @import("../../State.zig");
 
@@ -29,7 +29,6 @@ pub const Variable = struct {
 };
 
 pub const Break = *const Type;
-
 pub const Symbol = struct { type: *const Type, index: usize };
 pub const ExternSymbol = struct { module_index: usize, symbol: Symbol };
 

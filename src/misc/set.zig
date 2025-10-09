@@ -64,6 +64,10 @@ pub fn Set(comptime T: type) type {
         pub fn sort(self: *Self, comptime lessThan: fn (void, T, T) bool) void {
             std.sort.heap(T, self.values(), {}, lessThan);
         }
+
+        pub fn getIndex(self: *const Self, key: T) ?usize {
+            return self.set.getIndex(key);
+        }
     };
 }
 

@@ -220,11 +220,11 @@ pub const When = struct {
     kw: TokenIndex,
     expr: *Expr,
     arms: []Arm,
-};
 
-pub const Arm = struct {
-    pattern: *Expr,
-    body: Node,
+    pub const Arm = struct {
+        type: *Type,
+        body: Node,
+    };
 };
 
 /// Can be used with any `*Node`, `*Expr` or a `token index`
