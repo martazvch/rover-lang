@@ -343,7 +343,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 self.stack.peekRef(0).* = .makeBool(top.obj.kind == .string);
             },
             .is_type => {
-                const type_id = frame.readShort();
+                const type_id = frame.readByte();
                 self.stack.peekRef(0).* = .makeBool(self.stack.peek(0).obj.type_id == type_id);
             },
             .jump => {

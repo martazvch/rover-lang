@@ -92,6 +92,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .unary => |*data| self.unary(data),
         .unbox => |index| self.indexInstr("Unbox", index),
         .var_decl => |*data| self.varDecl(data),
+        .when => |*data| self.when(data),
         .@"while" => |data| self.whileInstr(data),
 
         .noop => {},
@@ -388,6 +389,21 @@ fn varDecl(self: *Self, data: *const Instruction.VarDecl) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
     if (data.value) |index| self.parseInstr(index) else self.indentAndAppendSlice("[Null]");
+}
+
+fn when(self: *Self, data: *const Instruction.When) void {
+    self.indentAndAppendSlice("[When]");
+    self.indentAndAppendSlice("- expression:");
+    self.indent_level += 1;
+    self.parseInstr(data.expr);
+    self.indent_level -= 1;
+    self.indentAndAppendSlice("- arms:");
+    for (data.arms) |arm| {
+        self.indentAndPrintSlice("[Types id: {}]", .{arm.type_id});
+        self.indent_level += 1;
+        self.parseInstr(arm.body);
+        self.indent_level -= 1;
+    }
 }
 
 fn whileInstr(self: *Self, data: Instruction.While) void {

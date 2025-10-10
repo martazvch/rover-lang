@@ -67,7 +67,6 @@ pub const Type = union(enum) {
     };
 
     pub const Loc = struct { name: InternerIdx, container: InternerIdx };
-    pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
 
     pub const Function = struct {
         loc: ?Loc,
@@ -78,6 +77,7 @@ pub const Type = union(enum) {
         pub const Kind = enum { normal, method, bound, native };
         pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
         pub const ParamsMap = AutoArrayHashMapUnmanaged(InternerIdx, Parameter);
+        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
 
         pub fn proto(self: *const Function, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -130,6 +130,7 @@ pub const Type = union(enum) {
             type: *const Type,
             default: bool,
         };
+        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
 
         pub fn proto(self: *const Structure, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -146,6 +147,20 @@ pub const Type = union(enum) {
 
     pub const Union = struct {
         types: []const *const Type,
+
+        pub const Proto = AutoHashMapUnmanaged(*const Type, bool);
+
+        pub fn proto(self: *const Union, allocator: Allocator) Proto {
+            var res: Proto = .empty;
+            // TODO: protect the cast?
+            res.ensureTotalCapacity(allocator, @intCast(self.types.len)) catch oom();
+
+            for (self.types) |ty| {
+                res.putAssumeCapacity(ty, false);
+            }
+
+            return res;
+        }
 
         /// Checks wether a type is contained in the union
         pub fn contains(self: *const Union, other: *const Type) bool {
@@ -322,7 +337,7 @@ pub const TypeInterner = struct {
     ids: Set(*const Type),
     cache: Cache,
 
-    const CacheList: []const Type = &.{ .never, .int, .float, .bool, .str, .null, .void };
+    const CacheList: []const Type = &.{ .float, .int, .bool, .str, .null, .void, .never };
     pub const Cache = CreateCache(CacheList);
 
     pub fn init(allocator: Allocator) TypeInterner {

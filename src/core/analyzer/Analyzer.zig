@@ -1728,33 +1728,59 @@ fn when(self: *Self, expr: *const Ast.When, exp_val: bool, ctx: *Context) Result
         @panic("Warning, 'when' on non-union");
     }
 
-    var types: Set(*const Type) = .empty;
-    var arms = ArrayList(Instruction.When.Arm).initCapacity(self.allocator, expr.arms.len) catch oom();
+    var proto = value.type.@"union".proto(self.allocator);
 
-    for (expr.arms) |*arm| {
+    const types, const arms = try self.whenArms(expr.arms, &proto, exp_val, ctx);
+    try self.whenValidation(&proto);
+
+    return .fromType(
+        self.mergeTypes(types),
+        self.irb.addInstr(.{ .when = .{ .expr = value.instr, .arms = arms } }, self.ast.getSpan(expr).start),
+    );
+}
+
+const WhenArmsRes = struct { []const *const Type, []const Instruction.When.Arm };
+
+fn whenArms(self: *Self, arm_exprs: []const Ast.When.Arm, proto: *Type.Union.Proto, exp_val: bool, ctx: *Context) Error!WhenArmsRes {
+    var had_err = false;
+    var types: Set(*const Type) = .empty;
+    var arms = ArrayList(Instruction.When.Arm).initCapacity(self.allocator, arm_exprs.len) catch oom();
+
+    for (arm_exprs) |*arm| {
         const ty = try self.checkAndGetType(arm.type, ctx);
 
-        if (!value.type.@"union".contains(ty)) {
-            @panic("Type not in union");
-        }
+        const gop = proto.getPtr(ty) orelse @panic("Type not in union");
+        gop.* = true;
 
-        const body = try self.analyzeNode(&arm.body, exp_val, ctx);
+        const body = self.analyzeNode(&arm.body, exp_val, ctx) catch {
+            had_err = true;
+            continue;
+        };
 
         if (body.ti.type.is(.void) and exp_val) {
-            @panic("Not all branhces return a value");
+            @panic("Not all branches return a value");
         }
 
         types.add(self.allocator, body.ti.type) catch oom();
         arms.appendAssumeCapacity(.{ .type_id = self.ti.typeId(ty), .body = body.instr });
     }
 
-    return .fromType(
-        self.mergeTypes(types.toOwned()),
-        self.irb.addInstr(
-            .{ .when = .{ .expr = value.instr, .arms = arms.toOwnedSlice(self.allocator) catch oom() } },
-            self.ast.getSpan(expr).start,
-        ),
-    );
+    return if (had_err) error.Err else .{ types.toOwned(), arms.toOwnedSlice(self.allocator) catch oom() };
+}
+
+fn whenValidation(self: *Self, proto: *const Type.Union.Proto) Error!void {
+    _ = self; // autofix
+    var had_err = false;
+
+    var it = proto.iterator();
+    while (it.next()) |entry| {
+        if (!entry.value_ptr.*) {
+            had_err = true;
+            @panic("Missing type or '_' arm in when expression");
+        }
+    }
+
+    if (had_err) return error.Err;
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key

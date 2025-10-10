@@ -349,6 +349,7 @@ const Compiler = struct {
             .unary => |*data| self.unary(data),
             .unbox => |index| self.wrappedInstr(.unbox, index),
             .var_decl => |*data| self.varDecl(data),
+            .when => |*data| self.when(data),
             .@"while" => |data| self.whileInstr(data),
 
             .noop => {},
@@ -776,6 +777,45 @@ const Compiler = struct {
         }
 
         self.defineVariable(data.variable);
+    }
+
+    fn when(self: *Self, data: *const Instruction.When) Error!void {
+        try self.compileInstr(data.expr);
+
+        var exit_jumps = ArrayList(usize).initCapacity(self.manager.allocator, data.arms.len) catch oom();
+
+        for (data.arms) |arm| {
+            if (arm.type_id <= 4) {
+                self.writeOp(switch (arm.type_id) {
+                    0 => .is_float,
+                    1 => .is_int,
+                    2 => .is_bool,
+                    4 => .is_str,
+                    else => unreachable,
+                });
+            } else if (arm.type_id < std.math.maxInt(u8)) {
+                self.writeOpAndByte(.is_type, @intCast(arm.type_id));
+            } else {
+                @panic("Type id to high, not implemented yet");
+            }
+
+            const arm_jump = self.emitJump(.jump_false);
+            // Pops the condition
+            self.writeOp(.pop);
+
+            // Then body
+            try self.compileInstr(arm.body);
+
+            // Exits the when after arm body
+            exit_jumps.appendAssumeCapacity(self.emitJump(.jump));
+
+            // Skips to next arm
+            try self.patchJump(arm_jump);
+        }
+
+        for (exit_jumps.items) |jump| {
+            try self.patchJump(jump);
+        }
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {
