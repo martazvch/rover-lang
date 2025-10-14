@@ -8,16 +8,11 @@
                 "args": []
             }
         },
+        "alias": "v",
         "arms": [
             {
-                "pattern": {
-                    "extractor": {
-                        "expr": {
-                            "literal": "int"
-                        },
-                        "alias": "i"
-                    }
-                },
+                "type": "int",
+                "alias": "i",
                 "body": {
                     "print": {
                         "literal": "i"
@@ -25,9 +20,7 @@
                 }
             },
             {
-                "pattern": {
-                    "literal": "float"
-                },
+                "type": "float",
                 "body": {
                     "block": [
                         "print": {

@@ -796,6 +796,7 @@ const Compiler = struct {
             } else if (arm.type_id < std.math.maxInt(u8)) {
                 self.writeOpAndByte(.is_type, @intCast(arm.type_id));
             } else {
+                // TODO: implement at least with a u16
                 @panic("Type id to high, not implemented yet");
             }
 
@@ -811,11 +812,16 @@ const Compiler = struct {
 
             // Skips to next arm
             try self.patchJump(arm_jump);
+            // Pops the condition in case of false
+            self.writeOp(.pop);
         }
 
         for (exit_jumps.items) |jump| {
             try self.patchJump(jump);
         }
+
+        // Pops the value matched on
+        self.writeOp(.pop);
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {

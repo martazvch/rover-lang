@@ -1,5 +1,5 @@
-when getValue() {
-    int :: i => print i
+when getValue() as v {
+    int as i => print i
     float => {
         print "im a float"
     }

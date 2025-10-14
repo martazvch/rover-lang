@@ -219,10 +219,12 @@ pub const Unary = struct {
 pub const When = struct {
     kw: TokenIndex,
     expr: *Expr,
+    alias: ?TokenIndex,
     arms: []Arm,
 
     pub const Arm = struct {
         type: *Type,
+        alias: ?TokenIndex,
         body: Node,
     };
 };

@@ -188,6 +188,7 @@ pub const Type = union(enum) {
         return std.meta.activeTag(self.*) == tag;
     }
 
+    /// Returns the union tag if the type matches, otherwise null
     pub fn as(self: *const Type, comptime tag: std.meta.Tag(Type)) ?@FieldType(Type, @tagName(tag)) {
         return if (self.is(tag)) @field(self, @tagName(tag)) else null;
     }
@@ -211,10 +212,6 @@ pub const Type = union(enum) {
     // TODO: remove now that casts are explicit
     pub fn canCastTo(self: *const Type, other: *const Type) bool {
         return self.is(.int) and other.is(.float);
-    }
-
-    pub fn getChildIfOptional(self: *const Type) ?*const Type {
-        return if (self.is(.optional)) self.optional else null;
     }
 
     pub fn hash(self: Type, allocator: Allocator, hasher: anytype) void {

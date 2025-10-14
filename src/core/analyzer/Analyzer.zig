@@ -1111,7 +1111,7 @@ fn extractor(self: *Self, expr: *const Ast.Extractor, ctx: *Context) Result {
     const span = self.ast.getSpan(expr);
     const expr_ty = try self.analyzeExpr(expr.expr, true, ctx);
 
-    const ty = expr_ty.type.getChildIfOptional() orelse return self.err(
+    const ty = expr_ty.type.as(.optional) orelse return self.err(
         .{ .extract_non_optional = .{ .found = self.typeName(expr_ty.type) } },
         span,
     );
@@ -1724,13 +1724,10 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
 fn when(self: *Self, expr: *const Ast.When, exp_val: bool, ctx: *Context) Result {
     const value = try self.analyzeExpr(expr.expr, true, ctx);
 
-    if (!value.type.is(.@"union")) {
-        @panic("Warning, 'when' on non-union");
-    }
+    const value_type = value.type.as(.@"union") orelse @panic("Warning, 'when' on non-union");
+    var proto = value_type.proto(self.allocator);
 
-    var proto = value.type.@"union".proto(self.allocator);
-
-    const types, const arms = try self.whenArms(expr.arms, &proto, exp_val, ctx);
+    const types, const arms = try self.whenArms(expr.arms, expr.alias, &proto, exp_val, ctx);
     try self.whenValidation(&proto);
 
     return .fromType(
@@ -1741,7 +1738,14 @@ fn when(self: *Self, expr: *const Ast.When, exp_val: bool, ctx: *Context) Result
 
 const WhenArmsRes = struct { []const *const Type, []const Instruction.When.Arm };
 
-fn whenArms(self: *Self, arm_exprs: []const Ast.When.Arm, proto: *Type.Union.Proto, exp_val: bool, ctx: *Context) Error!WhenArmsRes {
+fn whenArms(
+    self: *Self,
+    arm_exprs: []const Ast.When.Arm,
+    glob_alias: ?Ast.TokenIndex,
+    proto: *Type.Union.Proto,
+    exp_val: bool,
+    ctx: *Context,
+) Error!WhenArmsRes {
     var had_err = false;
     var types: Set(*const Type) = .empty;
     var arms = ArrayList(Instruction.When.Arm).initCapacity(self.allocator, arm_exprs.len) catch oom();
@@ -1751,6 +1755,16 @@ fn whenArms(self: *Self, arm_exprs: []const Ast.When.Arm, proto: *Type.Union.Pro
 
         const gop = proto.getPtr(ty) orelse @panic("Type not in union");
         gop.* = true;
+
+        // Implicit scope for aliases
+        self.scope.open(self.allocator, null, false, exp_val);
+        defer _ = self.scope.close();
+
+        alias: {
+            const alias = arm.alias orelse glob_alias orelse break :alias;
+            const binding = try self.internIfNotInCurrentScope(alias);
+            _ = try self.declareVariable(binding, ty, false, true, true, false, self.ast.getSpan(alias));
+        }
 
         const body = self.analyzeNode(&arm.body, exp_val, ctx) catch {
             had_err = true;

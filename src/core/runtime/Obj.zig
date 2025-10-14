@@ -484,6 +484,7 @@ pub const Instance = struct {
 
         obj.parent = parent;
         obj.fields = alloc_fields;
+        obj.asObj().type_id = parent.asObj().type_id;
 
         if (options.log_gc) obj.asObj().log();
 

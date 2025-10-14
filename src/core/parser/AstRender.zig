@@ -375,11 +375,17 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         .when => |*n| {
             try self.openKey("when", .block);
             try self.renderSingleExpr("expression", n.expr, .block, true);
+            if (n.alias) |alias| {
+                try self.pushKeyValue("alias", self.spanToSrc(alias), true);
+            }
 
             try self.openKey("arms", .list);
             for (n.arms, 0..) |arm, i| {
                 try self.openAnonKey(.block);
                 try self.pushKeyValue("type", try self.renderType(arm.type), true);
+                if (arm.alias) |alias| {
+                    try self.pushKeyValue("alias", self.spanToSrc(alias), true);
+                }
                 try self.renderSingleNode("body", &arm.body, .block, false);
                 try self.closeKey(.block, i < n.arms.len - 1);
             }

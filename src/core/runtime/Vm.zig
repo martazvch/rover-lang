@@ -344,7 +344,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             },
             .is_type => {
                 const type_id = frame.readByte();
-                self.stack.peekRef(0).* = .makeBool(self.stack.peek(0).obj.type_id == type_id);
+                self.stack.push(.makeBool(self.stack.peek(0).obj.type_id == type_id));
             },
             .jump => {
                 const jump = frame.readShort();

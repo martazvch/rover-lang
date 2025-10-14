@@ -636,10 +636,12 @@ fn use(self: *Self) Error!Node {
 }
 
 fn getAlias(self: *Self) Error!?TokenIndex {
-    return if (self.match(.as)) b: {
+    if (self.match(.as)) {
         try self.expect(.identifier, .non_ident_alias);
-        break :b self.token_idx - 1;
-    } else null;
+        return self.token_idx - 1;
+    }
+
+    return null;
 }
 
 fn statement(self: *Self) Error!Node {
@@ -1055,6 +1057,8 @@ fn when(self: *Self) Error!*Expr {
         break :value try self.parsePrecedenceExpr(0);
     };
 
+    const alias = try self.getAlias();
+
     self.skipNewLines();
     try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
     const opening_brace = self.token_idx - 1;
@@ -1073,6 +1077,7 @@ fn when(self: *Self) Error!*Expr {
     expr.* = .{ .when = .{
         .kw = kw,
         .expr = value,
+        .alias = alias,
         .arms = arms.toOwnedSlice(self.allocator) catch oom(),
     } };
 
@@ -1080,18 +1085,13 @@ fn when(self: *Self) Error!*Expr {
 }
 
 fn whenArm(self: *Self) Error!Ast.When.Arm {
-    // const pattern = pattern: {
-    //     const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
-    //     defer self.ctx.in_cond = save_extract;
-    //     break :pattern try self.parsePrecedenceExpr(0);
-    // };
-
     const ty = try self.parseType();
+    const alias = try self.getAlias();
     try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
 
     return .{
-        // .pattern = pattern,
         .type = ty,
+        .alias = alias,
         .body = try self.statement(),
     };
 }
