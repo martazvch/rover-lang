@@ -4,7 +4,6 @@
 
 **Rover** is an interpreted language written in **Zig** that runs on an embeddable stack-based VM.
 It's strictly typed but thanks to type inference you rarely write types.
-Rover is **not** OOP and use `unions` and pattern matching to create composition.
 
 There is no implicit reference to heap allocated objects.
 It uses a COW system to avoid unecessary copies at runtime, meaning that when you pass around heap allocated objects
@@ -41,20 +40,11 @@ variables and even initialize them with a compile time known value.
 
 ### Expressions
 
-- Each block is an expression
-- Last expression of a block is an implicit return
 - Each control flow is an expression, all branches must return the same value:
    - if
    - loop
    - match
-- Regarding returned value:
-    - if:
-        - Each branch must return the same type unless exit scope
-        - Each branch can exit the current scope with a `return` statement
-    - loop:
-        - Same as while can be exited with a value after or not
-    - match:
-        - Each branch must return the same type
+- Blocks can return a value and can be labelled
 - Unused values are automatically popped from the stack but you can explictly discard them
 - Automatically discarded errors is a warning
 
@@ -67,12 +57,12 @@ mayFail() // warning
 ### Statements
 
 - All symbols declaration are statements and can be done in any scope
-- While can't be an expression because of the fact that you may never enter the loop
+- While can't be an expression because you may never enter the loop
 
 ### Variables
 
 - Immutable variables are declared with `let` and mutables ones with `var`
-- Variable declared without value are declared as `null`. Static anylyzis pass try to warn the user in case of using an uninit variable.
+- Variable declared without value are declared as `uninit`. Using an undefined value is a compile time error
 - Assignment is not an expression
 - Variable names can shadow other variable with the same name if it's not within the same scope
 - Variable's type is declared after `:` after the name
@@ -83,14 +73,14 @@ mayFail() // warning
 All of those syntax are valid:
 
 ```rust
-var counter = 0 // infered as `int`
+var counter = 0 // inferred as `int`
 var counter: int = 0
 var counter: int
 
 let point = makePoint() // infered as Point
 let point: Point = makePoint()
 
-var i, j, k: int // all are `null`
+var i, j, k: int // all are `uninit`
 var i, j, k = 0 // i = 0, j = 0, k = 0
 var i, j, k = 1, 2, 3 // i = 1, j = 2, k = 3
 var i, j, k = false, 56, 1.2 // i: bool = false, j: int = 56, k: float = 1.2
@@ -98,8 +88,7 @@ var i, j, k = false, 56, 1.2 // i: bool = false, j: int = 56, k: float = 1.2
 
 ### Functions
 
-- They can be defined in global and local scopes
-- They can return explicitly with `return` or implictly as the body is a block
+- First class citizen : can be defined in global and local scopes and used as any object
 - Return type is defined after `->`
 - If the function doesn't return anything, you can just omit the type and the arrow (you can explicitly write `-> void`)
 - Parameters can share types
@@ -107,12 +96,11 @@ var i, j, k = false, 56, 1.2 // i: bool = false, j: int = 56, k: float = 1.2
 - Parameters can share default values
 - If a default value is provided, the type can be omitted
 - Parameters can be named during calls to but all positional arguments must be before named ones
-- Function are first class objects
 
 All of those syntax are valid:
 
 ```rust
-fn add(x, y: int) -> int { x + y }
+fn add(x, y: int) -> int { return x + y }
 fn sayHi(name = "Tom") { print name }
 
 fn work(who, why: str, urgent: bool, v1, v2 = 0.5, payed = false) { .. }
@@ -140,7 +128,7 @@ fn createPow(exposant=2) -> fn(int) -> int {
     fn pow(x: int) -> int {
         x ** exposant
     }
-    pow // implicit return of `pow` function itself
+    return pow
 }
 
 let powFn: fn(int) -> int = createPow(3)
@@ -165,7 +153,7 @@ filter(data, |x| -> bool { x % 2 == 0 })
 - Struct can be constructed as:
 
 ```rust
-struct Point {x, y: int}
+struct Point { x, y: int }
 let p = Point{ x = 1, y = 2 }
 ```
 
@@ -176,7 +164,7 @@ the structor name to be called as a constructor
 struct Point {
     x, y: int
 
-    fn init(x, y: int) -> Self {}
+    fn init(x, y: int) -> Self { ... }
 }
 let p = Point(1, 2)
 ```
@@ -226,7 +214,7 @@ struct Point {
     x, y: int
 
     fn init(x, y: int) Self {
-        .{ x, y }
+        return Self{ x, y }
     }
 }
 
@@ -260,7 +248,7 @@ A powerfull feature of Rover is pattern matching. You can either match on **valu
 with the keyword `when`.
 
 - You can match on ranges
-- You can extract the matched value with the operator `::`
+- You can bind the extracted value with `as`
 - You can match default case with `_`
 - Both `match` and `when` has to be exhaustive
 
@@ -279,9 +267,9 @@ match counter {
 }
 
 // Match on types
-when counter {
+when counter as c { // c is available for each arm with the matched type of the arm
     int -> addInt(counter, other),
-    float -> addFloat(counter, other),
+    float as f -> addFloat(counter, other), // can locally bind
     _ -> unreachable,
 }
 ```
@@ -289,55 +277,33 @@ when counter {
 ### Enums
 
 - Enums are defined with `enum`
-- They can't have payload
-- They can have methods
-- You can associate integer values to each field
+- They can have symbols (functions, constants, ...)
+- By default, tags' values are their id
+- You can specify a basic type to associate a value to tags
+- Or you can define associated value for each one
 
 ```rust
 enum Token {
     period,
-    comma,
-    colon = 90,
-}
-```
-
-### Union type
-
-- Used to pack together several possible defnintion of a variable
-- Can only be one at the same time
-- Used for pattern matching
-- Fields can have payloads
-- Methods can be attached to them
-
-```rust
-union Data {
-    vec: Vec2,
-    scalar: int
-
-    // Attach methods
-    fn getValue(self) -> int {
-        // match on tag name
-        match self {
-            vec :: v -> v.x + v.y,
-            scalar :: i -> i,
-        }
-    }
+    colon,
 }
 
-let data = Data.vec(Vec2(1, 2)) // build like this
-```
+enum Token: bool {
+    period = false,
+    colon = true,
+}
 
-- You can define anonymus unions with the syntax `|` (handy to pass around)
-- You can't have methods on anonymus unions
-
-```rust
-fn add(value: int | Vec2) -> int { ... }
+enum Token {
+    period: int,
+    colon: (float, int),
+}
 ```
 
 - *Not sure:* You can use `when` with this syntax to match on nested types:
 
 ```rust
-union Nested {
+union Geom { vec2: Vec2, vec3: Vec3 }
+enum Nested {
     geom: Geom, // nested one
     other, // equivalent to void
 }
@@ -346,27 +312,49 @@ fn nested(other: Nested) {
     // Here we use 'when' so we can interact with types and nested types. If analyzer
     // recognized that we match on a union inside a union, allow a syntaxe to match nested
     // levels
-    when other {
-        Geom:Vec2 :: v => ,
-        Geom:int :: i => ,
+    when other as v {
+        Geom:Vec2 => ...,
+        Geom:Vec3 => ...,
     }
 }
 ```
 
+### Union type
+
+- Define them with `|` separating types
+- Used to pack together several possible defnintion of a variable
+- Can only be one at the same time
+- USe pattern matching on them
+
+```rust
+var a: int|float = 1
+
+when a {
+    int as i => print(i)
+    ...
+}
+
+fn add(value: int | Vec2) -> int { ... }
+```
+
 ### Error
 
-- Error propagation is done with "!" and throw up the call stack the error
+- Define an enum of type `Error`
+- Returning an error is done with `fail` keyword
+- Error propagation is done with `!`
+- Error unwrapping is done with `!!`
+- Error to optional with `?`
+- Fallback value with `else!`
 - For propagation, error types must match
-- Error unions can be merged as any union type with '&':
-- Error can have a payload
+- Error unions can be merged as any union type with `&`:
 - Function returning errors are defined as: `OkType ! ErrorType`
 
 ```rust
-error ShelterErr { NoPet, NoRoof }
+enum ShelterErr: Error { NoPet, NoRoof }
 ```
 
 ```rust
-error ParserErr {
+enum ParserErr: Error {
      InvalidToken: Token // Token is a struct defined elsewhere: struct Token { start, end: int }
      SyntaxeErr // implicit "void" payload equivalent to no payload
      UnclosedQuote: (int, str) // Tuple payload with no argument name
@@ -375,132 +363,97 @@ error ParserErr {
 
 fn parse(source: str) -> int ! ParserErr {
     if source[0] == "%" {
-        ParserErr.InvalidToken(Token(source[0])
-    } else if source[0] == "{" and not source[1] == "}" {
-        ParserErr.InvalidType({ found = "int", expect = "float"})
-    } else {
-        0
+        fail ParserErr.InvalidToken(Token(source[0])
     }
+    if source[0] == "{" and not source[1] == "}" {
+        fail ParserErr.InvalidType{ found = "int", expect = "float"}
+    }
+
+    return 0
 }
 
-// propagation
-fn compile(source: str) -> ! CompilerErr|ParserErr { // error union inplace fusion
+// Propagation
+fn compile(source: str) -> !CompilerErr|ParserErr { // error union inplace fusion
     let parsed = parse()! // propagation
     ...
 }
 
-// chain
-fn add(a: int) -> int ! ArithmeticErr { }
+// Chain
+fn add(a: int) -> int!ArithmeticErr { }
 
-fn calculate(a, b: int) -> int ! ArithmeticErr {
-// chain propagation
+fn calculate(a, b: int) -> int!ArithmeticErr {
+    // Chain propagation
     let res = add(a)!.add(a)!
-    res
+    return res + b
+}
+
+// Unwrap
+fn calculate() -> int {
+    return add(a)!!.add(a)!!
+}
+
+// Fallback
+fn calculate(a: int) -> int!Err {
+    let res = add(a) else! 8
+    return res + 1
+}
+
+// To optional
+fn getFromDb() -> Data!DbErr { ... }
+fn getFromServer() -> Data!ServerErr { ... }
+
+fn getData() -> ?Data {
+    if getFromDb()? as data do return data
+    if getFromServer()? as data do return data
+    return null
 }
 ```
 
 ### Nullable
 
 - Nullability is directly embedded in types with the syntax `?` before the type
-- You can safely unwrap nullables with the extract operator `::`
-- You can unsafe unwrap nullables with postfix operator `.?` resulting in a runtime panic in case of `null` value
+- You can test for nullity with `if` expressions and bind to non-null value with `as`
+- You can unwrap nullables with postfix operator `??` resulting in a runtime panic in case of `null` value
 - `if` and `while` recognize nullable and allow to use it as a condition
-- To provide fallback values in case of null variable or error union variable, there are the two
-operators `??` and `!!`.
+- Provide fallback values with operator `else?`
+- Can chain nullable accesses
 
 ```rust
-fn add() -> int!Err {}
 fn mul() -> ?int {}
 
 // Fallbacks
-let res = add() !! 5
-let res = mul() ?? 5
+let res = mul() else? 5
 
 let a: ?int = null
-print a.? // unsafe unwrap
+print a?? // unsafe unwrap
 
-if a :: val {
+if a as val {
     // here val is an `int`
 }
 
-while getNext() :: next {
+while getNext() as next {
     // loop breaks the moment `getNext` returns `null`
 }
 
-```
+// Chain, stops at the first null
+var a = getPerson()?.getResidence()?.getAddress()
 
-### Extract operator
-
-You can use the extract operator `::` to extract in several place
-
-- Control flow:
-
-You can alias for the entier construct by extracting at the end of the condition or extract on each branch
-
-```rust
-match get_pet().name :: n {
-    "Rodrigo de la suerte" => print(fmt("I'm gonna kill you {}!", n))
-    _ => print("Who are you {}?", n)
-}
-
-when pet :: p {
-    Cat => print(fmt("I'm gonna kill you {}!", p.cat_method()))
-    _ => print("What type are you {}?", p)
-}
-
-// Alias branches (mostly useful for errors' payload)
-when err {
-    ParserErr.InvalidToken :: tk => {
-        print("got {}", tk.lexeme)
-        5
-    }
-    _ => return err
-}
-
-```
-
-For `if`, you can use it to extract a non-null value or a non-error value. In the latter case, the `else`
-branch can extract the error
-
-```rust
-let maybeNull: ?int = 0
-
-if maybeNull :: res {
-    // Here `res` is an int
-    print(res)
-}
-
-let maybeErr: int!Error = 0
-
-if maybeErr :: val {
-    // Here val is an int
-    print(val)
-} else :: err {
-    // Here err is an error
-    print("Error: {}", err) 
-}
-```
-
-For `while`, it's the same, a non-null value can be extracted in the condition like:
-
-```rust
-while maybeNull() :: value {}
 ```
 
 ### Trap keyword
 
 To work with errors, there is the `trap` keyword. It can extract the error and is considered as an *expression*.
-It means that it can provide a fallback value as `!!` with the possibility to interact with the error
+- Provide a fallback value (as `!!`) with the possibility to interact with the error
+- Can bind to the error with `as`
 
 ```rust
-let value = maybeErr() trap 5
-let value = maybeErr() trap { 5 }
-let value = maybeErr() trap :: err {
+let value = maybeErr() trap 5 // same as else!
+let value = maybeErr() trap as err {
     print err
-    5
+    break 5
 }
-let value = maybeErr() trap :: err {
-    match err {
+let value = maybeErr() trap as err {
+    break match err {
         MathErr => 5,
         _ => return err
     }
@@ -509,19 +462,19 @@ let value = maybeErr() trap :: err {
 
 ### Named loops
 
-- loop aliases are done with `@` before loop keyword so we can mix aliases and loop
+- loop aliases are done with `:` before loop keyword so we can mix aliases and loop
 aliases without any confusion:
 
 ```rust
-@outter while true {
-    @inner loop {
-        if today() == "monday" do break @outter
+:outter while true {
+    :inner loop {
+        if today() == "monday" do break :outter
     }
 }
 
-let last = @outter loop {
-    while get_token() :: tk {
-        if tk.kind == .plus do break @outter tk
+let last = :outter loop {
+    while get_token() as tk {
+        if tk.kind == .plus do break :outter tk
     }
 }
 ```
@@ -545,21 +498,16 @@ trait Speak {
 - Thanks to `when` working on types, it is possible to define triats on unions
 
 ```rust
-type Animal = Dog | Cat
-
 trait Speaker {
     fn speak(self) -> str
     fn die(self)
 }
 
 impl Speaker for Animal {
-    // For each type
-    fn speak(self) -> str when self {
-        Dog => "waf waf"
-        Cat => "meow meow"
+    fn speak(self) -> str {
+        return "meow meow"
     }
 
-    // For all types
     fn die(self) { print("dead") }
 }
 
@@ -633,11 +581,11 @@ var node = Node {lhs=0, rhs=0}
 match node {
     // Creates `lhs` in scope with value 1
     Node {lhs = 1, _} => print(lhs)
-    Node {lhs = 1, _} :: n => print(n)
+    Node {lhs = 1, _} as n => print(n)
 }
 
 // Assignemnt, use l and r as local variables
-let Node {lhs :: l, rhs :: r} = node
+let Node {lhs as l, rhs as r} = node
 ```
 
 ### Macro
@@ -665,30 +613,6 @@ If multiple macro, declare as a tuple
 struct Foo {}
 ```
 
-### Propagation
-
-To propagate error, simply use "!" right after a function call
-
-```rust
-fn add(a: int) -> int ! ArithmeticErr { }
-
-fn calculate(a, b: int) -> int ! ArithmeticErr {
-    let res = add(a)!
-    res
-}
-```
-
-It can be chained by design
-
-```rust
-fn add(a: int) -> int ! ArithmeticErr { }
-
-fn calculate(a, b: int) -> int ! ArithmeticErr {
-    let res = add(a)!.add(a)!
-    res
-}
-```
-
 ### Generics
 
 - Generics are defined with `$` in function declarations
@@ -704,17 +628,3 @@ fn add(v1: T, v2: $T) -> T { ... }
 fn add(v1: $T[Add, Sub], v2: T) -> T { ... }
 ```
 
-### Specialized else
-
-*Maybe*: To work with nullable and error, we introduce `else?` and `else!`. It allow to define a fallback value
-*It would be instead of `??` and `!!`.
-
-```rust
-fn get() -> ?int {}
-fn get2() -> int ! Err {}
-
-fn main() {
-    let val = get() else? 5
-    let val2 = get2() else! 5
-}
-```
