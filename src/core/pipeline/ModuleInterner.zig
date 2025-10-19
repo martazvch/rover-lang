@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const AnalyzedModule = @import("core/analyzer/Analyzer.zig").AnalyzedModule;
-const CompiledModule = @import("core/compiler/compiler.zig").CompiledModule;
+const AnalyzedModule = @import("../analyzer/Analyzer.zig").AnalyzedModule;
+const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
 
 const misc = @import("misc");
 const InternerIndex = misc.Interner.Index;

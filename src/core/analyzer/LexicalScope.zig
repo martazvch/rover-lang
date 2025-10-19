@@ -7,7 +7,7 @@ const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const Type = @import("types.zig").Type;
 const InstrIndex = @import("ir.zig").Index;
 const Span = @import("../parser/Lexer.zig").Span;
-const State = @import("../../State.zig");
+const State = @import("../pipeline/State.zig");
 
 const misc = @import("misc");
 const InternerIdx = misc.Interner.Index;

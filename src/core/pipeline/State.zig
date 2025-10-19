@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
+const TypeInterner = @import("../analyzer/types.zig").TypeInterner;
 const ModuleInterner = @import("ModuleInterner.zig");
 const NativeRegister = @import("NativesRegister.zig");
 

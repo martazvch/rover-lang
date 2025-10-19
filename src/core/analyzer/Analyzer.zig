@@ -6,7 +6,7 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 const FieldEnum = std.meta.FieldEnum;
 
-const Pipeline = @import("../../Pipeline.zig");
+const Pipeline = @import("../pipeline/Pipeline.zig");
 const AnalyzerMsg = @import("analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("../parser/Ast.zig");
 const Node = Ast.Node;

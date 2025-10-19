@@ -2,9 +2,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-const ffi = @import("core/builtins/ffi.zig");
-const Type = @import("core/analyzer/types.zig").Type;
-const TypeInterner = @import("core/analyzer/types.zig").TypeInterner;
+const ffi = @import("../builtins/ffi.zig");
+const Type = @import("../analyzer/types.zig").Type;
+const TypeInterner = @import("../analyzer/types.zig").TypeInterner;
 
 const misc = @import("misc");
 const Interner = misc.Interner;

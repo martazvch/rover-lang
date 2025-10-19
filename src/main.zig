@@ -2,14 +2,12 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-
 const clap = @import("clap");
 
 const oom = @import("misc").oom;
-const State = @import("State.zig");
-const Pipeline = @import("Pipeline.zig");
-const Repl = @import("commands/repl/Repl.zig");
-const Vm = @import("core/runtime/Vm.zig");
+const State = @import("core/pipeline/State.zig");
+const rover = @import("commands/rover.zig");
+const compile = @import("commands/compile.zig");
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
@@ -24,21 +22,29 @@ pub fn main() !void {
         std.debug.assert(debug_allocator.deinit() == .ok);
     };
 
+    var iter = try std.process.ArgIterator.initWithAllocator(allocator);
+    defer iter.deinit();
+
+    _ = iter.next();
+
+    const Commands = enum { compile, fmt };
+
+    const parsers = comptime .{
+        .FILE = clap.parsers.string,
+        .command = clap.parsers.enumeration(Commands),
+    };
     const params = comptime clap.parseParamsComptime(
         \\-h, --help             Display this help and exit
         \\<FILE>                 Path to the file to execute
+        \\<command>              Command to execute (compile | fmt)
         \\-s, --static-analyzis  Statically checks the file without running it (shows warnings)
         \\--print-ast            Prints the AST
         \\--print-bytecode       Prints the compiled bytecode
         \\--print-ir             Prints the extra infos on AST
     );
 
-    const parsers = comptime .{
-        .FILE = clap.parsers.string,
-    };
-
     var diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, parsers, .{
+    var res = clap.parseEx(clap.Help, &params, parsers, &iter, .{
         .diagnostic = &diag,
         .allocator = allocator,
     }) catch |err| {
@@ -57,39 +63,20 @@ pub fn main() !void {
         .embedded = res.positionals[0] == null,
     };
 
-    if (res.positionals[0]) |f| {
-        const file = std.fs.cwd().openFile(f, .{ .mode = .read_only }) catch |err| {
-            // TODO: Rover error
-            print("Error: {}, unable to open file at: {s}\n", .{ err, f });
-            std.process.exit(0);
-        };
-        defer file.close();
+    const first_arg = res.positionals[0] orelse {
+        std.debug.print("Error: Expected a command or file.\n", .{});
+        return;
+    };
 
-        // The file has a new line inserted by default
-        const size = try file.getEndPos();
-        const buf = try allocator.allocSentinel(u8, size, 0);
-        defer allocator.free(buf);
-        _ = try file.readAll(buf);
+    const command: ?Commands = std.meta.stringToEnum(Commands, first_arg);
 
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        const arena_alloc = arena.allocator();
-        defer arena.deinit();
-
-        var state: State = .new(arena_alloc, config);
-        state.registerNatives(arena_alloc, @import("core/builtins/builtins.zig"));
-
-        var vm: Vm = undefined;
-        vm.init(allocator, &state);
-        defer vm.deinit();
-
-        var pipeline: Pipeline = .init(arena_alloc, &vm, &state);
-
-        const module = pipeline.run(f, ".", buf) catch |e| switch (e) {
-            error.ExitOnPrint => return,
-            else => return e,
-        };
-
-        try vm.run(module, state.module_interner.compiled.values());
+    if (command) |cmd| {
+        switch (cmd) {
+            .compile => try compile.run(allocator, &iter),
+            .fmt => {},
+        }
+    } else if (res.positionals[0]) |f| {
+        try rover.run(allocator, f, config);
     } else {
         // var repl: Repl = undefined;
         // defer repl.deinit(allocator);

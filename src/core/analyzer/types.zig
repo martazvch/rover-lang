@@ -4,7 +4,6 @@ const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
 const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
 
 const InternerIdx = Interner.Index;
-const ModuleInterner = @import("../../ModuleInterner.zig");
 const LexicalScope = @import("LexicalScope.zig");
 
 const misc = @import("misc");

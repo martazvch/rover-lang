@@ -12,7 +12,7 @@ const oom = @import("misc").oom;
 const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const Value = @import("values.zig").Value;
-const State = @import("../../State.zig");
+const State = @import("../pipeline/State.zig");
 const NativeFn = @import("../builtins/ffi.zig").NativeFn;
 
 gc: Gc,
