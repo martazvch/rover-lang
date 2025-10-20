@@ -1,0 +1,55 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "inputs": [
+        {
+            "id": "gc",
+            "type": "pickString",
+            "default": "nogc",
+            "description": "stresses GC",
+            "options": [
+                "nogc",
+                "gc"
+            ]
+        },
+        {
+            "id": "standalone",
+            "type": "command",
+            "command": "shellCommand.execute",
+            "args": {
+                "command": "ls",
+                "cwd": "${workspaceFolder}/tests/standalones"
+            }
+        }
+    ],
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug test.rv",
+            "program": "${workspaceFolder}/zig-out/bin/rover",
+            "args": [
+                "--print-ir",
+                "--print-bytecode",
+                "test.rv"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build ${input:gc}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug standalone",
+            "program": "${workspaceFolder}/zig-out/bin/rover",
+            "args": [
+                "--print-ir",
+                "--print-bytecode",
+                "main.rv"
+            ],
+            "cwd": "${workspaceFolder}/tests/standalones/${input:standalone}",
+            "preLaunchTask": "build ${input:gc}"
+        }
+    ]
+}

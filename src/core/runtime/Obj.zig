@@ -318,7 +318,6 @@ pub const String = struct {
 
 pub const Function = struct {
     obj: Obj,
-    arity: u8,
     chunk: Chunk,
     name: *String,
     default_values: []Value,
@@ -326,9 +325,8 @@ pub const Function = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *String, default_count: usize, module_index: usize) *Self {
-        const obj = Obj.allocateComptime(vm, Self, undefined);
-        obj.arity = 0;
+    pub fn create(vm: *Vm, name: *String, type_id: TypeId, default_count: usize, module_index: usize) *Self {
+        const obj = Obj.allocateComptime(vm, Self, type_id);
         obj.chunk = Chunk.init(vm.allocator);
         obj.name = name;
         obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();

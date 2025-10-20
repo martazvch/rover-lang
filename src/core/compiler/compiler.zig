@@ -98,7 +98,7 @@ pub const CompilationManager = struct {
             stdout.interface.flush() catch oom();
         }
 
-        self.compiler = Compiler.init(self, "global scope", 0, module_index);
+        self.compiler = Compiler.init(self, "global scope", 0, 0, module_index);
 
         for (roots) |root| {
             try self.compiler.compileInstr(root);
@@ -159,12 +159,13 @@ const Compiler = struct {
     };
     const FnKind = enum { global, @"fn", method };
 
-    pub fn init(manager: *CompilationManager, name: []const u8, default_count: usize, module_index: usize) Self {
+    pub fn init(manager: *CompilationManager, name: []const u8, type_id: ir.TypeId, default_count: usize, module_index: usize) Self {
         return .{
             .manager = manager,
             .function = Obj.Function.create(
                 manager.vm,
                 Obj.String.copy(manager.vm, name),
+                type_id,
                 default_count,
                 module_index,
             ),
@@ -596,7 +597,7 @@ const Compiler = struct {
 
     fn compileCallable(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
         // TODO: protect cast
-        var compiler = Compiler.init(self.manager, name, @intCast(data.defaults.len), self.function.module_index);
+        var compiler = Compiler.init(self.manager, name, data.type_id, @intCast(data.defaults.len), self.function.module_index);
 
         for (data.defaults, 0..) |def, i| {
             compiler.function.default_values[i] = try self.compileDefaultValue(def);
@@ -804,8 +805,9 @@ const Compiler = struct {
             // Pops the condition
             self.writeOp(.pop);
 
-            // Then body
+            // Arm body
             try self.compileInstr(arm.body);
+            if (data.is_expr) self.writeOp(.store_blk_val);
 
             // Exits the when after arm body
             exit_jumps.appendAssumeCapacity(self.emitJump(.jump));
@@ -820,8 +822,9 @@ const Compiler = struct {
             try self.patchJump(jump);
         }
 
-        // Pops the value matched on
+        // Pops the value matched on first
         self.writeOp(.pop);
+        if (data.is_expr) self.writeOp(.load_blk_val);
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {

@@ -137,10 +137,10 @@ ti: *TypeInterner,
 irb: IrBuilder,
 main: ?usize,
 
-module_name: InternerIdx,
+mod_name: InternerIdx,
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
-pub fn init(allocator: Allocator, pipeline: *Pipeline, module_name: InternerIdx) Self {
+pub fn init(allocator: Allocator, pipeline: *Pipeline) Self {
     var scope: LexScope = .empty;
     scope.initGlobalScope(allocator, pipeline.state);
 
@@ -158,7 +158,7 @@ pub fn init(allocator: Allocator, pipeline: *Pipeline, module_name: InternerIdx)
         .irb = .init(allocator),
         .main = null,
 
-        .module_name = module_name,
+        .mod_name = undefined,
         .cached_names = .{
             .empty = pipeline.state.interner.intern(""),
             .main = pipeline.state.interner.intern("main"),
@@ -190,8 +190,9 @@ pub fn analyze(self: *Self, ast: *const Ast, module_name: []const u8, expect_mai
     self.ast = ast;
     var ctx: Context = .empty;
 
-    // Excluding file extension
-    self.containers.append(self.allocator, module_name[0 .. module_name.len - 3]);
+    const mod_no_ext = module_name[0 .. module_name.len - 3];
+    self.mod_name = self.interner.intern(mod_no_ext);
+    self.containers.append(self.allocator, mod_no_ext);
 
     for (ast.nodes) |*node| {
         const res = self.analyzeNode(node, false, &ctx) catch continue;
@@ -328,6 +329,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     return self.irb.addInstr(
         .{ .fn_decl = .{
             .kind = if (is_closure) .closure else .{ .symbol = sym.index },
+            .type_id = self.ti.typeId(interned_type),
             .name = name,
             .body = body_instrs,
             .defaults = param_res.defaults,
@@ -1098,6 +1100,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
         self.irb.addInstr(
             .{ .fn_decl = .{
                 .kind = .closure,
+                .type_id = self.ti.typeId(interned_type),
                 .name = null,
                 .body = body_instrs,
                 .defaults = param_res.defaults,
@@ -1730,15 +1733,18 @@ fn unary(self: *Self, expr: *const Ast.Unary, ctx: *Context) Result {
 fn when(self: *Self, expr: *const Ast.When, exp_val: bool, ctx: *Context) Result {
     const value = try self.analyzeExpr(expr.expr, true, ctx);
 
-    const value_type = value.type.as(.@"union") orelse @panic("Warning, 'when' on non-union");
+    const value_type = value.type.as(.@"union") orelse return self.err(
+        .{ .when_with_non_union = .{ .found = self.typeName(value.type) } },
+        self.ast.getSpan(expr.expr),
+    );
     var proto = value_type.proto(self.allocator);
 
-    const types, const arms = try self.whenArms(expr.arms, expr.alias, &proto, exp_val, ctx);
-    try self.whenValidation(&proto);
+    const types, const arms = try self.whenArms(expr.arms, expr.alias, value.type, &proto, exp_val, ctx);
+    try self.whenValidation(&proto, self.ast.getSpan(expr.kw));
 
     return .fromType(
         self.mergeTypes(types),
-        self.irb.addInstr(.{ .when = .{ .expr = value.instr, .arms = arms } }, self.ast.getSpan(expr).start),
+        self.irb.addInstr(.{ .when = .{ .expr = value.instr, .arms = arms, .is_expr = exp_val } }, self.ast.getSpan(expr).start),
     );
 }
 
@@ -1748,6 +1754,7 @@ fn whenArms(
     self: *Self,
     arm_exprs: []const Ast.When.Arm,
     glob_alias: ?Ast.TokenIndex,
+    ty: *const Type,
     proto: *Type.Union.Proto,
     exp_val: bool,
     ctx: *Context,
@@ -1757,10 +1764,10 @@ fn whenArms(
     var arms = ArrayList(Instruction.When.Arm).initCapacity(self.allocator, arm_exprs.len) catch oom();
 
     for (arm_exprs) |*arm| {
-        const ty = try self.checkAndGetType(arm.type, ctx);
+        const arm_span = self.ast.getSpan(arm.type);
+        const arm_ty = try self.checkAndGetType(arm.type, ctx);
 
-        const gop = proto.getPtr(ty) orelse @panic("Type not in union");
-        gop.* = true;
+        const resolved_ty = self.findTypeInProto(proto, ty, arm_ty, arm_span) catch continue;
 
         // Implicit scope for aliases
         self.scope.open(self.allocator, null, false, exp_val);
@@ -1769,7 +1776,7 @@ fn whenArms(
         alias: {
             const alias = arm.alias orelse glob_alias orelse break :alias;
             const binding = try self.internIfNotInCurrentScope(alias);
-            _ = try self.declareVariable(binding, ty, false, true, true, false, self.ast.getSpan(alias));
+            _ = try self.declareVariable(binding, resolved_ty, false, true, true, false, self.ast.getSpan(alias));
         }
 
         const body = self.analyzeNode(&arm.body, exp_val, ctx) catch {
@@ -1777,30 +1784,60 @@ fn whenArms(
             continue;
         };
 
-        if (body.ti.type.is(.void) and exp_val) {
-            @panic("Not all branches return a value");
-        }
-
         types.add(self.allocator, body.ti.type) catch oom();
-        arms.appendAssumeCapacity(.{ .type_id = self.ti.typeId(ty), .body = body.instr });
+        arms.appendAssumeCapacity(.{ .type_id = self.ti.typeId(resolved_ty), .body = body.instr });
     }
 
     return if (had_err) error.Err else .{ types.toOwned(), arms.toOwnedSlice(self.allocator) catch oom() };
 }
 
-fn whenValidation(self: *Self, proto: *const Type.Union.Proto) Error!void {
-    _ = self; // autofix
-    var had_err = false;
+fn findTypeInProto(self: *Self, proto: *Type.Union.Proto, union_ty: *const Type, ty: *const Type, span: Span) Error!*const Type {
+    const gop = proto.getEntry(ty) orelse gop: {
+        // We might not be able to find the entry if we're comparing anonymus function with a declared one
+        if (ty.is(.function)) {
+            var it = proto.iterator();
+            while (it.next()) |entry| {
+                if (entry.value_ptr.*) continue;
+
+                const fn_ty = entry.key_ptr.*;
+                if (fn_ty.* == .function) {
+                    _ = self.checkFunctionEq(fn_ty, ty) catch continue;
+                    break :gop entry;
+                }
+            }
+        }
+
+        return self.err(
+            .{ .when_arm_not_in_union = .{ .found = self.typeName(ty), .expect = self.typeName(union_ty) } },
+            span,
+        );
+    };
+
+    if (gop.value_ptr.*) {
+        return self.err(.when_arm_duplicate, span);
+    }
+    gop.value_ptr.* = true;
+
+    return gop.key_ptr.*;
+}
+
+fn whenValidation(self: *Self, proto: *const Type.Union.Proto, span: Span) Error!void {
+    var missing: ArrayList(u8) = .empty;
 
     var it = proto.iterator();
     while (it.next()) |entry| {
         if (!entry.value_ptr.*) {
-            had_err = true;
-            @panic("Missing type or '_' arm in when expression");
+            if (missing.items.len > 0) {
+                missing.appendSlice(self.allocator, ", ") catch oom();
+            }
+            missing.appendSlice(self.allocator, self.typeName(entry.key_ptr.*)) catch oom();
         }
     }
 
-    if (had_err) return error.Err;
+    if (missing.items.len > 0) return self.err(
+        .{ .when_non_exhaustive = .{ .missing = missing.toOwnedSlice(self.allocator) catch oom() } },
+        span,
+    );
 }
 
 /// Checks if identifier name is already declared, otherwise interns it and returns the key
@@ -1976,6 +2013,7 @@ fn performTypeCoercion(self: *Self, decl: *const Type, value: *const Type, decl_
 }
 
 /// Checks if two different pointers to function type are equal, due to anonymus ones
+/// Assumes that types are functions
 fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!*const Type {
     // Functions function's return types like: 'fn add() -> fn(int) -> int' don't have a declaration
     // There is also the case when assigning to a variable and infering type like: var bound = foo.method
@@ -2046,7 +2084,6 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
 
             if (depth_value != depth_decl) break :check;
             if (!child_value.is(.void)) {
-                // if (depth_value != depth_decl or child_value != child_decl) break :check;
                 if (depth_value != depth_decl or child_value != current_decl) break :check;
             }
 
@@ -2060,7 +2097,7 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
 }
 
 fn typeName(self: *const Self, ty: *const Type) []const u8 {
-    return ty.toString(self.allocator, self.interner);
+    return ty.toString(self.allocator, self.interner, self.mod_name);
 }
 
 fn declareVariable(

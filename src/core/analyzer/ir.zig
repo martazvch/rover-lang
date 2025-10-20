@@ -109,6 +109,7 @@ pub const Instruction = struct {
     pub const Arg = union(enum) { instr: Index, default: usize };
     pub const FnDecl = struct {
         kind: Kind,
+        type_id: TypeId,
         name: ?usize,
         body: []const Index,
         defaults: []const Index,
@@ -168,6 +169,7 @@ pub const Instruction = struct {
     pub const When = struct {
         expr: Index,
         arms: []const Arm,
+        is_expr: bool,
 
         pub const Arm = struct { type_id: TypeId, body: Index };
     };

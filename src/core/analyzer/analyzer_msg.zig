@@ -79,6 +79,10 @@ pub const AnalyzerMsg = union(enum) {
     void_array,
     void_param,
     void_value,
+    when_arm_duplicate,
+    when_arm_not_in_union: struct { found: []const u8, expect: []const u8 },
+    when_non_exhaustive: struct { missing: []const u8 },
+    when_with_non_union: struct { found: []const u8 },
 
     const Self = @This();
 
@@ -153,6 +157,13 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("can't declare an array of 'void' values"),
             .void_param => writer.writeAll("function parameters can't be of 'void' type"),
             .void_value => writer.writeAll("value is of type 'void'"),
+            .when_arm_duplicate => writer.writeAll("this pattern is already covered by another arm"),
+            .when_arm_not_in_union => |e| writer.print("type '{s}' is not part of union '{s}'", .{ e.found, e.expect }),
+            .when_non_exhaustive => |e| writer.print("non-exhaustive 'when', missing: '{s}'", .{e.missing}),
+            .when_with_non_union => |e| writer.print(
+                "using 'when' expression on a non-union type is useless, found: {s}",
+                .{e.found},
+            ),
         };
     }
 
@@ -206,6 +217,9 @@ pub const AnalyzerMsg = union(enum) {
             .unknown_param, .void_param => writer.writeAll("this parameter"),
             .void_array => writer.writeAll("declared here"),
             .void_value => writer.writeAll("this expression produces no value"),
+            .when_arm_not_in_union, .when_arm_duplicate => writer.writeAll("this arm"),
+            .when_non_exhaustive => writer.writeAll("this expression"),
+            .when_with_non_union => writer.writeAll("this is not an union"),
         };
     }
 
@@ -301,6 +315,14 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("use any other type to declare an array"),
             .void_param => writer.writeAll("use a any other type than 'void' or remove parameter"),
             .void_value => writer.writeAll("consider returning a value from expression"),
+            .when_arm_duplicate => writer.writeAll(
+                "pattern matching must be exhaustive and each possibility must be matched exactly once",
+            ),
+            .when_arm_not_in_union => writer.writeAll("remove the arm"),
+            .when_non_exhaustive => writer.writeAll(
+                "all pattern matching must be exhaustive. You can use '_' as the last prong to catch all the remaining possibilities",
+            ),
+            .when_with_non_union => writer.writeAll("remove 'when' expression and use the value as it is"),
         };
     }
 };

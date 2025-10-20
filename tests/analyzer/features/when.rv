@@ -1,0 +1,26 @@
+struct Vec {
+    fn foo(self) { print "from Vec" }
+}
+struct Point {
+    fn bar(self) { print "from Point" }
+}
+
+
+fn main() {
+    var a: Vec|Point = Point{}
+
+    when a as b {
+        Vec => b.foo()
+        Point => b.bar()
+    }
+
+    when a as b {
+        Vec as v => v.foo()
+        Point as p => p.bar()
+    }
+
+    var b = when a as b {
+        Vec as v => 1
+        Point as p => 2
+    }
+}

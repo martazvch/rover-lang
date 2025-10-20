@@ -46,13 +46,12 @@ pub fn init(allocator: Allocator, vm: *Vm, state: *State) Self {
 /// Runs the pipeline
 // TODO: could only need full path
 pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
-    const path_interned = self.state.interner.intern(path);
     // Initiliaze the path builder
     self.state.path_builder.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch oom());
 
     const ast = try self.parse(file_name, source);
 
-    var analyzer: Analyzer = .init(self.allocator, self, path_interned);
+    var analyzer: Analyzer = .init(self.allocator, self);
     const analyzed_module = analyzer.analyze(&ast, file_name, !self.is_sub);
 
     // Analyzed Ast printer
@@ -89,6 +88,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     );
 
     self.instr_count = analyzer.irb.count();
+    const path_interned = self.state.interner.intern(path);
     self.state.module_interner.add(path_interned, analyzed_module, compiled_module);
 
     return if (options.test_mode and self.state.config.print_bytecode and !self.is_sub)

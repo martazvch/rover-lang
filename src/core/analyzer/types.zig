@@ -171,13 +171,8 @@ pub const Type = union(enum) {
 
         /// Checks if an union is a subset a the union
         pub fn containsSubset(self: *const Union, other: *const Union) bool {
-            // sub: for (other.types) |sub| {
             for (other.types) |sub| {
                 if (!self.contains(sub)) return false;
-                // for (self.types) |ty| {
-                //     if (sub == ty) continue :sub;
-                // }
-                // return false;
             }
             return true;
         }
@@ -270,7 +265,7 @@ pub const Type = union(enum) {
         }
     }
 
-    pub fn toString(self: *const Type, allocator: Allocator, interner: *const Interner) []const u8 {
+    pub fn toString(self: *const Type, allocator: Allocator, interner: *const Interner, mod_name: InternerIdx) []const u8 {
         var res: std.ArrayList(u8) = .empty;
         var writer = res.writer(allocator);
 
@@ -278,34 +273,39 @@ pub const Type = union(enum) {
             .never, .int, .float, .bool, .str, .null, .void => return @tagName(self.*),
             .array => |ty| {
                 writer.writeAll("[]") catch oom();
-                writer.writeAll(ty.child.toString(allocator, interner)) catch oom();
+                writer.writeAll(ty.child.toString(allocator, interner, mod_name)) catch oom();
             },
             .function => |ty| {
                 writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
-                    writer.writeAll(p.type.toString(allocator, interner)) catch oom();
+                    writer.writeAll(p.type.toString(allocator, interner, mod_name)) catch oom();
                     if (i != ty.params.count() - 1) writer.writeAll(", ") catch oom();
                 }
                 writer.writeAll(") -> ") catch oom();
-                writer.writeAll(ty.return_type.toString(allocator, interner)) catch oom();
+                writer.writeAll(ty.return_type.toString(allocator, interner, mod_name)) catch oom();
             },
             .module => |interned| {
                 const name = interner.getKey(interned).?;
                 writer.print("module: {s}", .{name}) catch oom();
             },
             .optional => |opt| {
-                writer.print("?{s}", .{opt.toString(allocator, interner)}) catch oom();
+                writer.print("?{s}", .{opt.toString(allocator, interner, mod_name)}) catch oom();
             },
             .structure => |ty| {
                 if (ty.loc) |loc| {
-                    writer.print("{s}.{s}", .{ interner.getKey(loc.container).?, interner.getKey(loc.name).? }) catch oom();
+                    // If symbol is defnined in current mod/file, don't repeat the module
+                    if (loc.container == mod_name) {
+                        writer.print("{s}", .{interner.getKey(loc.name).?}) catch oom();
+                    } else {
+                        writer.print("{s}.{s}", .{ interner.getKey(loc.container).?, interner.getKey(loc.name).? }) catch oom();
+                    }
                 } else {
                     writer.writeAll("struct {") catch oom();
 
                     for (ty.fields.keys(), ty.fields.values(), 0..) |k, v, i| {
                         writer.print("{s}: {s}{s}", .{
                             interner.getKey(k).?,
-                            v.type.toString(allocator, interner),
+                            v.type.toString(allocator, interner, mod_name),
                             if (i < ty.fields.count() - 1) ", " else "",
                         }) catch oom();
                     }
@@ -314,7 +314,7 @@ pub const Type = union(enum) {
             },
             .@"union" => |u| {
                 for (u.types, 0..) |ty, i| {
-                    writer.writeAll(ty.toString(allocator, interner)) catch oom();
+                    writer.writeAll(ty.toString(allocator, interner, mod_name)) catch oom();
                     if (i < u.types.len - 1) writer.writeAll("|") catch oom();
                 }
             },

@@ -1,0 +1,49 @@
+[Structure declaration Vec]
+    [Function declaration foo]
+        [Print]
+            [String from Vec]
+[Structure declaration Point]
+    [Function declaration bar]
+        [Print]
+            [String from Point]
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Structure literal]
+            - structure
+            [Load symbol 2]
+
+    [When]
+    - expression:
+        [Variable index: 0, scope: local]
+    - arms:
+    [Types id: 10]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 1, scope: local]
+    [Types id: 12]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 1, scope: local]
+
+    [When]
+    - expression:
+        [Variable index: 0, scope: local]
+    - arms:
+    [Types id: 10]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 1, scope: local]
+    [Types id: 12]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 1, scope: local]
+
+    [Variable declaration index: 1, scope: local]
+        [When]
+        - expression:
+            [Variable index: 0, scope: local]
+        - arms:
+        [Types id: 10]
+            [Int 1]
+        [Types id: 12]
+            [Int 2]
