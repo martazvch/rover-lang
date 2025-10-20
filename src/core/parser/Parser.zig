@@ -702,13 +702,18 @@ fn whileStmt(self: *Self) Error!Node {
         }
         break :cond try self.parsePrecedenceExpr(0);
     };
+    const alias = try self.getAlias();
 
     const body = if (self.isAtBlock())
         try self.blockExpr()
     else
         return self.errAtCurrent(.expect_brace_after_while_cond);
 
-    return .{ .@"while" = .{ .condition = cond, .body = body.block } };
+    return .{ .@"while" = .{
+        .condition = cond,
+        .alias = alias,
+        .body = body.block,
+    } };
 }
 
 const Assoc = enum { left, none };
@@ -951,6 +956,7 @@ fn ifExpr(self: *Self) Error!*Expr {
 
         break :condition try self.parsePrecedenceExpr(0);
     };
+    const alias = try self.getAlias();
 
     self.skipNewLines();
 
@@ -980,6 +986,7 @@ fn ifExpr(self: *Self) Error!*Expr {
     const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .@"if" = .{
         .condition = condition,
+        .alias = alias,
         .then = then,
         .@"else" = else_body,
         .if_token = tk,
@@ -1122,14 +1129,6 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
 
             // Can't chain them, break the loop
             return self.structLiteral(expr);
-        }
-        // Extractor
-        else if (self.check(.extractor)) {
-            if (!self.ctx.can_extract) return self.errAtCurrent(.invalid_extract_ctx);
-            self.token_idx += 1;
-
-            // Can't chain them, break the loop
-            return self.extractor(expr);
         } else break;
     }
 

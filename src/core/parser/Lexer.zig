@@ -81,7 +81,6 @@ pub const Token = struct {
         equal,
         equal_equal,
         @"error",
-        extractor,
         false,
         float,
         @"fn",
@@ -142,7 +141,6 @@ const State = enum {
     dot,
     dot_dot,
     equal,
-    extractor,
     float,
     greater,
     identifier,
@@ -239,7 +237,6 @@ pub fn next(self: *Self) Token {
                     res.tag = .right_bracket;
                     self.index += 1;
                 },
-                ':' => continue :state .extractor,
                 ',' => {
                     res.tag = .comma;
                     self.index += 1;
@@ -277,6 +274,10 @@ pub fn next(self: *Self) Token {
                 '/' => continue :state .slash,
                 '\n' => {
                     res.tag = .new_line;
+                    self.index += 1;
+                },
+                ':' => {
+                    res.tag = .colon;
                     self.index += 1;
                 },
                 '<' => continue :state .less,
@@ -408,17 +409,6 @@ pub fn next(self: *Self) Token {
                     res.tag = .arrow_big;
                 },
                 else => res.tag = .equal,
-            }
-        },
-        .extractor => {
-            self.index += 1;
-
-            switch (self.source[self.index]) {
-                ':' => {
-                    res.tag = .extractor;
-                    self.index += 1;
-                },
-                else => res.tag = .colon,
             }
         },
         .float => {
@@ -588,13 +578,14 @@ test "numbers" {
 test "tokens" {
     var lexer = Self.init(std.testing.allocator);
     defer lexer.deinit();
-    lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=[]|?::");
+    lexer.lex("(){}.:,=!< ><= >= !=+-*/ += -= *= /=[]|");
 
     const res = [_]Token.Tag{
         .left_paren,    .right_paren, .left_brace, .right_brace, .dot,          .colon,
         .comma,         .equal,       .bang,       .less,        .greater,      .less_equal,
         .greater_equal, .bang_equal,  .plus,       .minus,       .star,         .slash,
         .plus_equal,    .minus_equal, .star_equal, .slash_equal, .left_bracket, .right_bracket,
+        .pipe,
     };
 
     for (0..res.len) |i| {

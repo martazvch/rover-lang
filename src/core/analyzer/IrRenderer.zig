@@ -165,7 +165,6 @@ fn binop(self: *Self, data: *const Instruction.Binop) void {
 }
 
 fn block(self: *Self, data: *const Instruction.Block) void {
-    // self.indentAndPrintSlice("[Block pop count: {}, is_expr: {}]", .{ data.pop_count, data.ret_slot != null });
     self.indentAndPrintSlice("[Block pop count: {}, is_expr: {}]", .{ data.pop_count, data.is_expr });
 
     self.indent_level += 1;
@@ -428,8 +427,4 @@ fn indentAndPrintSlice(self: *Self, comptime fmt: []const u8, args: anytype) voi
     self.indent();
     self.writer.print(fmt, args) catch oom();
     self.tree.appendSlice(self.allocator, "\n") catch oom();
-}
-
-fn checkInrcRc(self: *Self, incr_rc: bool) void {
-    if (incr_rc) self.indentAndAppendSlice("[Increment ref count]");
 }

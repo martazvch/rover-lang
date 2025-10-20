@@ -29,7 +29,7 @@ pub const AnalyzerMsg = union(enum) {
     dot_type_on_non_mod: struct { found: []const u8 },
     duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
-    extract_non_optional: struct { found: []const u8 },
+    cond_alias_non_optional: struct { found: []const u8 },
     float_equal,
     fn_expect_value: struct { expect: []const u8 },
     invalid_arithmetic: struct { found: []const u8 },
@@ -105,7 +105,10 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
             .already_declared_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
-            .extract_non_optional => |e| writer.print("can't extract non-optional type, found '{s}'", .{e.found}),
+            .cond_alias_non_optional => |e| writer.print(
+                "can't alias non-optional types in 'if' and 'while' conditions, found '{s}'",
+                .{e.found},
+            ),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
             .fn_expect_value => |e| writer.print("no value returned from function expecting '{s}'", .{e.expect}),
             .invalid_arithmetic => |e| writer.print("invalid arithmetic operation on type '{s}'", .{e.found}),
@@ -169,7 +172,7 @@ pub const AnalyzerMsg = union(enum) {
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
-            .extract_non_optional => writer.writeAll("this isn't an optional"),
+            .cond_alias_non_optional => writer.writeAll("this isn't an optional"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .fn_expect_value => writer.writeAll("last expression didn't return a value"),
             .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
@@ -240,7 +243,7 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
             .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),
-            .extract_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
+            .cond_alias_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
             .float_equal => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like

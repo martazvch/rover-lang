@@ -695,10 +695,13 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 
 fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) StmtResult {
     const span = self.ast.getSpan(node.condition);
-    const cond_res = try self.analyzeExpr(node.condition, true, ctx);
+    const cond_res = if (node.alias) |alias|
+        try self.aliasOptional(node.condition, alias, ctx)
+    else
+        try self.analyzeExprInfos(node.condition, true, ctx);
 
-    if (!cond_res.type.is(.bool)) return self.err(
-        .{ .non_bool_cond = .{ .what = "while", .found = self.typeName(cond_res.type) } },
+    if (!cond_res.ti.type.is(.bool)) return self.err(
+        .{ .non_bool_cond = .{ .what = "while", .found = self.typeName(cond_res.ti.type) } },
         span,
     );
     const body_res = try self.block(&node.body, false, ctx);
@@ -719,7 +722,6 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, exp_val: bool, ctx: *Context
         .binop => |*e| self.binop(e, ctx),
         .@"break" => |*e| self.breakExpr(e, ctx),
         .closure => |*e| self.closure(e, ctx),
-        .extractor => |*e| self.extractor(e, ctx),
         .field => |*e| self.field(e, ctx),
         .fn_call => |*e| self.call(e, ctx),
         .grouping => |*e| self.analyzeExprInfos(e.expr, exp_val, ctx),
@@ -1107,18 +1109,18 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     );
 }
 
-fn extractor(self: *Self, expr: *const Ast.Extractor, ctx: *Context) Result {
+fn aliasOptional(self: *Self, expr: *const Ast.Expr, alias: Ast.TokenIndex, ctx: *Context) Result {
     const span = self.ast.getSpan(expr);
-    const expr_ty = try self.analyzeExpr(expr.expr, true, ctx);
+    const expr_ty = try self.analyzeExpr(expr, true, ctx);
 
     const ty = expr_ty.type.as(.optional) orelse return self.err(
-        .{ .extract_non_optional = .{ .found = self.typeName(expr_ty.type) } },
+        .{ .cond_alias_non_optional = .{ .found = self.typeName(expr_ty.type) } },
         span,
     );
 
     // TODO: be sure that it's in the correct scope
-    const binding = try self.internIfNotInCurrentScope(expr.alias);
-    _ = try self.forwardDeclareVariable(binding, ty, false, self.ast.getSpan(expr.alias));
+    const binding = try self.internIfNotInCurrentScope(alias);
+    _ = try self.forwardDeclareVariable(binding, ty, false, self.ast.getSpan(alias));
 
     return .fromType(self.ti.cache.bool, self.irb.addInstr(.{ .extractor = expr_ty.instr }, span.start));
 }
@@ -1450,7 +1452,11 @@ fn builtinSymbol(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *Lex
 fn ifExpr(self: *Self, expr: *const Ast.If, exp_val: bool, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.condition);
 
-    const cond_res = try self.analyzeExprInfos(expr.condition, true, ctx);
+    const cond_res = if (expr.alias) |alias|
+        try self.aliasOptional(expr.condition, alias, ctx)
+    else
+        try self.analyzeExprInfos(expr.condition, true, ctx);
+
     var pure = cond_res.ti.comp_time;
 
     // We can continue to analyze if the condition isn't a bool

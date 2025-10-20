@@ -106,6 +106,7 @@ pub const VarDecl = struct {
 
 pub const While = struct {
     condition: *Expr,
+    alias: ?TokenIndex,
     body: Block,
 };
 
@@ -116,7 +117,6 @@ pub const Expr = union(enum) {
     binop: Binop,
     @"break": Break,
     closure: FnDecl,
-    extractor: Extractor,
     field: Field,
     fn_call: FnCall,
     grouping: Grouping,
@@ -157,11 +157,6 @@ pub const Break = struct {
     expr: ?*Expr,
 };
 
-pub const Extractor = struct {
-    expr: *Expr,
-    alias: TokenIndex,
-};
-
 pub const Field = struct {
     structure: *Expr,
     field: TokenIndex,
@@ -184,6 +179,7 @@ pub const Grouping = struct {
 
 pub const If = struct {
     condition: *Expr,
+    alias: ?TokenIndex,
     then: Node,
     @"else": ?Node,
     if_token: TokenIndex,
@@ -305,10 +301,6 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
             .start = self.token_spans[node.kw].start,
             .end = self.getSpan(e).end,
         } else self.token_spans[node.kw],
-        Extractor => .{
-            .start = self.getSpan(node.expr).start,
-            .end = self.token_spans[node.alias].end,
-        },
         Field => .{
             .start = self.getSpan(node.structure.*).start,
             .end = self.token_spans[node.field].end,

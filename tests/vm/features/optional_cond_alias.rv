@@ -6,16 +6,16 @@ fn get2(value: int) -> ?int {
 }
 
 fn main() {
-    if getValue() :: v {
+    if getValue() as v {
         print v
     }
 
-    if getNull() :: n {
+    if getNull() as n {
         print "here"
     }
 
     var i = 0
-    while get2(i) :: v {
+    while get2(i) as v {
         print v
         i += 1
     }

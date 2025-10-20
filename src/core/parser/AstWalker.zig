@@ -221,7 +221,6 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             }
         },
         .closure => |*e| self.functionCaptures(e, ctx),
-        .extractor => |*e| self.captureFromExpr(e.expr, ctx),
         .field => |*e| self.captureFromExpr(e.structure, ctx),
         .grouping => |e| self.captureFromExpr(e.expr, ctx),
         .@"if" => |*e| {

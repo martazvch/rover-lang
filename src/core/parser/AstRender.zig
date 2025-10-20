@@ -66,7 +66,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         },
         .struct_decl => |n| {
             try self.openKey(@tagName(node.*), .block);
-            try self.pushKeyValue("name", self.spanToSrc(n.name), true);
+            try self.pushKeyValue("name", self.ast.toSource(n.name), true);
 
             if (n.fields.len == 0) {
                 try self.emptyKey("fields", .list, true);
@@ -101,7 +101,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
             for (n.names, 0..) |name, i| {
                 const last = i != n.names.len - 1;
                 try self.indent();
-                try self.writer.print("\"{s}\"", .{self.spanToSrc(name)});
+                try self.writer.print("\"{s}\"", .{self.ast.toSource(name)});
                 try self.finishPush(last);
             }
             try self.closeKey(.list, true);
@@ -111,14 +111,14 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
                 for (items, 0..) |item, i| {
                     const last = i != items.len - 1;
                     try self.openAnonKey(.block);
-                    try self.pushKeyValue("item", self.spanToSrc(item.item), true);
-                    try self.pushKeyValue("alias", if (item.alias) |alias| self.spanToSrc(alias) else "", false);
+                    try self.pushKeyValue("item", self.ast.toSource(item.item), true);
+                    try self.pushKeyValue("alias", if (item.alias) |alias| self.ast.toSource(alias) else "", false);
                     try self.closeKey(.block, last);
                 }
                 try self.closeKey(.list, true);
             } else try self.emptyKey("items", .list, true);
 
-            try self.pushKeyValue("alias", if (n.alias) |alias| self.spanToSrc(alias) else "", false);
+            try self.pushKeyValue("alias", if (n.alias) |alias| self.ast.toSource(alias) else "", false);
             try self.closeKey(.block, comma);
         },
         .var_decl => |*n| {
@@ -157,7 +157,7 @@ fn renderFnDecl(self: *Self, name: []const u8, decl: *const Ast.FnDecl, comma: b
         for (decl.params, 0..) |p, i| {
             const last = i != decl.params.len - 1;
             try self.openAnonKey(.block);
-            try self.pushKeyValue("name", self.spanToSrc(p.name), true);
+            try self.pushKeyValue("name", self.ast.toSource(p.name), true);
             if (p.typ) |typ| {
                 try self.pushKeyValue("type", try self.renderType(typ), true);
             } else try self.pushKeyValue("type", "void", true);
@@ -175,7 +175,7 @@ fn renderFnDecl(self: *Self, name: []const u8, decl: *const Ast.FnDecl, comma: b
 }
 
 fn renderNameTypeValue(self: *Self, decl: *const Ast.VarDecl, comma: bool) !void {
-    try self.pushKeyValue("name", self.spanToSrc(decl.name), true);
+    try self.pushKeyValue("name", self.ast.toSource(decl.name), true);
 
     if (decl.typ) |t| {
         try self.pushKeyValue("type", try self.renderType(t), true);
@@ -198,7 +198,7 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
         },
         .fields => |fields| {
             for (fields, 0..) |f, i| {
-                try buf.appendSlice(self.allocator, self.spanToSrc(f));
+                try buf.appendSlice(self.allocator, self.ast.toSource(f));
                 if (i < fields.len - 1) {
                     try buf.appendSlice(self.allocator, ".");
                 }
@@ -222,7 +222,7 @@ fn renderType(self: *Self, typ: ?*Ast.Type) Error![]const u8 {
             } else try buf.appendSlice(self.allocator, "void");
         },
         .optional => |t| try buf.print(self.allocator, "?{s}", .{try self.renderType(t.child)}),
-        .scalar => |t| try buf.appendSlice(self.allocator, self.spanToSrc(t)),
+        .scalar => |t| try buf.appendSlice(self.allocator, self.ast.toSource(t)),
         .@"union" => |types| {
             for (types, 0..) |t, i| {
                 try buf.appendSlice(self.allocator, try self.renderType(t));
@@ -287,16 +287,10 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .closure => |*e| try self.renderFnDecl("", e, comma),
-        .extractor => |*e| {
-            try self.openKey(@tagName(expr.*), .block);
-            try self.renderSingleExpr("expr", e.expr, .block, true);
-            try self.pushKeyValue("alias", self.spanToSrc(e.alias), false);
-            try self.closeKey(.block, comma);
-        },
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.renderSingleExpr("structure", e.structure, .block, true);
-            try self.pushKeyValue("field_name", self.spanToSrc(e.field), false);
+            try self.pushKeyValue("field_name", self.ast.toSource(e.field), false);
             try self.closeKey(.block, comma);
         },
         .fn_call => |e| {
@@ -335,7 +329,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .literal => |e| {
-            const text = self.spanToSrc(e.idx);
+            const text = self.ast.toSource(e.idx);
             const final = if (e.tag == .string) text[1 .. text.len - 1] else text;
             try self.pushKeyValue(@tagName(expr.*), final, comma);
         },
@@ -355,7 +349,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
                 for (e.fields, 0..) |fv, i| {
                     const last = i != e.fields.len - 1;
                     try self.openAnonKey(.block);
-                    try self.pushKeyValue("name", self.spanToSrc(fv.name), true);
+                    try self.pushKeyValue("name", self.ast.toSource(fv.name), true);
                     if (fv.value) |v| {
                         try self.renderSingleExpr("value", v, .block, false);
                     } else try self.emptyKey("value", .block, false);
@@ -368,7 +362,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         },
         .unary => |e| {
             try self.openKey(@tagName(expr.*), .block);
-            try self.pushKeyValue("op", self.spanToSrc(e.op), true);
+            try self.pushKeyValue("op", self.ast.toSource(e.op), true);
             try self.renderSingleExpr("expr", e.expr, .block, false);
             try self.closeKey(.block, comma);
         },
@@ -376,7 +370,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.openKey("when", .block);
             try self.renderSingleExpr("expression", n.expr, .block, true);
             if (n.alias) |alias| {
-                try self.pushKeyValue("alias", self.spanToSrc(alias), true);
+                try self.pushKeyValue("alias", self.ast.toSource(alias), true);
             }
 
             try self.openKey("arms", .list);
@@ -384,7 +378,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
                 try self.openAnonKey(.block);
                 try self.pushKeyValue("type", try self.renderType(arm.type), true);
                 if (arm.alias) |alias| {
-                    try self.pushKeyValue("alias", self.spanToSrc(alias), true);
+                    try self.pushKeyValue("alias", self.ast.toSource(alias), true);
                 }
                 try self.renderSingleNode("body", &arm.body, .block, false);
                 try self.closeKey(.block, i < n.arms.len - 1);
@@ -410,22 +404,17 @@ fn renderBlock(self: *Self, block: *const Ast.Block, comma: bool) !void {
     if (block.nodes.len == 0) {
         if (block.label) |label| {
             try self.openKey("block", .list);
-            try self.pushKeyValue("label", self.spanToSrc(label), false);
+            try self.pushKeyValue("label", self.ast.toSource(label), false);
             try self.closeKey(.list, comma);
         } else try self.emptyKey("block", .list, comma);
     } else {
         try self.openKey("block", .list);
-        if (block.label) |label| try self.pushKeyValue("label", self.spanToSrc(label), true);
+        if (block.label) |label| try self.pushKeyValue("label", self.ast.toSource(label), true);
         for (block.nodes, 0..) |*data, i| {
             try self.renderNode(data, i != block.nodes.len - 1);
         }
         try self.closeKey(.list, comma);
     }
-}
-
-fn spanToSrc(self: *Self, idx: usize) []const u8 {
-    const span = self.ast.token_spans[idx];
-    return self.ast.source[span.start..span.end];
 }
 
 const KeyTag = enum {
