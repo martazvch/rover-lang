@@ -24,6 +24,7 @@ pub const Instruction = struct {
         call: Call,
         discard: Index,
         extractor: Index,
+        enum_decl: EnumDecl,
         field: Field,
         float: f64,
         fn_decl: FnDecl,
@@ -107,6 +108,7 @@ pub const Instruction = struct {
     pub const Break = struct { instr: ?Index, depth: usize };
     pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool, native: bool };
     pub const Arg = union(enum) { instr: Index, default: usize };
+    pub const EnumDecl = struct {};
     pub const FnDecl = struct {
         kind: Kind,
         type_id: TypeId,

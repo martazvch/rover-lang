@@ -20,6 +20,7 @@ pub const Type = union(enum) {
     str,
     null,
     array: Array,
+    @"enum": Enum,
     function: Function,
     module: InternerIdx,
     optional: *const Type,
@@ -66,6 +67,14 @@ pub const Type = union(enum) {
     };
 
     pub const Loc = struct { name: InternerIdx, container: InternerIdx };
+
+    pub const Enum = struct {
+        loc: ?Loc,
+        tags: Tags,
+
+        pub const empty: Enum = .{ .loc = null, .tags = .empty };
+        pub const Tags = AutoArrayHashMapUnmanaged(InternerIdx, *const Type);
+    };
 
     pub const Function = struct {
         loc: ?Loc,
@@ -226,6 +235,16 @@ pub const Type = union(enum) {
         switch (self) {
             .never, .void, .int, .float, .bool, .str, .null => {},
             .array => |ty| ty.child.hash(allocator, hasher),
+            .@"enum" => |ty| {
+                if (ty.loc) |loc| {
+                    hasher.update(asBytes(&loc.name));
+                    hasher.update(asBytes(&loc.container));
+                } else {
+                    for (ty.tags.values()) |tag| {
+                        tag.hash(allocator, hasher);
+                    }
+                }
+            },
             .function => |ty| {
                 if (ty.loc) |loc| {
                     hasher.update(asBytes(&loc.name));
@@ -275,6 +294,7 @@ pub const Type = union(enum) {
                 writer.writeAll("[]") catch oom();
                 writer.writeAll(ty.child.toString(allocator, interner, mod_name)) catch oom();
             },
+            .@"enum" => @panic("TODO"),
             .function => |ty| {
                 writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {

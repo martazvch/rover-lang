@@ -214,6 +214,7 @@ fn analyzeNode(self: *Self, node: *const Node, exp_val: bool, ctx: *Context) Res
     const instr = switch (node.*) {
         .assignment => |*n| try self.assignment(n, ctx),
         .discard => |n| try self.discard(n, ctx),
+        .enum_decl => |*n| try self.enumDeclaration(n, ctx),
         .fn_decl => |*n| try self.fnDeclaration(n, ctx),
         .multi_var_decl => |*n| try self.multiVarDecl(n, ctx),
         .print => |n| try self.print(n, ctx),
@@ -277,6 +278,38 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
 fn discard(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
     const res = try self.analyzeExprInfos(expr, true, ctx);
     return self.irb.wrapInstr(.discard, res.instr);
+}
+
+fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtResult {
+    const snapshot = ctx.snapshot();
+    defer snapshot.restore();
+
+    // TODO: anonymus enums
+    const name = node.name orelse @panic("anonymus enums aren't supported yet");
+    const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
+
+    var ty: Type.Enum = .empty;
+
+    for (node.tags) |tag| {
+        const tag_res = try self.enumTag(tag, ctx);
+        const gop = ty.tags.getOrPut(self.allocator, tag_res.name) catch oom();
+
+        if (gop.found_existing) {
+            @panic("Already declared tag in enum");
+        } else {
+            gop.value_ptr.* = tag_res.ty;
+        }
+    }
+
+    sym.type = self.ti.intern(.{ .@"enum" = ty });
+
+    return self.irb.addInstr(.{ .enum_decl = .{} }, self.ast.getSpan(node).start);
+}
+
+fn enumTag(self: *Self, tag: Ast.EnumDecl.Tag, ctx: *const Context) Error!struct { name: InternerIdx, ty: *const Type } {
+    const name = self.interner.intern(self.ast.toSource(tag.name));
+    const ty = if (tag.payload) |ty| try self.checkAndGetType(ty, ctx) else self.ti.cache.void;
+    return .{ .name = name, .ty = ty };
 }
 
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult {
@@ -2041,6 +2074,7 @@ fn checkFunctionEq(self: *Self, decl: *const Type, value: *const Type) Error!*co
     return error.Err;
 }
 /// Checks if two different types (with at least one of them being an unoion) fits in one or the other
+/// Assumes `decl` is an union
 fn checkUnionType(decl: *const Type, value: *const Type) error{ Mismatch, NotInUnion }!*const Type {
     // TODO: put the check void on decl in the caller
     if (decl.is(.void)) {
@@ -2066,6 +2100,7 @@ fn checkUnionType(decl: *const Type, value: *const Type) error{ Mismatch, NotInU
 }
 
 /// Try to infer array value type from variable's declared type
+/// Assumes `value` is an array
 fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span) (Error || error{mismatch})!*const Type {
     const depth_value, const child_value = value.array.depthAndChild();
 
@@ -2083,8 +2118,13 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
             const current_decl = if (child_decl.is(.optional)) child_decl.optional else child_decl;
 
             if (depth_value != depth_decl) break :check;
+
             if (!child_value.is(.void)) {
-                if (depth_value != depth_decl or child_value != current_decl) break :check;
+                // Additional check for cases like: var a: []int|float = [1, 2, 3]
+                if (current_decl.as(.@"union")) |*u| {
+                    return if (self.checkArrayOfUnion(u, value)) decl else error.mismatch;
+                }
+                if (child_value != current_decl) break :check;
             }
 
             return decl;
@@ -2094,6 +2134,13 @@ fn checkArrayType(self: *Self, decl: *const Type, value: *const Type, span: Span
     }
 
     return error.mismatch;
+}
+
+fn checkArrayOfUnion(self: *Self, decl: *const Type.Union, value: *const Type) bool {
+    for (decl.types) |ty| {
+        if (self.ti.intern(.{ .array = .{ .child = ty } }) == value) return true;
+    }
+    return false;
 }
 
 fn typeName(self: *const Self, ty: *const Type) []const u8 {

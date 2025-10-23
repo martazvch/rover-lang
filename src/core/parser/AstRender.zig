@@ -51,6 +51,21 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         .discard => |n| {
             try self.renderSingleExpr(@tagName(node.*), n, .block, comma);
         },
+        .enum_decl => |n| {
+            try self.openKey(@tagName(node.*), .block);
+            if (n.name) |name| try self.pushKeyValue("name", self.ast.toSource(name), true);
+
+            if (n.tags.len > 0) {
+                try self.openKey("tags", .list);
+                for (n.tags, 0..) |tag, i| {
+                    const ty = if (tag.payload) |payload| try self.renderType(payload) else "";
+                    try self.pushKeyValue(self.ast.toSource(tag.name), ty, i < n.tags.len - 1);
+                }
+                try self.closeKey(.list, false);
+            }
+
+            try self.closeKey(.block, comma);
+        },
         .fn_decl => |*n| try self.renderFnDecl(self.ast.toSource(n.name), n, comma),
         .multi_var_decl => |n| {
             try self.openKey(@tagName(node.*), .list);

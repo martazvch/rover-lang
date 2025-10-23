@@ -163,8 +163,8 @@ const Compiler = struct {
         return .{
             .manager = manager,
             .function = Obj.Function.create(
-                manager.vm,
-                Obj.String.copy(manager.vm, name),
+                manager.allocator,
+                name,
                 type_id,
                 default_count,
                 module_index,
@@ -295,7 +295,7 @@ const Compiler = struct {
                 &self.manager.module,
                 self.manager.render_mode,
             );
-            dis.disChunk(&alloc_writer.writer, self.function.name.chars);
+            dis.disChunk(&alloc_writer.writer, self.function.name);
 
             var buf: [1024]u8 = undefined;
             var stdout_writer = std.fs.File.stdout().writer(&buf);
@@ -329,6 +329,7 @@ const Compiler = struct {
             // will be the one extracted, it acts as if we just declared the value in scope
             .extractor => |index| self.wrappedInstr(.ne_null_push, index),
 
+            .enum_decl => |*data| self.enumDecl(data),
             .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.compileFn(data),
@@ -555,6 +556,12 @@ const Compiler = struct {
         }
     }
 
+    fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) Error!void {
+        _ = self; // autofix
+        _ = data; // autofix
+        @panic("Implement enum compilation");
+    }
+
     fn field(self: *Self, data: *const Instruction.Field) Error!void {
         try self.compileInstr(data.structure);
 
@@ -702,7 +709,7 @@ const Compiler = struct {
 
     fn stringInstr(self: *Self, index: usize) Error!void {
         try self.emitConstant(
-            Value.makeObj(Obj.String.copy(
+            Value.makeObj(Obj.String.comptimeCopy(
                 self.manager.vm,
                 self.manager.interner.getKey(index).?,
             ).asObj()),
@@ -712,8 +719,8 @@ const Compiler = struct {
     fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
         // TODO: just fetch symbol in symbol table?
         var structure = Obj.Structure.create(
-            self.manager.vm,
-            Obj.String.copy(self.manager.vm, self.manager.interner.getKey(data.name).?),
+            self.manager.allocator,
+            self.manager.interner.getKey(data.name).?,
             data.type_id,
             data.fields_count,
             data.default_fields.len,
@@ -731,15 +738,16 @@ const Compiler = struct {
         }
 
         var funcs: ArrayList(*Obj.Function) = .empty;
-        funcs.ensureTotalCapacity(self.manager.vm.allocator, data.functions.len) catch oom();
+        funcs.ensureTotalCapacity(self.manager.allocator, data.functions.len) catch oom();
 
         for (data.functions) |func| {
             const fn_data = self.manager.instr_data[func].fn_decl;
-            const fn_name = if (fn_data.name) |idx| self.manager.interner.getKey(idx).? else "anonymus";
+            // Structures' functions have a name
+            const fn_name = self.manager.interner.getKey(fn_data.name orelse unreachable).?;
             funcs.appendAssumeCapacity(try self.compileCallable(fn_name, &fn_data));
         }
 
-        structure.methods = funcs.toOwnedSlice(self.manager.vm.allocator) catch oom();
+        structure.methods = funcs.toOwnedSlice(self.manager.allocator) catch oom();
         const struct_obj = Value.makeObj(structure.asObj());
         self.addSymbol(data.sym_index, struct_obj);
     }
@@ -868,11 +876,11 @@ const Compiler = struct {
             .int => |val| Value.makeInt(val),
             .float => |val| Value.makeFloat(val),
             .bool => |val| Value.makeBool(val),
-            .string => |val| Value.makeObj(Obj.String.copy(
+            .string => |val| Value.makeObj(Obj.String.comptimeCopy(
                 self.manager.vm,
                 self.manager.interner.getKey(val).?,
             ).asObj()),
-            else => @panic("Default value type not supported yet"),
+            else => @panic("Default value supported yet"),
         };
     }
 };

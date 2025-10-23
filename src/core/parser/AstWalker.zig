@@ -161,6 +161,7 @@ fn captureFromNode(self: *Self, node: *Ast.Node, ctx: *CaptureCtx) void {
             self.captureFromExpr(n.value, ctx);
         },
         .discard => |e| self.captureFromExpr(e, ctx),
+        .enum_decl => {},
         .fn_decl => |*n| self.functionCaptures(n, ctx),
         .multi_var_decl => |*n| {
             for (n.decls) |decl| if (decl.value) |val| {
@@ -168,14 +169,7 @@ fn captureFromNode(self: *Self, node: *Ast.Node, ctx: *CaptureCtx) void {
             };
         },
         .print => |expr| self.captureFromExpr(expr, ctx),
-        .struct_decl => |*n| {
-            for (n.fields) |f| if (f.value) |val| {
-                self.captureFromExpr(val, ctx);
-            };
-            for (n.functions) |*func| {
-                self.functionCaptures(func, ctx);
-            }
-        },
+        .struct_decl => {},
         .use => {},
         .var_decl => |*n| {
             if (n.value) |val| {

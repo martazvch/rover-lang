@@ -40,6 +40,7 @@ pub const Token = struct {
         .{ "break", .@"break" },
         .{ "do", .do },
         .{ "else", .@"else" },
+        .{ "enum", .@"enum" },
         .{ "error", .@"error" },
         .{ "false", .false },
         .{ "fn", .@"fn" },
@@ -77,6 +78,7 @@ pub const Token = struct {
         dot_question_mark,
         dot_star,
         @"else",
+        @"enum",
         eof,
         equal,
         equal_equal,
@@ -600,13 +602,13 @@ test "keywords" {
     lexer.lex(
         \\\and else false for fn if null or print return 
         \\\self struct true var while not do use break when
-        \\\as
+        \\\as enum
     );
 
     const res = [_]Token.Tag{
-        .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",  .null,     .@"or", .print,
-        .@"return", .new_line, .self,  .@"struct", .true,  .@"var", .@"while", .not,   .do,
-        .use,       .@"break", .when,  .new_line,  .as,    .eof,
+        .@"and",    .@"else",  .false, .@"for",    .@"fn", .@"if",   .null,     .@"or", .print,
+        .@"return", .new_line, .self,  .@"struct", .true,  .@"var",  .@"while", .not,   .do,
+        .use,       .@"break", .when,  .new_line,  .as,    .@"enum", .eof,
     };
 
     for (0..res.len) |i| {

@@ -121,31 +121,23 @@ fn blackenObject(self: *Self, obj: *Obj) Allocator.Error!void {
             const array = obj.as(Array);
             try self.markArray(array.values.items);
         },
-        .box => try self.markValue(&obj.as(Obj.Box).value),
+        .box => {
+            @branchHint(.cold);
+            try self.markValue(&obj.as(Obj.Box).value);
+        },
         .closure => {
             const closure = obj.as(Obj.Closure);
-            try self.markObject(closure.function.asObj());
             try self.markArray(closure.captures);
-        },
-        .function => {
-            const function = obj.as(Function);
-            try self.markObject(function.name.asObj());
-            try self.markArray(function.chunk.constants[0..function.chunk.constant_count]);
         },
         .instance => {
             const instance = obj.as(Instance);
-            try self.markObject(instance.parent.asObj());
             try self.markArray(instance.fields);
         },
-        .structure => {
-            const structure = obj.as(Structure);
-            try self.markObject(structure.name.asObj());
-            try self.markArray(structure.default_values);
-            for (structure.methods) |m| {
-                try self.markObject(m.asObj());
-            }
-        },
-        .native_fn, .string => {},
+        .native_fn => unreachable,
+        // TODO: see why we can't mark functions and structure unreachable
+        // I think they should not be reachable because only allocated at comptime
+        // so not in Vm's linked list of obj
+        else => {},
     }
 }
 

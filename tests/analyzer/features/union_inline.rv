@@ -22,5 +22,9 @@ fn main() {
     var optUnion: ?int|float = 6
     var optInt: ?int = 7
     optUnion = optInt
+
+    // Arrays
+    // var arr: []int|float = [1, 2, 3]
+    // arr = [1.2, 2.3, 3.4]
 }
 

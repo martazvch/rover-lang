@@ -234,6 +234,8 @@ fn synchronize(self: *Self) void {
 fn declaration(self: *Self) Error!Node {
     return if (self.match(.@"var"))
         self.varDecl()
+    else if (self.match(.@"enum"))
+        self.enumDecl()
     else if (self.match(.@"fn"))
         self.fnDecl()
     else if (self.match(.@"struct"))
@@ -244,6 +246,41 @@ fn declaration(self: *Self) Error!Node {
         self.use()
     else
         self.statement();
+}
+
+fn enumDecl(self: *Self) Error!Node {
+    const tk = self.token_idx - 1;
+    const name = if (self.matchAndSkip(.identifier)) self.token_idx - 1 else null;
+    try self.expect(.left_brace, .expect_brace_before_enum_body);
+    self.skipNewLines();
+
+    var tags: ArrayList(Ast.EnumDecl.Tag) = .empty;
+    while (!self.check(.@"fn") and !self.check(.right_brace) and !self.check(.eof)) {
+        tags.append(self.allocator, try self.enumTag()) catch oom();
+        if (!self.matchAndSkip(.comma)) break;
+    }
+
+    try self.expect(.right_brace, .expect_brace_after_enum_body);
+
+    return .{ .enum_decl = .{
+        .tk = tk,
+        .name = name,
+        .tags = tags.toOwnedSlice(self.allocator) catch oom(),
+    } };
+}
+
+fn enumTag(self: *Self) Error!Ast.EnumDecl.Tag {
+    try self.expect(.identifier, .non_ident_enum_tag);
+    const name = self.token_idx - 1;
+
+    const payload = if (self.check(.comma)) null else payload: {
+        try self.expect(.colon, .expect_colon_before_type);
+        const ty = try self.parseType();
+        self.skipNewLines();
+        break :payload ty;
+    };
+
+    return .{ .name = name, .payload = payload };
 }
 
 fn fnDecl(self: *Self) Error!Node {

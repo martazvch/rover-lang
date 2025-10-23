@@ -68,11 +68,11 @@ pub fn allocate(vm: *Vm, comptime T: type, type_id: TypeId) *T {
 /// Used for objects that live for ever like symbols which are created at compile time
 /// Dedicated function so that we don't add a bool check at runtime when allocating with `allocate`
 // TODO: report a runtime error for OOM
-fn allocateComptime(vm: *Vm, comptime T: type, type_id: TypeId) *T {
+fn allocateComptime(allocator: Allocator, comptime T: type, type_id: TypeId) *T {
     comptime assert(@hasField(T, "obj"));
     comptime assert(@hasDecl(T, "asObj"));
 
-    const ptr = vm.allocator.create(T) catch oom();
+    const ptr = allocator.create(T) catch oom();
     ptr.obj = .{ .kind = .fromType(T), .next = null, .type_id = type_id };
 
     if (comptime options.log_gc) {
@@ -142,19 +142,19 @@ pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
             const closure = self.as(Closure);
 
             if (comptime @import("builtin").mode == .Debug) {
-                try writer.print("<closure {s}>", .{closure.function.name.chars});
+                try writer.print("<closure {s}>", .{closure.function.name});
             } else {
                 try writer.print("<fn {s}>", .{closure.function.name.chars});
             }
         },
         .function => {
             const function = self.as(Function);
-            try writer.print("<function {s}>", .{function.name.chars});
+            try writer.print("<function {s}>", .{function.name});
         },
-        .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
+        .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name}),
         .native_fn => try writer.print("<native fn {s}>", .{self.as(NativeFunction).name}),
         .string => try writer.print("{s}", .{self.as(String).chars}),
-        .structure => try writer.print("<structure {s}>", .{self.as(Structure).name.chars}),
+        .structure => try writer.print("<structure {s}>", .{self.as(Structure).name}),
     }
 }
 
@@ -162,12 +162,12 @@ pub fn log(self: *Obj) void {
     switch (self.kind) {
         .array => std.debug.print("<array>", .{}),
         .box => std.debug.print("box", .{}),
-        .closure => std.debug.print("<closure {s}>", .{self.as(Closure).function.name.chars}),
-        .function => std.debug.print("<fn {s}>", .{self.as(Function).name.chars}),
-        .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name.chars}),
+        .closure => std.debug.print("<closure {s}>", .{self.as(Closure).function.name}),
+        .function => std.debug.print("<fn {s}>", .{self.as(Function).name}),
+        .instance => std.debug.print("<instance of {s}>", .{self.as(Instance).parent.name}),
         .native_fn => std.debug.print("<native function {s}>", .{self.as(NativeFunction).name}),
         .string => std.debug.print("{s}", .{self.as(String).chars}),
-        .structure => std.debug.print("<structure {s}>", .{self.as(Structure).name.chars}),
+        .structure => std.debug.print("<structure {s}>", .{self.as(Structure).name}),
     }
 }
 
@@ -266,7 +266,7 @@ pub const String = struct {
     }
 
     /// **Warning**: Meant to be used at compile time only
-    pub fn copy(vm: *Vm, str: []const u8) *String {
+    pub fn comptimeCopy(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
         const gop = vm.strings.getOrPut(hash) catch oom();
         if (gop.found_existing) {
@@ -276,7 +276,7 @@ pub const String = struct {
         const chars = vm.allocator.alloc(u8, str.len) catch oom();
         @memcpy(chars, str);
 
-        var obj = Obj.allocateComptime(vm, Self, undefined);
+        var obj = Obj.allocateComptime(vm.allocator, Self, undefined);
         obj.chars = chars;
         obj.hash = hash;
 
@@ -319,17 +319,17 @@ pub const String = struct {
 pub const Function = struct {
     obj: Obj,
     chunk: Chunk,
-    name: *String,
+    name: []const u8,
     default_values: []Value,
     module_index: usize,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *String, type_id: TypeId, default_count: usize, module_index: usize) *Self {
-        const obj = Obj.allocateComptime(vm, Self, type_id);
-        obj.chunk = Chunk.init(vm.allocator);
-        obj.name = name;
-        obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, default_count: usize, module_index: usize) *Self {
+        const obj = Obj.allocateComptime(allocator, Self, type_id);
+        obj.chunk = Chunk.init(allocator);
+        obj.name = allocator.dupe(u8, name) catch oom();
+        obj.default_values = allocator.alloc(Value, default_count) catch oom();
         obj.module_index = module_index;
 
         if (options.log_gc) obj.asObj().log();
@@ -437,18 +437,18 @@ pub const NativeFunction = struct {
 
 pub const Structure = struct {
     obj: Obj,
-    name: *String,
+    name: []const u8,
     field_count: usize,
     default_values: []Value,
     methods: []*Function,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: *String, type_id: TypeId, field_count: usize, default_count: usize, methods: []*Function) *Self {
-        const obj = Obj.allocateComptime(vm, Self, type_id);
-        obj.name = name;
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, default_count: usize, methods: []*Function) *Self {
+        const obj = Obj.allocateComptime(allocator, Self, type_id);
+        obj.name = allocator.dupe(u8, name) catch oom();
         obj.field_count = field_count;
-        obj.default_values = vm.allocator.alloc(Value, default_count) catch oom();
+        obj.default_values = allocator.alloc(Value, default_count) catch oom();
         obj.methods = methods;
 
         return obj;
@@ -458,7 +458,7 @@ pub const Structure = struct {
         return &self.obj;
     }
 
-    // Functions are freed because they are on the main minked list of objects in the VM
+    // Functions aren't freed because they are on the main linked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
         vm.allocator.free(self.methods);
@@ -512,4 +512,44 @@ pub const Instance = struct {
         allocator.free(self.fields);
         allocator.destroy(self);
     }
+};
+
+pub const Enum = struct {
+    obj: Obj,
+    name: []const u8,
+    tags: []const []const u8,
+    functions: []*Function,
+
+    const Self = @This();
+
+    pub fn create(allocator: Allocator, name: []const u8, tags: []const []const u8, functions: []*Function) *Self {
+        const obj = Obj.allocateComptime(allocator, Self, undefined);
+        obj.name = name;
+        obj.tags = tags;
+        obj.functions = functions;
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    // Functions aren't freed because they are on the main linked list of objects in the VM
+    // The memory of the array is owned though
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        for (self.tags) |tag| {
+            vm.allocator.free(tag);
+        }
+        vm.allocator.free(self.tags);
+        vm.allocator.free(self.functions);
+        vm.gc_alloc.destroy(self);
+    }
+};
+
+const EnumInstance = struct {
+    obj: Obj,
+    parent: *Enum,
+    tag_id: usize,
+    payload: Value,
 };

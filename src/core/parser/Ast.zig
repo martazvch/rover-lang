@@ -16,6 +16,7 @@ pub const TokenIndex = usize;
 pub const Node = union(enum) {
     assignment: Assignment,
     discard: *Expr,
+    enum_decl: EnumDecl,
     fn_decl: FnDecl,
     multi_var_decl: MultiVarDecl,
     print: *Expr,
@@ -29,6 +30,17 @@ pub const Node = union(enum) {
 pub const Assignment = struct {
     assigne: *Expr,
     value: *Expr,
+};
+
+pub const EnumDecl = struct {
+    tk: TokenIndex,
+    name: ?TokenIndex,
+    tags: []const Tag,
+
+    pub const Tag = struct {
+        name: TokenIndex,
+        payload: ?*Type,
+    };
 };
 
 pub const FnDecl = struct {
@@ -251,6 +263,10 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
             .start = self.getSpan(node.assigne.*).start,
             .end = self.getSpan(node.value.*).end,
         },
+        EnumDecl => if (node.name) |name|
+            self.token_spans[name]
+        else
+            self.token_spans[node.tk],
         FnDecl, StructDecl, VarDecl => self.token_spans[node.name],
         MultiVarDecl => .{
             .start = self.getSpan(node.decls[0]).start,

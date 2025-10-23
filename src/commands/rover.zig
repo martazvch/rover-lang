@@ -8,9 +8,6 @@ const State = @import("../core/pipeline/State.zig");
 const file = @import("misc").file;
 
 pub fn run(allocator: Allocator, file_path: []const u8, config: State.Config) !void {
-    const file_content = try file.read(allocator, file_path);
-    defer allocator.free(file_content);
-
     var arena = std.heap.ArenaAllocator.init(allocator);
     const arena_alloc = arena.allocator();
     defer arena.deinit();
@@ -22,11 +19,18 @@ pub fn run(allocator: Allocator, file_path: []const u8, config: State.Config) !v
     vm.init(allocator, &state);
     defer vm.deinit();
 
-    var pipeline: Pipeline = .init(arena_alloc, &vm, &state);
+    const module = mod: {
+        const file_content = try file.read(allocator, file_path);
+        defer allocator.free(file_content);
 
-    const module = pipeline.run(file_path, ".", file_content) catch |e| switch (e) {
-        error.ExitOnPrint => return,
-        else => return e,
+        var pipeline: Pipeline = .init(arena_alloc, &vm, &state);
+
+        const module = pipeline.run(file_path, ".", file_content) catch |e| switch (e) {
+            error.ExitOnPrint => return,
+            else => return e,
+        };
+
+        break :mod module;
     };
 
     try vm.run(module, state.module_interner.compiled.values());
