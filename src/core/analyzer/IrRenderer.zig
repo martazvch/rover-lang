@@ -71,6 +71,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
         .discard => |index| self.indexInstr("Discard", index),
+        .enum_create => @panic("TODO"),
         .enum_decl => @panic("TODO"),
         .extractor => |index| self.indexInstr("Extractor", index),
         .field => |*data| self.getField(data, false),

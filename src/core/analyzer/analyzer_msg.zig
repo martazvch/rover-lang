@@ -6,6 +6,7 @@ pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_param: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
+    already_declared_tag: struct { name: []const u8 },
     array_mismatch_dim: struct { declared: usize, accessed: usize },
     assign_to_constant: struct { name: []const u8 },
     assign_to_struct_fn,
@@ -90,6 +91,7 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
+            .already_declared_tag => |e| writer.print("tag '{s}' already declared in enum", .{e.name}),
             .array_mismatch_dim => |e| writer.print("trying to access dimension {} of a {}-dimensions array", .{ e.accessed, e.declared }),
             .assign_to_constant => |e| writer.print("can't assign to constant variable '{s}'", .{e.name}),
             .assign_to_struct_fn => writer.writeAll("can't assign to structure's functions"),
@@ -170,6 +172,7 @@ pub const AnalyzerMsg = union(enum) {
     pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .already_declared_param => writer.writeAll("this name"),
+            .already_declared_tag => writer.writeAll("this tag"),
             .array_mismatch_dim => writer.writeAll("this array access is wrong"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
@@ -228,6 +231,7 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared,
             .already_declared_field,
             .already_declared_param,
+            .already_declared_tag,
             => writer.writeAll("use another name or introduce numbers, underscore, ..."),
             .array_mismatch_dim => writer.writeAll("refer to variable's definition to get array's dimension"),
             .assign_to_struct_fn => writer.writeAll("it is not allowed to modify structures' functions at runtime"),

@@ -329,6 +329,7 @@ const Compiler = struct {
             // will be the one extracted, it acts as if we just declared the value in scope
             .extractor => |index| self.wrappedInstr(.ne_null_push, index),
 
+            .enum_create => |*data| self.enumCreate(data),
             .enum_decl => |*data| self.enumDecl(data),
             .field => |*data| self.field(data),
             .float => |data| self.floatInstr(data),
@@ -556,10 +557,22 @@ const Compiler = struct {
         }
     }
 
+    fn enumCreate(self: *Self, data: *const Instruction.EnumCreate) Error!void {
+        try self.compileInstr(data.lhs);
+
+        // TODO: Error
+        if (data.tag_index >= std.math.maxInt(u8)) {
+            @panic("Enum is to big, not implemented yet");
+        }
+
+        self.writeOpAndByte(.enum_create, @intCast(data.tag_index));
+    }
+
     fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) Error!void {
-        _ = self; // autofix
-        _ = data; // autofix
-        @panic("Implement enum compilation");
+        const enum_val = Value.makeObj(
+            Obj.Enum.create(self.manager.allocator, self.manager.interner.getKey(data.name).?).asObj(),
+        );
+        self.addSymbol(data.sym_index, enum_val);
     }
 
     fn field(self: *Self, data: *const Instruction.Field) Error!void {

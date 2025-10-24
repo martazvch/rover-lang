@@ -4,8 +4,7 @@ const Writer = std.Io.Writer;
 
 const options = @import("options");
 
-const Chunk = @import("../compiler/Chunk.zig");
-const OpCode = Chunk.OpCode;
+const OpCode = @import("../compiler/Chunk.zig").OpCode;
 const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
 const Disassembler = @import("../compiler/Disassembler.zig");
 const oom = @import("misc").oom;
@@ -13,7 +12,6 @@ const Gc = @import("Gc.zig");
 const Obj = @import("Obj.zig");
 const Value = @import("values.zig").Value;
 const State = @import("../pipeline/State.zig");
-const NativeFn = @import("../builtins/ffi.zig").NativeFn;
 
 gc: Gc,
 stack: Stack,
@@ -263,6 +261,14 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const rhs = self.stack.pop().int;
                 const lhs = self.stack.pop().int;
                 self.stack.push(Value.makeInt(@divTrunc(lhs, rhs)));
+            },
+            .enum_create => {
+                self.stack.peekRef(0).* = .makeObj(Obj.EnumInstance.create(
+                    self.allocator,
+                    self.stack.peek(0).obj.as(Obj.Enum),
+                    frame.readByte(),
+                    .null,
+                ).asObj());
             },
             .eq_bool => self.stack.push(Value.makeBool(self.stack.pop().bool == self.stack.pop().bool)),
             .eq_float => self.stack.push(Value.makeBool(self.stack.pop().float == self.stack.pop().float)),

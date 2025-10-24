@@ -63,6 +63,10 @@ pub fn wrapInstrInplace(self: *Self, comptime instr: std.meta.FieldEnum(Instruct
     self.instructions.set(index, .{ .data = wrap, .offset = prev_offset });
 }
 
+pub fn instrOffset(self: *const Self, instr: usize) usize {
+    return self.instructions.items(.offset)[instr];
+}
+
 /// Converts instructions offsets to line numbers
 pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
     const offsets = self.instructions.items(.offset);

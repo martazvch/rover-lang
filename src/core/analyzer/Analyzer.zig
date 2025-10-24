@@ -284,18 +284,35 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
+    var buf: [1024]u8 = undefined;
+    const container_name = self.interner.internKeepRef(self.allocator, self.containers.renderWithSep(&buf, "."));
+
     // TODO: anonymus enums
-    const name = node.name orelse @panic("anonymus enums aren't supported yet");
+    const name_tk = node.name orelse @panic("anonymus enums aren't supported yet");
+    const name = self.interner.intern(self.ast.toSource(name_tk));
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
-    var ty: Type.Enum = .empty;
+    var ty: Type.Enum = .{
+        .loc = .{ .name = name, .container = container_name },
+        .tags = .empty,
+    };
+    ty.tags.ensureTotalCapacity(self.allocator, @intCast(node.tags.len)) catch oom();
+
+    self.scope.open(self.allocator, null, true, false);
+    defer _ = self.scope.close();
+
+    self.containers.append(self.allocator, self.ast.toSource(name));
+    defer _ = self.containers.pop();
 
     for (node.tags) |tag| {
         const tag_res = try self.enumTag(tag, ctx);
         const gop = ty.tags.getOrPut(self.allocator, tag_res.name) catch oom();
 
         if (gop.found_existing) {
-            @panic("Already declared tag in enum");
+            return self.err(
+                .{ .already_declared_tag = .{ .name = self.ast.toSource(tag.name) } },
+                self.ast.getSpan(tag.name),
+            );
         } else {
             gop.value_ptr.* = tag_res.ty;
         }
@@ -303,7 +320,13 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
 
     sym.type = self.ti.intern(.{ .@"enum" = ty });
 
-    return self.irb.addInstr(.{ .enum_decl = .{} }, self.ast.getSpan(node).start);
+    return self.irb.addInstr(
+        .{ .enum_decl = .{
+            .name = name,
+            .sym_index = sym.index,
+        } },
+        self.ast.getSpan(node).start,
+    );
 }
 
 fn enumTag(self: *Self, tag: Ast.EnumDecl.Tag, ctx: *const Context) Error!struct { name: InternerIdx, ty: *const Type } {
@@ -1174,8 +1197,12 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
     };
 
     const field_res = switch (struct_res.ti.type.*) {
-        .module => |ty| return self.moduleAccess(expr.field, ty),
+        .@"enum" => |ty| switch (try self.enumAccess(struct_res.instr, ty, expr.field, struct_res.ti.is_sym, ctx)) {
+            .tag => |tag| return tag,
+            .decl => |decl| decl,
+        },
         .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.ti.is_sym, ctx),
+        .module => |ty| return self.moduleAccess(expr.field, ty),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.typeName(struct_res.ti.type) } },
             span,
@@ -1213,6 +1240,38 @@ const AccessResult = struct {
     kind: enum { field, function },
     index: usize,
 };
+
+const EnumResult = union(enum) {
+    tag: InstrInfos,
+    decl: AccessResult,
+};
+
+fn enumAccess(self: *Self, instr: usize, ty: Type.Enum, tag_tk: Ast.TokenIndex, is_symbol: bool, ctx: *const Context) Error!EnumResult {
+    _ = ctx; // autofix
+    // TODO: Error
+    if (!is_symbol) @panic("Non symbol instance");
+
+    // const span = self.ast.getSpan(tag_tk);
+    const text = self.ast.toSource(tag_tk);
+    const tag_name = self.interner.intern(text);
+
+    if (ty.tags.getIndex(tag_name)) |index| return .{ .tag = .fromType(
+        self.ti.intern(.{ .@"enum" = ty }),
+        self.irb.addInstr(
+            .{ .enum_create = .{ .lhs = instr, .tag_index = index } },
+            self.ast.getSpan(tag_tk).start,
+        ),
+    ) };
+
+    return error.Err;
+}
+
+fn enumCreate(self: *Self, ty: *const Type, tag_index: usize, instr: usize) Result {
+    return .fromType(
+        ty,
+        self.irb.addInstr(.{ .enum_create = .{ .lhs = instr, .tag_index = tag_index } }, self.irb.instrOffset(instr)),
+    );
+}
 
 fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Structure, is_symbol: bool, ctx: *const Context) Error!AccessResult {
     const text = self.ast.toSource(field_tk);

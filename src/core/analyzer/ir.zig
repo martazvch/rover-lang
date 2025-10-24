@@ -6,6 +6,7 @@ pub const Index = usize;
 pub const IndexVoid = @import("std").math.maxInt(Index);
 
 pub const TypeId = @import("types.zig").TypeId;
+pub const SymbolIndex = usize;
 
 pub const Instruction = struct {
     data: Data,
@@ -24,6 +25,7 @@ pub const Instruction = struct {
         call: Call,
         discard: Index,
         extractor: Index,
+        enum_create: EnumCreate,
         enum_decl: EnumDecl,
         field: Field,
         float: f64,
@@ -108,7 +110,14 @@ pub const Instruction = struct {
     pub const Break = struct { instr: ?Index, depth: usize };
     pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool, native: bool };
     pub const Arg = union(enum) { instr: Index, default: usize };
-    pub const EnumDecl = struct {};
+    pub const EnumCreate = struct {
+        lhs: Index,
+        tag_index: usize,
+    };
+    pub const EnumDecl = struct {
+        name: usize,
+        sym_index: SymbolIndex,
+    };
     pub const FnDecl = struct {
         kind: Kind,
         type_id: TypeId,
@@ -118,7 +127,7 @@ pub const Instruction = struct {
         captures: []const Capture,
         returns: bool,
 
-        pub const Kind = union(enum) { closure, symbol: usize };
+        pub const Kind = union(enum) { closure, symbol: SymbolIndex };
         pub const Capture = struct { index: usize, local: bool };
     };
     pub const Field = struct {
@@ -142,7 +151,7 @@ pub const Instruction = struct {
     pub const StructDecl = struct {
         // Interner index
         name: usize,
-        sym_index: usize,
+        sym_index: SymbolIndex,
         type_id: TypeId,
         fields_count: usize,
         default_fields: []const Index,

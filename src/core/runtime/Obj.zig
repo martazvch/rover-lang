@@ -26,6 +26,8 @@ const Kind = enum {
     array,
     box,
     closure,
+    @"enum",
+    enum_instance,
     function,
     instance,
     native_fn,
@@ -37,6 +39,8 @@ const Kind = enum {
             Array => .array,
             Box => .box,
             Closure => .closure,
+            Enum => .@"enum",
+            EnumInstance => .enum_instance,
             Function => .function,
             Instance => .instance,
             NativeFunction => .native_fn,
@@ -85,6 +89,8 @@ fn allocateComptime(allocator: Allocator, comptime T: type, type_id: TypeId) *T 
 pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
     return switch (self.kind) {
         .array => self.as(Array).deepCopy(vm).asObj(),
+        .@"enum" => @panic("TODO"),
+        .enum_instance => @panic("TODO"),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
         .box, .closure, .function, .native_fn, .string, .structure => self,
@@ -96,6 +102,8 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
         .array => self.as(Array).deinit(vm),
         .box => self.as(Box).deinit(vm),
         .closure => self.as(Closure).deinit(vm),
+        .@"enum" => self.as(Enum).deinit(vm),
+        .enum_instance => self.as(EnumInstance).deinit(vm),
         .function => {
             const function = self.as(Function);
             function.deinit(vm);
@@ -147,6 +155,11 @@ pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
                 try writer.print("<fn {s}>", .{closure.function.name.chars});
             }
         },
+        .@"enum" => try writer.print("<enum {s}>", .{self.as(Enum).name}),
+        .enum_instance => {
+            const instance = self.as(EnumInstance);
+            try writer.print("<enum {s}, tag {}>", .{ instance.parent.name, instance.tag_id });
+        },
         .function => {
             const function = self.as(Function);
             try writer.print("<function {s}>", .{function.name});
@@ -176,6 +189,8 @@ pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
         .function => self.as(Function).default_values,
         .instance => self.as(Instance).parent.methods[index].default_values,
         .structure => self.as(Structure).default_values,
+        // They don't have default values yet
+        .@"enum" => return,
         else => unreachable,
     };
 }
@@ -517,16 +532,17 @@ pub const Instance = struct {
 pub const Enum = struct {
     obj: Obj,
     name: []const u8,
-    tags: []const []const u8,
-    functions: []*Function,
+    // tags: []const []const u8,
+    // functions: []*Function,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, tags: []const []const u8, functions: []*Function) *Self {
+    // pub fn create(allocator: Allocator, name: []const u8, tags: []const []const u8, functions: []*Function) *Self {
+    pub fn create(allocator: Allocator, name: []const u8) *Self {
         const obj = Obj.allocateComptime(allocator, Self, undefined);
-        obj.name = name;
-        obj.tags = tags;
-        obj.functions = functions;
+        obj.name = allocator.dupe(u8, name) catch oom();
+        // obj.tags = tags;
+        // obj.functions = functions;
 
         return obj;
     }
@@ -538,18 +554,37 @@ pub const Enum = struct {
     // Functions aren't freed because they are on the main linked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
-        for (self.tags) |tag| {
-            vm.allocator.free(tag);
-        }
-        vm.allocator.free(self.tags);
-        vm.allocator.free(self.functions);
+        // for (self.tags) |tag| {
+        //     vm.allocator.free(tag);
+        // }
+        // vm.allocator.free(self.tags);
+        // vm.allocator.free(self.functions);
         vm.gc_alloc.destroy(self);
     }
 };
 
-const EnumInstance = struct {
+pub const EnumInstance = struct {
     obj: Obj,
-    parent: *Enum,
-    tag_id: usize,
+    parent: *const Enum,
+    tag_id: u8,
     payload: Value,
+
+    const Self = @This();
+
+    pub fn create(allocator: Allocator, parent: *const Enum, tag_id: u8, payload: Value) *Self {
+        const obj = Obj.allocateComptime(allocator, Self, undefined);
+        obj.parent = parent;
+        obj.tag_id = tag_id;
+        obj.payload = payload;
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    pub fn deinit(self: *Self, vm: *Vm) void {
+        vm.gc_alloc.destroy(self);
+    }
 };

@@ -67,6 +67,7 @@ pub const OpCode = enum(u8) {
     def_global,
     div_float,
     div_int,
+    enum_create,
     eq_bool,
     eq_float,
     eq_int,
