@@ -5,7 +5,8 @@ const print = std.debug.print;
 const eql = std.mem.eql;
 const builtin = @import("builtin");
 
-const clap = @import("clap");
+const clarg = @import("clarg");
+const Arg = clarg.Arg;
 
 const Stage = enum {
     all,
@@ -24,11 +25,20 @@ const Stage = enum {
         };
     }
 };
+
 const Config = struct {
     stage: Stage = .all,
     show_diff: bool = false,
     show_got: bool = false,
     file: ?[]const u8 = null,
+};
+
+const Args = struct {
+    file: Arg(.string) = .{ .desc = "File to test (without '.rv' extension)", .short = 'f' },
+    stage: Arg(Stage.all) = .{ .desc = "Specific stage to test", .short = 's' },
+    diff: Arg(bool) = .{ .desc = "Prints a colored diff in case of error", .short = 'd' },
+    got: Arg(bool) = .{ .desc = "Prints what we got in stdout", .short = 'g' },
+    help: Arg(bool) = .{ .desc = "Prints this help and exit", .short = 'h' },
 };
 
 pub fn main() !u8 {
@@ -38,39 +48,27 @@ pub fn main() !u8 {
         std.debug.assert(status == .ok);
     }
     const allocator = gpa.allocator();
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit
-        \\-f, --file <FILE>      File to test (without '.rv' extension)
-        \\-s, --stage <STAGE>    Which stage to test [default: all]
-        \\-d, --diff             Shows a colored diff
-        \\-g, --got              Prints what we got
-    );
 
-    const parsers = comptime .{
-        .FILE = clap.parsers.string,
-        .STAGE = clap.parsers.enumeration(Stage),
+    var iter = try std.process.ArgIterator.initWithAllocator(allocator);
+    defer iter.deinit();
+
+    var diag: clarg.Diag = undefined;
+    const parsed = clarg.parse("tester", Args, &iter, &diag, .{}) catch |e| {
+        try diag.reportToFile(.stderr());
+        return e;
     };
 
-    var clap_diag = clap.Diagnostic{};
-    var res = clap.parse(clap.Help, &params, parsers, .{
-        .diagnostic = &clap_diag,
-        .allocator = allocator,
-    }) catch |err| {
-        clap_diag.reportToFile(std.fs.File.stderr(), err) catch {};
-        std.process.exit(0);
-    };
-    defer res.deinit();
-
-    if (res.args.help != 0) {
-        try clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
+    if (parsed.help) {
+        try clarg.helpToFile(Args, .stderr());
         return 0;
     }
 
-    var config: Config = .{};
-    config.show_diff = if (res.args.diff == 1) true else false;
-    config.show_got = if (res.args.got == 1) true else false;
-    config.stage = res.args.stage orelse .all;
-    config.file = res.args.file;
+    const config: Config = .{
+        .file = parsed.file,
+        .stage = parsed.stage,
+        .show_diff = parsed.diff,
+        .show_got = parsed.got,
+    };
 
     const tester_dir = try std.fs.selfExeDirPathAlloc(allocator);
     defer allocator.free(tester_dir);

@@ -38,8 +38,11 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("src/misc/misc.zig"),
     });
 
-    const clap = b.dependency("clap", .{});
-    exe.root_module.addImport("clap", clap.module("clap"));
+    const clarg = b.dependency("clarg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("clarg", clarg.module("clarg"));
     exe.root_module.addImport("misc", misc_mod);
     exe.root_module.addOptions("options", options);
 
@@ -62,7 +65,7 @@ pub fn build(b: *std.Build) !void {
         .name = "foo",
         .root_module = rover_mod,
     });
-    exe_check.root_module.addImport("clap", clap.module("clap"));
+    exe_check.root_module.addImport("clarg", clarg.module("clarg"));
     exe_check.root_module.addOptions("options", options);
 
     const check = b.step("check", "Check if foo compiles");
@@ -94,7 +97,7 @@ pub fn build(b: *std.Build) !void {
         .root_module = tester_mod,
     });
 
-    tester_exe.root_module.addImport("clap", clap.module("clap"));
+    tester_exe.root_module.addImport("clarg", clarg.module("clarg"));
     const install_tester = b.addInstallArtifact(tester_exe, .{});
     const run_tester = b.addRunArtifact(tester_exe);
     run_tester.step.dependOn(&install_tester.step);

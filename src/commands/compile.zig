@@ -1,7 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const clap = @import("clap");
+const clarg = @import("clarg");
+const Arg = clarg.Arg;
 const Ast = @import("../core/parser/Ast.zig");
 const Pipeline = @import("../core/pipeline/Pipeline.zig");
 const Vm = @import("../core/runtime/Vm.zig");
@@ -20,34 +21,23 @@ const Error = std.ArrayList(u8).Writer.Error;
 const spaces: []const u8 = " " ** 1024;
 const INDENT_SIZE = 4;
 
-pub fn run(allocator: Allocator, args: *std.process.ArgIterator) !void {
+pub const Args = struct {
+    file: Arg(.string) = .{ .desc = "Path to the file to compile", .positional = true },
+    out: Arg("out.e") = .{ .desc = "Output's name", .short = 'o' },
+    help: Arg(bool) = .{ .desc = "Prints this help and exit", .short = 'h' },
+
+    pub const description: []const u8 = "Compiles to a native executable";
+};
+
+pub fn run(allocator: Allocator, args: clarg.ParsedArgs(Args)) !void {
     var transpiler: Self = .{ .output = .empty, .writer = undefined, .ast = undefined, .indent_level = 0 };
     try transpiler.runPipeline(allocator, args);
 }
 
-pub fn runPipeline(self: *Self, allocator: Allocator, args: *std.process.ArgIterator) !void {
-    const parsers = comptime .{
-        .FILE = clap.parsers.string,
-    };
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit
-        \\<FILE>                 Path to the file to execute
-        \\-o, --out              Executable's name
-    );
+pub fn runPipeline(self: *Self, allocator: Allocator, args: anytype) !void {
+    if (args.help) return clarg.helpToFile(Args, .stderr());
 
-    var diag = clap.Diagnostic{};
-    var res = clap.parseEx(clap.Help, &params, parsers, args, .{
-        .diagnostic = &diag,
-        .allocator = allocator,
-    }) catch |err| {
-        diag.reportToFile(std.fs.File.stderr(), err) catch {};
-        std.process.exit(0);
-    };
-    defer res.deinit();
-
-    if (res.args.help != 0) return clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
-
-    const file_path = res.positionals[0] orelse {
+    const file_path = args.file orelse {
         std.debug.print("Error: Expected as file to compile.\n", .{});
         return;
     };

@@ -2,12 +2,31 @@ const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
-const clap = @import("clap");
+const clarg = @import("clarg");
+const Arg = clarg.Arg;
 
 const oom = @import("misc").oom;
 const State = @import("core/pipeline/State.zig");
 const rover = @import("commands/rover.zig");
 const compile = @import("commands/compile.zig");
+
+const Args = struct {
+    file: Arg(.string) = .{ .desc = "Path to the file to run", .positional = true },
+    print_ast: Arg(bool) = .{ .desc = "Prints the AST" },
+    print_ir: Arg(bool) = .{ .desc = "Prints the IR" },
+    print_bytecode: Arg(bool) = .{ .desc = "Prints the compiled bytecode" },
+    static_analyzis: Arg(bool) = .{ .desc = "Statically checks the file without running it (shows warnings)", .short = 's' },
+
+    compile: Arg(compile.Args) = .{ .desc = "Compiles to a native executable (WIP)", .short = 'c' },
+
+    help: Arg(bool) = .{ .desc = "Prints this help and exit", .short = 'h' },
+
+    pub const description: []const u8 =
+        \\Interpreter for Rover language. You can either run a file with the available options
+        \\or run a command.
+        \\If no arguments are provided, runs the REPL.
+    ;
+};
 
 var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
 
@@ -25,57 +44,27 @@ pub fn main() !void {
     var iter = try std.process.ArgIterator.initWithAllocator(allocator);
     defer iter.deinit();
 
-    _ = iter.next();
-
-    const Commands = enum { compile, fmt };
-
-    const parsers = comptime .{
-        .FILE = clap.parsers.string,
-        .command = clap.parsers.enumeration(Commands),
+    var diag: clarg.Diag = undefined;
+    const parsed = clarg.parse("rover", Args, &iter, &diag, .{}) catch |e| {
+        try diag.reportToFile(.stderr());
+        return e;
     };
-    const params = comptime clap.parseParamsComptime(
-        \\-h, --help             Display this help and exit
-        \\<FILE>                 Path to the file to execute
-        \\<command>              Command to execute (compile | fmt)
-        \\-s, --static-analyzis  Statically checks the file without running it (shows warnings)
-        \\--print-ast            Prints the AST
-        \\--print-bytecode       Prints the compiled bytecode
-        \\--print-ir             Prints the extra infos on AST
-    );
 
-    var diag = clap.Diagnostic{};
-    var res = clap.parseEx(clap.Help, &params, parsers, &iter, .{
-        .diagnostic = &diag,
-        .allocator = allocator,
-    }) catch |err| {
-        diag.reportToFile(std.fs.File.stderr(), err) catch {};
-        std.process.exit(0);
-    };
-    defer res.deinit();
-
-    if (res.args.help != 0) return clap.helpToFile(std.fs.File.stderr(), clap.Help, &params, .{});
+    if (parsed.help) {
+        return clarg.helpToFile(Args, .stderr());
+    }
 
     const config: State.Config = .{
-        .print_ast = res.args.@"print-ast" == 1,
-        .print_bytecode = res.args.@"print-bytecode" == 1,
-        .static_analyzis = res.args.@"static-analyzis" == 1,
-        .print_ir = res.args.@"print-ir" == 1,
-        .embedded = res.positionals[0] == null,
+        .print_ast = parsed.print_ast,
+        .print_bytecode = parsed.print_bytecode,
+        .static_analyzis = parsed.static_analyzis,
+        .print_ir = parsed.print_ir,
+        .embedded = parsed.file == null,
     };
 
-    const first_arg = res.positionals[0] orelse {
-        std.debug.print("Error: Expected a command or file.\n", .{});
-        return;
-    };
-
-    const command: ?Commands = std.meta.stringToEnum(Commands, first_arg);
-
-    if (command) |cmd| {
-        switch (cmd) {
-            .compile => try compile.run(allocator, &iter),
-            .fmt => {},
-        }
-    } else if (res.positionals[0]) |f| {
+    if (parsed.compile) |cmd| {
+        try compile.run(allocator, cmd);
+    } else if (parsed.file) |f| {
         try rover.run(allocator, f, config);
     } else {
         // var repl: Repl = undefined;

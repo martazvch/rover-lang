@@ -2,5 +2,7 @@
 zig-out
 .DS_STORE
 .zig-profile
+.vscode/
+.zed/
 data/
-test.rv
+*.rv
