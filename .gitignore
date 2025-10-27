@@ -5,4 +5,4 @@ zig-out
 .vscode/
 .zed/
 data/
-*.rv
+test.rv

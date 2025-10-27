@@ -289,12 +289,13 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
 
     // TODO: anonymus enums
     const name_tk = node.name orelse @panic("anonymus enums aren't supported yet");
-    const name = self.interner.intern(self.ast.toSource(name_tk));
+    const name = try self.internIfNotInCurrentScope(name_tk);
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
     var ty: Type.Enum = .{
         .loc = .{ .name = name, .container = container_name },
         .tags = .empty,
+        .functions = .empty,
     };
     ty.tags.ensureTotalCapacity(self.allocator, @intCast(node.tags.len)) catch oom();
 
@@ -310,7 +311,7 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
 
         if (gop.found_existing) {
             return self.err(
-                .{ .already_declared_tag = .{ .name = self.ast.toSource(tag.name) } },
+                .{ .enum_dup_tag = .{ .name = self.ast.toSource(tag.name) } },
                 self.ast.getSpan(tag.name),
             );
         } else {
@@ -321,10 +322,7 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
     sym.type = self.ti.intern(.{ .@"enum" = ty });
 
     return self.irb.addInstr(
-        .{ .enum_decl = .{
-            .name = name,
-            .sym_index = sym.index,
-        } },
+        .{ .enum_decl = .{ .name = name, .sym_index = sym.index } },
         self.ast.getSpan(node).start,
     );
 }
@@ -1197,9 +1195,13 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
     };
 
     const field_res = switch (struct_res.ti.type.*) {
-        .@"enum" => |ty| switch (try self.enumAccess(struct_res.instr, ty, expr.field, struct_res.ti.is_sym, ctx)) {
-            .tag => |tag| return tag,
-            .decl => |decl| decl,
+        .@"enum" => |ty| b: {
+            const res = try self.enumAccess(struct_res, ty, expr.field, ctx);
+
+            switch (res) {
+                .tag => |tag| return tag,
+                .decl => |decl| break :b decl,
+            }
         },
         .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.ti.is_sym, ctx),
         .module => |ty| return self.moduleAccess(expr.field, ty),
@@ -1246,24 +1248,35 @@ const EnumResult = union(enum) {
     decl: AccessResult,
 };
 
-fn enumAccess(self: *Self, instr: usize, ty: Type.Enum, tag_tk: Ast.TokenIndex, is_symbol: bool, ctx: *const Context) Error!EnumResult {
+fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.TokenIndex, ctx: *const Context) Error!EnumResult {
     _ = ctx; // autofix
-    // TODO: Error
-    if (!is_symbol) @panic("Non symbol instance");
-
-    // const span = self.ast.getSpan(tag_tk);
+    const span = self.ast.getSpan(tag_tk);
     const text = self.ast.toSource(tag_tk);
     const tag_name = self.interner.intern(text);
 
-    if (ty.tags.getIndex(tag_name)) |index| return .{ .tag = .fromType(
-        self.ti.intern(.{ .@"enum" = ty }),
-        self.irb.addInstr(
-            .{ .enum_create = .{ .lhs = instr, .tag_index = index } },
-            self.ast.getSpan(tag_tk).start,
-        ),
-    ) };
+    if (!enum_info.ti.is_sym) {
+        if (ty.tags.getIndex(tag_name) != null) return self.err(.enum_tag_access, span);
 
-    return error.Err;
+        // TODO: Return a decl access, could be a constant or a function
+        @panic("Non symbol instance");
+    }
+
+    if (ty.tags.getIndex(tag_name)) |index| {
+        return .{ .tag = .fromType(
+            self.ti.intern(.{ .@"enum" = ty }),
+            self.irb.addInstr(
+                .{ .enum_create = .{ .lhs = enum_info.instr, .tag_index = index } },
+                self.ast.getSpan(tag_tk).start,
+            ),
+        ) };
+    } else if (ty.functions.get(tag_name)) |func| {
+        _ = func;
+    }
+
+    return self.err(
+        .{ .enum_unknown_field = .{ .@"enum" = self.typeName(enum_info.ti.type), .field = self.ast.toSource(tag_tk) } },
+        span,
+    );
 }
 
 fn enumCreate(self: *Self, ty: *const Type, tag_index: usize, instr: usize) Result {

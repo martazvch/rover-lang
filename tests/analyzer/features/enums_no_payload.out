@@ -1,0 +1,8 @@
+[Enum declaration Foo]
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Enum create]
+            - enum
+            [Load symbol 0]
+            - tag
+            0

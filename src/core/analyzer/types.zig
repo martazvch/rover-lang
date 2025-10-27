@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const AutoArrayHashMapUnmanaged = std.AutoArrayHashMapUnmanaged;
-const AutoHashMapUnmanaged = std.AutoHashMapUnmanaged;
+const ArrayMap = std.AutoArrayHashMapUnmanaged;
+const Map = std.AutoHashMapUnmanaged;
 
 const InternerIdx = Interner.Index;
 const LexicalScope = @import("LexicalScope.zig");
@@ -10,6 +10,8 @@ const misc = @import("misc");
 const Interner = misc.Interner;
 const Set = misc.Set;
 const oom = misc.oom;
+
+const MapNameType = ArrayMap(InternerIdx, *const Type);
 
 pub const Type = union(enum) {
     never,
@@ -71,9 +73,10 @@ pub const Type = union(enum) {
     pub const Enum = struct {
         loc: ?Loc,
         tags: Tags,
+        functions: MapNameType,
 
         pub const empty: Enum = .{ .loc = null, .tags = .empty };
-        pub const Tags = AutoArrayHashMapUnmanaged(InternerIdx, *const Type);
+        pub const Tags = MapNameType;
     };
 
     pub const Function = struct {
@@ -84,8 +87,8 @@ pub const Type = union(enum) {
 
         pub const Kind = enum { normal, method, bound, native };
         pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
-        pub const ParamsMap = AutoArrayHashMapUnmanaged(InternerIdx, Parameter);
-        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
+        pub const ParamsMap = ArrayMap(InternerIdx, Parameter);
+        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: bool = false });
 
         pub fn proto(self: *const Function, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -131,14 +134,14 @@ pub const Type = union(enum) {
 
     pub const Structure = struct {
         loc: ?Loc,
-        functions: AutoArrayHashMapUnmanaged(InternerIdx, *const Type),
-        fields: AutoArrayHashMapUnmanaged(InternerIdx, Field),
+        functions: MapNameType,
+        fields: ArrayMap(InternerIdx, Field),
 
         pub const Field = struct {
             type: *const Type,
             default: bool,
         };
-        pub const Proto = AutoArrayHashMapUnmanaged(InternerIdx, struct { done: bool = false, default: bool = false });
+        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: bool = false });
 
         pub fn proto(self: *const Structure, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -156,7 +159,7 @@ pub const Type = union(enum) {
     pub const Union = struct {
         types: []const *const Type,
 
-        pub const Proto = AutoHashMapUnmanaged(*const Type, bool);
+        pub const Proto = Map(*const Type, bool);
 
         pub fn proto(self: *const Union, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -210,11 +213,6 @@ pub const Type = union(enum) {
             .void, .int, .float, .bool, .str, .null, .function, .optional, .@"union" => false,
             else => true,
         };
-    }
-
-    // TODO: remove now that casts are explicit
-    pub fn canCastTo(self: *const Type, other: *const Type) bool {
-        return self.is(.int) and other.is(.float);
     }
 
     pub fn hash(self: Type, allocator: Allocator, hasher: anytype) void {
@@ -294,7 +292,27 @@ pub const Type = union(enum) {
                 writer.writeAll("[]") catch oom();
                 writer.writeAll(ty.child.toString(allocator, interner, mod_name)) catch oom();
             },
-            .@"enum" => @panic("TODO"),
+            .@"enum" => |ty| {
+                if (ty.loc) |loc| {
+                    // If symbol is defnined in current mod/file, don't repeat the module
+                    if (loc.container == mod_name) {
+                        writer.print("{s}", .{interner.getKey(loc.name).?}) catch oom();
+                    } else {
+                        writer.print("{s}.{s}", .{ interner.getKey(loc.container).?, interner.getKey(loc.name).? }) catch oom();
+                    }
+                } else {
+                    writer.writeAll("enum {") catch oom();
+
+                    for (ty.tags.keys(), ty.tags.values(), 0..) |k, v, i| {
+                        writer.print("{s}: {s}{s}", .{
+                            interner.getKey(k).?,
+                            v.toString(allocator, interner, mod_name),
+                            if (i < ty.tags.count() - 1) ", " else "",
+                        }) catch oom();
+                    }
+                    writer.writeAll("}") catch oom();
+                }
+            },
             .function => |ty| {
                 writer.writeAll("fn(") catch oom();
                 for (ty.params.values(), 0..) |p, i| {
@@ -349,7 +367,7 @@ pub const TypeIds = Set(*const Type);
 
 pub const TypeInterner = struct {
     arena: std.heap.ArenaAllocator,
-    interned: AutoHashMapUnmanaged(u64, *Type),
+    interned: Map(u64, *Type),
     ids: Set(*const Type),
     cache: Cache,
 

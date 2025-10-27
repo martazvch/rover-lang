@@ -1,0 +1,12 @@
+enum Foo {
+    a,
+    a,
+}
+
+enum Bar { a, b }
+
+fn main() {
+    var bar = Bar.a
+    bar = Bar.not_a_field
+    print bar.a
+}

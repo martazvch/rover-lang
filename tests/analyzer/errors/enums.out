@@ -1,0 +1,3 @@
+enum_dup_tag, a
+enum_unknown_field, Bar, not_a_field
+enum_tag_access

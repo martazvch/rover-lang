@@ -225,7 +225,7 @@ fn synchronize(self: *Self) void {
 
     while (!self.check(.eof)) {
         switch (self.token_tags[self.token_idx]) {
-            .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .use, .@"var", .when, .@"while" => return,
+            .@"enum", .@"fn", .@"for", .@"if", .left_brace, .print, .@"return", .@"struct", .use, .@"var", .when, .@"while" => return,
             else => self.advance(),
         }
     }
@@ -256,7 +256,8 @@ fn enumDecl(self: *Self) Error!Node {
 
     var tags: ArrayList(Ast.EnumDecl.Tag) = .empty;
     while (!self.check(.@"fn") and !self.check(.right_brace) and !self.check(.eof)) {
-        tags.append(self.allocator, try self.enumTag()) catch oom();
+        const tag = try self.enumTag();
+        tags.append(self.allocator, tag) catch oom();
         if (!self.matchAndSkip(.comma)) break;
     }
 
@@ -272,8 +273,9 @@ fn enumDecl(self: *Self) Error!Node {
 fn enumTag(self: *Self) Error!Ast.EnumDecl.Tag {
     try self.expect(.identifier, .non_ident_enum_tag);
     const name = self.token_idx - 1;
+    self.skipNewLines();
 
-    const payload = if (self.check(.comma)) null else payload: {
+    const payload = if (self.check(.comma) or self.check(.right_brace)) null else payload: {
         try self.expect(.colon, .expect_colon_before_type);
         const ty = try self.parseType();
         self.skipNewLines();

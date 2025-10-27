@@ -6,7 +6,6 @@ pub const AnalyzerMsg = union(enum) {
     already_declared: struct { name: []const u8 },
     already_declared_param: struct { name: []const u8 },
     already_declared_field: struct { name: []const u8 },
-    already_declared_tag: struct { name: []const u8 },
     array_mismatch_dim: struct { declared: usize, accessed: usize },
     assign_to_constant: struct { name: []const u8 },
     assign_to_struct_fn,
@@ -17,6 +16,7 @@ pub const AnalyzerMsg = union(enum) {
     call_method_on_type: struct { name: []const u8 },
     call_static_on_instance: struct { name: []const u8 },
     cant_infer_array_type,
+    cond_alias_non_optional: struct { found: []const u8 },
     dead_code,
     default_value_type_mismatch: struct {
         expect: []const u8,
@@ -30,7 +30,9 @@ pub const AnalyzerMsg = union(enum) {
     dot_type_on_non_mod: struct { found: []const u8 },
     duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
-    cond_alias_non_optional: struct { found: []const u8 },
+    enum_dup_tag: struct { name: []const u8 },
+    enum_tag_access,
+    enum_unknown_field: struct { @"enum": []const u8, field: []const u8 },
     float_equal,
     fn_expect_value: struct { expect: []const u8 },
     invalid_arithmetic: struct { found: []const u8 },
@@ -91,7 +93,7 @@ pub const AnalyzerMsg = union(enum) {
         try switch (self) {
             .already_declared => |e| writer.print("identifier '{s}' is already declared in this scope", .{e.name}),
             .already_declared_field => |e| writer.print("a field named '{s}' already exist in structure declaration", .{e.name}),
-            .already_declared_tag => |e| writer.print("tag '{s}' already declared in enum", .{e.name}),
+            .already_declared_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
             .array_mismatch_dim => |e| writer.print("trying to access dimension {} of a {}-dimensions array", .{ e.accessed, e.declared }),
             .assign_to_constant => |e| writer.print("can't assign to constant variable '{s}'", .{e.name}),
             .assign_to_struct_fn => writer.writeAll("can't assign to structure's functions"),
@@ -102,7 +104,11 @@ pub const AnalyzerMsg = union(enum) {
             .call_method_on_type => |e| writer.print("method '{s}' called on a type", .{e.name}),
             .call_static_on_instance => |e| writer.print("static function '{s}' called on an instance", .{e.name}),
             .cant_infer_array_type => writer.writeAll("can't infer array type with empty array and not declared type"),
-            .dead_code => writer.print("unreachable code", .{}),
+            .cond_alias_non_optional => |e| writer.print(
+                "can't alias non-optional types in 'if' and 'while' conditions, found '{s}'",
+                .{e.found},
+            ),
+            .dead_code => writer.writeAll("unreachable code"),
             .default_value_type_mismatch => |e| writer.print(
                 "{s}'s default value doesn't match {s}'s type, expect '{s}' but found '{s}'",
                 .{ e.kind, e.kind, e.expect, e.found },
@@ -110,11 +116,9 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
             .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
-            .already_declared_param => |e| writer.print("identifier '{s}' is already used in parameters list", .{e.name}),
-            .cond_alias_non_optional => |e| writer.print(
-                "can't alias non-optional types in 'if' and 'while' conditions, found '{s}'",
-                .{e.found},
-            ),
+            .enum_dup_tag => |e| writer.print("tag '{s}' already declared in enum", .{e.name}),
+            .enum_tag_access => writer.writeAll("can't access enum's tag at runtime"),
+            .enum_unknown_field => |e| writer.print("enum '{s}' have no tag and no declaration '{s}'", .{ e.@"enum", e.field }),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
             .fn_expect_value => |e| writer.print("no value returned from function expecting '{s}'", .{e.expect}),
             .invalid_arithmetic => |e| writer.print("invalid arithmetic operation on type '{s}'", .{e.found}),
@@ -172,7 +176,6 @@ pub const AnalyzerMsg = union(enum) {
     pub fn getHint(self: Self, writer: *Writer) !void {
         try switch (self) {
             .already_declared, .already_declared_field, .already_declared_param => writer.writeAll("this name"),
-            .already_declared_tag => writer.writeAll("this tag"),
             .array_mismatch_dim => writer.writeAll("this array access is wrong"),
             .assign_to_constant => writer.writeAll("this variable is declared as a constant"),
             .assign_to_struct_fn => writer.writeAll("this field is a function"),
@@ -182,14 +185,16 @@ pub const AnalyzerMsg = union(enum) {
             .break_val_in_non_val_block => writer.writeAll("can't have this expression"),
             .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
             .cant_infer_array_type => writer.writeAll("empty arrays don't convey any type information"),
+            .cond_alias_non_optional => writer.writeAll("this isn't an optional"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
-            .cond_alias_non_optional => writer.writeAll("this isn't an optional"),
+            .enum_dup_tag => writer.writeAll("this tag"),
+            .enum_tag_access => writer.writeAll("this is one of the enum's tag"),
+            .enum_unknown_field => writer.writeAll("this name is unknown"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .fn_expect_value => writer.writeAll("last expression didn't return a value"),
-            .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
             .invalid_arithmetic => writer.writeAll("expression is not a numeric type"),
             .invalid_assign_target => writer.writeAll("cannot assign to this expression"),
             .invalid_call_target => writer.writeAll("this is neither a function neither a method"),
@@ -204,6 +209,7 @@ pub const AnalyzerMsg = union(enum) {
             .named_arg_in_bounded => writer.writeAll("this named argument"),
             .no_main => writer.writeAll("in this file"),
             .non_array_indexing => writer.writeAll("this is not an index"),
+            .non_comptime_in_global, .non_comptime_default => writer.writeAll("this expression"),
             .non_integer_index => writer.writeAll("this is not an integer"),
             .non_null_comp_optional => writer.writeAll("this is not 'null' literal"),
             .non_struct_field_access => |e| writer.print("expect a structure but found '{s}'", .{e.found}),
@@ -231,9 +237,8 @@ pub const AnalyzerMsg = union(enum) {
             .already_declared,
             .already_declared_field,
             .already_declared_param,
-            .already_declared_tag,
-            => writer.writeAll("use another name or introduce numbers, underscore, ..."),
-            .array_mismatch_dim => writer.writeAll("refer to variable's definition to get array's dimension"),
+            .array_mismatch_dim,
+            => writer.writeAll("refer to variable's definition to get array's dimension"),
             .assign_to_struct_fn => writer.writeAll("it is not allowed to modify structures' functions at runtime"),
             .assign_to_constant => writer.writeAll(
                 "variables declared with 'const' and function parameters are constant, their value can't be changed",
@@ -253,6 +258,7 @@ pub const AnalyzerMsg = union(enum) {
                 \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
                 \\Also, doing 'var arr: []int = []' is equivalent to 'var arr: []int'.
             ),
+            .cond_alias_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
             .dead_code => writer.writeAll("remove unreachable code"),
             .default_value_type_mismatch => |e| writer.print(
                 "modify {s}'s default value to match '{s}' type or change {s}'s type",
@@ -261,13 +267,17 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
             .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),
-            .cond_alias_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
+            .enum_dup_tag => writer.writeAll("use another name or introduce numbers, underscore, ..."),
+            .enum_tag_access => writer.writeAll(
+                \\you can either access declarations inside an enum (functions, constants, ...) or test enum's tag
+                \\with an 'if' statement like: 'if foo == .a {}' or with pattern matching via 'match'.
+            ),
+            .enum_unknown_field => writer.writeAll("refer to enum's declaration to see available tags and declarations"),
             .float_equal => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 
                 \\   If you want to compare floats, you should compare against an Epsilon, like
                 \\   value < 1e-6  instead of  value == 0
                 \\   value - other < 1e-6  instead of  value < other
-                ,
             ),
             .fn_expect_value => writer.writeAll("refer to function's declaration to return the correct type with 'return'"),
             .invalid_arithmetic => writer.writeAll("expect a numeric type"),
@@ -297,8 +307,7 @@ pub const AnalyzerMsg = union(enum) {
             .non_struct_struct_literal => writer.writeAll("refer to type's definition"),
             .null_assign_to_non_optional => writer.writeAll("only optional types declared with '?' can be assigned 'null'"),
             .return_outside_fn => writer.writeAll(
-                "return statements are only allow to exit a function's body. " ++
-                    "In loops, use 'break' otherwise remove the return",
+                "return statements are only allow to exit a function's body. In loops, use 'break' otherwise remove the return",
             ),
             .self_outside_struct => writer.writeAll("'self' is a reserved keyword. Use another parameter name"),
             .too_many_locals => writer.writeAll("it's a compiler's limitation for now. Try changing your code"),

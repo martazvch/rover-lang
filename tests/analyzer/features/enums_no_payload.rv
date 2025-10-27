@@ -1,0 +1,6 @@
+enum Foo { a, b }
+
+fn main() {
+    var foo = Foo.a
+}
+

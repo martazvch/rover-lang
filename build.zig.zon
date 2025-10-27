@@ -8,7 +8,7 @@
             .hash = "clarg-0.0.0-g4b0SYdoAAAPjw0yQPGi5p6g1ueFkEzu6acNShYKjGOD",
         },
     },
-    .fingerprint = 0xcdb9275d7bcae6a9,
+    .fingerprint = 0xd08838f793247dc8,
     .paths = .{
         "build.zig",
         "build.zig.zon",

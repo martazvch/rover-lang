@@ -71,10 +71,10 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
         .discard => |index| self.indexInstr("Discard", index),
-        .enum_create => @panic("TODO"),
-        .enum_decl => @panic("TODO"),
+        .enum_create => |data| self.enumCreate(data),
+        .enum_decl => |*data| self.enumDecl(data),
         .extractor => |index| self.indexInstr("Extractor", index),
-        .field => |*data| self.getField(data, false),
+        .field => |data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
         .identifier => |*data| self.identifier(data),
@@ -137,7 +137,7 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     const variable_data, const unbox = switch (self.instrs[data.assigne]) {
         .array_access => |*arr_data| return self.arrayAccess(arr_data, data.cow, true),
         .identifier => |*variable| .{ variable, false },
-        .field => |*member| return self.fieldAssignment(member, data.cow),
+        .field => |member| return self.fieldAssignment(member, data.cow),
         .unbox => |index| .{ &self.instrs[index].identifier, true },
         else => |got| {
             std.log.debug("Got: {any}", .{got});
@@ -151,7 +151,7 @@ fn assignment(self: *Self, data: *const Instruction.Assignment) void {
     });
 }
 
-fn fieldAssignment(self: *Self, data: *const Instruction.Field, cow: bool) void {
+fn fieldAssignment(self: *Self, data: Instruction.Field, cow: bool) void {
     self.indentAndAppendSlice("[Field assignment]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
@@ -239,7 +239,21 @@ fn capture(self: *Self, data: *const Instruction.Capture) void {
     self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.local });
 }
 
-fn getField(self: *Self, data: *const Instruction.Field, cow: bool) void {
+fn enumCreate(self: *Self, data: Instruction.EnumCreate) void {
+    self.indentAndAppendSlice("[Enum create]");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    self.indentAndAppendSlice("- enum");
+    self.parseInstr(data.lhs);
+    self.indentAndAppendSlice("- tag");
+    self.indentAndPrintSlice("{}", .{data.tag_index});
+}
+
+fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) void {
+    self.indentAndPrintSlice("[Enum declaration {s}]", .{self.interner.getKey(data.name).?});
+}
+
+fn getField(self: *Self, data: Instruction.Field, cow: bool) void {
     self.indentAndPrintSlice(
         "[{s} access {}{s}]",
         .{ if (data.kind == .field) "Field" else "Method", data.index, if (cow) ", cow" else "" },
