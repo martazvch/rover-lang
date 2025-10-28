@@ -1,6 +1,16 @@
 enum Foo { a, b }
+enum Bar { a, b }
 
 fn main() {
     var foo = Foo.a
+    var bar = Bar.b
+
+    foo == Foo.a
+    Foo.a == foo
+    Foo.a == Foo.b
+
+    bar != Bar.a
+    Bar.a != bar
+    Bar.a != Bar.b
 }
 

@@ -173,6 +173,10 @@ const Compiler = struct {
         };
     }
 
+    fn at(self: *const Self, index: usize) Instruction.Data {
+        return self.manager.instr_data[index];
+    }
+
     fn eof(self: *const Self) bool {
         return self.manager.instr_idx == self.manager.instr_data.len;
     }
@@ -442,6 +446,7 @@ const Compiler = struct {
     fn binop(self: *Self, data: *const Instruction.Binop) Error!void {
         if (data.op == .@"and" or data.op == .@"or") return self.logicalBinop(data);
         if (data.op == .eq_null or data.op == .ne_null) return self.nullBinop(data);
+        if (data.op == .eq_tag or data.op == .ne_tag) return self.tagBinop(data);
 
         try self.compileInstr(data.lhs);
         try self.compileInstr(data.rhs);
@@ -503,6 +508,22 @@ const Compiler = struct {
     fn nullBinop(self: *Self, data: *const Instruction.Binop) Error!void {
         try self.compileInstr(data.lhs);
         self.writeOp(if (data.op == .eq_null) .eq_null else .ne_null);
+    }
+
+    fn tagBinop(self: *Self, data: *const Instruction.Binop) Error!void {
+        try self.tagId(data.lhs);
+        try self.tagId(data.rhs);
+        self.writeOp(if (data.op == .eq_tag) .eq_int else .ne_int);
+    }
+
+    fn tagId(self: *Self, instr: usize) Error!void {
+        switch (self.at(instr)) {
+            .enum_create => |data| try self.emitConstant(Value.makeInt(@intCast(data.tag_index))),
+            else => {
+                try self.compileInstr(instr);
+                self.writeOp(.get_tag);
+            },
+        }
     }
 
     fn block(self: *Self, data: *const Instruction.Block) Error!void {

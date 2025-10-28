@@ -90,6 +90,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .get_local_cow => self.indexInstruction(writer, "get_local_cow", offset),
         .get_method => self.indexInstruction(writer, "get_method", offset),
         .get_static_method => self.getMember(writer, "get_static_method", offset),
+        .get_tag => self.simpleInstruction(writer, "get_tag", offset),
         .gt_float => self.simpleInstruction(writer, "gt_float", offset),
         .gt_int => self.simpleInstruction(writer, "gt_int", offset),
         .incr_ref => self.simpleInstruction(writer, "incr_ref", offset),

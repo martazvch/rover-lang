@@ -1,4 +1,6 @@
 [Enum declaration Foo]
+[Enum declaration Bar]
+
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Enum create]
@@ -6,3 +8,64 @@
             [Load symbol 0]
             - tag
             0
+    [Variable declaration index: 1, scope: local]
+        [Enum create]
+            - enum
+            [Load symbol 1]
+            - tag
+            1
+    [Pop]
+        [Binop type: eq_tag]
+            [Variable index: 0, scope: local]
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                0
+    [Pop]
+        [Binop type: eq_tag]
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                0
+            [Variable index: 0, scope: local]
+    [Pop]
+        [Binop type: eq_tag]
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                0
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                1
+    [Pop]
+        [Binop type: ne_tag]
+            [Variable index: 1, scope: local]
+            [Enum create]
+                - enum
+                [Load symbol 1]
+                - tag
+                0
+    [Pop]
+        [Binop type: ne_tag]
+            [Enum create]
+                - enum
+                [Load symbol 1]
+                - tag
+                0
+            [Variable index: 1, scope: local]
+    [Binop type: ne_tag]
+        [Enum create]
+            - enum
+            [Load symbol 1]
+            - tag
+            0
+        [Enum create]
+            - enum
+            [Load symbol 1]
+            - tag
+            1

@@ -337,6 +337,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 top.* = Value.makeObj(method.asObj());
                 self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
+            .get_tag => self.stack.peekRef(0).* = .makeInt(self.stack.peek(0).obj.as(Obj.EnumInstance).tag_id),
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref => self.stack.peekRef(0).obj.ref_count += 1,
@@ -401,6 +402,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int *= rhs;
             },
+            // PERF: no push/pop, only pointer manipulation (same for eq_)
             .ne_bool => self.stack.push(Value.makeBool(self.stack.pop().bool != self.stack.pop().bool)),
             .ne_int => self.stack.push(Value.makeBool(self.stack.pop().int != self.stack.pop().int)),
             .ne_float => self.stack.push(Value.makeBool(self.stack.pop().float != self.stack.pop().float)),

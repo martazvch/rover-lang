@@ -4,9 +4,22 @@ enum Foo {
 }
 
 enum Bar { a, b }
+enum Baz { c, d }
 
 fn main() {
     var bar = Bar.a
     bar = Bar.not_a_field
-    print bar.a
+    bar.a
+
+    bar = Baz.c
+
+    var baz = Baz.c
+
+    baz == Baz
+    baz == Bar.a
+
+    Baz.c == Bar.a
+
+    1 + Baz.c
 }
+
