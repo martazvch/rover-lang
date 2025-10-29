@@ -197,6 +197,7 @@ const Tester = struct {
         var walker = try cwd.walk(self.allocator);
         defer walker.deinit();
         var specific_tested = false;
+        var err = false;
 
         while (try walker.next()) |entry| {
             if (entry.kind != .directory) continue;
@@ -212,12 +213,17 @@ const Tester = struct {
             defer cwd = cwd.openDir("..", .{}) catch unreachable;
 
             var buf: [1024]u8 = undefined;
-            self.testFile(&cwd, .standalone, try std.fmt.bufPrint(&buf, "{s}.rv", .{entry.basename}), "features") catch continue;
+            self.testFile(&cwd, .standalone, try std.fmt.bufPrint(&buf, "{s}.rv", .{entry.basename}), "features") catch {
+                err = true;
+                continue;
+            };
         }
 
         if (self.config.file != null and !specific_tested) {
             print("Failed to test specific standalone: '{s}'\n", .{self.config.file.?});
         }
+
+        if (err) return error.StandaloneErr;
     }
 
     fn runStage(self: *Self, stage: Stage) !void {
@@ -289,6 +295,12 @@ const Tester = struct {
         defer self.allocator.free(res.stdout);
         defer self.allocator.free(res.stderr);
 
+        // In standalone mode, if stderr isn't empty we encountered an error
+        if (stage == .standalone and res.stderr.len > 0) {
+            print("Error in standalone ‘{s}':\n{s}\n", .{ file_name, res.stderr });
+            return error.StandaloneErr;
+        }
+
         const got = self.cleanText(if (eql(u8, category, "features")) res.stdout else res.stderr) catch oom();
         defer self.allocator.free(got);
 
@@ -308,12 +320,12 @@ const Tester = struct {
         defer self.allocator.free(clean_expect);
 
         std.testing.expect(eql(u8, std.mem.trimRight(u8, got, "\n"), std.mem.trimRight(u8, clean_expect, "\n"))) catch |e| {
-            try self.diags.append(self.allocator, .{
+            self.diags.append(self.allocator, .{
                 .category = category,
                 .file_name = self.allocator.dupe(u8, file_name) catch oom(),
                 .diff = self.colorizedDiff(clean_expect, got) catch oom(),
                 .got = self.allocator.dupe(u8, std.mem.trimRight(u8, got, "\n")) catch oom(),
-            });
+            }) catch oom();
             return e;
         };
     }

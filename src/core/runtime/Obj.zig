@@ -305,6 +305,7 @@ pub const String = struct {
     pub fn take(vm: *Vm, str: []const u8) *String {
         const hash = String.hashString(str);
         if (vm.strings.get(hash)) |interned| {
+            vm.gc_alloc.free(str);
             return interned;
         }
 
