@@ -75,7 +75,7 @@ const Context = struct {
 };
 
 const Self = @This();
-const Error = error{Err};
+const Error = error{ Err, NotSymbol };
 const TypeResult = Error!struct { type: *const Type, instr: InstrIndex };
 const StmtResult = Error!InstrIndex;
 const TypeInfos = struct {
@@ -482,6 +482,7 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         // We try to analyze the whole body
         const res = self.analyzeNode(n, .maybe, ctx) catch continue;
 
+        // Type checking is done in return expression analyzis
         final_type = res.ti.type;
         returns = res.cf == .@"return";
 
@@ -514,7 +515,7 @@ fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr,
 }
 
 fn print(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
-    const res = try self.analyzeExpr(expr, .either, ctx);
+    const res = try self.analyzeExpr(expr, .any, ctx);
     return self.irb.wrapInstr(.print, res.instr);
 }
 
@@ -771,10 +772,10 @@ fn analyzeExpr(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *Contex
 }
 
 const ExprResKind = enum {
+    any,
     value,
-    symbol,
-    either,
     maybe,
+    symbol,
     none,
 };
 
@@ -801,31 +802,21 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *C
     const ty = res.ti.type;
 
     switch (expect) {
+        .any => try self.checkNotVoid(ty, span),
         .value => {
             try self.checkNotVoid(ty, span);
-            // Special case for functions because there are first class objects
+
+            // Functions are first class object and treated like values
             if (res.ti.is_sym and !ty.is(.function)) return self.err(
                 .{ .expect_value_found_type = .{ .found = self.typeName(ty) } },
                 self.ast.getSpan(expr),
             );
         },
-        .symbol => {},
-        // .symbol => {
-        //     try self.checkNotVoid(ty, span);
-        //     // Check wether it's a function because closures are runtime variables but still symbols
-        //     if (!res.ti.is_sym and !ty.is(.function)) {
-        //         if (ctx.in_call) return self.err(.invalid_call_target, span);
-        //         // TODO: error
-        //         @panic("Expect symbol");
-        //     }
-        // },
-        .either => {
-            try self.checkNotVoid(ty, span);
-        },
         .maybe => {},
-        .none => {
-            if (!ty.is(.void)) @panic("Must be void");
-        },
+        .symbol => if (!res.ti.is_sym) return error.NotSymbol,
+        // Should be unreachable because the `.none` information is used by blocks
+        // to declare a value-returning ob block or not.
+        .none => unreachable,
     }
 
     if (self.scope.isGlobal() and !res.ti.comp_time) {
@@ -929,9 +920,11 @@ fn block(self: *Self, expr: *const Ast.Block, expect: ExprResKind, ctx: *Context
 
     for (expr.nodes) |*node| {
         errdefer _ = self.scope.close();
+
         var res = try self.analyzeNode(node, .maybe, ctx);
         pure = pure and res.ti.comp_time;
 
+        // Type checking is done in break expression analyzis
         if (!res.ti.type.is(.void) and !res.ti.type.is(.never)) {
             instrs.appendAssumeCapacity(self.irb.wrapPreviousInstr(.pop));
         } else {
@@ -964,6 +957,7 @@ fn block(self: *Self, expr: *const Ast.Block, expect: ExprResKind, ctx: *Context
         var types = Set(*const Type).fromSlice(self.allocator, breaks) catch oom();
         break :ty self.mergeTypes(types.toOwned());
     };
+
     // TODO: protect cast
     return .newCf(
         .newType(final),
@@ -1380,7 +1374,7 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     const span = self.ast.getSpan(expr);
 
     const ctx_call = ctx.setAndGetPrevious(.in_call, true);
-    const callee = try self.analyzeExpr(expr.callee, .symbol, ctx);
+    const callee = try self.analyzeExpr(expr.callee, .any, ctx);
 
     if (!callee.type.is(.function)) return self.err(.invalid_call_target, span);
 
@@ -1747,15 +1741,13 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.structure);
-    const struct_res = try self.analyzeExprInfos(expr.structure, .symbol, ctx);
+    const struct_res = self.analyzeExprInfos(expr.structure, .symbol, ctx) catch |e| switch (e) {
+        error.NotSymbol => return self.err(.non_struct_struct_literal, span),
+        else => return e,
+    };
     var comp_time = struct_res.ti.comp_time;
 
-    const struct_type = s: {
-        if (struct_res.ti.is_sym) if (struct_res.ti.type.as(.structure)) |ty| {
-            break :s ty;
-        };
-        return self.err(.non_struct_struct_literal, span);
-    };
+    const struct_type = struct_res.ti.type.as(.structure) orelse return self.err(.non_struct_struct_literal, span);
 
     var proto = struct_type.proto(self.allocator);
     defer proto.deinit(self.allocator);

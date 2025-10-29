@@ -8,3 +8,5 @@ call_static_on_instance, staticFn
 call_method_on_type, method
 
 duplicate_param, a
+
+expect_value_found_type, Foo

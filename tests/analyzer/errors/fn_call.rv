@@ -8,6 +8,8 @@ struct Foo {
 
 fn defaults(a: int, b=2) {}
 
+fn callFoo(f: Foo) {}
+
 fn main() {
     add(1)
     add(1, 2)
@@ -22,4 +24,6 @@ fn main() {
     Foo.method()
 
     defaults(a=1, a=2)
+
+    callFoo(Foo)
 }
