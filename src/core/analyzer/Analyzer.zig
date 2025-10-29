@@ -809,15 +809,16 @@ fn analyzeExprInfos(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *C
                 self.ast.getSpan(expr),
             );
         },
-        .symbol => {
-            try self.checkNotVoid(ty, span);
-            // Check wether it's a function because closures are runtime variables but still symbols
-            if (!res.ti.is_sym and !ty.is(.function)) {
-                if (ctx.in_call) return self.err(.invalid_call_target, span);
-                // TODO: error
-                @panic("Expect symbol");
-            }
-        },
+        .symbol => {},
+        // .symbol => {
+        //     try self.checkNotVoid(ty, span);
+        //     // Check wether it's a function because closures are runtime variables but still symbols
+        //     if (!res.ti.is_sym and !ty.is(.function)) {
+        //         if (ctx.in_call) return self.err(.invalid_call_target, span);
+        //         // TODO: error
+        //         @panic("Expect symbol");
+        //     }
+        // },
         .either => {
             try self.checkNotVoid(ty, span);
         },
@@ -1749,7 +1750,10 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
     const struct_res = try self.analyzeExprInfos(expr.structure, .symbol, ctx);
     var comp_time = struct_res.ti.comp_time;
 
-    const struct_type = struct_res.ti.type.as(.structure) orelse {
+    const struct_type = s: {
+        if (struct_res.ti.is_sym) if (struct_res.ti.type.as(.structure)) |ty| {
+            break :s ty;
+        };
         return self.err(.non_struct_struct_literal, span);
     };
 

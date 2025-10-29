@@ -89,11 +89,10 @@ fn allocateComptime(allocator: Allocator, comptime T: type, type_id: TypeId) *T 
 pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
     return switch (self.kind) {
         .array => self.as(Array).deepCopy(vm).asObj(),
-        .@"enum" => @panic("TODO"),
         .enum_instance => @panic("TODO"),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .box, .closure, .function, .native_fn, .string, .structure => self,
+        .box, .closure, .@"enum", .function, .native_fn, .string, .structure => self,
     };
 }
 

@@ -508,6 +508,7 @@ fn cow(self: *Self, obj: *Obj) *Obj {
     return obj;
 }
 
+// PERF: check if a length is 0 and just return the string?
 fn strConcat(self: *Self) void {
     const s2 = self.stack.peekRef(0).obj.as(Obj.String);
     const s1 = self.stack.peekRef(1).obj.as(Obj.String);
@@ -520,6 +521,7 @@ fn strConcat(self: *Self) void {
     self.stack.top -= 1;
 }
 
+// PERF: check if factor is 0 or 1 and return empty or self string
 fn strMul(self: *Self, str: *const Obj.String, factor: i64) void {
     // BUG: Check if factor is positive
     const f = @as(usize, @intCast(factor));

@@ -1,3 +1,4 @@
 type_mismatch, bool, int
 type_mismatch, int, bool
 duplicate_field, x
+non_struct_struct_literal
