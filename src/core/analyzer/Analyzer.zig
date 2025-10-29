@@ -40,12 +40,12 @@ pub const AnalyzedModule = struct {
 
 const Context = struct {
     fn_type: ?*const Type,
-    struct_type: ?*const Type,
+    self_type: ?*const Type,
     in_call: bool,
 
     pub const empty: Context = .{
         .fn_type = null,
-        .struct_type = null,
+        .self_type = null,
         .in_call = false,
     };
 
@@ -299,11 +299,8 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
     };
     ty.tags.ensureTotalCapacity(self.allocator, @intCast(node.tags.len)) catch oom();
 
-    self.scope.open(self.allocator, null, true, false);
-    defer _ = self.scope.close();
-
-    self.containers.append(self.allocator, self.ast.toSource(name));
-    defer _ = self.containers.pop();
+    try self.openContainer(name_tk);
+    defer self.closeContainer();
 
     for (node.tags) |tag| {
         const tag_res = try self.enumTag(tag, ctx);
@@ -319,12 +316,42 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
         }
     }
 
-    sym.type = self.ti.intern(.{ .@"enum" = ty });
+    const funcs = try self.containerFnDecls(&ty, node.functions, sym, ctx);
 
     return self.irb.addInstr(
-        .{ .enum_decl = .{ .name = name, .sym_index = sym.index } },
+        .{ .enum_decl = .{ .name = name, .sym_index = sym.index, .functions = funcs } },
         self.ast.getSpan(node).start,
     );
+}
+
+/// Analyzes function declarations in a container (enum or structure)
+fn containerFnDecls(self: *Self, ty: anytype, decls: []const Ast.FnDecl, sym: *LexScope.Symbol, ctx: *Context) Error![]const InstrIndex {
+    ty.functions.ensureTotalCapacity(self.allocator, @intCast(decls.len)) catch oom();
+
+    // Create type before functions to allow 'self' to refer to the structure
+    // Can be either a structure or an enum
+    const tag_name = if (@TypeOf(ty) == *Type.Enum) "enum" else "structure";
+    const interned_type = self.ti.intern(@unionInit(Type, tag_name, ty.*));
+    const interned_kind = &@field(interned_type, tag_name);
+
+    sym.type = interned_type;
+    ctx.self_type = interned_type;
+    defer ctx.self_type = null;
+
+    var funcs: ArrayList(InstrIndex) = .empty;
+    funcs.ensureTotalCapacity(self.allocator, decls.len) catch oom();
+
+    for (decls) |*f| {
+        const fn_name = self.interner.intern(self.ast.toSource(f.name));
+        funcs.appendAssumeCapacity(try self.fnDeclaration(f, ctx));
+        // At this point, the symbol exists
+        const fn_type = self.scope.removeSymbolFromScope(fn_name).?.type;
+        interned_kind.functions.putAssumeCapacity(fn_name, fn_type);
+    }
+
+    sym.type = interned_type;
+
+    return funcs.toOwnedSlice(self.allocator) catch oom();
 }
 
 fn enumTag(self: *Self, tag: Ast.EnumDecl.Tag, ctx: *const Context) Error!struct { name: InternerIdx, ty: *const Type } {
@@ -428,7 +455,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
         const param_name = self.interner.intern(self.ast.toSource(p.name));
 
         if (i == 0 and param_name == self.cached_names.self) {
-            const self_type = ctx.struct_type orelse return self.err(.self_outside_struct, span);
+            const self_type = ctx.self_type orelse return self.err(.self_outside_decl, span);
 
             is_method = true;
             _ = try self.declareVariable(param_name, self_type, p.meta.captured, true, true, false, .zero);
@@ -669,48 +696,25 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
         .functions = .empty,
     };
     ty.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
-    ty.functions.ensureTotalCapacity(self.allocator, @intCast(node.functions.len)) catch oom();
 
-    self.scope.open(self.allocator, null, true, false);
-    defer _ = self.scope.close();
+    try self.openContainer(node.name);
+    defer self.closeContainer();
 
-    self.containers.append(self.allocator, self.ast.toSource(node.name));
-    defer _ = self.containers.pop();
-
-    // Create type before functions to allow 'self' to refer to the structure
-    const interned_type = self.ti.intern(.{ .structure = ty });
-    const interned_struct = &interned_type.structure;
-
-    sym.type = interned_type;
-    ctx.struct_type = interned_type;
-    defer ctx.struct_type = null;
-
-    const default_fields = try self.structureFields(node.fields, interned_struct, ctx);
-
-    var funcs: ArrayList(InstrIndex) = .empty;
-    funcs.ensureTotalCapacity(self.allocator, node.functions.len) catch oom();
-
-    for (node.functions) |*f| {
-        const fn_name = self.interner.intern(self.ast.toSource(f.name));
-        funcs.appendAssumeCapacity(try self.fnDeclaration(f, ctx));
-        // At this point, the symbol exists
-        const fn_type = self.scope.removeSymbolFromScope(fn_name).?.type;
-        interned_struct.functions.putAssumeCapacity(fn_name, fn_type);
-    }
+    const default_fields = try self.structureFields(node.fields, &ty, ctx);
+    const funcs = try self.containerFnDecls(&ty, node.functions, sym, ctx);
 
     return self.irb.addInstr(
         .{ .struct_decl = .{
             .name = name,
             .sym_index = sym.index,
-            .type_id = self.ti.typeId(interned_type),
+            .type_id = self.ti.typeId(sym.type),
             .fields_count = node.fields.len,
             .default_fields = default_fields,
-            .functions = funcs.toOwnedSlice(self.allocator) catch oom(),
+            .functions = funcs,
         } },
         span.start,
     );
 }
-
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error![]const InstrIndex {
     var default_fields: ArrayList(InstrIndex) = .empty;
 
@@ -1304,7 +1308,7 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
             ),
         ) };
     } else if (ty.functions.get(tag_name)) |func| {
-        _ = func;
+        return .{ .decl = .{ .type = func, .kind = .function, .index = ty.functions.getIndex(tag_name).? } };
     }
 
     return self.err(
@@ -1494,8 +1498,12 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
     }
 
     const sym_name = if (name == self.cached_names.Self) b: {
-        const struct_type = ctx.struct_type orelse return self.err(.big_self_outside_struct, span);
-        break :b struct_type.structure.loc.?.name;
+        const ty = ctx.self_type orelse return self.err(.big_self_outside_decl, span);
+        break :b switch (ty.*) {
+            .@"enum" => |t| t.loc.?.name,
+            .structure => |t| t.loc.?.name,
+            else => unreachable,
+        };
     } else name;
 
     if (self.symbolIdentifier(sym_name, span)) |res| {
@@ -2057,10 +2065,10 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
 
             const found_type = self.scope.getType(interned) orelse {
                 if (interned == self.cached_names.Self) {
-                    if (ctx.struct_type) |struct_type| {
+                    if (ctx.self_type) |struct_type| {
                         return struct_type;
                     } else {
-                        return self.err(.big_self_outside_struct, self.ast.getSpan(t));
+                        return self.err(.big_self_outside_decl, self.ast.getSpan(t));
                     }
                 } else {
                     return self.err(.{ .undeclared_type = .{ .found = self.ast.toSource(t) } }, self.ast.getSpan(t));
@@ -2079,7 +2087,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
 
             return self.ti.intern(.{ .@"union" = .{ .types = types.toOwnedSlice(self.allocator) catch oom() } });
         },
-        .self => if (ctx.struct_type) |struct_type| struct_type else self.err(.self_outside_struct, self.ast.getSpan(t)),
+        .self => if (ctx.self_type) |struct_type| struct_type else self.err(.self_outside_decl, self.ast.getSpan(t)),
     };
 }
 
@@ -2277,4 +2285,14 @@ fn declareVariable(
 
 fn forwardDeclareVariable(self: *Self, name: InternerIdx, ty: *const Type, captured: bool, span: Span) Error!void {
     return self.scope.declareVarInFutureScope(self.allocator, name, ty, captured) catch self.err(.too_many_locals, span);
+}
+
+fn openContainer(self: *Self, name: Ast.TokenIndex) Error!void {
+    self.scope.open(self.allocator, null, true, false);
+    self.containers.append(self.allocator, self.ast.toSource(name));
+}
+
+fn closeContainer(self: *Self) void {
+    defer _ = self.scope.close();
+    defer _ = self.containers.pop();
 }

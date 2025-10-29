@@ -261,12 +261,13 @@ fn enumDecl(self: *Self) Error!Node {
         if (!self.matchAndSkip(.comma)) break;
     }
 
-    try self.expect(.right_brace, .expect_brace_after_enum_body);
+    const functions = try self.containerFnDecls("enum");
 
     return .{ .enum_decl = .{
         .tk = tk,
         .name = name,
         .tags = tags.toOwnedSlice(self.allocator) catch oom(),
+        .functions = functions,
     } };
 }
 
@@ -275,7 +276,7 @@ fn enumTag(self: *Self) Error!Ast.EnumDecl.Tag {
     const name = self.token_idx - 1;
     self.skipNewLines();
 
-    const payload = if (self.check(.comma) or self.check(.right_brace)) null else payload: {
+    const payload = if (self.check(.comma) or self.check(.@"fn") or self.check(.right_brace)) null else payload: {
         try self.expect(.colon, .expect_colon_before_type);
         const ty = try self.parseType();
         self.skipNewLines();
@@ -441,22 +442,27 @@ fn structDecl(self: *Self) !Node {
         return self.errAtPrev(.missing_comma_after_field);
     }
 
-    // Functions
-    var functions: ArrayList(Ast.FnDecl) = .empty;
-
-    while (!self.check(.right_brace) and !self.check(.eof)) {
-        try self.expect(.@"fn", .expect_fn_in_struct_body);
-        functions.append(self.allocator, (try self.fnDecl()).fn_decl) catch oom();
-        self.skipNewLines();
-    }
-
-    try self.expectOrErrAtPrev(.right_brace, .expect_brace_after_struct_body);
+    const functions = try self.containerFnDecls("structure");
 
     return .{ .struct_decl = .{
         .name = name,
         .fields = fields.toOwnedSlice(self.allocator) catch oom(),
-        .functions = functions.toOwnedSlice(self.allocator) catch oom(),
+        .functions = functions,
     } };
+}
+
+fn containerFnDecls(self: *Self, kind: []const u8) Error![]Ast.FnDecl {
+    var functions: ArrayList(Ast.FnDecl) = .empty;
+
+    while (!self.check(.right_brace) and !self.check(.eof)) {
+        try self.expect(.@"fn", .{ .expect_fn_in_container = .{ .kind = kind } });
+        functions.append(self.allocator, (try self.fnDecl()).fn_decl) catch oom();
+        self.skipNewLines();
+    }
+
+    try self.expectOrErrAtPrev(.right_brace, .{ .expect_brace_end_container = .{ .kind = kind } });
+
+    return functions.toOwnedSlice(self.allocator) catch oom();
 }
 
 fn varDecl(self: *Self) Error!Node {

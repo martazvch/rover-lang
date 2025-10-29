@@ -590,10 +590,26 @@ const Compiler = struct {
     }
 
     fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) Error!void {
-        const enum_val = Value.makeObj(
-            Obj.Enum.create(self.manager.allocator, self.manager.interner.getKey(data.name).?).asObj(),
-        );
-        self.addSymbol(data.sym_index, enum_val);
+        const enum_obj = Obj.Enum.create(self.manager.allocator, self.manager.interner.getKey(data.name).?).asObj();
+
+        // We forward declare the structure in the globals because when disassembling the
+        // structure's method, they need to refer to the object. Only the name can be refered to
+        // TODO: Create a placeholder that has only the name?
+        self.addSymbol(data.sym_index, Value.makeObj(enum_obj));
+
+        var funcs: ArrayList(*Obj.Function) = .empty;
+        funcs.ensureTotalCapacity(self.manager.allocator, data.functions.len) catch oom();
+
+        for (data.functions) |func| {
+            const fn_data = self.manager.instr_data[func].fn_decl;
+            // Structures' functions have a name
+            const fn_name = self.manager.interner.getKey(fn_data.name orelse unreachable).?;
+            funcs.appendAssumeCapacity(try self.compileCallable(fn_name, &fn_data));
+        }
+
+        // enum_obj.methods = funcs.toOwnedSlice(self.manager.allocator) catch oom();
+
+        self.addSymbol(data.sym_index, .makeObj(enum_obj));
     }
 
     fn field(self: *Self, data: *const Instruction.Field) Error!void {

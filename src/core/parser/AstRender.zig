@@ -64,6 +64,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
                 try self.closeKey(.list, false);
             }
 
+            try self.renderFnDecls(n.functions);
             try self.closeKey(.block, comma);
         },
         .fn_decl => |*n| try self.renderFnDecl(self.ast.toSource(n.name), n, comma),
@@ -96,17 +97,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
                 try self.closeKey(.list, true);
             }
 
-            if (n.functions.len == 0) {
-                try self.emptyKey("functions", .list, false);
-            } else {
-                try self.openKey("functions", .list);
-                for (n.functions, 0..) |*f, i| {
-                    const last = i != n.functions.len - 1;
-                    try self.renderFnDecl(self.ast.toSource(f.name), f, last);
-                }
-                try self.closeKey(.list, false);
-            }
-
+            try self.renderFnDecls(n.functions);
             try self.closeKey(.block, comma);
         },
         .use => |n| {
@@ -148,6 +139,19 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .expr => |n| try self.renderExpr(n, comma),
+    }
+}
+
+fn renderFnDecls(self: *Self, decls: []const Ast.FnDecl) !void {
+    if (decls.len == 0) {
+        try self.emptyKey("functions", .list, false);
+    } else {
+        try self.openKey("functions", .list);
+        for (decls, 0..) |*f, i| {
+            const last = i != decls.len - 1;
+            try self.renderFnDecl(self.ast.toSource(f.name), f, last);
+        }
+        try self.closeKey(.list, false);
     }
 }
 

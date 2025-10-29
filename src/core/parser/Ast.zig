@@ -36,6 +36,7 @@ pub const EnumDecl = struct {
     tk: TokenIndex,
     name: ?TokenIndex,
     tags: []const Tag,
+    functions: []FnDecl,
 
     pub const Tag = struct {
         name: TokenIndex,

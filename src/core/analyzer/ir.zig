@@ -119,6 +119,7 @@ pub const Instruction = struct {
     pub const EnumDecl = struct {
         name: usize,
         sym_index: SymbolIndex,
+        functions: []const Index,
     };
     pub const FnDecl = struct {
         kind: Kind,
