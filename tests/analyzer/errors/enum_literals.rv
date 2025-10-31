@@ -1,0 +1,7 @@
+enum Marker { circle, cross }
+fn main() {
+    var foo = .bar
+    var bar: int = .baz
+
+    var marker: Marker = .triangle
+}

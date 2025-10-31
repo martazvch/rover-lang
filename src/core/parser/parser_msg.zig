@@ -3,6 +3,7 @@ const Writer = @import("std").Io.Writer;
 pub const ParserMsg = union(enum) {
     chaining_cmp_op,
     default_value_self,
+    enum_lit_non_ident,
     expect_brace_end_container: struct { kind: []const u8 },
     expect_brace_after_struct_lit,
     expect_brace_after_while_cond,
@@ -61,6 +62,7 @@ pub const ParserMsg = union(enum) {
         try switch (self) {
             .chaining_cmp_op => writer.writeAll("chaining comparison operators"),
             .default_value_self => writer.writeAll("can't assign a default value to 'self'"),
+            .enum_lit_non_ident => writer.writeAll("expect an identifier for enum literal"),
             .expect_arrow_before_fn_type => writer.writeAll("expect arrow '->' before function type"),
             .expect_arrow_before_pm_arm_body => writer.writeAll("expect arrow '=>' before pattern matching arm's body"),
             .expect_block_or_do => |e| writer.print("expect a block or 'do' after '{s}' condition", .{e.what}),
@@ -148,7 +150,7 @@ pub const ParserMsg = union(enum) {
             => writer.writeAll("expect to be here"),
             .expect_colon_before_type => writer.writeAll("before this identifier"),
             .expect_equal_struct_lit => writer.writeAll("expect to be after this"),
-            .expect_field_name => writer.writeAll("this is not an identifier"),
+            .enum_lit_non_ident, .expect_field_name => writer.writeAll("this is not an identifier"),
             .expect_field_type_or_default => writer.writeAll("this field has no type and not default value"),
             .expect_fn_in_container => writer.writeAll("this is unexpected"),
             .default_value_self,
@@ -179,6 +181,7 @@ pub const ParserMsg = union(enum) {
             .default_value_self => writer.writeAll(
                 "'self' is the only parameter than can't have a default value, as it's value is infered by the compiler",
             ),
+            .enum_lit_non_ident => writer.writeAll("enum literal syntax is: '.enum_tag'"),
             .expect_arrow_before_fn_type => writer.writeAll("add an arrow '->' between function's arguments list and type"),
             .expect_arrow_before_pm_arm_body => writer.writeAll(
                 "Syntax is: <pattern> => <body> with optional binding like <pattern> :: binding => <body>",

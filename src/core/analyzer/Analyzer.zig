@@ -39,11 +39,13 @@ pub const AnalyzedModule = struct {
 };
 
 const Context = struct {
+    decl_type: ?*const Type,
     fn_type: ?*const Type,
     self_type: ?*const Type,
     in_call: bool,
 
     pub const empty: Context = .{
+        .decl_type = null,
         .fn_type = null,
         .self_type = null,
         .in_call = false,
@@ -219,8 +221,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
     defer snapshot.restore();
     const span = self.ast.getSpan(node.assigne);
 
-    var value_res = try self.analyzeExpr(node.value, .value, ctx);
-
     const maybe_assigne: ?InstrInfos = switch (node.assigne.*) {
         .literal => |*e| b: {
             if (e.tag != .identifier) break :b null;
@@ -247,6 +247,12 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
     };
 
     const assigne = maybe_assigne orelse return self.err(.invalid_assign_target, span);
+
+    ctx.decl_type = assigne.type;
+    defer ctx.decl_type = null;
+
+    var value_res = try self.analyzeExpr(node.value, .value, ctx);
+
     _ = try self.performTypeCoercion(assigne.type, value_res.type, false, self.ast.getSpan(node.value));
 
     self.checkWrap(&value_res.instr, value_res.ti.heap);
@@ -624,6 +630,9 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) StmtResu
     const name = try self.internIfNotInCurrentScope(node.name);
     var checked_type = try self.checkAndGetType(node.typ, ctx);
 
+    ctx.decl_type = if (!checked_type.is(.void)) checked_type else null;
+    defer ctx.decl_type = null;
+
     var comp_time = false;
 
     const value_instr = if (node.value) |value| instr: {
@@ -713,6 +722,9 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 
         struct_field.type = try self.checkAndGetType(f.typ, ctx);
 
+        ctx.decl_type = struct_field.type;
+        defer ctx.decl_type = null;
+
         if (f.value) |value| {
             struct_field.default = true;
             const res = try self.analyzeExpr(value, .value, ctx);
@@ -769,6 +781,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *Contex
         .binop => |*e| self.binop(e, ctx),
         .@"break" => |*e| self.breakExpr(e, ctx),
         .closure => |*e| self.closure(e, ctx),
+        .enum_lit => |e| self.enumLit(e, ctx),
         .field => |*e| self.field(e, ctx),
         .fn_call => |*e| self.call(e, ctx),
         .grouping => |*e| self.analyzeExpr(e.expr, expect, ctx),
@@ -964,6 +977,11 @@ fn internLabel(self: *Self, label: ?Ast.TokenIndex) ?InternerIdx {
 
 fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
     const lhs = try self.analyzeExpr(expr.lhs, .value, ctx);
+
+    // For enum literals
+    ctx.decl_type = if (!lhs.type.is(.void)) lhs.type else null;
+    defer ctx.decl_type = null;
+
     const rhs = try self.analyzeExpr(expr.rhs, .value, ctx);
 
     const lhs_type = lhs.type;
@@ -1208,6 +1226,35 @@ fn aliasOptional(self: *Self, expr: *const Ast.Expr, alias: Ast.TokenIndex, ctx:
     };
 }
 
+fn enumLit(self: *Self, tag: Ast.TokenIndex, ctx: *Context) Result {
+    const span = self.ast.getSpan(tag);
+    const decl = ctx.decl_type orelse return self.err(.enum_lit_no_type, span);
+
+    const enum_ty = decl.as(.@"enum") orelse return self.err(
+        .{ .enum_lit_non_enum = .{ .found = self.typeName(decl) } },
+        span,
+    );
+    const tag_name = self.interner.intern(self.ast.toSource(tag));
+
+    const tag_index = enum_ty.tags.getIndex(tag_name) orelse return self.err(
+        .{ .enum_unknown_decl = .{ .@"enum" = self.typeName(decl), .field = self.ast.toSource(tag) } },
+        span,
+    );
+
+    // It must exist because type parsed before expression, so if not existing it would have error already
+    const name = self.scope.getSymbolName(decl).?;
+    const sym = self.symbolIdentifier(name, span).?;
+
+    return .{
+        .type = decl,
+        .ti = .{ .comp_time = enum_ty.tags.get(tag_name).?.is(.void) },
+        .instr = self.irb.addInstr(
+            .{ .enum_create = .{ .lhs = sym.instr, .tag_index = tag_index } },
+            span.start,
+        ),
+    };
+}
+
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.structure);
 
@@ -1304,13 +1351,6 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
     return self.err(
         .{ .enum_unknown_decl = .{ .@"enum" = self.typeName(enum_info.type), .field = self.ast.toSource(tag_tk) } },
         span,
-    );
-}
-
-fn enumCreate(self: *Self, ty: *const Type, tag_index: usize, instr: usize) Result {
-    return .fromType(
-        ty,
-        self.irb.addInstr(.{ .enum_create = .{ .lhs = instr, .tag_index = tag_index } }, self.irb.instrOffset(instr)),
     );
 }
 
@@ -1416,7 +1456,6 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
 
     for (args, 0..) |arg, i| {
         var param_info: *const Type.Function.Parameter = undefined;
-        var value = try self.analyzeExpr(arg.value, .value, ctx);
         const span = self.ast.getSpan(arg.value);
 
         const index = value: {
@@ -1445,6 +1484,10 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
                 break :value i;
             }
         };
+
+        ctx.decl_type = param_info.type;
+        defer ctx.decl_type = null;
+        var value = try self.analyzeExpr(arg.value, .value, ctx);
 
         _ = try self.performTypeCoercion(param_info.type, value.type, false, span);
 

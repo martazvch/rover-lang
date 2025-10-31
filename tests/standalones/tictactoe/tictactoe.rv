@@ -1,25 +1,26 @@
+enum Marker {
+    circle,
+    cross,
+    none,
+
+    fn toStr(self) -> str {
+        if self == .circle do return "o"
+        if self == .cross do return "x"
+        return " "
+    }
+}
+
 struct Cell {
-    played = false,
-    marker = 0,
+    marker: Marker = .none,
 
-    fn mark(self, marker: int) {
-        if self.played do print "Already played cell"
+    fn mark(self, marker: Marker) {
+        if self.marker != .none do print "Already played cell"
 
-        self.played = true
         self.marker = marker
     }
 
-    fn checkValidity(self) {
-        if self.played and self.marker == 0 {
-            print "Invalid cell, marked as played but no marker"
-        }
-    }
-
-    fn toString(self) -> str {
-        self.checkValidity()
-        return "[" + {
-            break if self.played {break if self.marker == 1 do "x" else "o"} else " "
-        } + "]"
+    fn toStr(self) -> str {
+        return "[" + self.marker.toStr() + "]"
     }
 }
 
@@ -38,15 +39,17 @@ struct Grid {
         }
     }
 
-    fn playAt(self, x, y: int, marker: int, method = false) {
-        if self.cells[x][y].played {
+    fn playAt(self, x, y: int, marker: Marker, method = false) {
+        if self.cells[x][y].marker != .none {
             print "Already played in this cell"
             return
         }
         
         if method {
             self.cells[x][y].mark(marker)
-        } else self.cells[x][y] = Cell{played=true, marker}
+        } else {
+            self.cells[x][y] = Cell{marker}
+        }
     }
 
     fn display(self) {
@@ -58,7 +61,7 @@ struct Grid {
             var j = 0
             
             while j < self.dim {
-                line += self.cells[i][j].toString() + if j < 2 do " " else ""
+                line += self.cells[i][j].toStr() + if j < 2 do " " else ""
                 j += 1
             }
 
@@ -74,16 +77,18 @@ fn main() {
     var grid = Grid.init()
     
     grid.display()
-    grid.playAt(1, 2, 2)
+    grid.playAt(1, 2, .circle)
     grid.display()
 
-    grid.playAt(1, 2, 2)
-    grid.playAt(2, 0, 1)
+    grid.playAt(1, 2, .circle)
+    grid.playAt(2, 0, .cross)
     grid.display()
 
-    grid.playAt(1, 0, 2, true)
+    grid.playAt(1, 0, .circle, true)
     grid.display()
 
-    grid.playAt(1, 1, 1, method=true)
+    grid.playAt(1, 1, .cross, method=true)
     grid.display()
 }
+
+

@@ -1,0 +1,4 @@
+enum_lit_no_type
+enum_lit_non_enum, int
+enum_unknown_decl, Marker, triangle
+

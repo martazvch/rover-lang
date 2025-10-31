@@ -206,6 +206,20 @@ pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
     return null;
 }
 
+pub fn getSymbolName(self: *const Self, sym_type: *const Type) ?InternerIdx {
+    var it = self.iterator();
+    while (it.next()) |scope| {
+        var sym_it = scope.symbols.iterator();
+        while (sym_it.next()) |sym| {
+            if (sym.value_ptr.type == sym_type) {
+                return sym.key_ptr.*;
+            }
+        }
+    }
+
+    return null;
+}
+
 pub fn declareExternSymbol(
     self: *Self,
     allocator: Allocator,
@@ -281,8 +295,7 @@ pub fn getType(self: *Self, name: InternerIdx) ?*const Type {
 }
 
 pub fn isVarOrSymInCurrentScope(self: *const Self, name: InternerIdx) bool {
-    return self.current.variables.get(name) != null or
-        self.current.symbols.get(name) != null;
+    return self.current.variables.get(name) != null or self.current.symbols.get(name) != null;
 }
 
 pub fn isModuleImported(self: *const Self, name: InternerIdx) bool {

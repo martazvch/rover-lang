@@ -824,6 +824,7 @@ fn parseExpr(self: *Self) Error!*Expr {
     const expr = try switch (self.prev(.tag)) {
         .@"break" => self.breakExpr(),
         .colon => self.labelledBlock(),
+        .dot => self.enumLit(),
         .false => self.literal(.bool),
         .float => self.literal(.float),
         .@"if" => self.ifExpr(),
@@ -985,6 +986,13 @@ fn closure(self: *Self) Error!*Expr {
         .is_closure = true,
     } };
 
+    return expr;
+}
+
+fn enumLit(self: *Self) Error!*Expr {
+    const expr = self.allocator.create(Expr) catch oom();
+    try self.expect(.identifier, .enum_lit_non_ident);
+    expr.* = .{ .enum_lit = self.token_idx - 1 };
     return expr;
 }
 

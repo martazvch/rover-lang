@@ -130,6 +130,7 @@ pub const Expr = union(enum) {
     binop: Binop,
     @"break": Break,
     closure: FnDecl,
+    enum_lit: TokenIndex,
     field: Field,
     fn_call: FnCall,
     grouping: Grouping,

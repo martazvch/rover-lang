@@ -31,6 +31,8 @@ pub const AnalyzerMsg = union(enum) {
     duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
     enum_dup_tag: struct { name: []const u8 },
+    enum_lit_no_type,
+    enum_lit_non_enum: struct { found: []const u8 },
     enum_tag_access,
     enum_unknown_decl: struct { @"enum": []const u8, field: []const u8 },
     expect_value_found_type: struct { found: []const u8 },
@@ -118,6 +120,8 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
             .enum_dup_tag => |e| writer.print("tag '{s}' already declared in enum", .{e.name}),
+            .enum_lit_no_type => writer.writeAll("can't infer enum's type"),
+            .enum_lit_non_enum => |e| writer.print("expect an enum but found '{s}'", .{e.found}),
             .enum_tag_access => writer.writeAll("can't access enum's tag at runtime"),
             .enum_unknown_decl => |e| writer.print("enum '{s}' have no declaration '{s}'", .{ e.@"enum", e.field }),
             .expect_value_found_type => |e| writer.print("expect a value found type '{s}'", .{e.found}),
@@ -193,6 +197,8 @@ pub const AnalyzerMsg = union(enum) {
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
             .enum_dup_tag => writer.writeAll("this tag"),
+            .enum_lit_no_type => writer.writeAll("this expression has no type to infer to"),
+            .enum_lit_non_enum => writer.writeAll("this enum literal don't match any enum"),
             .enum_tag_access => writer.writeAll("this is one of the enum's tag"),
             .enum_unknown_decl => writer.writeAll("this name is unknown"),
             .expect_value_found_type => writer.writeAll("this is not a runtime value"),
@@ -271,6 +277,11 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
             .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),
             .enum_dup_tag => writer.writeAll("use another name or introduce numbers, underscore, ..."),
+            .enum_lit_no_type => writer.writeAll(
+                \\to use enum literals, you must provide a type so that the compiler can infer it.
+                \\use either: 'var foo: Foo = .a' or 'var foo = Foo.a'"
+            ),
+            .enum_lit_non_enum => writer.writeAll("enum literal expressions are only allowed with enum types"),
             .enum_tag_access => writer.writeAll(
                 \\you can either access declarations inside an enum (functions, constants, ...) or test enum's tag
                 \\with an 'if' statement like: 'if foo == .a {}' or with pattern matching via 'match'.

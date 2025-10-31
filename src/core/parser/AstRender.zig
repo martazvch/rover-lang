@@ -306,6 +306,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             try self.closeKey(.block, comma);
         },
         .closure => |*e| try self.renderFnDecl("", e, comma),
+        .enum_lit => |e| try self.pushKeyValue("enum_literal", self.ast.toSource(e), comma),
         .field => |e| {
             try self.openKey(@tagName(expr.*), .block);
             try self.renderSingleExpr("structure", e.structure, .block, true);
