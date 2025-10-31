@@ -58,14 +58,25 @@
                 - tag
                 0
             [Variable index: 1, scope: local]
-    [Binop type: ne_tag]
-        [Enum create]
-            - enum
-            [Load symbol 1]
-            - tag
-            0
-        [Enum create]
-            - enum
-            [Load symbol 1]
-            - tag
-            1
+    [Pop]
+        [Binop type: ne_tag]
+            [Enum create]
+                - enum
+                [Load symbol 1]
+                - tag
+                0
+            [Enum create]
+                - enum
+                [Load symbol 1]
+                - tag
+                1
+
+    [Variable declaration index: 2, scope: local]
+        [Fn call]
+            [Method access 0]
+                [Load symbol 1]
+
+    [Print]
+        [Fn call]
+            [Method access 1]
+                [Variable index: 2, scope: local]

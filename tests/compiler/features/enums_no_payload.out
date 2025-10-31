@@ -1,0 +1,74 @@
+-- init --
+load_sym index 1, <enum Bar>
+enum_create index 0
+ret
+
+-- toStr --
+get_local index 0
+get_tag
+constant index 0, value 0
+eq_int
+jump_false 6 -> 16
+pop
+constant index 1, value a
+ret
+jump 13 -> 17
+pop
+constant index 2, value b
+ret
+
+-- main --
+load_sym index 0, <enum Foo>
+enum_create index 0
+
+load_sym index 1, <enum Bar>
+enum_create index 1
+
+get_local index 0
+get_tag
+constant index 0, value 0
+eq_int
+pop
+
+constant index 1, value 0
+get_local index 0
+get_tag
+eq_int
+pop
+
+constant index 2, value 0
+constant index 3, value 1
+eq_int
+pop
+
+get_local index 1
+get_tag
+constant index 4, value 0
+ne_int
+pop
+
+constant index 5, value 0
+get_local index 1
+get_tag
+ne_int
+pop
+
+constant index 6, value 0
+constant index 7, value 1
+ne_int
+pop
+
+load_sym index 1, <enum Bar>
+get_fn index 0
+call index 0
+
+get_local index 2
+invoke index 1
+call index 1
+print
+
+ret_naked
+
+-- global scope --
+load_sym index 4, <function main>
+call index 0

@@ -1,0 +1,11 @@
+<enum Foo, tag 0>
+<enum Bar, tag 1>
+true
+true
+false
+
+true
+true
+true
+
+a

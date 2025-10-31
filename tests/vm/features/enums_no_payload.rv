@@ -15,15 +15,18 @@ enum Bar {
 
 fn main() {
     var foo = Foo.a
+    print foo
+
     var bar = Bar.b
+    print bar
 
-    foo == Foo.a
-    Foo.a == foo
-    Foo.a == Foo.b
+    print foo == Foo.a
+    print Foo.a == foo
+    print Foo.a == Foo.b
 
-    bar != Bar.a
-    Bar.a != bar
-    Bar.a != Bar.b
+    print bar != Bar.a
+    print Bar.a != bar
+    print Bar.a != Bar.b
 
     var d = Bar.init()
     print d.toStr()
