@@ -22,11 +22,11 @@ constant index 1, value Tom
 struct_lit index 2
 push_null
 get_local index 0
-get_method index 0
+invoke index 0
 closure index 1
 push_null
 get_local index 0
-get_method index 1
+invoke index 1
 closure index 1
 get_local index 2
 call index 0

@@ -60,7 +60,7 @@ call index 0
 print
 
 load_sym index 1, <structure Bar>
-get_static_method index 0
+get_fn index 0
 get_local_cow index 1
 set_field index 0
 
@@ -70,7 +70,7 @@ call index 0
 print
 
 get_local index 0
-get_method index 1
+invoke index 1
 closure index 1
 get_local_cow index 1
 set_field index 0

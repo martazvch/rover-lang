@@ -15,12 +15,12 @@ ret
 
 -- main --
 load_sym index 0, <structure Vec1>
-get_static_method index 0
+get_fn index 0
 constant index 0, value 5
 call index 1
 
 load_sym index 0, <structure Vec1>
-get_static_method index 0
+get_fn index 0
 
 get_local index 1
 constant index 1, value 65
@@ -28,13 +28,13 @@ call index 1
 set_local index 0
 
 load_sym index 4, <structure Vec2>
-get_static_method index 0
+get_fn index 0
 constant index 2, value 12
 constant index 3, value 99
 call index 2
 
 load_sym index 4, <structure Vec2>
-get_static_method index 0
+get_fn index 0
 
 get_local index 3
 constant index 4, value 56

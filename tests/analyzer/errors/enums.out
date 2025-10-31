@@ -1,5 +1,5 @@
 enum_dup_tag, a
-enum_unknown_field, Bar, not_a_field
+enum_unknown_decl, Bar, not_a_field
 enum_tag_access
 type_mismatch, Bar, Baz
 expect_value_found_type, Baz

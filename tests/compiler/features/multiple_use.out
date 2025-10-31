@@ -117,7 +117,7 @@ constant index 1, value 90
 struct_lit index 2
 
 get_local index 0
-get_method index 1
+invoke index 1
 call index 1
 
 load_extern_sym index 4, module 1
@@ -162,7 +162,7 @@ call index 1
 print
 
 get_local index 0
-get_method index 1
+invoke index 1
 call index 1
 
 load_extern_sym index 0, module 2
@@ -172,12 +172,12 @@ call index 2
 print
 
 get_local index 1
-get_method index 0
+invoke index 0
 get_local index 0
 call index 2
 
 get_local index 3
-get_method index 1
+invoke index 1
 call index 1
 
 get_local index 1

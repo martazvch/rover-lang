@@ -322,25 +322,22 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
-            .get_method => {
+            .get_fn => {
                 const index = frame.readByte();
-                self.stack.push(self.stack.peek(0));
-                self.stack.peekRef(1).* = Value.makeObj(self.stack.peekRef(0).obj.as(Obj.Instance).parent.methods[index].asObj());
-                self.stack.peekRef(1).obj.loadDefaultValues(self, 0);
-            },
-            // TODO: same as above
-            .get_static_method => {
-                const method_idx = frame.readByte();
-                const top = self.stack.peekRef(0);
-                const structure = top.obj.as(Obj.Structure);
-                const method = structure.methods[method_idx];
-                top.* = Value.makeObj(method.asObj());
+                self.stack.peekRef(0).* = self.stack.peekRef(0).obj.getFn(index);
                 self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
             .get_tag => self.stack.peekRef(0).* = .makeInt(self.stack.peek(0).obj.as(Obj.EnumInstance).tag_id),
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref => self.stack.peekRef(0).obj.ref_count += 1,
+            .invoke => {
+                const index = frame.readByte();
+                // Puts 'self' on as first arg
+                self.stack.push(self.stack.peek(0));
+                self.stack.peekRef(1).* = self.stack.peekRef(0).obj.getFn(index);
+                self.stack.peekRef(1).obj.loadDefaultValues(self, 0);
+            },
             .is_bool => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .bool),
             .is_float => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .float),
             .is_int => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .int),

@@ -16,7 +16,7 @@ constant index 0, value 1
 struct_lit index 1
 
 get_local index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 print

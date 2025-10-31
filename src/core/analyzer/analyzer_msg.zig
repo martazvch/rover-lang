@@ -32,7 +32,7 @@ pub const AnalyzerMsg = union(enum) {
     duplicate_param: struct { name: []const u8 },
     enum_dup_tag: struct { name: []const u8 },
     enum_tag_access,
-    enum_unknown_field: struct { @"enum": []const u8, field: []const u8 },
+    enum_unknown_decl: struct { @"enum": []const u8, field: []const u8 },
     expect_value_found_type: struct { found: []const u8 },
     float_equal,
     fn_expect_value: struct { expect: []const u8 },
@@ -119,7 +119,7 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
             .enum_dup_tag => |e| writer.print("tag '{s}' already declared in enum", .{e.name}),
             .enum_tag_access => writer.writeAll("can't access enum's tag at runtime"),
-            .enum_unknown_field => |e| writer.print("enum '{s}' have no tag and no declaration '{s}'", .{ e.@"enum", e.field }),
+            .enum_unknown_decl => |e| writer.print("enum '{s}' have no declaration '{s}'", .{ e.@"enum", e.field }),
             .expect_value_found_type => |e| writer.print("expect a value found type '{s}'", .{e.found}),
             .float_equal => writer.writeAll("floating-point values equality is unsafe"),
             .fn_expect_value => |e| writer.print("no value returned from function expecting '{s}'", .{e.expect}),
@@ -194,7 +194,7 @@ pub const AnalyzerMsg = union(enum) {
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
             .enum_dup_tag => writer.writeAll("this tag"),
             .enum_tag_access => writer.writeAll("this is one of the enum's tag"),
-            .enum_unknown_field => writer.writeAll("this name is unknown"),
+            .enum_unknown_decl => writer.writeAll("this name is unknown"),
             .expect_value_found_type => writer.writeAll("this is not a runtime value"),
             .float_equal => writer.writeAll("both sides are 'floats'"),
             .fn_expect_value => writer.writeAll("last expression didn't return a value"),
@@ -275,7 +275,7 @@ pub const AnalyzerMsg = union(enum) {
                 \\you can either access declarations inside an enum (functions, constants, ...) or test enum's tag
                 \\with an 'if' statement like: 'if foo == .a {}' or with pattern matching via 'match'.
             ),
-            .enum_unknown_field => writer.writeAll("refer to enum's declaration to see available tags and declarations"),
+            .enum_unknown_decl => writer.writeAll("refer to enum's declaration to see available tags and declarations"),
             .expect_value_found_type => writer.writeAll("types can't be used as a runtime value"),
             .float_equal => writer.writeAll(
                 \\floating-point values are approximations to infinitly precise real numbers. 

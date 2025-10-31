@@ -553,7 +553,7 @@ const Compiler = struct {
     fn boundMethod(self: *Self, data: Instruction.BoundMethod) Error!void {
         try self.compileInstr(data.structure);
         // Get method duplicates instance on top of stack and it's used by closure
-        self.writeOpAndByte(.get_method, @intCast(data.index));
+        self.writeOpAndByte(.invoke, @intCast(data.index));
         self.writeOpAndByte(.closure, 1);
     }
 
@@ -590,26 +590,9 @@ const Compiler = struct {
     }
 
     fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) Error!void {
-        const enum_obj = Obj.Enum.create(self.manager.allocator, self.manager.interner.getKey(data.name).?).asObj();
-
-        // We forward declare the structure in the globals because when disassembling the
-        // structure's method, they need to refer to the object. Only the name can be refered to
-        // TODO: Create a placeholder that has only the name?
-        self.addSymbol(data.sym_index, Value.makeObj(enum_obj));
-
-        var funcs: ArrayList(*Obj.Function) = .empty;
-        funcs.ensureTotalCapacity(self.manager.allocator, data.functions.len) catch oom();
-
-        for (data.functions) |func| {
-            const fn_data = self.manager.instr_data[func].fn_decl;
-            // Structures' functions have a name
-            const fn_name = self.manager.interner.getKey(fn_data.name orelse unreachable).?;
-            funcs.appendAssumeCapacity(try self.compileCallable(fn_name, &fn_data));
-        }
-
-        // enum_obj.methods = funcs.toOwnedSlice(self.manager.allocator) catch oom();
-
-        self.addSymbol(data.sym_index, .makeObj(enum_obj));
+        const enum_val = Obj.Enum.create(self.manager.allocator, self.manager.interner.getKey(data.name).?, &.{});
+        self.addSymbol(data.sym_index, Value.makeObj(enum_val.asObj()));
+        enum_val.functions = try self.containerFnDecls(data.functions);
     }
 
     fn field(self: *Self, data: *const Instruction.Field) Error!void {
@@ -622,9 +605,9 @@ const Compiler = struct {
             else if (data.kind == .symbol)
                 .load_sym
             else if (data.kind == .method)
-                .get_method
+                .invoke
             else
-                .get_static_method,
+                .get_fn,
             @intCast(data.index),
         );
     }
@@ -690,6 +673,21 @@ const Compiler = struct {
         }
 
         self.writeOpAndByte(.closure, @intCast(data.captures.len));
+    }
+
+    fn containerFnDecls(self: *Self, decls: []const ir.Index) Error![]Value {
+        var funcs: ArrayList(Value) = .empty;
+        funcs.ensureTotalCapacity(self.manager.allocator, decls.len) catch oom();
+
+        for (decls) |decl| {
+            const fn_data = self.manager.instr_data[decl].fn_decl;
+            // Structures' functions have a name
+            const fn_name = self.manager.interner.getKey(fn_data.name orelse unreachable).?;
+            const func = try self.compileCallable(fn_name, &fn_data);
+            funcs.appendAssumeCapacity(.makeObj(func.asObj()));
+        }
+
+        return funcs.toOwnedSlice(self.manager.allocator) catch oom();
     }
 
     fn identifier(self: *Self, data: *const Instruction.Variable) Error!void {
@@ -787,17 +785,7 @@ const Compiler = struct {
             structure.default_values[i] = try self.compileDefaultValue(def);
         }
 
-        var funcs: ArrayList(*Obj.Function) = .empty;
-        funcs.ensureTotalCapacity(self.manager.allocator, data.functions.len) catch oom();
-
-        for (data.functions) |func| {
-            const fn_data = self.manager.instr_data[func].fn_decl;
-            // Structures' functions have a name
-            const fn_name = self.manager.interner.getKey(fn_data.name orelse unreachable).?;
-            funcs.appendAssumeCapacity(try self.compileCallable(fn_name, &fn_data));
-        }
-
-        structure.methods = funcs.toOwnedSlice(self.manager.allocator) catch oom();
+        structure.functions = try self.containerFnDecls(data.functions);
         const struct_obj = Value.makeObj(structure.asObj());
         self.addSymbol(data.sym_index, struct_obj);
     }

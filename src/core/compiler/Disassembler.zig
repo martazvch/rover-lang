@@ -88,8 +88,8 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .get_global_cow => self.getGlobal(writer, true, offset),
         .get_local => self.indexInstruction(writer, "get_local", offset),
         .get_local_cow => self.indexInstruction(writer, "get_local_cow", offset),
-        .get_method => self.indexInstruction(writer, "get_method", offset),
-        .get_static_method => self.getMember(writer, "get_static_method", offset),
+        .invoke => self.indexInstruction(writer, "invoke", offset),
+        .get_fn => self.getMember(writer, "get_fn", offset),
         .get_tag => self.simpleInstruction(writer, "get_tag", offset),
         .gt_float => self.simpleInstruction(writer, "gt_float", offset),
         .gt_int => self.simpleInstruction(writer, "gt_int", offset),
@@ -259,11 +259,7 @@ fn loadSymbol(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
     return offset + 2;
 }
 fn getMember(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writer.Error!usize {
-    // Skips the structure op
-    // TODO: What?
-    var local_offset = offset + 1;
-    const idx = self.chunk.code.items[local_offset];
-    local_offset += 1;
+    const idx = self.chunk.code.items[offset + 1];
 
     if (self.render_mode == .@"test") {
         try writer.print("{s} index {}\n", .{ name, idx });
@@ -271,5 +267,5 @@ fn getMember(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writ
         try writer.print("{s:<20} index {:>4}\n", .{ name, idx });
     }
 
-    return local_offset;
+    return offset + 2;
 }

@@ -1234,14 +1234,14 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
 
     const field_res = switch (struct_res.ti.type.*) {
         .@"enum" => |ty| b: {
-            const res = try self.enumAccess(struct_res, ty, expr.field, ctx);
+            const res = try self.enumAccess(struct_res, ty, expr.field);
 
             switch (res) {
                 .tag => |tag| return tag,
                 .decl => |decl| break :b decl,
             }
         },
-        .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.ti.is_sym, ctx),
+        .structure => |*ty| try self.structureAccess(expr.field, ty, struct_res.ti.is_sym, ctx.in_call),
         .module => |ty| return self.moduleAccess(expr.field, ty),
         else => return self.err(
             .{ .non_struct_field_access = .{ .found = self.typeName(struct_res.ti.type) } },
@@ -1286,20 +1286,17 @@ const EnumResult = union(enum) {
     decl: AccessResult,
 };
 
-fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.TokenIndex, ctx: *const Context) Error!EnumResult {
-    _ = ctx; // autofix
+fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.TokenIndex) Error!EnumResult {
     const span = self.ast.getSpan(tag_tk);
     const text = self.ast.toSource(tag_tk);
     const tag_name = self.interner.intern(text);
 
-    if (!enum_info.ti.is_sym) {
-        if (ty.tags.getIndex(tag_name) != null) return self.err(.enum_tag_access, span);
-
-        // TODO: Return a decl access, could be a constant or a function
-        @panic("Non symbol instance");
-    }
-
     if (ty.tags.getIndex(tag_name)) |index| {
+        // Can't access a tag on an instance
+        if (!enum_info.ti.is_sym) {
+            return self.err(.enum_tag_access, span);
+        }
+
         return .{ .tag = .fromType(
             self.ti.intern(.{ .@"enum" = ty }),
             self.irb.addInstr(
@@ -1312,7 +1309,7 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
     }
 
     return self.err(
-        .{ .enum_unknown_field = .{ .@"enum" = self.typeName(enum_info.ti.type), .field = self.ast.toSource(tag_tk) } },
+        .{ .enum_unknown_decl = .{ .@"enum" = self.typeName(enum_info.ti.type), .field = self.ast.toSource(tag_tk) } },
         span,
     );
 }
@@ -1324,7 +1321,7 @@ fn enumCreate(self: *Self, ty: *const Type, tag_index: usize, instr: usize) Resu
     );
 }
 
-fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Structure, is_symbol: bool, ctx: *const Context) Error!AccessResult {
+fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Structure, is_symbol: bool, in_call: bool) Error!AccessResult {
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
 
@@ -1333,7 +1330,7 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Struct
     else if (ty.functions.get(field_name)) |f| b: {
         const function = &f.function;
 
-        if (ctx.in_call) {
+        if (in_call) {
             if (is_symbol and function.kind == .method) {
                 return self.err(.{ .call_method_on_type = .{ .name = text } }, self.ast.getSpan(field_tk));
             } else if (!is_symbol and function.kind != .method) {

@@ -183,10 +183,20 @@ pub fn log(self: *Obj) void {
     }
 }
 
+pub fn getFn(self: *Obj, index: usize) Value {
+    return switch (self.kind) {
+        .@"enum" => self.as(Enum).functions[index],
+        .enum_instance => self.as(EnumInstance).parent.functions[index],
+        .structure => self.as(Structure).functions[index],
+        .instance => self.as(Instance).parent.functions[index],
+        else => undefined,
+    };
+}
+
 pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
     vm.r3 = switch (self.kind) {
         .function => self.as(Function).default_values,
-        .instance => self.as(Instance).parent.methods[index].default_values,
+        .instance => self.as(Instance).parent.functions[index].obj.as(Function).default_values,
         .structure => self.as(Structure).default_values,
         // They don't have default values yet
         .@"enum" => return,
@@ -455,16 +465,16 @@ pub const Structure = struct {
     name: []const u8,
     field_count: usize,
     default_values: []Value,
-    methods: []*Function,
+    functions: []Value,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, default_count: usize, methods: []*Function) *Self {
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, default_count: usize, functions: []Value) *Self {
         const obj = Obj.allocateComptime(allocator, Self, type_id);
         obj.name = allocator.dupe(u8, name) catch oom();
         obj.field_count = field_count;
         obj.default_values = allocator.alloc(Value, default_count) catch oom();
-        obj.methods = methods;
+        obj.functions = functions;
 
         return obj;
     }
@@ -476,7 +486,7 @@ pub const Structure = struct {
     // Functions aren't freed because they are on the main linked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
-        vm.allocator.free(self.methods);
+        vm.allocator.free(self.functions);
         vm.allocator.free(self.default_values);
         vm.gc_alloc.destroy(self);
     }
@@ -533,16 +543,15 @@ pub const Enum = struct {
     obj: Obj,
     name: []const u8,
     // tags: []const []const u8,
-    // functions: []*Function,
+    functions: []Value,
 
     const Self = @This();
 
-    // pub fn create(allocator: Allocator, name: []const u8, tags: []const []const u8, functions: []*Function) *Self {
-    pub fn create(allocator: Allocator, name: []const u8) *Self {
+    pub fn create(allocator: Allocator, name: []const u8, functions: []Value) *Self {
         const obj = Obj.allocateComptime(allocator, Self, undefined);
         obj.name = allocator.dupe(u8, name) catch oom();
         // obj.tags = tags;
-        // obj.functions = functions;
+        obj.functions = functions;
 
         return obj;
     }

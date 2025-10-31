@@ -4,7 +4,6 @@ const ArrayMap = std.AutoArrayHashMapUnmanaged;
 const Map = std.AutoHashMapUnmanaged;
 
 const InternerIdx = Interner.Index;
-const LexicalScope = @import("LexicalScope.zig");
 
 const misc = @import("misc");
 const Interner = misc.Interner;

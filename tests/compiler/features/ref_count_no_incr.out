@@ -38,18 +38,18 @@ get_field index 0
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 get_field index 0
@@ -64,14 +64,14 @@ call index 3
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 set_local index 5
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 
@@ -86,7 +86,7 @@ set_local index 5
 
 get_local index 2
 get_field index 0
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 
@@ -106,7 +106,7 @@ ret_naked
 jump 144 -> 156
 pop
 get_local index 1
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 set_local index 5
@@ -115,7 +115,7 @@ push_true
 jump_false 159 -> 174
 pop
 get_local index 1
-get_method index 0
+invoke index 0
 call index 1
 get_field index 0
 jump 171 -> 176

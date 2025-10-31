@@ -25,11 +25,11 @@ struct_lit index 2
 
 push_null
 get_local index 0
-get_method index 0
+invoke index 0
 call index 1
 
 get_local index 0
-get_method index 1
+invoke index 1
 constant index 2, value 10
 call index 2
 

@@ -138,7 +138,7 @@ call index 4
 
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 20, value first
 constant index 21, value 10
 constant index 22, value 20
@@ -146,7 +146,7 @@ constant index 23, value 245
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 24, value second
 get_default index 0
 get_default index 1
@@ -154,7 +154,7 @@ get_default index 2
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 25, value third
 constant index 26, value 80
 get_default index 1
@@ -162,7 +162,7 @@ get_default index 2
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 27, value fourth
 get_default index 0
 get_default index 1
@@ -170,7 +170,7 @@ constant index 28, value 1234.56
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 29, value fifth
 constant index 30, value 800
 get_default index 1
@@ -178,7 +178,7 @@ constant index 31, value 123.4
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 32, value sixth
 constant index 33, value 650
 constant index 34, value 540
@@ -186,7 +186,7 @@ constant index 35, value 31.4
 call index 4
 
 load_sym index 4, <structure Foo>
-get_static_method index 0
+get_fn index 0
 constant index 36, value seventh
 constant index 37, value 1110
 constant index 38, value 110
@@ -201,7 +201,7 @@ incr_ref
 struct_lit index 1
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 40, value first
 constant index 41, value 1
 neg_int
@@ -212,7 +212,7 @@ neg_float
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 44, value second
 get_default index 0
 get_default index 1
@@ -220,7 +220,7 @@ get_default index 2
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 45, value third
 constant index 46, value 8
 neg_int
@@ -229,7 +229,7 @@ get_default index 2
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 47, value fourth
 get_default index 0
 get_default index 1
@@ -238,7 +238,7 @@ neg_float
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 49, value fifth
 constant index 50, value 80
 neg_int
@@ -248,7 +248,7 @@ neg_float
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 52, value sixth
 constant index 53, value 65
 neg_int
@@ -259,7 +259,7 @@ neg_float
 call index 5
 
 get_local index 1
-get_method index 1
+invoke index 1
 constant index 56, value seventh
 constant index 57, value 111
 neg_int
@@ -271,7 +271,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 60, value first
 push_true
 push_false
@@ -281,7 +281,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 62, value second
 get_default index 0
 get_default index 1
@@ -290,7 +290,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 63, value third
 push_true
 get_default index 1
@@ -299,7 +299,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 64, value fourth
 get_default index 0
 get_default index 1
@@ -309,7 +309,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 66, value fifth
 push_true
 get_default index 1
@@ -318,7 +318,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 68, value sixth
 push_true
 push_false
@@ -327,7 +327,7 @@ call index 5
 
 get_local index 1
 get_field index 0
-get_method index 1
+invoke index 1
 constant index 70, value seventh
 push_false
 push_true
@@ -341,7 +341,7 @@ call index 1
 print
 
 load_extern_sym index 0, module 0
-get_static_method index 0
+get_fn index 0
 constant index 72, value imported static
 get_default index 0
 get_default index 1
@@ -349,7 +349,7 @@ get_default index 2
 call index 4
 
 load_extern_sym index 0, module 0
-get_static_method index 0
+get_fn index 0
 constant index 73, value imported static
 constant index 74, value 90
 push_true
@@ -360,7 +360,7 @@ load_extern_sym index 0, module 0
 struct_lit index 0
 
 get_local index 2
-get_method index 1
+invoke index 1
 constant index 75, value imported method
 get_default index 0
 get_default index 1
@@ -368,7 +368,7 @@ get_default index 2
 call index 5
 
 get_local index 2
-get_method index 1
+invoke index 1
 constant index 76, value imported method
 constant index 77, value 180
 get_default index 1
