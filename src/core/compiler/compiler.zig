@@ -911,6 +911,24 @@ const Compiler = struct {
 
     fn compileDefaultValue(self: *Self, instr: ir.Index) Error!Value {
         return switch (self.manager.instr_data[instr]) {
+            // TODO: protect the cast
+            .enum_create => |val| {
+                const data = self.manager.instr_data[val.lhs];
+
+                if (data != .load_symbol) {
+                    @panic("Not supported yet");
+                }
+                const parent = self.manager.module.symbols[data.load_symbol.symbol_index].obj.as(Obj.Enum);
+
+                return Value.makeObj(
+                    Obj.EnumInstance.create(
+                        self.manager.allocator,
+                        parent,
+                        @intCast(val.tag_index),
+                        .null_,
+                    ).asObj(),
+                );
+            },
             .int => |val| Value.makeInt(val),
             .float => |val| Value.makeFloat(val),
             .bool => |val| Value.makeBool(val),

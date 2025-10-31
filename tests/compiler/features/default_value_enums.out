@@ -1,0 +1,82 @@
+-- init --
+load_sym index 0, <enum Marker>
+enum_create index 0
+ret
+
+-- toString --
+get_local index 0
+get_tag
+constant index 0, value 0
+eq_int
+jump_false 6 -> 16
+pop
+constant index 1, value x
+ret
+jump 13 -> 17
+pop
+get_local index 0
+get_tag
+constant index 2, value 1
+eq_int
+jump_false 23 -> 33
+pop
+constant index 3, value o
+ret
+jump 30 -> 34
+pop
+constant index 4, value x
+ret
+
+-- markerStuff --
+get_local index 0
+invoke index 1
+call index 1
+print
+ret_naked
+
+-- markerStuff2 --
+get_local index 0
+invoke index 1
+call index 1
+print
+ret_naked
+
+-- main --
+load_sym index 3, <structure Cell>
+get_default index 0
+get_default index 1
+struct_lit index 2
+
+get_local index 0
+get_field index 0
+print
+
+get_local index 0
+get_field index 0
+invoke index 1
+call index 1
+print
+
+get_local index 0
+get_field index 1
+print
+
+get_local index 0
+get_field index 1
+invoke index 1
+call index 1
+print
+
+load_sym index 4, <function markerStuff>
+get_default index 0
+call index 1
+
+load_sym index 5, <function markerStuff2>
+get_default index 0
+call index 1
+
+ret_naked
+
+-- global scope --
+load_sym index 6, <function main>
+call index 0

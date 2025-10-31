@@ -1,0 +1,69 @@
+[Enum declaration Marker]
+[Structure declaration Cell]
+    - default values
+    [Enum create]
+        - enum
+        [Load symbol 0]
+        - tag
+        0
+    [Enum create]
+        - enum
+        [Load symbol 0]
+        - tag
+        1
+[Function declaration markerStuff]
+    - default params
+    [Enum create]
+        - enum
+        [Load symbol 0]
+        - tag
+        1
+    - body
+    [Print]
+        [Fn call]
+            [Method access 1]
+                [Variable index: 0, scope: local]
+[Function declaration markerStuff2]
+    - default params
+    [Enum create]
+        - enum
+        [Load symbol 0]
+        - tag
+        0
+    - body
+    [Print]
+        [Fn call]
+            [Method access 1]
+                [Variable index: 0, scope: local]
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Structure literal]
+            - structure
+            [Load symbol 3]
+            - args
+            [Default field 0]
+            [Default field 1]
+    [Print]
+        [Field access 0]
+            [Variable index: 0, scope: local]
+    [Print]
+        [Fn call]
+            [Method access 1]
+                [Field access 0]
+                    [Variable index: 0, scope: local]
+    [Print]
+        [Field access 1]
+            [Variable index: 0, scope: local]
+    [Print]
+        [Fn call]
+            [Method access 1]
+                [Field access 1]
+                    [Variable index: 0, scope: local]
+    [Fn call]
+        [Load symbol 4]
+        - args
+        [Default field 0]
+    [Fn call]
+        [Load symbol 5]
+        - args
+        [Default field 0]

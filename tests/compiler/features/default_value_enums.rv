@@ -1,0 +1,41 @@
+enum Marker {
+    cross,
+    circle,
+    none
+
+    fn init() -> Self {
+        return Self.cross
+    }
+
+    fn toString(self) -> str {
+        if self == Self.cross do return "x"
+        if self == Self.circle do return "o"
+        return "x"
+    }
+}
+
+struct Cell {
+    marker: Marker = Marker.cross,
+    marker2 = Marker.circle
+}
+
+fn markerStuff(m: Marker = Marker.circle) {
+    print m.toString()
+}
+
+fn markerStuff2(m = Marker.cross) {
+    print m.toString()
+}
+
+fn main() {
+    var cell = Cell{}
+    print cell.marker
+    print cell.marker.toString()
+    print cell.marker2
+    print cell.marker2.toString()
+
+    markerStuff()
+    markerStuff2()
+}
+
+

@@ -202,6 +202,7 @@ fn analyzeNode(self: *Self, node: *const Node, expect: ExprResKind, ctx: *Contex
         .struct_decl => |*n| try self.structDecl(n, ctx),
         .use => |*n| b: {
             try self.use(n, ctx);
+            // TODO: replace with a error.Noop to skip it?
             break :b self.irb.addInstr(.noop, 0);
         },
         .var_decl => |*n| try self.varDeclaration(n, ctx),
@@ -1290,6 +1291,7 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
 
         return .{ .tag = .{
             .type = self.ti.intern(.{ .@"enum" = ty }),
+            .ti = .{ .comp_time = ty.tags.get(tag_name).?.is(.void) },
             .instr = self.irb.addInstr(
                 .{ .enum_create = .{ .lhs = enum_info.instr, .tag_index = index } },
                 self.ast.getSpan(tag_tk).start,
