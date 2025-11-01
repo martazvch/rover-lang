@@ -70,6 +70,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .def_global => self.indexInstruction(writer, "def_global", offset),
         .div_float => self.simpleInstruction(writer, "div_float", offset),
         .div_int => self.simpleInstruction(writer, "div_int", offset),
+        .dup => self.simpleInstruction(writer, "dup", offset),
         .enum_create => self.indexInstruction(writer, "enum_create", offset),
         .eq_bool => self.simpleInstruction(writer, "eq_bool", offset),
         .eq_float => self.simpleInstruction(writer, "eq_float", offset),
@@ -139,6 +140,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .struct_lit => self.indexInstruction(writer, "struct_lit", offset),
         .sub_float => self.simpleInstruction(writer, "sub_float", offset),
         .sub_int => self.simpleInstruction(writer, "sub_int", offset),
+        .swap_pop => self.simpleInstruction(writer, "swap_pop", offset),
         .unbox => self.simpleInstruction(writer, "unbox", offset),
     } catch oom();
 }

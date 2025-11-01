@@ -76,6 +76,19 @@ pub const Type = union(enum) {
 
         pub const empty: Enum = .{ .loc = null, .tags = .empty };
         pub const Tags = MapNameType;
+
+        pub const Proto = ArrayMap(InternerIdx, bool);
+
+        pub fn proto(self: *const Enum, allocator: Allocator) Proto {
+            var res: Proto = .empty;
+            res.ensureTotalCapacity(allocator, self.tags.count()) catch oom();
+
+            for (self.tags.keys()) |tag| {
+                res.putAssumeCapacity(tag, false);
+            }
+
+            return res;
+        }
     };
 
     pub const Function = struct {

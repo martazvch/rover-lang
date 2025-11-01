@@ -83,6 +83,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .incr_rc => |index| self.indexInstr("Incr rc", index),
         .load_symbol => |*data| self.loadSymbol(data),
         .load_builtin => |index| self.indentAndPrintSlice("[Builtin symbol: {}]", .{index}),
+        .match => |*data| self.match(data),
         .multiple_var_decl => |*data| self.multipleVarDecl(data),
         .null => self.indentAndAppendSlice("[Null]"),
         .pop => |index| self.indexInstr("Pop", index),
@@ -338,6 +339,27 @@ fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
         self.indentAndPrintSlice("[Load symbol {} of module {}]", .{ data.symbol_index, mod });
     } else {
         self.indentAndPrintSlice("[Load symbol {}]", .{data.symbol_index});
+    }
+}
+
+fn match(self: *Self, data: *const Instruction.Match) void {
+    self.indentAndAppendSlice("[Match]");
+    self.indentAndAppendSlice("- expression:");
+    self.indent_level += 1;
+    self.parseInstr(data.expr);
+    self.indent_level -= 1;
+    self.indentAndAppendSlice("- arms:");
+    self.indent_level += 1;
+    defer self.indent_level -= 1;
+    for (data.arms) |arm| {
+        self.indentAndAppendSlice("- expr:");
+        self.indent_level += 1;
+        self.parseInstr(arm.expr);
+        self.indent_level -= 1;
+        self.indentAndAppendSlice("- body:");
+        self.indent_level += 1;
+        self.parseInstr(arm.body);
+        self.indent_level -= 1;
     }
 }
 

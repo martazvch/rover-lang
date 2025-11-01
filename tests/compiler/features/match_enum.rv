@@ -1,0 +1,36 @@
+enum Marker {
+    cross,
+    circle,
+    none
+}
+
+enum Bar{a}
+
+fn main() {
+    var marker: Marker = .none
+    var bar: Bar = .a
+
+    match marker {
+        Marker.circle => print "circle"
+        Marker.cross => print "cross"
+        Marker.none => print "none"
+    }
+
+    match marker {
+        .circle => print "circle"
+        .cross => print "cross"
+        .none => print "none"
+    }
+
+    var foo = match marker {
+        .circle => 1
+        .cross => 2
+        .none => {
+            var tmp = 4
+            var tmp2 = 6
+            break 3
+        }
+    }
+}
+
+

@@ -136,6 +136,7 @@ pub const Expr = union(enum) {
     grouping: Grouping,
     @"if": If,
     literal: Literal,
+    match: Match,
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
@@ -219,6 +220,18 @@ pub const StructLiteral = struct {
 pub const FieldAndValue = struct {
     name: TokenIndex,
     value: ?*Expr,
+};
+
+pub const Match = struct {
+    kw: TokenIndex,
+    expr: *Expr,
+    arms: []Arm,
+
+    pub const Arm = struct {
+        expr: *Expr,
+        alias: ?TokenIndex,
+        body: Node,
+    };
 };
 
 pub const Unary = struct {
@@ -327,6 +340,10 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
         Grouping => node.span,
         If => self.getSpan(node.if_token),
         Literal => self.token_spans[node.idx],
+        Match => .{
+            .start = self.token_spans[node.kw].start,
+            .end = self.getSpan(node.expr).end,
+        },
         Return => self.token_spans[node.kw],
         StructLiteral => self.getSpan(node.structure),
         Unary => .{

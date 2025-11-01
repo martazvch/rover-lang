@@ -249,7 +249,6 @@ fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResul
     const assigne = maybe_assigne orelse return self.err(.invalid_assign_target, span);
 
     ctx.decl_type = assigne.type;
-    defer ctx.decl_type = null;
 
     var value_res = try self.analyzeExpr(node.value, .value, ctx);
 
@@ -631,7 +630,6 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) StmtResu
     var checked_type = try self.checkAndGetType(node.typ, ctx);
 
     ctx.decl_type = if (!checked_type.is(.void)) checked_type else null;
-    defer ctx.decl_type = null;
 
     var comp_time = false;
 
@@ -723,7 +721,6 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
         struct_field.type = try self.checkAndGetType(f.typ, ctx);
 
         ctx.decl_type = struct_field.type;
-        defer ctx.decl_type = null;
 
         if (f.value) |value| {
             struct_field.default = true;
@@ -787,6 +784,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *Contex
         .grouping => |*e| self.analyzeExpr(e.expr, expect, ctx),
         .@"if" => |*e| self.ifExpr(e, expect, ctx),
         .literal => |*e| self.literal(e, ctx),
+        .match => |*e| self.match(e, expect, ctx),
         .@"return" => |*e| self.returnExpr(e, ctx),
         .struct_literal => |*e| self.structLiteral(e, ctx),
         .unary => |*e| self.unary(e, ctx),
@@ -980,7 +978,6 @@ fn binop(self: *Self, expr: *const Ast.Binop, ctx: *Context) Result {
 
     // For enum literals
     ctx.decl_type = if (!lhs.type.is(.void)) lhs.type else null;
-    defer ctx.decl_type = null;
 
     const rhs = try self.analyzeExpr(expr.rhs, .value, ctx);
 
@@ -1486,7 +1483,6 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
         };
 
         ctx.decl_type = param_info.type;
-        defer ctx.decl_type = null;
         var value = try self.analyzeExpr(arg.value, .value, ctx);
 
         _ = try self.performTypeCoercion(param_info.type, value.type, false, span);
@@ -1786,6 +1782,106 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
     return .{ .type = ty, .ti = .{ .comp_time = true }, .instr = instr };
 }
 
+fn match(self: *Self, expr: *const Ast.Match, expect: ExprResKind, ctx: *Context) Result {
+    const value = try self.analyzeExpr(expr.expr, .value, ctx);
+
+    const value_type = value.type.as(.@"enum") orelse @panic("Match on anything else than enum not implemented yet");
+    var proto = value_type.proto(self.allocator);
+
+    const types, const arms = try self.matchArms(expr.arms, value.type, &proto, expect, ctx);
+    try self.matchValidation(&proto, self.ast.getSpan(expr.kw));
+
+    return .{
+        .type = self.mergeTypes(types),
+        .instr = self.irb.addInstr(
+            .{ .match = .{
+                .expr = value.instr,
+                .arms = arms,
+                .is_expr = expect == .value,
+            } },
+            self.ast.getSpan(expr).start,
+        ),
+    };
+}
+
+const MatchArms = struct { []const *const Type, []const Instruction.Match.Arm };
+
+fn matchArms(
+    self: *Self,
+    arm_exprs: []const Ast.Match.Arm,
+    ty: *const Type,
+    proto: *Type.Enum.Proto,
+    expect: ExprResKind,
+    ctx: *Context,
+) Error!MatchArms {
+    var had_err = false;
+    var types: Set(*const Type) = .empty;
+    var arms = ArrayList(Instruction.Match.Arm).initCapacity(self.allocator, arm_exprs.len) catch oom();
+
+    for (arm_exprs) |*arm| {
+        const arm_span = self.ast.getSpan(arm.expr);
+
+        // For enum literals
+        const prev_decl_type = ctx.setAndGetPrevious(.decl_type, ty);
+        defer ctx.decl_type = prev_decl_type;
+
+        const tag, const pattern = switch (arm.expr.*) {
+            .enum_lit => |e| .{ e, try self.enumLit(e, ctx) },
+            .field => |*e| .{ e.field, try self.field(e, ctx) },
+            else => @panic("Should pattern match enums with either full name or enum lit"),
+        };
+
+        if (pattern.type != ty) return self.err(
+            .{ .match_arm_type_mismatch = .{ .expect = self.typeName(ty), .found = self.typeName(pattern.type) } },
+            arm_span,
+        );
+
+        if (proto.getPtr(self.interner.intern(self.ast.toSource(tag)))) |found| {
+            found.* = true;
+        }
+
+        // Implicit scope for aliases
+        // self.scope.open(self.allocator, null, false, expect == .value);
+        // defer _ = self.scope.close();
+
+        // alias: {
+        //     const alias = arm.alias orelse break :alias;
+        //     const binding = try self.internIfNotInCurrentScope(alias);
+        //     _ = binding; // autofix
+        //     // _ = try self.declareVariable(binding, resolved_ty, false, true, true, false, self.ast.getSpan(alias));
+        // }
+
+        const body = self.analyzeNode(&arm.body, expect, ctx) catch {
+            had_err = true;
+            continue;
+        };
+
+        types.add(self.allocator, body.type) catch oom();
+        arms.appendAssumeCapacity(.{ .expr = pattern.instr, .body = body.instr });
+    }
+
+    return if (had_err) error.Err else .{ types.toOwned(), arms.toOwnedSlice(self.allocator) catch oom() };
+}
+
+fn matchValidation(self: *Self, proto: *const Type.Enum.Proto, span: Span) Error!void {
+    var missing: ArrayList(u8) = .empty;
+
+    var it = proto.iterator();
+    while (it.next()) |entry| {
+        if (!entry.value_ptr.*) {
+            if (missing.items.len > 0) {
+                missing.appendSlice(self.allocator, ", ") catch oom();
+            }
+            missing.appendSlice(self.allocator, self.interner.getKey(entry.key_ptr.*).?) catch oom();
+        }
+    }
+
+    if (missing.items.len > 0) return self.err(
+        .{ .pattern_match_non_exhaustive = .{ .kind = "match", .missing = missing.toOwnedSlice(self.allocator) catch oom() } },
+        span,
+    );
+}
+
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.structure);
     const struct_res = self.analyzeExpr(expr.structure, .symbol, ctx) catch |e| switch (e) {
@@ -2025,7 +2121,7 @@ fn whenValidation(self: *Self, proto: *const Type.Union.Proto, span: Span) Error
     }
 
     if (missing.items.len > 0) return self.err(
-        .{ .when_non_exhaustive = .{ .missing = missing.toOwnedSlice(self.allocator) catch oom() } },
+        .{ .pattern_match_non_exhaustive = .{ .kind = "when", .missing = missing.toOwnedSlice(self.allocator) catch oom() } },
         span,
     );
 }

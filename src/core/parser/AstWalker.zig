@@ -229,6 +229,12 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             const interned = self.interner.intern(self.ast.toSource(e.idx));
             ctx.resolveCapture(self.allocator, interned);
         },
+        .match => |*e| {
+            self.captureFromExpr(e.expr, ctx);
+            for (e.arms) |*arm| {
+                self.captureFromNode(&arm.body, ctx);
+            }
+        },
         .@"return" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),
         .struct_literal => |e| {
             self.captureFromExpr(e.structure, ctx);

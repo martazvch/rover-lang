@@ -1,0 +1,117 @@
+[Enum declaration Marker]
+[Enum declaration Bar]
+
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Enum create]
+            - enum
+            [Load symbol 0]
+            - tag
+            2
+
+    [Variable declaration index: 1, scope: local]
+        [Enum create]
+            - enum
+            [Load symbol 1]
+            - tag
+            0
+
+    [Match]
+    - expression:
+        [Variable index: 0, scope: local]
+    - arms:
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                1
+        - body:
+            [Print]
+                [String circle]
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                0
+        - body:
+            [Print]
+                [String cross]
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                2
+        - body:
+            [Print]
+                [String none]
+
+    [Match]
+    - expression:
+        [Variable index: 0, scope: local]
+    - arms:
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                1
+        - body:
+            [Print]
+                [String circle]
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                0
+        - body:
+            [Print]
+                [String cross]
+        - expr:
+            [Enum create]
+                - enum
+                [Load symbol 0]
+                - tag
+                2
+        - body:
+            [Print]
+                [String none]
+
+    [Variable declaration index: 2, scope: local]
+        [Match]
+        - expression:
+            [Variable index: 0, scope: local]
+        - arms:
+            - expr:
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    1
+            - body:
+                [Int 1]
+            - expr:
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    0
+            - body:
+                [Int 2]
+            - expr:
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    2
+            - body:
+                [Block pop count: 2, is_expr: true]
+                    [Variable declaration index: 0, scope: local]
+                        [Int 4]
+                    [Variable declaration index: 1, scope: local]
+                        [Int 6]
+                    [Break depth: 0]
+                        [Int 3]

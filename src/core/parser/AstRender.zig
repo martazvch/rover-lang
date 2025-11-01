@@ -353,6 +353,24 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             const final = if (e.tag == .string) text[1 .. text.len - 1] else text;
             try self.pushKeyValue(@tagName(expr.*), final, comma);
         },
+        .match => |*n| {
+            try self.openKey("match", .block);
+            try self.renderSingleExpr("expression", n.expr, .block, true);
+
+            try self.openKey("arms", .list);
+            for (n.arms, 0..) |arm, i| {
+                try self.openAnonKey(.block);
+                try self.renderSingleExpr("expr", arm.expr, .block, true);
+                if (arm.alias) |alias| {
+                    try self.pushKeyValue("alias", self.ast.toSource(alias), true);
+                }
+                try self.renderSingleNode("body", &arm.body, .block, false);
+                try self.closeKey(.block, i < n.arms.len - 1);
+            }
+            try self.closeKey(.list, false);
+
+            try self.closeKey(.block, comma);
+        },
         .@"return" => |e| {
             if (e.expr) |data| {
                 try self.renderSingleExpr(@tagName(expr.*), data, .block, comma);

@@ -67,6 +67,7 @@ pub const OpCode = enum(u8) {
     def_global,
     div_float,
     div_int,
+    dup,
     enum_create,
     eq_bool,
     eq_float,
@@ -136,5 +137,6 @@ pub const OpCode = enum(u8) {
     struct_lit,
     sub_float,
     sub_int,
+    swap_pop,
     unbox,
 };

@@ -1,5 +1,5 @@
 block_all_path_dont_return
-when_non_exhaustive, Point
+pattern_match_non_exhaustive, when, Point
 when_arm_not_in_union, int, Vec|Point
 when_arm_duplicate
 when_with_non_union, bool

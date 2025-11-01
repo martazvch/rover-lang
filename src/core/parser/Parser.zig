@@ -833,6 +833,7 @@ fn parseExpr(self: *Self) Error!*Expr {
         .left_brace => (try self.block(null)).@"0",
         .left_bracket => self.array(),
         .left_paren => self.leftParenExprStart(),
+        .match => self.matchExpr(),
         .minus, .not => self.unary(),
         .null => self.literal(.null),
         .pipe => self.closure(),
@@ -1084,6 +1085,44 @@ fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
     return expr;
 }
 
+fn matchExpr(self: *Self) Error!*Expr {
+    const start = try self.patternMatchStart();
+
+    // TODO: error
+    if (start.alias != null) @panic("Can't alias match value");
+
+    var arms: ArrayList(Ast.Match.Arm) = .empty;
+
+    while (!self.check(.eof) and !self.check(.right_brace)) {
+        arms.append(self.allocator, try self.matchArm()) catch oom();
+        try self.expect(.new_line, .expect_new_line_pm_arm);
+        self.skipNewLines();
+    }
+
+    try self.expectOrErrAtToken(.right_brace, .unclosed_brace, start.open_brace);
+
+    const expr = self.allocator.create(Expr) catch oom();
+    expr.* = .{ .match = .{
+        .kw = start.token,
+        .expr = start.value,
+        .arms = arms.toOwnedSlice(self.allocator) catch oom(),
+    } };
+
+    return expr;
+}
+
+fn matchArm(self: *Self) Error!Ast.Match.Arm {
+    const expr = try self.parsePrecedenceExpr(0);
+    const alias = try self.getAlias();
+    try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
+
+    return .{
+        .expr = expr,
+        .alias = alias,
+        .body = try self.statement(),
+    };
+}
+
 fn returnExpr(self: *Self) Error!*Expr {
     const kw = self.token_idx - 1;
     const expr = self.allocator.create(Expr) catch oom();
@@ -1108,22 +1147,7 @@ fn unary(self: *Self) Error!*Expr {
 }
 
 fn when(self: *Self) Error!*Expr {
-    const kw = self.token_idx - 1;
-    const expr = self.allocator.create(Expr) catch oom();
-
-    const value = value: {
-        const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
-        defer self.ctx.in_cond = save_cond;
-        break :value try self.parsePrecedenceExpr(0);
-    };
-
-    const alias = try self.getAlias();
-
-    self.skipNewLines();
-    try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
-    const opening_brace = self.token_idx - 1;
-    self.skipNewLines();
-
+    const start = try self.patternMatchStart();
     var arms: ArrayList(Ast.When.Arm) = .empty;
 
     while (!self.check(.eof) and !self.check(.right_brace)) {
@@ -1132,12 +1156,13 @@ fn when(self: *Self) Error!*Expr {
         self.skipNewLines();
     }
 
-    try self.expectOrErrAtToken(.right_brace, .unclosed_brace, opening_brace);
+    try self.expectOrErrAtToken(.right_brace, .unclosed_brace, start.open_brace);
 
+    const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .when = .{
-        .kw = kw,
-        .expr = value,
-        .alias = alias,
+        .kw = start.token,
+        .expr = start.value,
+        .alias = start.alias,
         .arms = arms.toOwnedSlice(self.allocator) catch oom(),
     } };
 
@@ -1154,6 +1179,32 @@ fn whenArm(self: *Self) Error!Ast.When.Arm {
         .alias = alias,
         .body = try self.statement(),
     };
+}
+
+const PatternMatchStart = struct {
+    token: TokenIndex,
+    value: *Expr,
+    alias: ?TokenIndex,
+    open_brace: TokenIndex,
+};
+
+fn patternMatchStart(self: *Self) Error!PatternMatchStart {
+    const kw = self.token_idx - 1;
+
+    const value = value: {
+        const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
+        defer self.ctx.in_cond = save_cond;
+        break :value try self.parsePrecedenceExpr(0);
+    };
+
+    const alias = try self.getAlias();
+
+    self.skipNewLines();
+    try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
+    const opening_brace = self.token_idx - 1;
+    self.skipNewLines();
+
+    return .{ .token = kw, .value = value, .alias = alias, .open_brace = opening_brace };
 }
 
 // Parses postfix expressions: calls, member access

@@ -345,6 +345,7 @@ const Compiler = struct {
             // TODO: protect the cast
             .load_builtin => |index| self.writeOpAndByte(.load_builtin, @intCast(index)),
             .load_symbol => |*data| self.loadSymbol(data),
+            .match => |*data| self.match(data),
             .multiple_var_decl => |*data| self.multipleVarDecl(data),
             .null => self.nullInstr(),
             .pop => |index| self.wrappedInstr(.pop, index),
@@ -738,6 +739,45 @@ const Compiler = struct {
         }
     }
 
+    fn match(self: *Self, data: *const Instruction.Match) Error!void {
+        try self.tagId(data.expr);
+
+        var exit_jumps = ArrayList(usize).initCapacity(self.manager.allocator, data.arms.len) catch oom();
+
+        for (data.arms) |arm| {
+            self.writeOp(.dup);
+            try self.tagId(arm.expr);
+            self.writeOp(.eq_int);
+
+            const arm_jump = self.emitJump(.jump_false);
+            // Pops the condition
+            self.writeOp(.pop);
+
+            // Arm body
+            try self.compileInstr(arm.body);
+
+            // Exits the when after arm body
+            exit_jumps.appendAssumeCapacity(self.emitJump(.jump));
+
+            // Skips to next arm
+            try self.patchJump(arm_jump);
+            // Pops the condition in case of false
+            self.writeOp(.pop);
+        }
+
+        for (exit_jumps.items) |jump| {
+            try self.patchJump(jump);
+        }
+
+        // If we return a value, we pop the value matched on and leave the result on stack
+        // equivalent to swapping the two first values then popping
+        if (data.is_expr) {
+            self.writeOp(.swap_pop);
+        } else {
+            self.writeOp(.pop);
+        }
+    }
+
     fn multipleVarDecl(self: *Self, data: *const Instruction.MultiVarDecl) Error!void {
         for (data.decls) |decl| {
             try self.compileInstr(decl);
@@ -853,7 +893,7 @@ const Compiler = struct {
 
             // Arm body
             try self.compileInstr(arm.body);
-            if (data.is_expr) self.writeOp(.store_blk_val);
+            // if (data.is_expr) self.writeOp(.store_blk_val);
 
             // Exits the when after arm body
             exit_jumps.appendAssumeCapacity(self.emitJump(.jump));
@@ -868,9 +908,13 @@ const Compiler = struct {
             try self.patchJump(jump);
         }
 
-        // Pops the value matched on first
-        self.writeOp(.pop);
-        if (data.is_expr) self.writeOp(.load_blk_val);
+        // If we return a value, we pop the value matched on and leave the result on stack
+        // equivalent to swapping the two first values then popping
+        if (data.is_expr) {
+            self.writeOp(.swap_pop);
+        } else {
+            self.writeOp(.pop);
+        }
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {

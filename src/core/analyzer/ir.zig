@@ -36,6 +36,7 @@ pub const Instruction = struct {
         int: i64,
         load_symbol: LoadSymbol,
         load_builtin: usize,
+        match: Match,
         multiple_var_decl: MultiVarDecl,
         null,
         pop: Index,
@@ -148,6 +149,13 @@ pub const Instruction = struct {
     pub const LoadSymbol = struct {
         module_index: ?usize,
         symbol_index: u8,
+    };
+    pub const Match = struct {
+        expr: Index,
+        arms: []const Arm,
+        is_expr: bool,
+
+        pub const Arm = struct { expr: Index, body: Index };
     };
     pub const MultiVarDecl = struct { decls: []const Index };
     pub const Return = struct { value: ?Index };

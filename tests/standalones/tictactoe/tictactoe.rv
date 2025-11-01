@@ -4,9 +4,11 @@ enum Marker {
     none,
 
     fn toStr(self) -> str {
-        if self == .circle do return "o"
-        if self == .cross do return "x"
-        return " "
+        return match self {
+            .circle => "o"
+            .cross => "x"
+            .none => " "
+        }
     }
 }
 

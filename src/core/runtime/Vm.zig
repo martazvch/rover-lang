@@ -262,6 +262,7 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 const lhs = self.stack.pop().int;
                 self.stack.push(Value.makeInt(@divTrunc(lhs, rhs)));
             },
+            .dup => self.stack.push(self.stack.peek(0)),
             .enum_create => {
                 self.stack.peekRef(0).* = .makeObj(Obj.EnumInstance.create(
                     self.allocator,
@@ -488,6 +489,10 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
             .sub_int => {
                 const rhs = self.stack.pop().int;
                 self.stack.peekRef(0).int -= rhs;
+            },
+            .swap_pop => {
+                self.stack.peekRef(1).* = self.stack.peek(0);
+                self.stack.top -= 1;
             },
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }

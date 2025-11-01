@@ -1,0 +1,123 @@
+-- main --
+load_sym index 0, <enum Marker>
+enum_create index 2
+
+load_sym index 1, <enum Bar>
+enum_create index 0
+
+// Pattern match 1
+get_local index 0
+get_tag
+
+dup
+constant index 0, value 1
+eq_int
+jump_false 15 -> 25
+pop
+constant index 1, value circle
+print
+jump 22 -> 56
+pop
+
+dup
+constant index 2, value 0
+eq_int
+jump_false 30 -> 40
+pop
+constant index 3, value cross
+print
+jump 37 -> 56
+pop
+
+dup
+constant index 4, value 2
+eq_int
+jump_false 45 -> 55
+pop
+constant index 5, value none
+print
+jump 52 -> 56
+pop
+
+pop
+
+// Pattern match 2
+get_local index 0
+get_tag
+dup
+constant index 6, value 1
+eq_int
+jump_false 64 -> 74
+pop
+constant index 7, value circle
+print
+jump 71 -> 105
+pop
+
+dup
+constant index 8, value 0
+eq_int
+jump_false 79 -> 89
+pop
+constant index 9, value cross
+print
+jump 86 -> 105
+pop
+
+dup
+constant index 10, value 2
+eq_int
+jump_false 94 -> 104
+pop
+constant index 11, value none
+print
+jump 101 -> 105
+pop
+
+pop
+
+// Pattern match 3
+get_local index 0
+get_tag
+dup
+constant index 12, value 1
+eq_int
+jump_false 113 -> 122
+pop
+constant index 13, value 1
+jump 119 -> 162
+pop
+
+dup
+constant index 14, value 0
+eq_int
+jump_false 127 -> 136
+pop
+constant index 15, value 2
+jump 133 -> 162
+pop
+
+dup
+constant index 16, value 2
+eq_int
+jump_false 141 -> 161
+pop
+constant index 17, value 4
+constant index 18, value 6
+constant index 19, value 3
+store_blk_val
+jump 152 -> 155
+pop
+pop
+load_blk_val
+jump 158 -> 162
+pop
+
+// Because pattern match is an expression
+swap_pop
+
+ret_naked
+
+-- global scope --
+load_sym index 2, <function main>
+call index 0

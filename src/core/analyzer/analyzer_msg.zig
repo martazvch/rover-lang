@@ -44,6 +44,7 @@ pub const AnalyzerMsg = union(enum) {
     invalid_comparison: struct { found1: []const u8, found2: []const u8 },
     invalid_logical: struct { found: []const u8 },
     invalid_unary: struct { found: []const u8 },
+    match_arm_type_mismatch: struct { expect: []const u8, found: []const u8 },
     missing_symbol_in_module: struct { symbol: []const u8, module: []const u8 },
     missing_else_clause: struct { if_type: []const u8 },
     missing_field_struct_literal: struct { name: []const u8 },
@@ -87,7 +88,7 @@ pub const AnalyzerMsg = union(enum) {
     void_value,
     when_arm_duplicate,
     when_arm_not_in_union: struct { found: []const u8, expect: []const u8 },
-    when_non_exhaustive: struct { missing: []const u8 },
+    pattern_match_non_exhaustive: struct { kind: []const u8, missing: []const u8 },
     when_with_non_union: struct { found: []const u8 },
 
     const Self = @This();
@@ -133,6 +134,7 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => |e| writer.print("invalid comparison between types '{s}' and '{s}'", .{ e.found1, e.found2 }),
             .invalid_logical => writer.writeAll("logical operators must be used with booleans"),
             .invalid_unary => writer.writeAll("invalid unary operation"),
+            .match_arm_type_mismatch => |e| writer.print("match arm type mismatch, expect '{s}' but found '{s}'", .{ e.expect, e.found }),
             .missing_symbol_in_module => |e| writer.print("no symbol named '{s}' in module '{s}'", .{ e.symbol, e.module }),
             .missing_else_clause => writer.writeAll("'if' is missing an 'else' clause"),
             .missing_field_struct_literal => |e| writer.print("missing field '{s}' in structure literal", .{e.name}),
@@ -171,11 +173,8 @@ pub const AnalyzerMsg = union(enum) {
             .void_value => writer.writeAll("value is of type 'void'"),
             .when_arm_duplicate => writer.writeAll("this pattern is already covered by another arm"),
             .when_arm_not_in_union => |e| writer.print("type '{s}' is not part of union '{s}'", .{ e.found, e.expect }),
-            .when_non_exhaustive => |e| writer.print("non-exhaustive 'when', missing: '{s}'", .{e.missing}),
-            .when_with_non_union => |e| writer.print(
-                "using 'when' expression on a non-union type is useless, found: {s}",
-                .{e.found},
-            ),
+            .pattern_match_non_exhaustive => |e| writer.print("non-exhaustive '{s}' pattern matching, missing: '{s}'", .{ e.kind, e.missing }),
+            .when_with_non_union => |e| writer.print("using 'when' expression on a non-union type is useless, found type: '{s}'", .{e.found}),
         };
     }
 
@@ -210,6 +209,7 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => writer.writeAll("expressions have different types"),
             .invalid_logical => |e| writer.print("this expression resolves to a '{s}'", .{e.found}),
             .invalid_unary, .non_bool_cond => writer.writeAll("expression is not a boolean type"),
+            .match_arm_type_mismatch => |e| writer.print("this is of type '{s}'", .{e.found}),
             .missing_symbol_in_module => writer.writeAll("this symbol is unknown"),
             .missing_else_clause => |e| writer.print("'if' expression is of type '{s}'", .{e.if_type}),
             .missing_field_struct_literal => writer.writeAll("non-exhaustive structure literal"),
@@ -236,7 +236,7 @@ pub const AnalyzerMsg = union(enum) {
             .void_array => writer.writeAll("declared here"),
             .void_value => writer.writeAll("this expression produces no value"),
             .when_arm_not_in_union, .when_arm_duplicate => writer.writeAll("this arm"),
-            .when_non_exhaustive => writer.writeAll("this expression"),
+            .pattern_match_non_exhaustive => writer.writeAll("this expression"),
             .when_with_non_union => writer.writeAll("this is not an union"),
         };
     }
@@ -301,6 +301,7 @@ pub const AnalyzerMsg = union(enum) {
             .invalid_comparison => writer.writeAll("expressions must have the same type when compared"),
             .invalid_logical => writer.writeAll("modify the logic to operate on booleans"),
             .invalid_unary => |e| writer.print("can only negate boolean type, found '{s}'", .{e.found}),
+            .match_arm_type_mismatch => writer.writeAll("refer to type's definition"),
             .missing_symbol_in_module => writer.writeAll("refer to module's source code or documentation to ge the list of available symbols"),
             .missing_else_clause => writer.writeAll("add an 'else' block that evaluate to the expected type"),
             .missing_field_struct_literal => writer.writeAll(
@@ -347,7 +348,7 @@ pub const AnalyzerMsg = union(enum) {
                 "pattern matching must be exhaustive and each possibility must be matched exactly once",
             ),
             .when_arm_not_in_union => writer.writeAll("remove the arm"),
-            .when_non_exhaustive => writer.writeAll(
+            .pattern_match_non_exhaustive => writer.writeAll(
                 "all pattern matching must be exhaustive. You can use '_' as the last prong to catch all the remaining possibilities",
             ),
             .when_with_non_union => writer.writeAll("remove 'when' expression and use the value as it is"),
