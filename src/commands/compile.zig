@@ -8,7 +8,6 @@ const Pipeline = @import("../core/pipeline/Pipeline.zig");
 const Vm = @import("../core/runtime/Vm.zig");
 const State = @import("../core/pipeline/State.zig");
 
-const file = @import("misc").file;
 const oom = @import("misc").oom;
 
 indent_level: usize,
@@ -42,7 +41,11 @@ pub fn runPipeline(self: *Self, allocator: Allocator, args: anytype) !void {
         return;
     };
 
-    const file_content = try file.read(allocator, file_path);
+    const file_content = std.fs.cwd().readFileAllocOptions(allocator, file_path, 100_000, null, .of(u8), 0) catch |err| {
+        // TODO: Rover error
+        std.debug.print("Error: {}, unable to open file at: {s}\n", .{ err, file_path });
+        std.process.exit(0);
+    };
     defer allocator.free(file_content);
 
     var arena = std.heap.ArenaAllocator.init(allocator);
