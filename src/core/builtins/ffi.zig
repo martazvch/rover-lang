@@ -7,6 +7,7 @@ pub const ZigModule = struct {
     name: ?[]const u8 = null,
     is_module: bool = true,
     functions: []const ZigFnMeta = &.{},
+    structures: []const ZigStruct = &.{},
 };
 
 pub const ZigFnMeta = struct {
@@ -43,6 +44,19 @@ pub const ZigFnMeta = struct {
 
 pub const ZigFn = *const fn (*Vm, []const Value) ?Value;
 
+pub const ZigStruct = struct {
+    name: []const u8,
+    type: type,
+    fields: []const Field = &.{},
+    functions: []const ZigFnMeta = &.{},
+
+    pub const Field = struct {
+        name: []const u8,
+        desc: []const u8,
+        offset: usize,
+    };
+};
+
 pub fn makeNative(func: anytype) ZigFn {
     return struct {
         comptime func: @TypeOf(func) = func,
@@ -51,10 +65,15 @@ pub fn makeNative(func: anytype) ZigFn {
             const ArgsType = ArgsTuple(@TypeOf(func));
             var args: ArgsType = undefined;
 
-            const fields = @typeInfo(ArgsType).@"struct".fields;
+            if (@TypeOf(args[0]) != *Vm) {
+                @compileError("First argument of functions must be of type *Vm");
+            }
 
-            inline for (fields, 0..) |f, i| {
-                args[i] = fromValue(f.type, stack[i]);
+            const fields = @typeInfo(ArgsType).@"struct".fields;
+            args[0] = vm;
+
+            inline for (fields[1..], 0..) |f, i| {
+                args[i + 1] = fromValue(f.type, stack[i]);
             }
 
             if (@typeInfo(@TypeOf(func)).@"fn".return_type != null) {
@@ -78,11 +97,15 @@ pub fn makeNative(func: anytype) ZigFn {
                     else => unreachable,
                 },
                 .pointer => |ptr| {
-                    if (ptr.child != u8) {
-                        @compileError("Slice of non u8 elements");
-                    }
-
-                    return value.obj.as(Obj.String).chars;
+                    return switch (ptr.child) {
+                        u8 => value.obj.as(Obj.String).chars,
+                        else => {
+                            // const obj = value.asObj() orelse @compileError("Unsupported pointer child type: " ++ @typeName(T));
+                            const obj = value.asObj() orelse unreachable;
+                            const native = obj.as(Obj.NativeObj);
+                            return @ptrCast(@alignCast(native.child));
+                        },
+                    };
                 },
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(T)),
             };
@@ -100,7 +123,6 @@ pub fn makeNative(func: anytype) ZigFn {
 
                     return .makeObj(Obj.NativeObj.create(vm, "file", value).asObj());
                 },
-
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(@TypeOf(value))),
             };
         }
@@ -120,7 +142,7 @@ pub fn ArgsTuple(comptime FnType: type) type {
 
     var args_type: [fn_infos.params.len]type = undefined;
     inline for (fn_infos.params, 0..) |arg, i| {
-        args_type[i] = arg.type orelse Value;
+        args_type[i] = arg.type.?;
     }
 
     var fields: [fn_infos.params.len]std.builtin.Type.StructField = undefined;

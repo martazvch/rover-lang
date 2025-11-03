@@ -114,7 +114,8 @@ pub fn initGlobalScope(self: *Self, allocator: Allocator, state: *State) void {
     while (it.next()) |entry| {
         self.natives.putAssumeCapacity(entry.key_ptr.*, .{
             .index = self.natives.count(),
-            .type = state.type_interner.intern(.{ .function = entry.value_ptr.* }),
+            // .type = state.type_interner.intern(.{ .function = entry.value_ptr.* }),
+            .type = entry.value_ptr.*,
         });
     }
 }

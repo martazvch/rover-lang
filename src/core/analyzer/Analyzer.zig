@@ -1748,7 +1748,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
             .null => break :b .{ self.ti.cache.null, self.irb.addInstr(.null, span.start) },
             .string => {
                 const no_quotes = text[1 .. text.len - 1];
-                var final: ArrayList(u8) = .{};
+                var final: ArrayList(u8) = .empty;
                 var i: usize = 0;
 
                 while (i < no_quotes.len) : (i += 1) {
@@ -1785,6 +1785,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
 fn match(self: *Self, expr: *const Ast.Match, expect: ExprResKind, ctx: *Context) Result {
     const value = try self.analyzeExpr(expr.expr, .value, ctx);
 
+    // TODO: error
     const value_type = value.type.as(.@"enum") orelse @panic("Match on anything else than enum not implemented yet");
     var proto = value_type.proto(self.allocator);
 
@@ -1825,6 +1826,7 @@ fn matchArms(
         const prev_decl_type = ctx.setAndGetPrevious(.decl_type, ty);
         defer ctx.decl_type = prev_decl_type;
 
+        // TODO: error
         const tag, const pattern = switch (arm.expr.*) {
             .enum_lit => |e| .{ e, try self.enumLit(e, ctx) },
             .field => |*e| .{ e.field, try self.field(e, ctx) },

@@ -10,7 +10,7 @@ const Interner = misc.Interner;
 const Set = misc.Set;
 const oom = misc.oom;
 
-const MapNameType = ArrayMap(InternerIdx, *const Type);
+pub const MapNameType = ArrayMap(InternerIdx, *const Type);
 
 pub const Type = union(enum) {
     never,
@@ -146,9 +146,10 @@ pub const Type = union(enum) {
 
     pub const Structure = struct {
         loc: ?Loc,
+        fields: FieldsMap,
         functions: MapNameType,
-        fields: ArrayMap(InternerIdx, Field),
 
+        pub const FieldsMap = ArrayMap(InternerIdx, Field);
         pub const Field = struct {
             type: *const Type,
             default: bool,

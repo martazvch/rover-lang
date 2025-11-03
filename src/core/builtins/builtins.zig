@@ -1,5 +1,6 @@
 const ffi = @import("ffi.zig");
 const Value = @import("../runtime/values.zig").Value;
+const Vm = @import("../runtime/Vm.zig");
 
 pub const module: ffi.ZigModule = .{
     .is_module = false,
@@ -9,14 +10,14 @@ pub const module: ffi.ZigModule = .{
     },
 };
 
-fn int(value: union(enum) { float: f64, int: i64 }) i64 {
+fn int(_: *Vm, value: union(enum) { float: f64, int: i64 }) i64 {
     return switch (value) {
         .int => |i| i,
         .float => @intFromFloat(value.float),
     };
 }
 
-fn float(value: union(enum) { float: f64, int: i64 }) f64 {
+fn float(_: *Vm, value: union(enum) { float: f64, int: i64 }) f64 {
     return switch (value) {
         .int => @floatFromInt(value.int),
         .float => |f| f,
