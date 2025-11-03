@@ -9,7 +9,7 @@ const options = @import("options");
 const TypeId = @import("../analyzer/types.zig").TypeId;
 const Chunk = @import("../compiler/Chunk.zig");
 const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
-const NativeFn = @import("../builtins/ffi.zig").NativeFn;
+const ffi = @import("../builtins/ffi.zig");
 const oom = @import("misc").oom;
 const Value = @import("values.zig").Value;
 const Vm = @import("Vm.zig");
@@ -31,6 +31,7 @@ const Kind = enum {
     function,
     instance,
     native_fn,
+    native_obj,
     string,
     structure,
 
@@ -44,6 +45,7 @@ const Kind = enum {
             Function => .function,
             Instance => .instance,
             NativeFunction => .native_fn,
+            NativeObj => .native_obj,
             String => .string,
             Structure => .structure,
             else => @compileError(@typeName(T) ++ " isn't a runtime object type"),
@@ -92,7 +94,7 @@ pub fn deepCopy(self: *Obj, vm: *Vm) *Obj {
         .enum_instance => @panic("TODO"),
         .instance => self.as(Instance).deepCopy(vm).asObj(),
         // Immutable, shallow copy ok
-        .box, .closure, .@"enum", .function, .native_fn, .string, .structure => self,
+        .box, .closure, .@"enum", .function, .native_fn, .native_obj, .string, .structure => self,
     };
 }
 
@@ -114,6 +116,10 @@ pub fn destroy(self: *Obj, vm: *Vm) void {
         .native_fn => {
             const function = self.as(NativeFunction);
             function.deinit(vm.gc_alloc);
+        },
+        .native_obj => {
+            const object = self.as(NativeObj);
+            object.deinit(vm.gc_alloc);
         },
         .string => self.as(String).deinit(vm.gc_alloc),
         .structure => {
@@ -165,6 +171,7 @@ pub fn print(self: *Obj, writer: *Writer) Writer.Error!void {
         },
         .instance => try writer.print("<instance of {s}>", .{self.as(Instance).parent.name}),
         .native_fn => try writer.print("<native fn {s}>", .{self.as(NativeFunction).name}),
+        .native_obj => try writer.print("<native object {s}>", .{self.as(NativeObj).name}),
         .string => try writer.print("{s}", .{self.as(String).chars}),
         .structure => try writer.print("<structure {s}>", .{self.as(Structure).name}),
     }
@@ -435,11 +442,11 @@ pub const Box = struct {
 pub const NativeFunction = struct {
     obj: Obj,
     name: []const u8,
-    function: NativeFn,
+    function: ffi.ZigFn,
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: []const u8, function: NativeFn) *Self {
+    pub fn create(vm: *Vm, name: []const u8, function: ffi.ZigFn) *Self {
         const obj = Obj.allocate(vm, Self, undefined);
         obj.name = name;
         obj.function = function;
@@ -595,5 +602,34 @@ pub const EnumInstance = struct {
 
     pub fn deinit(self: *Self, vm: *Vm) void {
         vm.gc_alloc.destroy(self);
+    }
+};
+
+pub const NativeObj = struct {
+    obj: Obj,
+    name: []const u8,
+    child: *anyopaque,
+
+    const Self = @This();
+
+    pub fn create(vm: *Vm, name: []const u8, child: *anyopaque) *Self {
+        // Fields first for GC because other wise allocating fields after creation
+        // of the instance may trigger GC in between
+        const obj = Obj.allocate(vm, Self, undefined);
+        obj.name = name;
+        obj.child = child;
+
+        if (options.log_gc) obj.asObj().log();
+
+        return obj;
+    }
+
+    pub fn asObj(self: *Self) *Obj {
+        return &self.obj;
+    }
+
+    // TODO: destroy child too?
+    pub fn deinit(self: *Self, allocator: Allocator) void {
+        allocator.destroy(self);
     }
 };

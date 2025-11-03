@@ -230,9 +230,11 @@ fn execute(self: *Self, entry_module: *const CompiledModule) !void {
                 frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
             },
             .call_native => {
+                // TODO: auto push to stack? maybe two op code for knowing if
+                // builtin returns or not to don't check at runtime
                 const args_count = frame.readByte();
                 const native = self.stack.peekRef(args_count).obj.as(Obj.NativeFunction).function;
-                const result = native.call((self.stack.top - args_count)[0..args_count]);
+                const result = native(self, (self.stack.top - args_count)[0..args_count]);
 
                 self.stack.top -= args_count + 1;
                 if (result) |res| self.stack.push(res);

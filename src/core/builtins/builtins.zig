@@ -1,34 +1,24 @@
 const ffi = @import("ffi.zig");
 const Value = @import("../runtime/values.zig").Value;
 
-pub const int: ffi.FnMeta = .{
-    .params = &.{
-        .{ .type = .{ .@"union" = &.{ .float, .int } } },
+pub const module: ffi.ZigModule = .{
+    .is_module = false,
+    .functions = &.{
+        .init("int", "", &.{}, int),
+        .init("float", "", &.{}, float),
     },
-    .return_type = .int,
-    .function = ffi.makeNative(_int),
 };
 
-fn _int(value: Value) i64 {
+fn int(value: union(enum) { float: f64, int: i64 }) i64 {
     return switch (value) {
         .int => |i| i,
         .float => @intFromFloat(value.float),
-        else => unreachable,
     };
 }
 
-pub const float: ffi.FnMeta = .{
-    .params = &.{
-        .{ .type = .{ .@"union" = &.{ .float, .int } } },
-    },
-    .return_type = .float,
-    .function = ffi.makeNative(_float),
-};
-
-fn _float(value: Value) f64 {
+fn float(value: union(enum) { float: f64, int: i64 }) f64 {
     return switch (value) {
         .int => @floatFromInt(value.int),
         .float => |f| f,
-        else => unreachable,
     };
 }

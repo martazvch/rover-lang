@@ -1,43 +1,56 @@
 const std = @import("std");
 const Value = @import("../runtime/values.zig").Value;
+const Obj = @import("../runtime/Obj.zig");
+const Vm = @import("../runtime/Vm.zig");
 
-pub const Type = union(enum) {
-    int,
-    float,
-    @"union": []const Type,
+pub const ZigModule = struct {
+    name: ?[]const u8 = null,
+    is_module: bool = true,
+    functions: []const ZigFnMeta = &.{},
 };
 
-pub const FnMeta = struct {
-    params: []const Param = &.{},
-    return_type: Type,
-    function: NativeFn,
+pub const ZigFnMeta = struct {
+    name: []const u8,
+    params: []const []const u8,
+    desc: []const u8,
+    info: std.builtin.Type.Fn,
+    function: ZigFn,
 
-    pub const Param = struct {
-        type: Type,
-        desc: ?[]const u8 = null,
-        default: ?Value = null,
-    };
-};
+    pub fn init(name: []const u8, desc: []const u8, params: []const []const u8, func: anytype) ZigFnMeta {
+        if (name.len == 0) {
+            @compileError("Function's name can't be empty");
+        }
 
-pub const NativeFn = struct {
-    call_fn: *const fn ([]const Value) ?Value,
+        const info = @typeInfo(@TypeOf(func));
+        if (info != .@"fn") {
+            @compileError("Trying to declare a non-function, found: " ++ @typeName(func));
+        }
 
-    pub fn call(self: *const NativeFn, stack: []const Value) ?Value {
-        return self.call_fn(stack);
+        const fn_info = info.@"fn";
+        if (params.len > fn_info.params.len) {
+            @compileError("Too many parameters descriptions");
+        }
+
+        return .{
+            .name = name,
+            .desc = desc,
+            .params = params,
+            .info = fn_info,
+            .function = makeNative(func),
+        };
     }
 };
 
-pub fn makeNative(func: anytype) NativeFn {
-    return GenNative(func).ffi();
-}
+pub const ZigFn = *const fn (*Vm, []const Value) ?Value;
 
-pub fn GenNative(func: anytype) type {
+pub fn makeNative(func: anytype) ZigFn {
     return struct {
-        const ArgsType = ArgsTuple(@TypeOf(func));
         comptime func: @TypeOf(func) = func,
 
-        pub fn call(stack: []const Value) ?Value {
+        pub fn call(vm: *Vm, stack: []const Value) ?Value {
+            const ArgsType = ArgsTuple(@TypeOf(func));
             var args: ArgsType = undefined;
+
             const fields = @typeInfo(ArgsType).@"struct".fields;
 
             inline for (fields, 0..) |f, i| {
@@ -46,7 +59,7 @@ pub fn GenNative(func: anytype) type {
 
             if (@typeInfo(@TypeOf(func)).@"fn".return_type != null) {
                 const res = @call(.auto, func, args);
-                return toValue(res);
+                return toValue(vm, res);
             } else {
                 @call(.auto, func, args);
                 return null;
@@ -60,23 +73,40 @@ pub fn GenNative(func: anytype) type {
                 .float => value.float,
                 .int => value.int,
                 .bool => value.bool,
+                // TODO: make this generic
+                .@"union" => switch (value) {
+                    .int => .{ .int = value.int },
+                    .float => .{ .float = value.float },
+                    else => unreachable,
+                },
+                .pointer => |ptr| {
+                    if (ptr.child != u8) {
+                        @compileError("Slice of non u8 elements");
+                    }
+
+                    return value.obj.as(Obj.String).chars;
+                },
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(T)),
             };
         }
 
-        fn toValue(value: anytype) Value {
+        fn toValue(vm: *Vm, value: anytype) Value {
             return switch (@typeInfo(@TypeOf(value))) {
                 .float => .{ .float = value },
                 .int => .{ .int = value },
                 .bool => .{ .bool = value },
+                .pointer => |ptr| {
+                    if (ptr.child == u8) {
+                        return .makeObj(Obj.String.take(vm, value).asObj());
+                    }
+
+                    return .makeObj(Obj.NativeObj.create(vm, "file", value).asObj());
+                },
+
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(@TypeOf(value))),
             };
         }
-
-        pub fn ffi() NativeFn {
-            return .{ .call_fn = call };
-        }
-    };
+    }.call;
 }
 
 pub fn ArgsTuple(comptime FnType: type) type {

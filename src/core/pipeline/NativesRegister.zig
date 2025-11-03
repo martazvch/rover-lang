@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const ffi = @import("../builtins/ffi.zig");
+const MapNameType = @import("../analyzer/types.zig").MapNameType;
 const Type = @import("../analyzer/types.zig").Type;
 const TypeInterner = @import("../analyzer/types.zig").TypeInterner;
 
@@ -11,60 +12,61 @@ const Interner = misc.Interner;
 const oom = misc.oom;
 
 meta: std.AutoArrayHashMapUnmanaged(Interner.Index, Type.Function),
-funcs: ArrayList(struct { name: []const u8, func: ffi.NativeFn }),
+funcs: ArrayList(struct { name: []const u8, func: ffi.ZigFn }),
 
 const Self = @This();
 
 pub const empty: Self = .{ .meta = .empty, .funcs = .empty };
 
 pub fn register(self: *Self, allocator: Allocator, interner: *Interner, ti: *TypeInterner, Module: type) void {
-    const infos = @typeInfo(Module);
-    if (infos != .@"struct") {
-        @compileError("Native Reg: can't register natives outside of a file-container");
+    if (!@hasDecl(Module, "module")) {
+        @compileError("Native Zig module must declare a 'module'");
     }
 
-    const struct_infos = infos.@"struct";
+    const mod = @field(Module, "module");
 
-    inline for (struct_infos.decls) |decl| {
-        const fn_meta = @field(Module, decl.name);
-        if (@TypeOf(fn_meta) != ffi.FnMeta) {
-            @compileError("Native Reg: can't register anything else than ffi.FnMeta");
-        }
+    if (@TypeOf(mod) != ffi.ZigModule) {
+        @compileError("Native Zig module's 'module' variable must be of type " ++ @typeName(ffi.ZigModule));
+    }
 
-        self.registerFn(allocator, interner, ti, decl.name, &fn_meta);
+    inline for (mod.functions) |func| {
+        self.registerFn(allocator, interner, ti, &func);
     }
 }
 
 // We can use pointers here because we refer to comptime declarations in Module
-fn registerFn(self: *Self, allocator: Allocator, interner: *Interner, ti: *TypeInterner, name: []const u8, fn_meta: *const ffi.FnMeta) void {
+fn registerFn(self: *Self, allocator: Allocator, interner: *Interner, ti: *TypeInterner, func: *const ffi.ZigFnMeta) void {
     var params: Type.Function.ParamsMap = .empty;
-    params.ensureTotalCapacity(allocator, fn_meta.params.len) catch oom();
+    params.ensureTotalCapacity(allocator, func.info.params.len) catch oom();
 
-    for (fn_meta.params, 0..) |*p, i| {
-        params.putAssumeCapacity(i, .{ .type = ffiTypesToRover(allocator, ti, p.type), .default = p.default != null, .captured = false });
+    inline for (func.info.params, 0..) |*p, i| {
+        params.putAssumeCapacity(i, .{ .type = zigToRover(allocator, p.type.?, ti), .default = false, .captured = false });
     }
 
     const ty: Type.Function = .{
         .kind = .native,
         .loc = null,
-        .return_type = ffiTypesToRover(allocator, ti, fn_meta.return_type),
+        .return_type = zigToRover(allocator, func.info.return_type.?, ti),
         .params = params,
     };
 
-    self.meta.put(allocator, interner.intern(name), ty) catch oom();
-    self.funcs.append(allocator, .{ .name = name, .func = fn_meta.function }) catch oom();
+    self.meta.put(allocator, interner.intern(func.name), ty) catch oom();
+    self.funcs.append(allocator, .{ .name = func.name, .func = func.function }) catch oom();
 }
 
-fn ffiTypesToRover(allocator: Allocator, ti: *TypeInterner, ffi_ty: ffi.Type) *const Type {
-    return switch (ffi_ty) {
-        .int => ti.getCached(.int),
-        .float => ti.getCached(.float),
-        .@"union" => |u| {
-            var childs = ArrayList(*const Type).initCapacity(allocator, u.len) catch oom();
-            for (u) |t| {
-                childs.appendAssumeCapacity(ffiTypesToRover(allocator, ti, t));
-            }
-            return ti.intern(.{ .@"union" = .{ .types = childs.toOwnedSlice(allocator) catch oom() } });
+fn zigToRover(allocator: Allocator, ty: type, ti: *TypeInterner) *const Type {
+    return switch (ty) {
+        i64 => ti.getCached(.int),
+        f64 => ti.getCached(.float),
+        else => switch (@typeInfo(ty)) {
+            .@"union" => |u| {
+                var childs = ArrayList(*const Type).initCapacity(allocator, u.fields.len) catch oom();
+                inline for (u.fields) |f| {
+                    childs.appendAssumeCapacity(zigToRover(allocator, f.type, ti));
+                }
+                return ti.intern(.{ .@"union" = .{ .types = childs.toOwnedSlice(allocator) catch oom() } });
+            },
+            else => unreachable,
         },
     };
 }
