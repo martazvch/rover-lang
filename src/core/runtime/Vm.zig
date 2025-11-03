@@ -111,19 +111,19 @@ fn instructionNb(self: *const Self) usize {
     return addr1 - addr2;
 }
 
-pub fn run(self: *Self, module: CompiledModule, modules: []CompiledModule) !void {
+pub fn run(self: *Self, entry_point: *Obj.Function, modules: []CompiledModule) !void {
     self.modules = modules;
     self.gc.active = true;
-    try self.execute(&module);
+    try self.execute(entry_point);
 }
 
-fn execute(self: *Self, entry_module: *const CompiledModule) !void {
+fn execute(self: *Self, entry_point: *Obj.Function) !void {
     var buf: [1024]u8 = undefined;
     var stdout_writer = std.fs.File.stdout().writer(&buf);
     const stdout = &stdout_writer.interface;
 
     var frame = try self.frame_stack.new();
-    frame.initCall(entry_module.function.asObj(), &self.stack, 0, self.modules);
+    frame.initCall(entry_point.asObj(), &self.stack, 0, self.modules);
 
     while (true) {
         if (comptime options.print_stack) {

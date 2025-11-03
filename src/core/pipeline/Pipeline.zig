@@ -18,6 +18,7 @@ const LexicalScope = @import("../analyzer/LexicalScope.zig");
 const Parser = @import("../parser/Parser.zig");
 const ParserMsg = @import("../parser/parser_msg.zig").ParserMsg;
 const IrRenderer = @import("../analyzer/IrRenderer.zig");
+const Obj = @import("../runtime/Obj.zig");
 const Vm = @import("../runtime/Vm.zig");
 
 const misc = @import("misc");
@@ -45,7 +46,7 @@ pub fn init(allocator: Allocator, vm: *Vm, state: *State) Self {
 
 /// Runs the pipeline
 // TODO: could only need full path
-pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !CompiledModule {
+pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]const u8) !*Obj.Function {
     // Initiliaze the path builder
     self.state.path_builder.append(self.allocator, std.fs.cwd().realpathAlloc(self.allocator, ".") catch oom());
 
@@ -79,7 +80,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         analyzer.scope.symbol_count,
     );
 
-    const compiled_module = try compiler.compile(
+    const entry_point, const compiled_module = try compiler.compile(
         analyzer.irb.instructions.items(.data)[self.instr_count..],
         analyzer.irb.roots.items[self.instr_count..],
         analyzer.irb.computeLineFromOffsets(source)[self.instr_count..],
@@ -94,7 +95,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     return if (options.test_mode and self.state.config.print_bytecode and !self.is_sub)
         error.ExitOnPrint
     else
-        compiled_module;
+        entry_point;
 }
 
 pub fn parse(self: *Self, file_name: []const u8, source: [:0]const u8) !Ast {

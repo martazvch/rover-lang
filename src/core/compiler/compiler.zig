@@ -20,16 +20,14 @@ const GenReport = misc.reporter.GenReport;
 const oom = misc.oom;
 
 pub const CompiledModule = struct {
-    // TODO: useless?
+    // Used for debugging
     name: []const u8,
-    function: *Obj.Function,
     globals: []Value,
     symbols: []Value,
 
     pub fn init(allocator: Allocator, name: []const u8, globals_count: usize, symbols_count: usize) CompiledModule {
         return .{
             .name = name,
-            .function = undefined,
             .globals = allocator.alloc(Value, globals_count) catch oom(),
             .symbols = allocator.alloc(Value, symbols_count) catch oom(),
         };
@@ -87,7 +85,7 @@ pub const CompilationManager = struct {
         instr_lines: []const usize,
         main_index: ?usize,
         module_index: usize,
-    ) !CompiledModule {
+    ) !struct { *Obj.Function, CompiledModule } {
         self.instr_data = instr_data;
         self.instr_lines = instr_lines;
 
@@ -112,8 +110,7 @@ pub const CompilationManager = struct {
             self.compiler.getChunk().writeOp(.exit_repl, 0);
         }
 
-        self.module.function = try self.compiler.end();
-        return self.module;
+        return .{ try self.compiler.end(), self.module };
     }
 };
 

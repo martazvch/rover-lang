@@ -67,8 +67,6 @@ pub fn makeNative(func: anytype) ZigFn {
         }
 
         fn fromValue(T: type, value: Value) T {
-            if (T == Value) return value;
-
             return switch (@typeInfo(T)) {
                 .float => value.float,
                 .int => value.int,
