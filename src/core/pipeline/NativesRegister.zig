@@ -7,120 +7,125 @@ const MapNameType = @import("../analyzer/types.zig").MapNameType;
 const Type = @import("../analyzer/types.zig").Type;
 const TypeInterner = @import("../analyzer/types.zig").TypeInterner;
 
+const Value = @import("../runtime/values.zig").Value;
+const Obj = @import("../runtime/Obj.zig");
+const Vm = @import("../runtime/Vm.zig");
+
 const misc = @import("misc");
 const Interner = misc.Interner;
 const oom = misc.oom;
 
-meta: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
-funcs: ArrayList(struct { name: []const u8, func: ffi.ZigFn }),
+/// Native functions used at runtime
+// funcs: ArrayList(struct { name: []const u8, func: ffi.ZigFn }),
+funcs: ArrayList(Value),
+/// Native functions translated to Rover's type system for compilation
+funcs_meta: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
+
+/// Native structures used at runtime
+structs: ArrayList(struct { name: []const u8, func: Value }),
+/// Native structures translated to Rover's type system for compilation
+structs_meta: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
+/// Native structures translated to Rover's type system used here for self references
+scratch_structs: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
 
 const Self = @This();
 
-pub const empty: Self = .{ .meta = .empty, .funcs = .empty };
+pub const empty: Self = .{
+    .funcs_meta = .empty,
+    .funcs = .empty,
+    .structs = .empty,
+    .structs_meta = .empty,
+    .scratch_structs = .empty,
+};
 
 pub fn register(self: *Self, allocator: Allocator, interner: *Interner, ti: *TypeInterner, Module: type) void {
-    const SelfType, const self_interned = s: {
-        if (!@hasDecl(Module, "rover_self")) {
-            break :s .{ null, null };
-        }
-
-        const field = @field(Module, "rover_self");
-        if (@TypeOf(field) != ffi.ZigStruct) {
-            @compileError("Native Zig module's 'rover_self' variable must be of type " ++ @typeName(ffi.ZigStruct));
-        }
-
-        break :s .{ field.type, registerStruct(allocator, &field, interner, ti) };
-    };
-
-    if (@hasDecl(Module, "module")) {
-        const mod = @field(Module, "module");
-
-        if (@TypeOf(mod) != ffi.ZigModule) {
-            @compileError("Native Zig module's 'module' variable must be of type " ++ @typeName(ffi.ZigModule));
-        }
-
-        inline for (mod.functions) |func| {
-            self.registerFn(allocator, &func, SelfType, self_interned, interner, ti);
-        }
-    } else {
+    if (!@hasDecl(Module, "module")) {
         @compileError("Native Zig files must declare a module");
+    }
+
+    const mod = @field(Module, "module");
+    if (@TypeOf(mod) != ffi.ZigModule) {
+        @compileError("Native Zig module's 'module' variable must be of type " ++ @typeName(ffi.ZigModule));
+    }
+
+    inline for (mod.structures) |s| {
+        self.registerStruct(allocator, s, interner, ti);
+    }
+
+    inline for (mod.functions) |func| {
+        self.registerFn(allocator, &func, interner, ti);
     }
 }
 
-fn registerStruct(allocator: Allocator, structure: *const ffi.ZigStruct, interner: *Interner, ti: *TypeInterner) *const Type {
+fn registerStruct(self: *Self, allocator: Allocator, S: type, interner: *Interner, ti: *TypeInterner) void {
+    if (!@hasDecl(S, "zig_struct")) {
+        @compileError("Native structures must declare a public 'zig_struct' constant");
+    }
+
+    const zig_struct = @field(S, "zig_struct");
+    if (@TypeOf(zig_struct) != ffi.ZigStructMeta) {
+        @compileError("zig_struct constant must be of type: " ++ @typeName(ffi.ZigStructMeta));
+    }
+
     var s: Type.Structure = .{
         .loc = null,
         .fields = .empty,
         .functions = .empty,
     };
-    s.fields.ensureTotalCapacity(allocator, structure.fields.len) catch oom();
-    s.functions.ensureTotalCapacity(allocator, structure.functions.len) catch oom();
+    s.fields.ensureTotalCapacity(allocator, zig_struct.fields.len) catch oom();
+    s.functions.ensureTotalCapacity(allocator, zig_struct.functions.len) catch oom();
 
     const ty = ti.intern(.{ .structure = s });
+    self.scratch_structs.put(allocator, interner.intern(@typeName(S)), ty) catch oom();
 
-    inline for (structure.functions) |*func| {
-        const f = fnZigToRover(allocator, func, structure.type, ty, interner, ti);
-        s.functions.putAssumeCapacity(interner.intern(func.name), f);
+    inline for (zig_struct.functions) |*func| {
+        const f = self.fnZigToRover(allocator, func, interner, ti);
+        ty.structure.functions.putAssumeCapacity(interner.intern(func.name), f);
     }
 
-    return ty;
+    // TODO: use assume capacity (check all the 'put')
+    self.structs_meta.put(allocator, interner.intern(zig_struct.name), ty) catch oom();
 }
 
 // We can use pointers here because we refer to comptime declarations in Module
-fn registerFn(
-    self: *Self,
-    allocator: Allocator,
-    func: *const ffi.ZigFnMeta,
-    SelfType: ?type,
-    self_interned: ?*const Type,
-    interner: *Interner,
-    ti: *TypeInterner,
-) void {
-    self.meta.put(allocator, interner.intern(func.name), fnZigToRover(allocator, func, SelfType, self_interned, interner, ti)) catch oom();
-    self.funcs.append(allocator, .{ .name = func.name, .func = func.function }) catch oom();
+fn registerFn(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, interner: *Interner, ti: *TypeInterner) void {
+    self.funcs_meta.put(allocator, interner.intern(func.name), self.fnZigToRover(allocator, func, interner, ti)) catch oom();
+    const value = Value.makeObj(Obj.NativeFunction.create(allocator, func.name, func.function).asObj());
+
+    // self.funcs.append(allocator, .{ .name = func.name, .func = func.function }) catch oom();
+    // self.funcs.append(allocator, .{ .name = func.name, .func = value }) catch oom();
+    self.funcs.append(allocator, value) catch oom();
 }
 
-fn fnZigToRover(
-    allocator: Allocator,
-    func: *const ffi.ZigFnMeta,
-    SelfType: ?type,
-    self_interned: ?*const Type,
-    interner: *Interner,
-    ti: *TypeInterner,
-) *const Type {
+fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, interner: *Interner, ti: *TypeInterner) *const Type {
     var params: Type.Function.ParamsMap = .empty;
-    // -1 for the 'Vm' parameter
-    params.ensureTotalCapacity(allocator, func.info.params.len - 1) catch oom();
 
-    inline for (func.info.params[1..], 0..) |*p, i| {
-        if (i == 0) {
-            params.putAssumeCapacity(
-                i,
-                .{ .type = maybeSelf(allocator, SelfType, self_interned, p.type.?, interner, ti), .default = false, .captured = false },
-            );
-        } else {
-            params.putAssumeCapacity(i, .{ .type = zigToRover(allocator, p.type.?, interner, ti), .default = false, .captured = false });
-        }
+    // We don't take into account param *Vm and if it's in second place, it means 'self' is in first and we skip it too
+    const offset: usize = if (func.info.params.len > 1 and func.info.params[1].type.? == *Vm) 2 else 1;
+
+    params.ensureTotalCapacity(allocator, func.info.params.len - offset) catch oom();
+
+    inline for (func.info.params[offset..], 0..) |*p, i| {
+        const param_ty = self.zigToRover(allocator, p.type.?, interner, ti);
+
+        const param_index = if (i == 0) i else i - 1;
+        params.putAssumeCapacity(
+            interner.intern(func.params[param_index].name),
+            .{ .type = param_ty, .default = false, .captured = false },
+        );
     }
 
     const ty: Type.Function = .{
-        .kind = .native,
+        .kind = if (offset == 2) .native_method else .native,
         .loc = null,
-        .return_type = maybeSelf(allocator, SelfType, self_interned, func.info.return_type.?, interner, ti),
+        .return_type = self.zigToRover(allocator, func.info.return_type.?, interner, ti),
         .params = params,
     };
 
     return ti.intern(.{ .function = ty });
 }
 
-fn maybeSelf(allocator: Allocator, SelfType: ?type, self_interned: ?*const Type, ty: type, interner: *Interner, ti: *TypeInterner) *const Type {
-    if (SelfType) |S| {
-        if (ty == *S) return self_interned.?;
-    }
-    return zigToRover(allocator, ty, interner, ti);
-}
-
-fn zigToRover(allocator: Allocator, ty: type, interner: *Interner, ti: *TypeInterner) *const Type {
+fn zigToRover(self: *Self, allocator: Allocator, ty: type, interner: *Interner, ti: *TypeInterner) *const Type {
     return switch (ty) {
         i64 => ti.getCached(.int),
         f64 => ti.getCached(.float),
@@ -129,41 +134,23 @@ fn zigToRover(allocator: Allocator, ty: type, interner: *Interner, ti: *TypeInte
             .@"union" => |u| {
                 var childs = ArrayList(*const Type).initCapacity(allocator, u.fields.len) catch oom();
                 inline for (u.fields) |f| {
-                    childs.appendAssumeCapacity(zigToRover(allocator, f.type, interner, ti));
+                    childs.appendAssumeCapacity(self.zigToRover(allocator, f.type, interner, ti));
                 }
                 return ti.intern(.{ .@"union" = .{ .types = childs.toOwnedSlice(allocator) catch oom() } });
             },
             .pointer => |ptr| switch (ptr.child) {
-                []const u8 => @panic("TODO"),
-                else => |C| zigToRover(allocator, C, interner, ti),
+                Obj => unreachable,
+                else => |C| self.zigToRover(allocator, C, interner, ti),
             },
-            // .@"struct" => {
-            //     // It is considered that it must refer to a 'self' value, can't return a pointer from
-            //     // a builtin if it's not the object itself
-            //     const obj = self_data orelse {
-            //         @compileError("Expect to find 'self' type when returning pointer from native function");
-            //     };
-            //
-            //     var fields: Type.Structure.FieldsMap = .empty;
-            //     fields.ensureTotalCapacity(allocator, obj.fields.len) catch oom();
-            //
-            //     inline for (obj.fields) |f| {
-            //         fields.putAssumeCapacity(interner.intern(f.name), .{ .type = undefined, .default = false });
-            //     }
-            //
-            //     var functions: MapNameType = .empty;
-            //     functions.ensureTotalCapacity(allocator, obj.functions.len) catch oom();
-            //
-            //     inline for (obj.functions) |func| {
-            //         functions.putAssumeCapacity(interner.intern(func.name), fnZigToRover(allocator, &func, obj, interner, ti));
-            //     }
-            //
-            //     return ti.intern(.{ .structure = .{
-            //         .loc = null,
-            //         .fields = fields,
-            //         .functions = functions,
-            //     } });
-            // },
+            .@"struct" => {
+                if (self.scratch_structs.get(interner.intern(@typeName(ty)))) |t| {
+                    return t;
+                }
+
+                // TODO: error, occurs when everything isn't correctly registered inside the file
+                // like a static function returning a type not declared in the structures of the module
+                unreachable;
+            },
             else => @compileError("Zig to Rover type conversion not supported for type: " ++ @typeName(ty)),
         },
     };

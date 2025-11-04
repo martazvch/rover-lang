@@ -1,46 +1,45 @@
 const std = @import("std");
 const ffi = @import("ffi.zig");
 const Value = @import("../runtime/values.zig").Value;
+const Obj = @import("../runtime/Obj.zig");
 const Vm = @import("../runtime/Vm.zig");
-
-fd: std.fs.File,
-
-const Self = @This();
 
 pub const module: ffi.ZigModule = .{
     .is_module = false,
     .functions = &.{
-        .init("open", "", &.{}, open),
+        .init("open", open, "", &.{.{ .name = "path" }}),
     },
-    // .structures = &.{.{
-    //     .name = "File",
-    //     .functions = &.{
-    //         // .init("open", "", &.{}, open),
-    //     },
-    // }},
-};
-
-pub const rover_self: ffi.ZigStruct = .{
-    .name = "File",
-    .type = Self,
-    .functions = &.{
-        .init("readAll", "", &.{}, readAll),
+    .structures = &.{
+        File,
     },
 };
 
-fn open(vm: *Vm, path: []const u8) *Self {
-    const self = vm.gc_alloc.create(Self) catch unreachable;
+const File = struct {
+    fd: std.fs.File,
 
+    const Self = @This();
+
+    pub const zig_struct: ffi.ZigStructMeta = .{
+        .name = "File",
+        .functions = &.{
+            .init("readAll", readAll, "", &.{}),
+        },
+    };
+
+    fn readAll(self: *Self, vm: *Vm) []const u8 {
+        _ = self; // autofix
+        _ = vm; // autofix
+        return "";
+    }
+};
+
+fn open(vm: *Vm, path: []const u8) *File {
+    const self = vm.gc_alloc.create(File) catch unreachable;
     self.* = .{
         .fd = std.fs.cwd().openFile(path, .{}) catch unreachable,
     };
 
-    return self;
-}
+    const obj = Obj.NativeObj.create(vm, "File", self);
 
-fn readAll(vm: *Vm, self: *Self) []const u8 {
-    _ = self; // autofix
-    // fn readAll(vm: *Vm, v: i64) []const u8 {
-    _ = vm; // autofix
-    return "";
+    return @ptrCast(@alignCast(&obj.child));
 }

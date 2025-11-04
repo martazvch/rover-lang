@@ -7,17 +7,23 @@ pub const ZigModule = struct {
     name: ?[]const u8 = null,
     is_module: bool = true,
     functions: []const ZigFnMeta = &.{},
-    structures: []const ZigStruct = &.{},
+    structures: []const type = &.{},
 };
 
 pub const ZigFnMeta = struct {
     name: []const u8,
-    params: []const []const u8,
+    params: []const Param,
     desc: []const u8,
     info: std.builtin.Type.Fn,
     function: ZigFn,
 
-    pub fn init(name: []const u8, desc: []const u8, params: []const []const u8, func: anytype) ZigFnMeta {
+    // NOTE: it is not possible in Zig 0.15.2 to reflect on parameters name, we have to provide them
+    pub const Param = struct {
+        name: [:0]const u8,
+        desc: []const u8 = "",
+    };
+
+    pub fn init(name: []const u8, func: anytype, desc: []const u8, params: []const Param) ZigFnMeta {
         if (name.len == 0) {
             @compileError("Function's name can't be empty");
         }
@@ -27,16 +33,11 @@ pub const ZigFnMeta = struct {
             @compileError("Trying to declare a non-function, found: " ++ @typeName(func));
         }
 
-        const fn_info = info.@"fn";
-        if (params.len > fn_info.params.len) {
-            @compileError("Too many parameters descriptions");
-        }
-
         return .{
             .name = name,
             .desc = desc,
             .params = params,
-            .info = fn_info,
+            .info = info.@"fn",
             .function = makeNative(func),
         };
     }
@@ -44,9 +45,8 @@ pub const ZigFnMeta = struct {
 
 pub const ZigFn = *const fn (*Vm, []const Value) ?Value;
 
-pub const ZigStruct = struct {
+pub const ZigStructMeta = struct {
     name: []const u8,
-    type: type,
     fields: []const Field = &.{},
     functions: []const ZigFnMeta = &.{},
 
@@ -57,23 +57,28 @@ pub const ZigStruct = struct {
     };
 };
 
+pub const ZigStruct = struct {
+    child: *anyopaque,
+    funcs: []const ZigFn,
+};
+
 pub fn makeNative(func: anytype) ZigFn {
     return struct {
-        comptime func: @TypeOf(func) = func,
-
         pub fn call(vm: *Vm, stack: []const Value) ?Value {
-            const ArgsType = ArgsTuple(@TypeOf(func));
+            const ArgsType, const vm_index = ArgsTuple(@TypeOf(func));
             var args: ArgsType = undefined;
 
-            if (@TypeOf(args[0]) != *Vm) {
-                @compileError("First argument of functions must be of type *Vm");
-            }
-
             const fields = @typeInfo(ArgsType).@"struct".fields;
-            args[0] = vm;
 
-            inline for (fields[1..], 0..) |f, i| {
-                args[i + 1] = fromValue(f.type, stack[i]);
+            comptime var offset: usize = 0;
+
+            inline for (fields, 0..) |f, i| {
+                if (i == vm_index) {
+                    args[vm_index] = vm;
+                    offset = 1;
+                } else {
+                    args[i] = fromValue(f.type, stack[i - offset]);
+                }
             }
 
             if (@typeInfo(@TypeOf(func)).@"fn".return_type != null) {
@@ -99,8 +104,8 @@ pub fn makeNative(func: anytype) ZigFn {
                 .pointer => |ptr| {
                     return switch (ptr.child) {
                         u8 => value.obj.as(Obj.String).chars,
+                        anyopaque => @compileError("Can't use *anyopaque in functions"),
                         else => {
-                            // const obj = value.asObj() orelse @compileError("Unsupported pointer child type: " ++ @typeName(T));
                             const obj = value.asObj() orelse unreachable;
                             const native = obj.as(Obj.NativeObj);
                             return @ptrCast(@alignCast(native.child));
@@ -116,12 +121,20 @@ pub fn makeNative(func: anytype) ZigFn {
                 .float => .{ .float = value },
                 .int => .{ .int = value },
                 .bool => .{ .bool = value },
-                .pointer => |ptr| {
-                    if (ptr.child == u8) {
-                        return .makeObj(Obj.String.take(vm, value).asObj());
-                    }
+                .pointer => |ptr| return switch (ptr.child) {
+                    // TODO: check memory managment
+                    u8 => .makeObj(Obj.String.take(vm, value).asObj()),
+                    else => {
+                        const native = @as(
+                            *Obj.NativeObj,
+                            @alignCast(@fieldParentPtr(
+                                "child",
+                                @as(*align(@alignOf(@FieldType(Obj.NativeObj, "child"))) *anyopaque, @ptrCast(@alignCast(value))),
+                            )),
+                        );
 
-                    return .makeObj(Obj.NativeObj.create(vm, "file", value).asObj());
+                        return .makeObj(native.asObj());
+                    },
                 },
                 else => @compileError("FFI: Unsupported type in auto conversion: " ++ @typeName(@TypeOf(value))),
             };
@@ -129,7 +142,7 @@ pub fn makeNative(func: anytype) ZigFn {
     }.call;
 }
 
-pub fn ArgsTuple(comptime FnType: type) type {
+pub fn ArgsTuple(comptime FnType: type) struct { type, usize } {
     const infos = @typeInfo(FnType);
     if (infos != .@"fn") {
         @compileError("FFI: Can't generate native function for a non-function");
@@ -140,7 +153,15 @@ pub fn ArgsTuple(comptime FnType: type) type {
         @compileError("FFI: Can't generate native function for variadic function");
     }
 
+    const vm_index = if (fn_infos.params[0].type.? == *Vm)
+        0
+    else if (fn_infos.params[1].type.? == *Vm)
+        1
+    else
+        @compileError("Either first or second argument of functions must be of type *Vm");
+
     var args_type: [fn_infos.params.len]type = undefined;
+
     inline for (fn_infos.params, 0..) |arg, i| {
         args_type[i] = arg.type.?;
     }
@@ -156,10 +177,13 @@ pub fn ArgsTuple(comptime FnType: type) type {
         };
     }
 
-    return @Type(.{ .@"struct" = .{
-        .is_tuple = true,
-        .decls = &.{},
-        .fields = &fields,
-        .layout = .auto,
-    } });
+    return .{
+        @Type(.{ .@"struct" = .{
+            .is_tuple = true,
+            .decls = &.{},
+            .fields = &fields,
+            .layout = .auto,
+        } }),
+        vm_index,
+    };
 }

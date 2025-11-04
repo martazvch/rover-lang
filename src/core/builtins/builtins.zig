@@ -5,8 +5,12 @@ const Vm = @import("../runtime/Vm.zig");
 pub const module: ffi.ZigModule = .{
     .is_module = false,
     .functions = &.{
-        .init("int", "", &.{}, int),
-        .init("float", "", &.{}, float),
+        .init("int", int, "", &.{
+            .{ .name = "value" },
+        }),
+        .init("float", float, "", &.{
+            .{ .name = "value" },
+        }),
     },
 };
 

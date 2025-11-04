@@ -97,7 +97,7 @@ pub const Type = union(enum) {
         return_type: *const Type,
         kind: Kind,
 
-        pub const Kind = enum { normal, method, bound, native };
+        pub const Kind = enum { normal, method, bound, native, native_method };
         pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
         pub const ParamsMap = ArrayMap(InternerIdx, Parameter);
         pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: bool = false });

@@ -1355,21 +1355,26 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Struct
     const text = self.ast.toSource(field_tk);
     const field_name = self.interner.intern(text);
 
-    return if (ty.fields.getPtr(field_name)) |f|
-        .{ .type = f.type, .kind = .field, .index = ty.fields.getIndex(field_name).? }
-    else if (ty.functions.get(field_name)) |f| b: {
+    if (ty.fields.getPtr(field_name)) |f| {
+        return .{ .type = f.type, .kind = .field, .index = ty.fields.getIndex(field_name).? };
+    } else if (ty.functions.get(field_name)) |f| {
         const function = &f.function;
 
         if (in_call) {
+            // Call method on type
             if (is_symbol and function.kind == .method) {
                 return self.err(.{ .call_method_on_type = .{ .name = text } }, self.ast.getSpan(field_tk));
-            } else if (!is_symbol and function.kind != .method) {
+            }
+            // Call static on instance
+            else if (!is_symbol and function.kind != .method and function.kind != .native_method) {
                 return self.err(.{ .call_static_on_instance = .{ .name = text } }, self.ast.getSpan(field_tk));
             }
         }
 
-        break :b .{ .type = f, .kind = .function, .index = ty.functions.getIndex(field_name).? };
-    } else self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
+        return .{ .type = f, .kind = .function, .index = ty.functions.getIndex(field_name).? };
+    }
+
+    return self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
 }
 
 fn moduleAccess(self: *Self, field_tk: Ast.TokenIndex, module_idx: InternerIdx) Result {
@@ -1424,7 +1429,7 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
                 .callee = callee.instr,
                 .args = args_res,
                 .implicit_first = callee.type.function.kind == .method,
-                .native = callee.type.function.kind == .native,
+                .native = callee.type.function.kind == .native or callee.type.function.kind == .native_method,
             } },
             span.start,
         ),

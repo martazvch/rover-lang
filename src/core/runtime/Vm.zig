@@ -46,8 +46,8 @@ pub fn init(self: *Self, allocator: Allocator, state: *const State) void {
     self.frame_stack = .empty;
     self.objects = null;
 
-    self.createNatives(state);
-
+    // self.createNatives(state);
+    self.natives = state.native_reg.funcs.items;
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
     // but the count is coherent of what is expected below, for example
@@ -58,13 +58,13 @@ pub fn init(self: *Self, allocator: Allocator, state: *const State) void {
     }
 }
 
-fn createNatives(self: *Self, state: *const State) void {
-    self.natives = self.allocator.alloc(Value, state.native_reg.funcs.items.len) catch oom();
-
-    for (state.native_reg.funcs.items, 0..) |func, i| {
-        self.natives[i] = .makeObj(Obj.NativeFunction.create(self, func.name, func.func).asObj());
-    }
-}
+// fn createNatives(self: *Self, state: *const State) void {
+//     self.natives = self.allocator.alloc(Value, state.native_reg.funcs.items.len) catch oom();
+//
+//     for (state.native_reg.funcs.items, 0..) |func, i| {
+//         self.natives[i] = .makeObj(Obj.NativeFunction.create(self.allocator, func.name, func.func).asObj());
+//     }
+// }
 
 pub fn deinit(self: *Self) void {
     self.arena_comptime.deinit();

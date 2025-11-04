@@ -109,12 +109,11 @@ pub fn initGlobalScope(self: *Self, allocator: Allocator, state: *State) void {
         self.builtins.putAssumeCapacity(state.interner.intern(builtin.name), @field(state.type_interner.cache, builtin.name));
     }
 
-    self.natives.ensureTotalCapacity(allocator, @intCast(state.native_reg.meta.count())) catch oom();
-    var it = state.native_reg.meta.iterator();
+    self.natives.ensureTotalCapacity(allocator, @intCast(state.native_reg.funcs_meta.count())) catch oom();
+    var it = state.native_reg.funcs_meta.iterator();
     while (it.next()) |entry| {
         self.natives.putAssumeCapacity(entry.key_ptr.*, .{
             .index = self.natives.count(),
-            // .type = state.type_interner.intern(.{ .function = entry.value_ptr.* }),
             .type = entry.value_ptr.*,
         });
     }

@@ -196,7 +196,7 @@ pub fn getFn(self: *Obj, index: usize) Value {
         .enum_instance => self.as(EnumInstance).parent.functions[index],
         .structure => self.as(Structure).functions[index],
         .instance => self.as(Instance).parent.functions[index],
-        else => undefined,
+        else => unreachable,
     };
 }
 
@@ -446,8 +446,8 @@ pub const NativeFunction = struct {
 
     const Self = @This();
 
-    pub fn create(vm: *Vm, name: []const u8, function: ffi.ZigFn) *Self {
-        const obj = Obj.allocate(vm, Self, undefined);
+    pub fn create(allocator: Allocator, name: []const u8, function: ffi.ZigFn) *Self {
+        const obj = Obj.allocateComptime(allocator, Self, undefined);
         obj.name = name;
         obj.function = function;
 
@@ -609,15 +609,18 @@ pub const NativeObj = struct {
     obj: Obj,
     name: []const u8,
     child: *anyopaque,
+    // info: ffi.ZigStruct,
 
     const Self = @This();
 
+    // pub fn create(vm: *Vm, name: []const u8, child: *anyopaque, info: ffi.ZigStruct) *Self {
     pub fn create(vm: *Vm, name: []const u8, child: *anyopaque) *Self {
         // Fields first for GC because other wise allocating fields after creation
         // of the instance may trigger GC in between
         const obj = Obj.allocate(vm, Self, undefined);
         obj.name = name;
         obj.child = child;
+        // obj.info = info;
 
         if (options.log_gc) obj.asObj().log();
 
@@ -626,6 +629,12 @@ pub const NativeObj = struct {
 
     pub fn asObj(self: *Self) *Obj {
         return &self.obj;
+    }
+
+    pub fn getFunc(self: *Self, index: usize) Value {
+        _ = self; // autofix
+        _ = index; // autofix
+        unreachable;
     }
 
     // TODO: destroy child too?
