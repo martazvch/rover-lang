@@ -200,17 +200,6 @@ pub fn getFn(self: *Obj, index: usize) Value {
     };
 }
 
-pub fn loadDefaultValues(self: *Obj, vm: *Vm, index: usize) void {
-    vm.r3 = switch (self.kind) {
-        .function => self.as(Function).default_values,
-        .instance => self.as(Instance).parent.functions[index].obj.as(Function).default_values,
-        .structure => self.as(Structure).default_values,
-        // They don't have default values yet
-        .@"enum" => return,
-        else => unreachable,
-    };
-}
-
 pub fn structLiteral(self: *Obj, vm: *Vm) *Instance {
     return switch (self.kind) {
         .structure => Instance.create(vm, self.as(Structure)),
@@ -352,16 +341,17 @@ pub const Function = struct {
     obj: Obj,
     chunk: Chunk,
     name: []const u8,
-    default_values: []Value,
     module_index: usize,
+    // defaults: []u8,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, default_count: usize, module_index: usize) *Self {
+    // pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, defaults: usize, module_index: usize) *Self {
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, module_index: usize) *Self {
         const obj = Obj.allocateComptime(allocator, Self, type_id);
-        obj.chunk = Chunk.init(allocator);
+        obj.chunk = .empty;
         obj.name = allocator.dupe(u8, name) catch oom();
-        obj.default_values = allocator.alloc(Value, default_count) catch oom();
+        // obj.defaults = allocator.alloc(u8, defaults) catch oom();
         obj.module_index = module_index;
 
         if (options.log_gc) obj.asObj().log();
@@ -375,8 +365,7 @@ pub const Function = struct {
 
     pub fn deinit(self: *Self, vm: *Vm) void {
         self.chunk.deinit(vm.allocator);
-        vm.allocator.free(self.default_values);
-
+        // vm.allocator.free(self.defaults);
         // Name already in the linked list, don't free manually
         vm.gc_alloc.destroy(self);
     }
@@ -470,17 +459,18 @@ pub const NativeFunction = struct {
 pub const Structure = struct {
     obj: Obj,
     name: []const u8,
+    // defaults: []u8,
     field_count: usize,
-    default_values: []Value,
     functions: []Value,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, default_count: usize, functions: []Value) *Self {
+    // pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, defaults: usize, field_count: usize, functions: []Value) *Self {
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, functions: []Value) *Self {
         const obj = Obj.allocateComptime(allocator, Self, type_id);
         obj.name = allocator.dupe(u8, name) catch oom();
+        // obj.defaults = allocator.alloc(u8, defaults) catch oom();
         obj.field_count = field_count;
-        obj.default_values = allocator.alloc(Value, default_count) catch oom();
         obj.functions = functions;
 
         return obj;
@@ -493,8 +483,8 @@ pub const Structure = struct {
     // Functions aren't freed because they are on the main linked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
+        // vm.allocator.free(self.defaults);
         vm.allocator.free(self.functions);
-        vm.allocator.free(self.default_values);
         vm.gc_alloc.destroy(self);
     }
 };

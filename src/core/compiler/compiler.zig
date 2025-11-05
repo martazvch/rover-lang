@@ -24,12 +24,14 @@ pub const CompiledModule = struct {
     name: []const u8,
     globals: []Value,
     symbols: []Value,
+    constants: []Value,
 
-    pub fn init(allocator: Allocator, name: []const u8, globals_count: usize, symbols_count: usize) CompiledModule {
+    pub fn init(allocator: Allocator, name: []const u8, globals_count: usize, symbols_count: usize, constants_count: usize) CompiledModule {
         return .{
             .name = name,
             .globals = allocator.alloc(Value, globals_count) catch oom(),
             .symbols = allocator.alloc(Value, symbols_count) catch oom(),
+            .constants = allocator.alloc(Value, constants_count) catch oom(),
         };
     }
 
@@ -39,7 +41,7 @@ pub const CompiledModule = struct {
     }
 };
 
-pub const CompilationManager = struct {
+pub const CompilationUnit = struct {
     allocator: Allocator,
     vm: *Vm,
     interner: *const Interner,
@@ -52,8 +54,9 @@ pub const CompilationManager = struct {
     line: usize,
 
     const Self = @This();
-    const Error = error{err} || Chunk.Error || std.posix.WriteError;
+    const Error = error{ Err, TooManyConst } || std.posix.WriteError;
     const CompilerReport = GenReport(CompilerMsg);
+    const ConstIndex = u8;
 
     pub fn init(
         allocator: Allocator,
@@ -63,6 +66,7 @@ pub const CompilationManager = struct {
         render_mode: Disassembler.RenderMode,
         global_count: usize,
         symbol_count: usize,
+        constants_count: usize,
     ) Self {
         return .{
             .allocator = allocator,
@@ -73,7 +77,7 @@ pub const CompilationManager = struct {
             .instr_data = undefined,
             .instr_lines = undefined,
             .render_mode = render_mode,
-            .module = .init(allocator, name, global_count, symbol_count),
+            .module = .init(allocator, name, global_count, symbol_count, constants_count),
             .line = 0,
         };
     }
@@ -82,12 +86,15 @@ pub const CompilationManager = struct {
         self: *Self,
         instr_data: []const Instruction.Data,
         roots: []const ir.Index,
+        constants: []const Instruction.Data,
         instr_lines: []const usize,
         main_index: ?usize,
         module_index: usize,
     ) !struct { *Obj.Function, CompiledModule } {
         self.instr_data = instr_data;
         self.instr_lines = instr_lines;
+
+        try self.compileConstants(constants);
 
         if (self.render_mode != .none) {
             var buf: [256]u8 = undefined;
@@ -96,7 +103,8 @@ pub const CompilationManager = struct {
             stdout.interface.flush() catch oom();
         }
 
-        self.compiler = Compiler.init(self, "global scope", 0, 0, module_index);
+        // self.compiler = Compiler.init(self, "global scope", 0, 0, module_index);
+        self.compiler = Compiler.init(self, "global scope", 0, module_index);
 
         for (roots) |root| {
             try self.compiler.compileInstr(root);
@@ -107,15 +115,59 @@ pub const CompilationManager = struct {
             self.compiler.writeOpAndByte(.load_sym, @intCast(idx));
             self.compiler.writeOpAndByte(.call, 0);
         } else {
-            self.compiler.getChunk().writeOp(.exit_repl, 0);
+            self.compiler.writeOp(.exit_repl);
         }
 
         return .{ try self.compiler.end(), self.module };
     }
+
+    pub fn compileConstants(self: *Self, instrs: []const Instruction.Data) Error!void {
+        for (instrs, 0..) |instr, i| {
+            if (self.module.constants.len == std.math.maxInt(ConstIndex) + 1) {
+                return error.TooManyConst;
+            }
+
+            self.module.constants[i] = self.constant(instr);
+        }
+    }
+
+    fn constant(self: *Self, instr_data: Instruction.Data) Value {
+        return switch (instr_data) {
+            // TODO: protect the cast
+            // .enum_create => |val| b: {
+            //     const data = self.manager.instr_data[val.lhs];
+            //
+            //     if (data != .load_symbol) {
+            //         @panic("Not supported yet");
+            //     }
+            //     const parent = self.manager.module.symbols[data.load_symbol.symbol_index].obj.as(Obj.Enum);
+            //
+            //     break :b Value.makeObj(
+            //         Obj.EnumInstance.create(
+            //             self.manager.allocator,
+            //             parent,
+            //             @intCast(val.tag_index),
+            //             .null_,
+            //         ).asObj(),
+            //     );
+            // },
+            .int => |val| Value.makeInt(val),
+            .float => |val| Value.makeFloat(val),
+            .string => |val| Value.makeObj(Obj.String.comptimeCopy(
+                self.vm,
+                self.interner.getKey(val).?,
+            ).asObj()),
+            // .fn_decl => |*f| b: {
+            //     const func = try self.compiler.compileCallable("anonymus", f);
+            //     break :b .makeObj(func.asObj());
+            // },
+            else => @panic("Default value supported yet"),
+        };
+    }
 };
 
 const Compiler = struct {
-    manager: *CompilationManager,
+    manager: *CompilationUnit,
     function: *Obj.Function,
     block_stack: BlockStack,
     state: State = .{},
@@ -140,7 +192,7 @@ const Compiler = struct {
             self.stack.items[self.stack.items.len - 1 - depth].append(allocator, instr) catch oom();
         }
     };
-    const Error = error{Err} || Chunk.Error || std.posix.WriteError;
+    const Error = CompilationUnit.Error;
 
     const CompilerReport = GenReport(CompilerMsg);
     // TODO: could make a generic construct with only flags like this (share with other contexts)
@@ -156,14 +208,15 @@ const Compiler = struct {
     };
     const FnKind = enum { global, @"fn", method };
 
-    pub fn init(manager: *CompilationManager, name: []const u8, type_id: ir.TypeId, default_count: usize, module_index: usize) Self {
+    // pub fn init(manager: *CompilationUnit, name: []const u8, type_id: ir.TypeId, defaults: usize, module_index: usize) Self {
+    pub fn init(manager: *CompilationUnit, name: []const u8, type_id: ir.TypeId, module_index: usize) Self {
         return .{
             .manager = manager,
             .function = Obj.Function.create(
                 manager.allocator,
                 name,
                 type_id,
-                default_count,
+                // defaults,
                 module_index,
             ),
             .block_stack = .empty,
@@ -178,10 +231,6 @@ const Compiler = struct {
         return self.manager.instr_idx == self.manager.instr_data.len;
     }
 
-    fn getChunk(self: *Self) *Chunk {
-        return &self.function.chunk;
-    }
-
     fn setInstrIndexGetPrev(self: *Self, index: usize) usize {
         const variable_instr = self.manager.instr_idx;
         self.manager.instr_idx = index;
@@ -190,12 +239,12 @@ const Compiler = struct {
 
     /// Writes an OpCode to the current chunk
     fn writeOp(self: *Self, op: OpCode) void {
-        self.getChunk().writeOp(op, self.manager.line);
+        self.function.chunk.writeOp(self.manager.allocator, op, self.manager.line);
     }
 
     /// Writes a byte to the current chunk
     fn writeByte(self: *Self, byte: u8) void {
-        self.getChunk().writeByte(byte, self.manager.line);
+        self.function.chunk.writeByte(self.manager.allocator, byte, self.manager.line);
     }
 
     /// Writes an OpCode and a byte to the current chunk
@@ -204,16 +253,13 @@ const Compiler = struct {
         self.writeByte(byte);
     }
 
-    fn emitConstant(self: *Self, value: Value) Error!void {
-        // TODO: error
-        self.writeOpAndByte(
-            .constant,
-            self.getChunk().writeConstant(value) catch |err| {
-                std.debug.print("Too many constants in chunk\n", .{});
-                return err;
-            },
-        );
-    }
+    // fn emitConstant(self: *Self, value: Value) Error!void {
+    //     // TODO: error
+    //     self.writeOpAndByte(
+    //         .constant,
+    //         try self.manager.addConstant(value),
+    //     );
+    // }
 
     fn addGlobal(self: *Self, index: usize, global: Value) void {
         self.manager.module.globals[index] = global;
@@ -247,16 +293,16 @@ const Compiler = struct {
     }
 
     fn emitJump(self: *Self, kind: OpCode) usize {
-        const chunk = self.getChunk();
-        chunk.writeOp(kind, self.manager.line);
-        chunk.writeByte(0xff, self.manager.line);
-        chunk.writeByte(0xff, self.manager.line);
+        const chunk = &self.function.chunk;
+        chunk.writeOp(self.manager.allocator, kind, self.manager.line);
+        chunk.writeByte(self.manager.allocator, 0xff, self.manager.line);
+        chunk.writeByte(self.manager.allocator, 0xff, self.manager.line);
 
         return chunk.code.items.len - 2;
     }
 
     fn patchJump(self: *Self, offset: usize) Error!void {
-        const chunk = self.getChunk();
+        const chunk = &self.function.chunk;
         // -2 for the two 8bits jump value (cf emit jump)
         const jump = chunk.code.items.len - offset - 2;
 
@@ -272,8 +318,8 @@ const Compiler = struct {
 
     fn emitLoop(self: *Self, loop_start: usize) Error!void {
         const offset = self.manager.line;
-        const chunk = self.getChunk();
-        chunk.writeOp(.loop, offset);
+        const chunk = &self.function.chunk;
+        chunk.writeOp(self.manager.allocator, .loop, offset);
         // +2 for loop own operands (jump offset on 16bits)
         const jump_offset = chunk.code.items.len - loop_start + 2;
 
@@ -282,8 +328,8 @@ const Compiler = struct {
             @panic("loop body too large\n");
         }
 
-        chunk.writeByte(@as(u8, @intCast(jump_offset >> 8)) & 0xff, offset);
-        chunk.writeByte(@intCast(jump_offset & 0xff), offset);
+        chunk.writeByte(self.manager.allocator, @as(u8, @intCast(jump_offset >> 8)) & 0xff, offset);
+        chunk.writeByte(self.manager.allocator, @intCast(jump_offset & 0xff), offset);
     }
 
     pub fn end(self: *Self) Error!*Obj.Function {
@@ -291,9 +337,12 @@ const Compiler = struct {
             var alloc_writer: std.Io.Writer.Allocating = .init(self.manager.allocator);
             defer alloc_writer.deinit();
 
+            // TODO: could now use initMod and delete one of the constructors
             var dis = Disassembler.init(
                 &self.function.chunk,
-                &self.manager.module,
+                self.manager.module.globals,
+                self.manager.module.symbols,
+                self.manager.module.constants,
                 self.manager.render_mode,
             );
             dis.disChunk(&alloc_writer.writer, self.function.name);
@@ -323,6 +372,9 @@ const Compiler = struct {
             .bound_method => |data| self.boundMethod(data),
             .@"break" => |data| self.breakInstr(data),
             .call => |*data| self.fnCall(data),
+
+            // TODO: protect cast
+            .constant => |index| self.writeOpAndByte(.get_constant, @intCast(index)),
             .discard => |index| self.wrappedInstr(.pop, index),
 
             // In case of an extractor, we don't replace top of stack with the bool result of
@@ -333,11 +385,11 @@ const Compiler = struct {
             .enum_create => |*data| self.enumCreate(data),
             .enum_decl => |*data| self.enumDecl(data),
             .field => |*data| self.field(data),
-            .float => |data| self.floatInstr(data),
+            // .float => |data| self.floatInstr(data),
             .fn_decl => |*data| self.compileFn(data),
             .identifier => |*data| self.identifier(data),
             .@"if" => |*data| self.ifInstr(data),
-            .int => |data| self.intInstr(data),
+            // .int => |data| self.intInstr(data),
             .incr_rc => |index| self.wrappedInstr(.incr_ref, index),
             // TODO: protect the cast
             .load_builtin => |index| self.writeOpAndByte(.load_builtin, @intCast(index)),
@@ -348,7 +400,7 @@ const Compiler = struct {
             .pop => |index| self.wrappedInstr(.pop, index),
             .print => |index| self.wrappedInstr(.print, index),
             .@"return" => |*data| self.returnInstr(data),
-            .string => |data| self.stringInstr(data),
+            // .string => |data| self.stringInstr(data),
             .struct_decl => |*data| self.structDecl(data),
             .struct_literal => |*data| self.structLiteral(data),
             .unary => |*data| self.unary(data),
@@ -357,6 +409,8 @@ const Compiler = struct {
             .when => |*data| self.when(data),
             .@"while" => |data| self.whileInstr(data),
 
+            // TODO: maybe remove them from IR
+            .int, .float, .string => unreachable,
             .noop => {},
         };
     }
@@ -516,7 +570,9 @@ const Compiler = struct {
 
     fn tagId(self: *Self, instr: usize) Error!void {
         switch (self.at(instr)) {
-            .enum_create => |data| try self.emitConstant(Value.makeInt(@intCast(data.tag_index))),
+            // .enum_create => |data| try self.emitConstant(Value.makeInt(@intCast(data.tag_index))),
+            // TODO: protect the cast
+            .enum_create => |data| self.writeOpAndByte(.get_constant, @intCast(data.tag_index)),
             else => {
                 try self.compileInstr(instr);
                 self.writeOp(.get_tag);
@@ -610,9 +666,9 @@ const Compiler = struct {
         );
     }
 
-    fn floatInstr(self: *Self, value: f64) Error!void {
-        try self.emitConstant(Value.makeFloat(value));
-    }
+    // fn floatInstr(self: *Self, value: f64) Error!void {
+    //     try self.emitConstant(Value.makeFloat(value));
+    // }
 
     fn fnCall(self: *Self, data: *const Instruction.Call) Error!void {
         try self.compileInstr(data.callee);
@@ -626,8 +682,12 @@ const Compiler = struct {
 
     fn compileArgs(self: *Self, args: []const Instruction.Arg) Error!void {
         for (args) |arg| {
+            std.log.debug("Arg: {any}", .{arg});
             switch (arg) {
-                .default => |index| self.writeOpAndByte(.get_default, @intCast(index)),
+                // TODO: protext the cast
+                // .default => |index| self.writeOpAndByte(.get_constant, @intCast(index)),
+                // .default => |index| try self.compileInstr(index),
+                .default => |index| self.writeOpAndByte(.get_constant, @intCast(index)),
                 .instr => |instr| try self.compileInstr(instr),
             }
         }
@@ -635,11 +695,12 @@ const Compiler = struct {
 
     fn compileCallable(self: *Self, name: []const u8, data: *const Instruction.FnDecl) Error!*Obj.Function {
         // TODO: protect cast
-        var compiler = Compiler.init(self.manager, name, data.type_id, @intCast(data.defaults.len), self.function.module_index);
+        // var compiler = Compiler.init(self.manager, name, data.type_id, data.defaults.len, self.function.module_index);
+        var compiler = Compiler.init(self.manager, name, data.type_id, self.function.module_index);
 
-        for (data.defaults, 0..) |def, i| {
-            compiler.function.default_values[i] = try self.compileDefaultValue(def);
-        }
+        // for (data.defaults, 0..) |def, i| {
+        //     compiler.function.defaults[i] = try self.compileDefaultValue(def);
+        // }
 
         for (data.body) |instr| {
             try compiler.compileInstr(instr);
@@ -651,20 +712,31 @@ const Compiler = struct {
     }
 
     fn compileFn(self: *Self, data: *const Instruction.FnDecl) Error!void {
-        const fn_name = if (data.name) |idx| self.manager.interner.getKey(idx).? else "Script";
+        const fn_name = if (data.name) |idx| self.manager.interner.getKey(idx).? else "anonymus";
 
         const index = switch (data.kind) {
             .symbol => |idx| idx,
-            .closure => return self.compileClosure(data, fn_name),
+            // .closure => return self.compileClosure(data, fn_name),
+            // TODO: WIP
+            .closure => unreachable,
         };
 
         const func = try self.compileCallable(fn_name, data);
         self.addSymbol(index, Value.makeObj(func.asObj()));
+
+        if (data.captures.len > 0) {
+            try self.compileClosure(data, index);
+        }
     }
 
-    fn compileClosure(self: *Self, data: *const Instruction.FnDecl, name: ?[]const u8) Error!void {
-        const func = try self.compileCallable(name orelse "anonymus", data);
-        try self.emitConstant(Value.makeObj(func.asObj()));
+    // fn compileClosure(self: *Self, data: *const Instruction.FnDecl, name: ?[]const u8) Error!void {
+    fn compileClosure(self: *Self, data: *const Instruction.FnDecl, sym_index: usize) Error!void {
+        // const func = try self.compileCallable(name orelse "anonymus", data);
+
+        // TODO: Compile closure on start with other constants
+        // try self.emitConstant(Value.makeObj(func.asObj()));
+
+        self.writeOpAndByte(.load_sym, @intCast(sym_index));
 
         for (data.captures) |*capt| {
             try self.capture(capt);
@@ -692,9 +764,9 @@ const Compiler = struct {
         self.emitGetVar(data);
     }
 
-    fn intInstr(self: *Self, value: isize) Error!void {
-        try self.emitConstant(Value.makeInt(value));
-    }
+    // fn intInstr(self: *Self, value: isize) Error!void {
+    //     try self.emitConstant(Value.makeInt(value));
+    // }
 
     fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
         const is_extractor = self.manager.instr_data[data.cond] == .extractor;
@@ -792,14 +864,14 @@ const Compiler = struct {
         } else self.writeOp(.ret_naked);
     }
 
-    fn stringInstr(self: *Self, index: usize) Error!void {
-        try self.emitConstant(
-            Value.makeObj(Obj.String.comptimeCopy(
-                self.manager.vm,
-                self.manager.interner.getKey(index).?,
-            ).asObj()),
-        );
-    }
+    // fn stringInstr(self: *Self, index: usize) Error!void {
+    //     try self.emitConstant(
+    //         Value.makeObj(Obj.String.comptimeCopy(
+    //             self.manager.vm,
+    //             self.manager.interner.getKey(index).?,
+    //         ).asObj()),
+    //     );
+    // }
 
     fn structDecl(self: *Self, data: *const Instruction.StructDecl) Error!void {
         // TODO: just fetch symbol in symbol table?
@@ -807,8 +879,8 @@ const Compiler = struct {
             self.manager.allocator,
             self.manager.interner.getKey(data.name).?,
             data.type_id,
+            // data.default_fields.len,
             data.fields_count,
-            data.default_fields.len,
             &.{},
         );
 
@@ -818,9 +890,9 @@ const Compiler = struct {
         self.addSymbol(data.sym_index, Value.makeObj(structure.asObj()));
 
         // We compile each default value and as we know there are pure
-        for (data.default_fields, 0..) |def, i| {
-            structure.default_values[i] = try self.compileDefaultValue(def);
-        }
+        // for (data.default_fields, 0..) |def, i| {
+        //     structure.defaults[i] = try self.compileDefaultValue(def);
+        // }
 
         structure.functions = try self.containerFnDecls(data.functions);
         const struct_obj = Value.makeObj(structure.asObj());
@@ -918,7 +990,7 @@ const Compiler = struct {
         const is_extractor = self.manager.instr_data[data.cond] == .extractor;
         self.block_stack.open(self.manager.allocator);
 
-        const loop_start = self.getChunk().code.items.len;
+        const loop_start = self.function.chunk.code.items.len;
 
         try self.compileInstr(data.cond);
         const exit_jump = self.emitJump(.jump_false);
@@ -950,34 +1022,36 @@ const Compiler = struct {
         }
     }
 
-    fn compileDefaultValue(self: *Self, instr: ir.Index) Error!Value {
-        return switch (self.manager.instr_data[instr]) {
-            // TODO: protect the cast
-            .enum_create => |val| {
-                const data = self.manager.instr_data[val.lhs];
-
-                if (data != .load_symbol) {
-                    @panic("Not supported yet");
-                }
-                const parent = self.manager.module.symbols[data.load_symbol.symbol_index].obj.as(Obj.Enum);
-
-                return Value.makeObj(
-                    Obj.EnumInstance.create(
-                        self.manager.allocator,
-                        parent,
-                        @intCast(val.tag_index),
-                        .null_,
-                    ).asObj(),
-                );
-            },
-            .int => |val| Value.makeInt(val),
-            .float => |val| Value.makeFloat(val),
-            .bool => |val| Value.makeBool(val),
-            .string => |val| Value.makeObj(Obj.String.comptimeCopy(
-                self.manager.vm,
-                self.manager.interner.getKey(val).?,
-            ).asObj()),
-            else => @panic("Default value supported yet"),
-        };
-    }
+    // fn compileDefaultValue(self: *Self, instr: ir.Index) Error!CompilationUnit.ConstIndex {
+    //     const value = switch (self.manager.instr_data[instr]) {
+    //         // TODO: protect the cast
+    //         .enum_create => |val| b: {
+    //             const data = self.manager.instr_data[val.lhs];
+    //
+    //             if (data != .load_symbol) {
+    //                 @panic("Not supported yet");
+    //             }
+    //             const parent = self.manager.module.symbols[data.load_symbol.symbol_index].obj.as(Obj.Enum);
+    //
+    //             break :b Value.makeObj(
+    //                 Obj.EnumInstance.create(
+    //                     self.manager.allocator,
+    //                     parent,
+    //                     @intCast(val.tag_index),
+    //                     .null_,
+    //                 ).asObj(),
+    //             );
+    //         },
+    //         .int => |val| Value.makeInt(val),
+    //         .float => |val| Value.makeFloat(val),
+    //         .bool => |val| Value.makeBool(val),
+    //         .string => |val| Value.makeObj(Obj.String.comptimeCopy(
+    //             self.manager.vm,
+    //             self.manager.interner.getKey(val).?,
+    //         ).asObj()),
+    //         else => @panic("Default value supported yet"),
+    //     };
+    //
+    //     return self.manager.addConstant(value);
+    // }
 };

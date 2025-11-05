@@ -3,14 +3,16 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
 
-const Obj = @import("../runtime/Obj.zig");
+const Value = @import("../runtime/values.zig").Value;
 const oom = @import("misc").oom;
 const Chunk = @import("Chunk.zig");
 const OpCode = Chunk.OpCode;
 const Module = @import("compiler.zig").CompiledModule;
 
 chunk: *const Chunk,
-module: *const Module,
+globals: []const Value,
+symbols: []const Value,
+constants: []const Value,
 render_mode: RenderMode,
 
 prev_line: usize = 0,
@@ -18,10 +20,22 @@ prev_line: usize = 0,
 const Self = @This();
 pub const RenderMode = enum { none, normal, @"test" };
 
-pub fn init(chunk: *const Chunk, module: *const Module, render_mode: RenderMode) Self {
+pub fn initMod(chunk: *const Chunk, module: *const Module, render_mode: RenderMode) Self {
     return .{
         .chunk = chunk,
-        .module = module,
+        .globals = module.globals,
+        .symbols = module.symbols,
+        .constants = module.constants,
+        .render_mode = render_mode,
+    };
+}
+
+pub fn init(chunk: *const Chunk, globals: []const Value, symbols: []const Value, constants: []const Value, render_mode: RenderMode) Self {
+    return .{
+        .chunk = chunk,
+        .globals = globals,
+        .symbols = symbols,
+        .constants = constants,
         .render_mode = render_mode,
     };
 }
@@ -82,7 +96,7 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .ge_int => self.simpleInstruction(writer, "ge_int", offset),
         .get_capt_frame => self.indexInstruction(writer, "get_capt_frame", offset),
         .get_capt_local => self.indexInstruction(writer, "get_capt_local", offset),
-        .get_default => self.indexInstruction(writer, "get_default", offset),
+        .get_constant => self.constantInstruction(writer, "get_constant", offset),
         .get_field => self.getMember(writer, "get_field", offset),
         .get_field_cow => self.getMember(writer, "get_field_cow", offset),
         .get_global => self.getGlobal(writer, false, offset),
@@ -190,7 +204,7 @@ fn getGlobal(self: *Self, writer: *Writer, cow: bool, offset: usize) Writer.Erro
         try writer.print("{s:<20} index {:>4}", .{ text, index });
     }
 
-    if (self.module.globals[index].asObj()) |obj| {
+    if (self.globals[index].asObj()) |obj| {
         try writer.writeAll(", ");
         try obj.print(writer);
     }
@@ -201,7 +215,7 @@ fn getGlobal(self: *Self, writer: *Writer, cow: bool, offset: usize) Writer.Erro
 
 fn constantInstruction(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writer.Error!usize {
     const constant = self.chunk.code.items[offset + 1];
-    const value = self.chunk.constants[constant];
+    const value = self.constants[constant];
 
     if (self.render_mode == .@"test") {
         try writer.print("{s} index {}, value ", .{ name, constant });
@@ -228,25 +242,10 @@ fn jumpInstruction(self: *Self, writer: *Writer, name: []const u8, sign: isize, 
     return offset + 3;
 }
 
-fn for_instruction(self: *Self, writer: *Writer, name: []const u8, sign: isize, offset: usize) Writer.Error!usize {
-    var jump: u16 = @as(u16, self.chunk.code.items[offset + 1]) << 8;
-    jump |= self.chunk.code.items[offset + 2];
-    const target = @as(isize, jump) * sign + @as(isize, @intCast(offset)) + 4;
-    const iter_index = self.chunk.code.items[offset + 3];
-
-    if (self.render_mode == .@"test") {
-        try writer.print("{s} iter index {}, {} -> {}\n", .{ name, iter_index, offset, target });
-    } else {
-        try writer.print("{s:<20} iter index {}, {:<4} -> {}\n", .{ name, iter_index, offset, target });
-    }
-
-    return offset + 4;
-}
-
 fn loadSymbol(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
     const text = "load_sym";
     const idx = self.chunk.code.items[offset + 1];
-    const sym = self.module.symbols[idx].obj;
+    const sym = self.symbols[idx].obj;
 
     var buf: [512]u8 = undefined;
     var bw = std.Io.Writer.fixed(&buf);
@@ -260,6 +259,7 @@ fn loadSymbol(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
 
     return offset + 2;
 }
+
 fn getMember(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writer.Error!usize {
     const idx = self.chunk.code.items[offset + 1];
 

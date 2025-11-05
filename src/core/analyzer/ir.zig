@@ -23,6 +23,7 @@ pub const Instruction = struct {
         bound_method: BoundMethod,
         @"break": Break,
         call: Call,
+        constant: usize,
         discard: Index,
         extractor: Index,
         enum_create: EnumCreate,
@@ -114,6 +115,7 @@ pub const Instruction = struct {
     pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool, native: bool };
     pub const Arg = union(enum) { instr: Index, default: usize };
     pub const EnumCreate = struct {
+        // TODO: just resolve to a load_sym?
         lhs: Index,
         tag_index: usize,
     };

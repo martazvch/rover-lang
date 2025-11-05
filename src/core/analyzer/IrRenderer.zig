@@ -70,6 +70,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .bound_method => |data| self.boundMethod(data),
         .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
+        .constant => |index| self.indentAndPrintSlice("[Constant index: {}]", .{index}),
         .discard => |index| self.indexInstr("Discard", index),
         .enum_create => |data| self.enumCreate(data),
         .enum_decl => |*data| self.enumDecl(data),
@@ -221,16 +222,16 @@ fn fnCall(self: *Self, data: *const Instruction.Call) void {
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr(data.callee);
-    self.argsList(data.args);
+    self.argsList("param", data.args);
 }
 
-fn argsList(self: *Self, args: []const Instruction.Arg) void {
+fn argsList(self: *Self, kind: []const u8, args: []const Instruction.Arg) void {
     if (args.len == 0) return;
 
     self.indentAndAppendSlice("- args");
     for (args) |arg| {
         switch (arg) {
-            .default => |def| self.indentAndPrintSlice("[Default field {}]", .{def}),
+            .default => |def| self.indentAndPrintSlice("[Default {s} {}]", .{ kind, def }),
             .instr => |i| self.parseInstr(i),
         }
     }
@@ -407,7 +408,7 @@ fn structLiteral(self: *Self, data: *const Instruction.StructLiteral) void {
     defer self.indent_level -= 1;
     self.indentAndAppendSlice("- structure");
     self.parseInstr(data.structure);
-    self.argsList(data.values);
+    self.argsList("field", data.values);
 }
 
 fn unary(self: *Self, data: *const Instruction.Unary) void {

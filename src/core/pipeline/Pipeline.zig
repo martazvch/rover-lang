@@ -6,7 +6,7 @@ const options = @import("options");
 const State = @import("State.zig");
 const Compiler = @import("../compiler/compiler.zig").Compiler;
 const CompiledModule = @import("../compiler/compiler.zig").CompiledModule;
-const CompilationManager = @import("../compiler/compiler.zig").CompilationManager;
+const CompilationUnit = @import("../compiler/compiler.zig").CompilationUnit;
 const Analyzer = @import("../analyzer/Analyzer.zig");
 const AnalyzerMsg = @import("../analyzer/analyzer_msg.zig").AnalyzerMsg;
 const Ast = @import("../parser/Ast.zig");
@@ -70,7 +70,7 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
     }
 
     // Compiler
-    var compiler = CompilationManager.init(
+    var compiler = CompilationUnit.init(
         self.vm.allocator,
         file_name,
         self.vm,
@@ -78,11 +78,13 @@ pub fn run(self: *Self, file_name: []const u8, path: []const u8, source: [:0]con
         if (!self.state.config.print_bytecode) .none else if (options.test_mode) .@"test" else .normal,
         analyzer.scope.current.variables.count(),
         analyzer.scope.symbol_count,
+        analyzer.irb.constants.constants.count(),
     );
 
     const entry_point, const compiled_module = try compiler.compile(
         analyzer.irb.instructions.items(.data)[self.instr_count..],
         analyzer.irb.roots.items[self.instr_count..],
+        analyzer.irb.constants.constants.values(),
         analyzer.irb.computeLineFromOffsets(source)[self.instr_count..],
         analyzer.main,
         self.state.module_interner.compiled.count(),

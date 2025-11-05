@@ -386,7 +386,7 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
 
     // If it's a closure, it lives on the stack at runtime
     if (is_closure) {
-        _ = self.scope.removeSymbolFromScope(name);
+        // _ = self.scope.removeSymbolFromScope(name);
         _ = try self.declareVariable(name, interned_type, false, true, true, false, span);
     }
 
@@ -395,15 +395,18 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     }
 
     return self.irb.addInstr(
-        .{ .fn_decl = .{
-            .kind = if (is_closure) .closure else .{ .symbol = sym.index },
-            .type_id = self.ti.typeId(interned_type),
-            .name = name,
-            .body = body_instrs,
-            .defaults = param_res.defaults,
-            .captures = captures,
-            .returns = returns,
-        } },
+        .{
+            .fn_decl = .{
+                // .kind = if (is_closure) .closure else .{ .symbol = sym.index },
+                .kind = .{ .symbol = sym.index },
+                .type_id = self.ti.typeId(interned_type),
+                .name = name,
+                .body = body_instrs,
+                .defaults = param_res.defaults,
+                .captures = captures,
+                .returns = returns,
+            },
+        },
         span.start,
     );
 }
@@ -446,7 +449,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
 
             is_method = true;
             _ = try self.declareVariable(param_name, self_type, p.meta.captured, true, true, false, .zero);
-            decls.putAssumeCapacity(param_name, .{ .type = self_type, .default = false, .captured = false });
+            decls.putAssumeCapacity(param_name, .{ .type = self_type, .default = null, .captured = false });
             continue;
         }
 
@@ -454,6 +457,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
             return self.err(.{ .already_declared_param = .{ .name = self.ast.toSource(p.name) } }, span);
         }
 
+        var instr: ?InstrIndex = null;
         var param_type = try self.checkAndGetType(p.typ, ctx);
 
         if (p.value) |val| {
@@ -463,8 +467,11 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
                 return self.err(.{ .non_comptime_default = .new(.parameter) }, self.ast.getSpan(val));
             }
 
-            defaults.append(self.allocator, value_res.instr) catch oom();
+            // instr = value_res.instr;
+            // TODO: WIP
+            instr = self.irb.instructions.items(.data)[value_res.instr].constant;
             param_type = value_res.type;
+            defaults.append(self.allocator, value_res.instr) catch oom();
         }
 
         if (param_type.is(.void)) return self.err(.void_param, span);
@@ -472,7 +479,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
         _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, false, span);
         decls.putAssumeCapacity(param_name, .{
             .type = param_type,
-            .default = p.value != null,
+            .default = instr,
             .captured = p.meta.captured,
         });
     }
@@ -706,6 +713,7 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
     );
 }
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error![]const InstrIndex {
+    // TODO: make a list of constant index?
     var default_fields: ArrayList(InstrIndex) = .empty;
 
     for (fields) |*f| {
@@ -723,7 +731,6 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
         ctx.decl_type = struct_field.type;
 
         if (f.value) |value| {
-            struct_field.default = true;
             const res = try self.analyzeExpr(value, .value, ctx);
 
             if (!res.ti.comp_time) return self.err(.{ .non_comptime_default = .new(.field) }, self.ast.getSpan(value));
@@ -737,6 +744,9 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
                 );
             };
 
+            // struct_field.default = res.instr;
+            // TODO: WIP
+            struct_field.default = self.irb.instructions.items(.data)[res.instr].constant;
             default_fields.append(self.allocator, res.instr) catch oom();
         }
 
@@ -1165,6 +1175,9 @@ fn breakExpr(self: *Self, expr: *const Ast.Break, ctx: *Context) Result {
 }
 
 fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
+    // TODO: create an anonymus name generator mechanism
+    var sym = self.scope.forwardDeclareSymbol(self.allocator, self.interner.intern("azert"));
+
     self.scope.open(self.allocator, null, true, false);
     defer _ = self.scope.close();
 
@@ -1179,6 +1192,7 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
         .kind = .normal,
     };
     const interned_type = self.ti.intern(.{ .function = closure_type });
+    sym.type = interned_type;
 
     const span = self.ast.getSpan(expr);
     const offset = span.start;
@@ -1190,15 +1204,18 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     return .{
         .type = interned_type,
         .instr = self.irb.addInstr(
-            .{ .fn_decl = .{
-                .kind = .closure,
-                .type_id = self.ti.typeId(interned_type),
-                .name = null,
-                .body = body_instrs,
-                .defaults = param_res.defaults,
-                .captures = captures,
-                .returns = returns,
-            } },
+            .{
+                .fn_decl = .{
+                    // .kind = .closure,
+                    .kind = .{ .symbol = sym.index },
+                    .type_id = self.ti.typeId(interned_type),
+                    .name = null,
+                    .body = body_instrs,
+                    .defaults = param_res.defaults,
+                    .captures = captures,
+                    .returns = returns,
+                },
+            },
             offset,
         ),
     };
@@ -1246,7 +1263,9 @@ fn enumLit(self: *Self, tag: Ast.TokenIndex, ctx: *Context) Result {
         .type = decl,
         .ti = .{ .comp_time = enum_ty.tags.get(tag_name).?.is(.void) },
         .instr = self.irb.addInstr(
-            .{ .enum_create = .{ .lhs = sym.instr, .tag_index = tag_index } },
+            // .{ .enum_create = .{ .lhs = sym.instr, .tag_index = tag_index } },
+            // TODO: protect the cast
+            .{ .enum_create = .{ .lhs = sym.instr, .tag_index = self.irb.addConstant(.{ .int = @intCast(tag_index) }, span.start) } },
             span.start,
         ),
     };
@@ -1446,11 +1465,9 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
     var instrs = self.allocator.alloc(Instruction.Arg, params.len) catch oom();
     var proto_values = proto.values();
 
-    var default_count: usize = 0;
     for (proto_values, 0..) |val, i| {
-        if (val.default) {
-            instrs[i] = .{ .default = default_count };
-            default_count += 1;
+        if (val.default) |def| {
+            instrs[i] = .{ .default = def };
         } else {
             instrs[i] = undefined;
         }
@@ -1502,7 +1519,7 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
     const err_count = self.errs.items.len;
 
     for (proto.keys(), proto_values) |k, v| {
-        if (v.done or v.default) continue;
+        if (v.done or v.default != null) continue;
         self.err(.{ .missing_function_param = .{ .name = self.interner.getKey(k).? } }, err_span) catch {};
     }
 
@@ -1739,7 +1756,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
                     break :blk 0;
                 };
 
-                break :b .{ self.ti.cache.int, self.irb.addInstr(.{ .int = value }, span.start) };
+                break :b .{ self.ti.cache.int, self.irb.addConstant(.{ .int = value }, span.start) };
             },
             .float => {
                 const value = std.fmt.parseFloat(f64, text) catch blk: {
@@ -1748,7 +1765,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
                     break :blk 0.0;
                 };
 
-                break :b .{ self.ti.cache.float, self.irb.addInstr(.{ .float = value }, span.start) };
+                break :b .{ self.ti.cache.float, self.irb.addConstant(.{ .float = value }, span.start) };
             },
             .null => break :b .{ self.ti.cache.null, self.irb.addInstr(.null, span.start) },
             .string => {
@@ -1779,7 +1796,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
 
                 const value = self.interner.intern(final.toOwnedSlice(self.allocator) catch oom());
 
-                break :b .{ self.ti.cache.str, self.irb.addInstr(.{ .string = value }, span.start) };
+                break :b .{ self.ti.cache.str, self.irb.addConstant(.{ .string = value }, span.start) };
             },
         }
     };
@@ -1904,11 +1921,9 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
 
     var values = self.allocator.alloc(Instruction.Arg, struct_type.fields.count()) catch oom();
 
-    var default_count: usize = 0;
     for (struct_type.fields.values(), 0..) |f, i| {
-        if (f.default) {
-            values[i] = .{ .default = default_count };
-            default_count += 1;
+        if (f.default) |def| {
+            values[i] = .{ .default = def };
         } else {
             values[i] = undefined;
         }
@@ -1954,7 +1969,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
     const err_count = self.errs.items.len;
 
     for (proto.keys(), proto.values()) |k, v| {
-        if (v.done or v.default) continue;
+        if (v.done or v.default != null) continue;
         self.err(.{ .missing_field_struct_literal = .{ .name = self.interner.getKey(k).? } }, span) catch {};
     }
 
@@ -2191,7 +2206,7 @@ fn checkAndGetType(self: *Self, ty: ?*const Ast.Type, ctx: *const Context) Error
             var params: AutoArrayHashMapUnmanaged(InternerIdx, Type.Function.Parameter) = .{};
             for (func.params, 0..) |p, i| {
                 const p_type = try self.checkAndGetType(p, ctx);
-                params.put(self.allocator, i, .{ .type = p_type, .default = false, .captured = false }) catch oom();
+                params.put(self.allocator, i, .{ .type = p_type, .default = null, .captured = false }) catch oom();
             }
 
             return self.ti.intern(.{ .function = .{

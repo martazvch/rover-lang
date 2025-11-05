@@ -3,10 +3,10 @@ const Allocator = std.mem.Allocator;
 const ArrayMap = std.AutoArrayHashMapUnmanaged;
 const Map = std.AutoHashMapUnmanaged;
 
-const InternerIdx = Interner.Index;
-
+const InstrIndex = @import("ir.zig").Index;
 const misc = @import("misc");
 const Interner = misc.Interner;
+const InternerIdx = Interner.Index;
 const Set = misc.Set;
 const oom = misc.oom;
 
@@ -98,9 +98,9 @@ pub const Type = union(enum) {
         kind: Kind,
 
         pub const Kind = enum { normal, method, bound, native, native_method };
-        pub const Parameter = struct { type: *const Type, default: bool, captured: bool };
+        pub const Parameter = struct { type: *const Type, default: ?InstrIndex, captured: bool };
         pub const ParamsMap = ArrayMap(InternerIdx, Parameter);
-        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: bool = false });
+        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: ?InstrIndex = null });
 
         pub fn proto(self: *const Function, allocator: Allocator) Proto {
             var res: Proto = .empty;
@@ -125,7 +125,7 @@ pub const Type = union(enum) {
             params.orderedRemoveAt(0);
 
             for (params.values()) |*val| {
-                val.default = false;
+                val.default = null;
                 val.captured = false;
             }
 
@@ -136,7 +136,7 @@ pub const Type = union(enum) {
             var params = self.params.clone(allocator) catch oom();
 
             for (params.values()) |*val| {
-                val.default = false;
+                val.default = null;
                 val.captured = false;
             }
 
@@ -152,9 +152,9 @@ pub const Type = union(enum) {
         pub const FieldsMap = ArrayMap(InternerIdx, Field);
         pub const Field = struct {
             type: *const Type,
-            default: bool,
+            default: ?InstrIndex,
         };
-        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: bool = false });
+        pub const Proto = ArrayMap(InternerIdx, struct { done: bool = false, default: ?InstrIndex = null });
 
         pub fn proto(self: *const Structure, allocator: Allocator) Proto {
             var res: Proto = .empty;

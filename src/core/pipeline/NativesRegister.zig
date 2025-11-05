@@ -111,7 +111,7 @@ fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, i
         const param_index = if (i == 0) i else i - 1;
         params.putAssumeCapacity(
             interner.intern(func.params[param_index].name),
-            .{ .type = param_ty, .default = false, .captured = false },
+            .{ .type = param_ty, .default = null, .captured = false },
         );
     }
 

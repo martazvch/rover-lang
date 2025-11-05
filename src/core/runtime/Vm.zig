@@ -132,7 +132,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.init(&frame.function.chunk, frame.module, .normal);
+            var dis = Disassembler.initMod(&frame.function.chunk, frame.module, .normal);
             const instr_nb = self.instructionNb();
             _ = dis.disInstruction(stdout, instr_nb);
         }
@@ -296,7 +296,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const index = frame.readByte();
                 self.stack.push((frame.slots + index)[0]);
             },
-            .get_default => self.stack.push(self.r3[frame.readByte()]),
+            .get_constant => self.stack.push(frame.module.constants[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
                 self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Instance).fields[field_idx];
@@ -328,7 +328,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .get_fn => {
                 const index = frame.readByte();
                 self.stack.peekRef(0).* = self.stack.peekRef(0).obj.getFn(index);
-                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
             .get_tag => self.stack.peekRef(0).* = .makeInt(self.stack.peek(0).obj.as(Obj.EnumInstance).tag_id),
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
@@ -339,7 +338,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 // Puts 'self' on as first arg
                 self.stack.push(self.stack.peek(0));
                 self.stack.peekRef(1).* = self.stack.peekRef(0).obj.getFn(index);
-                self.stack.peekRef(1).obj.loadDefaultValues(self, 0);
             },
             .is_bool => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .bool),
             .is_float => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .float),
@@ -378,7 +376,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const module = self.modules[module_index];
                 const symbol = module.symbols[symbol_index];
                 self.stack.push(symbol);
-                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
             .load_builtin => {
                 const symbol_idx = frame.readByte();
@@ -387,7 +384,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .load_sym => {
                 const symbol_idx = frame.readByte();
                 self.stack.push(frame.module.symbols[symbol_idx]);
-                self.stack.peekRef(0).obj.loadDefaultValues(self, 0);
             },
 
             .loop => {
@@ -613,8 +609,8 @@ pub const CallFrame = struct {
     }
 
     pub fn readConstant(self: *CallFrame) Value {
-        // Compiler bug: https://github.com/ziglang/zig/issues/13938
-        return (&self.function.chunk.constants)[self.readByte()];
+        // TODO: Compiler bug: https://github.com/ziglang/zig/issues/13938?
+        return self.module.constants[self.readByte()];
     }
 
     pub fn readShort(self: *CallFrame) u16 {
