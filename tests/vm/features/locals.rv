@@ -1,5 +1,3 @@
-// Tests locals
-
 fn main() {
     {
         var loc1 = 1.5

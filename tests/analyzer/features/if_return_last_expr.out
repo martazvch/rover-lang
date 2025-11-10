@@ -2,105 +2,100 @@
     [Return]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
+                [Bool true]
         - then:
-            [Int 1]
+            [Constant 3]
+                [Int 1]
         - else:
-            [Int 5]
-
+            [Constant 4]
+                [Int 5]
 [Function declaration add1, returns]
     [Return]
         [If]
         - condition:
-            [Bool false]
+            [Constant 1]
+                [Bool false]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Int 1]
+                    [Constant 3]
         - else:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Int 5]
-
+                    [Constant 4]
 [Function declaration add2, returns]
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Return]
-                [Int 1]
+                [Constant 3]
         - else:
-            [Int 5]
+            [Constant 4]
     [Return]
         [Variable index: 0, scope: local]
-
 [Function declaration add3, returns]
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
-            [Int 1]
+            [Constant 3]
         - else:
             [Return]
-                [Int 5]
+                [Constant 4]
     [Return]
         [Variable index: 0, scope: local]
-
 [Function declaration add4, returns]
     [If]
     - condition:
-        [Bool true]
+        [Constant 0]
     - then:
         [Return]
-            [Int 1]
+            [Constant 3]
     - else:
         [Return]
-            [Int 5]
-
+            [Constant 4]
 [Function declaration add5, returns]
     [Return]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
-            [Int 1]
+            [Constant 3]
         - else:
-            [Int 5]
-
+            [Constant 4]
 [Function declaration add6, returns]
     [Return]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Return]
-                [Int 1]
+                [Constant 3]
         - else:
-            [Int 5]
-
+            [Constant 4]
 [Function declaration add7, returns]
     [Return]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
-            [Int 1]
+            [Constant 3]
         - else:
             [Return]
-                [Int 5]
-
+                [Constant 4]
 [Function declaration add8, returns]
     [Return]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Return]
-                [Int 1]
+                [Constant 3]
         - else:
             [Return]
-                [Int 5]
-
+                [Constant 4]
 [Function declaration main]

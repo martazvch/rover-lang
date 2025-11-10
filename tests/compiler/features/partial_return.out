@@ -2,7 +2,7 @@
 push_true
 jump_false 1 -> 10
 pop
-constant index 0, value str
+load_constant index 5, value str
 jump 7 -> 14
 pop
 get_local index 0
@@ -13,13 +13,13 @@ push_false
 jump_false 16 -> 29
 pop
 get_local index 0
-constant index 1, value 2
+load_constant index 6, value 2
 add_int
 ret
 jump 26 -> 40
 pop
-constant index 2, value 56.4
-constant index 3, value champ
+load_constant index 7, value 56.4
+load_constant index 8, value champ
 store_blk_val
 jump 35 -> 38
 pop
@@ -31,7 +31,7 @@ print
 push_false
 jump_false 44 -> 54
 pop
-constant index 4, value 8
+load_constant index 9, value 8
 ret
 jump 51 -> 55
 pop
@@ -42,7 +42,7 @@ pop
 push_true
 jump_false 61 -> 77
 pop
-constant index 5, value 1
+load_constant index 10, value 1
 store_blk_val
 jump 68 -> 71
 load_blk_val
@@ -50,7 +50,7 @@ ret
 pop
 jump 74 -> 80
 pop
-constant index 6, value 5
+load_constant index 4, value 5
 store_blk_val
 jump 81 -> 84
 load_blk_val
@@ -62,17 +62,17 @@ pop
 push_true
 jump_false 95 -> 106
 pop
-constant index 7, value 4
+load_constant index 3, value 4
 ret
 pop
 jump 103 -> 109
 pop
-constant index 8, value 3
+load_constant index 11, value 3
 ret
 pop
 jump 111 -> 117
 pop
-constant index 9, value 8
+load_constant index 9, value 8
 store_blk_val
 jump 118 -> 121
 load_blk_val
@@ -88,10 +88,10 @@ pop
 jump 9 -> 13
 pop
 
-constant index 0, value should not be seen
+load_constant index 12, value should not be seen
 print
 
-constant index 1, value 4.5
+load_constant index 13, value 4.5
 ret
 
 -- shortcut_bis --
@@ -104,10 +104,10 @@ get_local index 0
 ret
 pop
 
-constant index 0, value should not be seen
+load_constant index 12, value should not be seen
 print
 
-constant index 1, value 0.01
+load_constant index 15, value 0.01
 ret
 
 -- nested --
@@ -117,7 +117,7 @@ pop
 push_true
 jump_false 6 -> 22
 pop
-constant index 0, value 1
+load_constant index 10, value 1
 store_blk_val
 jump 13 -> 16
 load_blk_val
@@ -125,7 +125,7 @@ ret
 pop
 jump 19 -> 25
 pop
-constant index 1, value 5
+load_constant index 4, value 5
 store_blk_val
 jump 26 -> 29
 load_blk_val
@@ -137,17 +137,17 @@ pop
 push_false
 jump_false 40 -> 51
 pop
-constant index 2, value 4
+load_constant index 3, value 4
 ret
 pop
 jump 48 -> 54
 pop
-constant index 3, value 3
+load_constant index 11, value 3
 ret
 pop
 jump 56 -> 62
 pop
-constant index 4, value 8
+load_constant index 9, value 8
 store_blk_val
 jump 63 -> 66
 load_blk_val
@@ -160,7 +160,7 @@ pop
 ret_naked
 jump 6 -> 12
 pop
-constant index 0, value 4
+load_constant index 3, value 4
 
 get_local index 0
 print
@@ -168,7 +168,7 @@ print
 push_true
 jump_false 16 -> 25
 pop
-constant index 1, value 5
+load_constant index 4, value 5
 jump 22 -> 27
 pop
 ret_naked
@@ -177,17 +177,17 @@ get_local index 1
 print
 
 load_sym index 1, <function func>
-constant index 2, value 5
+load_constant index 4, value 5
 call index 1
 print
 
 load_sym index 2, <function shortcut>
-constant index 3, value 8.5
+load_constant index 14, value 8.5
 call index 1
 print
 
 load_sym index 3, <function shortcut_bis>
-constant index 4, value 18.5
+load_constant index 16, value 18.5
 neg_float
 call index 1
 print

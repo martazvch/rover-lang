@@ -1,8 +1,8 @@
 -- main --
-constant index 0, value 0
+load_constant index 3, value 0
 
 get_local index 0
-constant index 1, value 4
+load_constant index 4, value 4
 lt_int
 jump_false 7 -> 24
 
@@ -11,7 +11,7 @@ get_local index 0
 print
 
 get_local index 0
-constant index 2, value 1
+load_constant index 5, value 1
 add_int
 set_local index 0
 

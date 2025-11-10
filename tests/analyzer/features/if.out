@@ -2,99 +2,110 @@
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
+                [Bool true]
         - then:
-            [Int 4]
+            [Constant 3]
+                [Int 4]
         - else:
-            [Float 5.6]
+            [Constant 4]
+                [Float 5.6]
     [Variable declaration index: 1, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Float 5.6]
+                    [Constant 4]
         - else:
-            [Int 4]
+            [Constant 3]
     [Variable declaration index: 2, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Float 8.7]
+                    [Constant 5]
+                        [Float 8.7]
         - else:
             [If]
             - condition:
-                [Bool true]
+                [Constant 0]
             - then:
                 [Block pop count: 0, is_expr: true]
                     [Break depth: 0]
-                        [Int 6]
+                        [Constant 6]
+                            [Int 6]
             - else:
-                [Int 4]
+                [Constant 3]
     [Discard]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [String ok]
+                    [Constant 7]
+                        [String ok]
         - else:
-            [String ko]
+            [Constant 8]
+                [String ko]
     [Discard]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
-            [String ok]
+            [Constant 7]
         - else:
-            [String ko]
+            [Constant 8]
     [Discard]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
-            [Bool false]
+            [Constant 1]
+                [Bool false]
         - else:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Bool true]
+                    [Constant 0]
     [Discard]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Block pop count: 2, is_expr: true]
                 [Variable declaration index: 0, scope: local]
-                    [Float 5.5]
+                    [Constant 9]
+                        [Float 5.5]
                 [Variable declaration index: 1, scope: local]
-                    [Float 8.7]
+                    [Constant 5]
                 [Break depth: 0]
                     [Binop type: add_float]
                         [Variable index: 3, scope: local]
                         [Variable index: 4, scope: local]
         - else:
-            [Int 4]
+            [Constant 3]
     [Discard]
         [If]
         - condition:
             [Block pop count: 2, is_expr: true]
                 [Variable declaration index: 0, scope: local]
-                    [Bool true]
+                    [Constant 0]
                 [Variable declaration index: 1, scope: local]
-                    [Int 1]
+                    [Constant 10]
+                        [Int 1]
                 [Break depth: 0]
                     [Variable index: 3, scope: local]
         - then:
-            [Float 1.5]
+            [Constant 11]
+                [Float 1.5]
         - else:
             [Block pop count: 0, is_expr: true]
                 [Break depth: 0]
-                    [Int 4]
+                    [Constant 3]
     [Discard]
         [If]
         - condition:
@@ -102,24 +113,26 @@
                 [Break depth: 0]
                     [If]
                     - condition:
-                        [Bool true]
+                        [Constant 0]
                     - then:
-                        [Bool true]
+                        [Constant 0]
                     - else:
-                        [Bool false]
+                        [Constant 1]
         - then:
-            [Int 1]
+            [Constant 10]
         - else:
-            [Float 4.5]
+            [Constant 12]
+                [Float 4.5]
     [Function declaration add, returns]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Return]
-                [Int 1]
+                [Constant 10]
         [Return]
-            [Int 2]
+            [Constant 13]
+                [Int 2]
     [Discard]
         [Fn call]
             [Load symbol 1]

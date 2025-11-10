@@ -1,20 +1,24 @@
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
-        [Int 0]
+        [Constant 3]
+            [Int 0]
     [While]
     - condition:
         [Binop type: lt_int]
             [Variable index: 0, scope: local]
-            [Int 10]
+            [Constant 4]
+                [Int 10]
     - body:
         [Block pop count: 0, is_expr: false]
             [Binop type: add_int]
                 [Variable index: 0, scope: local]
-                [Int 1]
+                [Constant 5]
+                    [Int 1]
             [Assignment index: 0, scope: local]
     [While]
     - condition:
-        [Bool true]
+        [Constant 0]
+            [Bool true]
     - body:
         [Block pop count: 0, is_expr: false]
             [Break depth: 0]

@@ -42,6 +42,10 @@ pub fn Set(comptime T: type) type {
             return self.set.contains(item);
         }
 
+        pub fn getOrPut(self: *Self, allocator: Allocator, item: T) Allocator.Error!@TypeOf(self.set).GetOrPutResult {
+            return self.set.getOrPut(allocator, item);
+        }
+
         /// Removes the `item` if found while keeping order in the set
         pub fn remove(self: *Self, item: T) bool {
             return self.set.orderedRemove(item);

@@ -1,19 +1,19 @@
 -- main --
 load_builtin index 0
-constant index 0, value 5.6
+load_constant index 3, value 5.6
 call_native index 1
 
 load_builtin index 0
-constant index 1, value 5
+load_constant index 4, value 5
 call_native index 1
 set_local index 0
 
 load_builtin index 1
-constant index 2, value 6
+load_constant index 5, value 6
 call_native index 1
 
 load_builtin index 1
-constant index 3, value 6.4
+load_constant index 6, value 6.4
 call_native index 1
 set_local index 1
 

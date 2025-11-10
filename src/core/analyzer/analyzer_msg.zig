@@ -18,15 +18,6 @@ pub const AnalyzerMsg = union(enum) {
     cant_infer_array_type,
     cond_alias_non_optional: struct { found: []const u8 },
     dead_code,
-    default_value_type_mismatch: struct {
-        expect: []const u8,
-        found: []const u8,
-        kind: []const u8,
-
-        pub fn new(expect: []const u8, found: []const u8, kind: enum { field, param }) @This() {
-            return .{ .expect = expect, .found = found, .kind = @tagName(kind) };
-        }
-    },
     dot_type_on_non_mod: struct { found: []const u8 },
     duplicate_field: struct { name: []const u8 },
     duplicate_param: struct { name: []const u8 },
@@ -113,10 +104,6 @@ pub const AnalyzerMsg = union(enum) {
                 .{e.found},
             ),
             .dead_code => writer.writeAll("unreachable code"),
-            .default_value_type_mismatch => |e| writer.print(
-                "{s}'s default value doesn't match {s}'s type, expect '{s}' but found '{s}'",
-                .{ e.kind, e.kind, e.expect, e.found },
-            ),
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
             .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
             .duplicate_param => |e| writer.print("parameter '{s}' is already present in function call", .{e.name}),
@@ -192,7 +179,6 @@ pub const AnalyzerMsg = union(enum) {
             .cant_infer_array_type => writer.writeAll("empty arrays don't convey any type information"),
             .cond_alias_non_optional => writer.writeAll("this isn't an optional"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
-            .default_value_type_mismatch => |e| writer.print("this expression is of type '{s}'", .{e.found}),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
             .enum_dup_tag => writer.writeAll("this tag"),
@@ -269,10 +255,6 @@ pub const AnalyzerMsg = union(enum) {
             ),
             .cond_alias_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
             .dead_code => writer.writeAll("remove unreachable code"),
-            .default_value_type_mismatch => |e| writer.print(
-                "modify {s}'s default value to match '{s}' type or change {s}'s type",
-                .{ e.kind, e.expect, e.kind },
-            ),
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),
             .duplicate_param => writer.writeAll("parameters can be defined only once in function calls"),

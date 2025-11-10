@@ -24,6 +24,7 @@ pub const Variable = struct {
     captured: bool,
     constant: bool,
     comp_time: bool,
+    ext_mod: ?usize,
 
     pub const Index = usize;
 };
@@ -137,6 +138,7 @@ pub fn declareVar(
     initialized: bool,
     constant: bool,
     comp_time: bool,
+    ext_mode: ?usize,
 ) error{TooManyLocals}!usize {
     const index = self.current.variables.count();
     if (index == 255 and !self.isGlobal()) return error.TooManyLocals;
@@ -149,6 +151,7 @@ pub fn declareVar(
         .captured = captured,
         .constant = constant,
         .comp_time = comp_time,
+        .ext_mod = ext_mode,
     }) catch oom();
 
     return index;
@@ -166,6 +169,7 @@ pub fn declareVarInFutureScope(self: *Self, allocator: Allocator, name: Interner
         .captured = captured,
         .constant = true,
         .comp_time = false,
+        .ext_mod = null,
     }) catch oom();
 }
 
@@ -220,18 +224,8 @@ pub fn getSymbolName(self: *const Self, sym_type: *const Type) ?InternerIdx {
     return null;
 }
 
-pub fn declareExternSymbol(
-    self: *Self,
-    allocator: Allocator,
-    name: InternerIdx,
-    module_index: usize,
-    symbol: Symbol,
-) void {
-    self.current.extern_symbols.put(
-        allocator,
-        name,
-        .{ .module_index = module_index, .symbol = symbol },
-    ) catch oom();
+pub fn declareExternSymbol(self: *Self, allocator: Allocator, name: InternerIdx, module_index: usize, symbol: Symbol) void {
+    self.current.extern_symbols.put(allocator, name, .{ .module_index = module_index, .symbol = symbol }) catch oom();
 }
 
 pub fn getExternSymbol(self: *const Self, name: InternerIdx) ?*ExternSymbol {

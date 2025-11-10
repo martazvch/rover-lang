@@ -1,6 +1,7 @@
 [Function declaration getValue, returns]
     [Return]
-        [Float 5]
+        [Constant 3]
+            [Float 5]
 [Function declaration main]
     [If]
     - condition:

@@ -1,123 +1,90 @@
 [Enum declaration Marker]
-
 [Structure declaration Cell]
     - default values
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        0
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
-
-[Function declaration markerStuff]
-    - default params
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        0
-    - body
-    [Print]
-        [Fn call]
-            [Method access 0]
-                [Variable index: 0, scope: local]
-
-[Function declaration markerStuff2]
-    - default params
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
-    - body
-    [Print]
-        [Fn call]
-            [Method access 0]
-                [Variable index: 0, scope: local]
-
-[Function declaration main]
-    [Variable declaration index: 0, scope: local]
-        [Enum create]
-            - enum
-            [Load symbol 0]
-            - tag
-            2
-
-    [Print]
-        [Variable index: 0, scope: local]
-
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
-    [Assignment index: 0, scope: local, cow]
-
-    [Print]
-        [Variable index: 0, scope: local]
-
-    [Fn call]
-        [Load symbol 3]
-        - args
-        [Enum create]
-            - enum
-            [Load symbol 0]
-            - tag
-            1
-
-    [Fn call]
-        [Load symbol 4]
-        - args
+    [Constant 3]
         [Enum create]
             - enum
             [Load symbol 0]
             - tag
             0
-
+    [Constant 7]
+        [Enum create]
+            - enum
+            [Load symbol 0 of module 0]
+            - tag
+            1
+[Function declaration markerStuff]
+    - default params
+    [Constant 3]
+    - body
+    [Print]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 0, scope: local]
+[Function declaration markerStuff2]
+    - default params
+    [Constant 5]
+        [Enum create]
+            - enum
+            [Load symbol 0]
+            - tag
+            1
+    - body
+    [Print]
+        [Fn call]
+            [Method access 0]
+                [Variable index: 0, scope: local]
+[Function declaration main]
+    [Variable declaration index: 0, scope: local]
+        [Constant 8]
+            [Enum create]
+                - enum
+                [Load symbol 0 of module 0]
+                - tag
+                2
+    [Print]
+        [Variable index: 0, scope: local]
+    [Constant 7]
+    [Assignment index: 0, scope: local, cow]
+    [Print]
+        [Variable index: 0, scope: local]
+    [Fn call]
+        [Load symbol 3]
+        - args
+        [Constant 7]
+    [Fn call]
+        [Load symbol 4]
+        - args
+        [Constant 9]
+            [Enum create]
+                - enum
+                [Load symbol 0 of module 0]
+                - tag
+                0
     [Variable declaration index: 1, scope: local]
         [Structure literal]
             - structure
             [Load symbol 2]
             - args
-            [Default field 0]
-            [Default field 1]
-
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
+            [Default field constant index 3]
+            [Default field constant index 7]
+    [Constant 7]
     [Field assignment]
         [Field access 0, cow]
             [Variable index: 1, scope: local]
-
     [Print]
         [Field access 0]
             [Variable index: 1, scope: local]
-
     [Print]
         [Field access 1]
             [Variable index: 1, scope: local]
-
     [Print]
         [Binop type: eq_tag]
             [Field access 0]
                 [Variable index: 1, scope: local]
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                1
+            [Constant 7]
     [Print]
         [Binop type: ne_tag]
             [Field access 0]
                 [Variable index: 1, scope: local]
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                1
+            [Constant 7]

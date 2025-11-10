@@ -1,38 +1,38 @@
 -- main --
-constant index 0, value 5
+load_constant index 3, value 5
 store_blk_val
 jump 3 -> 6
 load_blk_val
 pop
 
-constant index 1, value 5
+load_constant index 3, value 5
 pop
 
 push_null
 pop
 
-constant index 2, value 1
-constant index 3, value 3
-constant index 4, value 4
+load_constant index 4, value 1
+load_constant index 5, value 3
+load_constant index 6, value 4
 add_int
 pop
-constant index 5, value 5
+load_constant index 3, value 5
 get_local index 1
 print
 pop
 pop
 
-constant index 6, value 7
+load_constant index 7, value 7
 get_local index 0
 store_blk_val
 jump 33 -> 36
 pop
 
 load_blk_val
-constant index 7, value 67
-constant index 8, value just chillin
-constant index 9, value 7
-constant index 10, value 90
+load_constant index 8, value 67
+load_constant index 9, value just chillin
+load_constant index 7, value 7
+load_constant index 10, value 90
 get_local index 3
 store_blk_val
 jump 49 -> 52

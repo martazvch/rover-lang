@@ -1,6 +1,6 @@
 -- getPt --
 load_sym index 0, <structure Point>
-constant index 0, value 9
+load_constant index 3, value 9
 struct_lit index 1
 ret
 
@@ -12,7 +12,7 @@ ret
 
 -- main --
 load_sym index 1, <structure Vec2>
-constant index 0, value 1
+load_constant index 4, value 1
 struct_lit index 1
 
 get_local index 0
@@ -22,7 +22,7 @@ get_field index 0
 print
 
 load_sym index 3, <function getVec>
-constant index 1, value 5
+load_constant index 5, value 5
 call index 1
 get_field index 0
 print

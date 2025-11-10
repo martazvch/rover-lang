@@ -3,8 +3,11 @@ const ArrayList = std.ArrayList;
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
 
-const Interner = @import("misc").Interner;
-const oom = @import("misc").oom;
+const misc = @import("misc");
+
+const Interner = misc.Interner;
+const oom = misc.oom;
+const Set = misc.Set;
 const AnalyzerReport = @import("../analyzer/Analyzer.zig").AnalyzerReport;
 const Ast = @import("../parser/Ast.zig");
 const Node = Ast.Node;
@@ -22,6 +25,7 @@ instrs: []const Instruction.Data,
 indent_level: u8,
 tree: ArrayList(u8),
 writer: std.ArrayList(u8).Writer,
+compiled_constants: Set(usize),
 
 const indent_size: u8 = 4;
 const spaces: [1024]u8 = [_]u8{' '} ** 1024;
@@ -37,6 +41,7 @@ pub fn init(allocator: Allocator, instrs: []const Instruction.Data, interner: *c
         .tree = .empty,
         .writer = undefined,
         .indent_level = 0,
+        .compiled_constants = .empty,
     };
 }
 
@@ -70,7 +75,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .bound_method => |data| self.boundMethod(data),
         .@"break" => |data| self.breakInstr(data),
         .call => |*data| self.fnCall(data),
-        .constant => |index| self.indentAndPrintSlice("[Constant index: {}]", .{index}),
+        .constant => |data| self.constant(data),
         .discard => |index| self.indexInstr("Discard", index),
         .enum_create => |data| self.enumCreate(data),
         .enum_decl => |*data| self.enumDecl(data),
@@ -231,7 +236,13 @@ fn argsList(self: *Self, kind: []const u8, args: []const Instruction.Arg) void {
     self.indentAndAppendSlice("- args");
     for (args) |arg| {
         switch (arg) {
-            .default => |def| self.indentAndPrintSlice("[Default {s} {}]", .{ kind, def }),
+            .default => |def| {
+                if (def.mod) |mod| {
+                    self.indentAndPrintSlice("[Default {s} constant index {}, module {}]", .{ kind, def.const_index, mod });
+                } else {
+                    self.indentAndPrintSlice("[Default {s} constant index {}]", .{ kind, def.const_index });
+                }
+            },
             .instr => |i| self.parseInstr(i),
         }
     }
@@ -241,12 +252,22 @@ fn capture(self: *Self, data: *const Instruction.Capture) void {
     self.indentAndPrintSlice("[Capture index: {}, is_local: {}]", .{ data.index, data.local });
 }
 
+fn constant(self: *Self, data: Instruction.Constant) void {
+    self.indentAndPrintSlice("[Constant {}]", .{data.index});
+    const gop = self.compiled_constants.getOrPut(self.allocator, data.index) catch oom();
+    if (!gop.found_existing) {
+        self.indent_level += 1;
+        defer self.indent_level -= 1;
+        self.parseInstr(data.instr);
+    }
+}
+
 fn enumCreate(self: *Self, data: Instruction.EnumCreate) void {
     self.indentAndAppendSlice("[Enum create]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.indentAndAppendSlice("- enum");
-    self.parseInstr(data.lhs);
+    self.loadSymbol(&data.sym);
     self.indentAndAppendSlice("- tag");
     self.indentAndPrintSlice("{}", .{data.tag_index});
 }
@@ -268,16 +289,7 @@ fn getField(self: *Self, data: Instruction.Field, cow: bool) void {
 
 fn fnDeclaration(self: *Self, data: *const Instruction.FnDecl) void {
     const fn_name = if (data.name) |idx| self.interner.getKey(idx).? else "";
-
-    const fn_kind = switch (data.kind) {
-        .symbol => "Function",
-        .closure => "Closure",
-    };
-
-    self.indentAndPrintSlice(
-        "[{s} declaration {s}{s}]",
-        .{ fn_kind, fn_name, if (data.returns) ", returns" else "" },
-    );
+    self.indentAndPrintSlice("[Function declaration {s}{s}]", .{ fn_name, if (data.returns) ", returns" else "" });
 
     self.indent_level += 1;
     defer self.indent_level -= 1;

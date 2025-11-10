@@ -2,16 +2,15 @@
     [Function declaration capture]
     [Return]
         [Load symbol 1]
-
 [Function declaration factory1, returns]
     [Function declaration capture, returns]
         [Return]
-            [Int 4]
+            [Constant 3]
+                [Int 4]
     [Return]
         [Load symbol 3]
-
 [Function declaration factory2, returns]
-    [Closure declaration capture, returns]
+    [Function declaration capture, returns]
         [Return]
             [Unbox]
                 [Variable index: 0, scope: local]
@@ -19,10 +18,8 @@
         [Capture index: 0, is_local: true]
     [Return]
         [Variable index: 1, scope: local]
-
 [Function declaration factory3, returns]
     [Return]
         [Fn call]
             [Variable index: 0, scope: local]
-
 [Function declaration main]

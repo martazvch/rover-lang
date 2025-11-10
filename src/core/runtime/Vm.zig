@@ -25,10 +25,6 @@ objects: ?*Obj,
 modules: []CompiledModule,
 natives: []Value,
 
-/// Holds default variables of current call
-// TODO: put inside the frame too
-r3: []Value = undefined,
-
 const Self = @This();
 const Error = error{StackOverflow} || Allocator.Error;
 
@@ -46,7 +42,6 @@ pub fn init(self: *Self, allocator: Allocator, state: *const State) void {
     self.frame_stack = .empty;
     self.objects = null;
 
-    // self.createNatives(state);
     self.natives = state.native_reg.funcs.items;
     // In REPL mode, we won't call the main function (there is not)
     // so we increment ourself the frame stack (discaring the first one)
@@ -57,14 +52,6 @@ pub fn init(self: *Self, allocator: Allocator, state: *const State) void {
         self.frame_stack.count += 1;
     }
 }
-
-// fn createNatives(self: *Self, state: *const State) void {
-//     self.natives = self.allocator.alloc(Value, state.native_reg.funcs.items.len) catch oom();
-//
-//     for (state.native_reg.funcs.items, 0..) |func, i| {
-//         self.natives[i] = .makeObj(Obj.NativeFunction.create(self.allocator, func.name, func.func).asObj());
-//     }
-// }
 
 pub fn deinit(self: *Self) void {
     self.arena_comptime.deinit();
@@ -250,7 +237,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 self.stack.top -= captures_count + 1;
                 self.stack.push(Value.makeObj(closure.asObj()));
             },
-            .constant => self.stack.push(frame.readConstant()),
             .def_global => {
                 const idx = frame.readByte();
                 frame.module.globals[idx] = self.stack.pop();
@@ -296,7 +282,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const index = frame.readByte();
                 self.stack.push((frame.slots + index)[0]);
             },
-            .get_constant => self.stack.push(frame.module.constants[frame.readByte()]),
             .get_field => {
                 const field_idx = frame.readByte();
                 self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Instance).fields[field_idx];
@@ -370,7 +355,13 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
 
             .load_blk_val => self.stack.push(frame.blk_val),
 
-            .load_extern_sym => {
+            .load_constant => self.stack.push(frame.readConstant()),
+            .load_ext_constant => {
+                const const_index = frame.readByte();
+                const mod_index = frame.readByte();
+                self.stack.push(self.modules[mod_index].constants[const_index]);
+            },
+            .load_ext_sym => {
                 const module_index = frame.readByte();
                 const symbol_index = frame.readByte();
                 const module = self.modules[module_index];

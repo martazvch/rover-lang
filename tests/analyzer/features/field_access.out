@@ -6,15 +6,19 @@
             - structure
             [Load symbol 0]
             - args
-            [String Vodka]
-            [Bool false]
+            [Constant 3]
+                [String Vodka]
+            [Constant 1]
+                [Bool false]
     [Variable declaration index: 1, scope: local]
         [Structure literal]
             - structure
             [Load symbol 1]
             - args
-            [Int 5]
-            [String Tom]
+            [Constant 4]
+                [Int 5]
+            [Constant 5]
+                [String Tom]
             [Incr rc]
                 [Variable index: 0, scope: local]
     [Print]

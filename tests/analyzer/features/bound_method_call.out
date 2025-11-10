@@ -3,7 +3,6 @@
         [Print]
             [Field access 1]
                 [Variable index: 0, scope: local]
-
     [Function declaration getOld, returns]
         [Binop type: add_int]
             [Field access 0]
@@ -15,35 +14,31 @@
         [Return]
             [Field access 0]
                 [Variable index: 0, scope: local]
-
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0]
             - args
-            [Int 5]
-            [String Tom]
-
+            [Constant 3]
+                [Int 5]
+            [Constant 4]
+                [String Tom]
     [Variable declaration index: 1, scope: local]
         [Null]
-
     [Variable declaration index: 2, scope: local]
         [Bound method, method index: 0]
             [Variable index: 0, scope: local]
-
     [Variable declaration index: 3, scope: local]
         [Null]
-
     [Variable declaration index: 4, scope: local]
         [Bound method, method index: 1]
             [Variable index: 0, scope: local]
-
     [Fn call]
         [Variable index: 2, scope: local]
-
     [Discard]
         [Fn call]
             [Variable index: 4, scope: local]
             - args
-            [Int 10]
+            [Constant 5]
+                [Int 10]

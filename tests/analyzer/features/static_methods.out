@@ -6,10 +6,8 @@
                 [Load symbol 0]
                 - args
                 [Variable index: 0, scope: local]
-
 [Function declaration main]
     [Structure declaration Point]
-
     [Structure declaration Vec2]
         [Function declaration new, returns]
             [Return]
@@ -19,40 +17,39 @@
                     - args
                     [Variable index: 0, scope: local]
                     [Variable index: 1, scope: local]
-
     [Variable declaration index: 0, scope: local]
         [Fn call]
             [Method access 0]
                 [Load symbol 0]
             - args
-            [Int 5]
-
+            [Constant 3]
+                [Int 5]
     [Variable declaration index: 1, scope: local]
         [Method access 0]
             [Load symbol 0]
-
     [Fn call]
         [Variable index: 1, scope: local]
         - args
-        [Int 65]
-
+        [Constant 4]
+            [Int 65]
     [Assignment index: 0, scope: local, cow]
-
     [Variable declaration index: 2, scope: local]
         [Fn call]
             [Method access 0]
                 [Load symbol 4]
             - args
-            [Int 12]
-            [Int 99]
-
+            [Constant 5]
+                [Int 12]
+            [Constant 6]
+                [Int 99]
     [Variable declaration index: 3, scope: local]
         [Method access 0]
             [Load symbol 4]
-
     [Fn call]
         [Variable index: 3, scope: local]
         - args
-        [Int 56]
-        [Int 78]
+        [Constant 7]
+            [Int 56]
+        [Constant 8]
+            [Int 78]
     [Assignment index: 2, scope: local, cow]

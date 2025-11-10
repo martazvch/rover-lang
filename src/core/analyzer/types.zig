@@ -464,6 +464,22 @@ pub const TypeInterner = struct {
         // Safe unwrap because in `intern` we add every new type in `ids`
         return @intCast(self.ids.getIndex(ty).?);
     }
+
+    pub fn newStruct(self: *TypeInterner, loc: ?Type.Loc) *Type {
+        return self.intern(.{ .structure = .{
+            .loc = loc,
+            .fields = .empty,
+            .functions = .empty,
+        } });
+    }
+
+    pub fn newEnum(self: *TypeInterner, loc: ?Type.Loc) *Type {
+        return self.intern(.{ .@"enum" = .{
+            .loc = loc,
+            .tags = .empty,
+            .functions = .empty,
+        } });
+    }
 };
 
 test "inline union" {

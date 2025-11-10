@@ -1,117 +1,111 @@
 [Enum declaration Marker]
 [Enum declaration Bar]
-
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
-        [Enum create]
-            - enum
-            [Load symbol 0]
-            - tag
-            2
-
+        [Constant 3]
+            [Enum create]
+                - enum
+                [Load symbol 0 of module 0]
+                - tag
+                2
     [Variable declaration index: 1, scope: local]
-        [Enum create]
-            - enum
-            [Load symbol 1]
-            - tag
-            0
-
+        [Constant 4]
+            [Enum create]
+                - enum
+                [Load symbol 1 of module 0]
+                - tag
+                0
     [Match]
     - expression:
         [Variable index: 0, scope: local]
     - arms:
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                1
+            [Constant 5]
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    1
         - body:
             [Print]
-                [String circle]
+                [Constant 6]
+                    [String circle]
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                0
+            [Constant 7]
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    0
         - body:
             [Print]
-                [String cross]
+                [Constant 8]
+                    [String cross]
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                2
+            [Constant 9]
+                [Enum create]
+                    - enum
+                    [Load symbol 0]
+                    - tag
+                    2
         - body:
             [Print]
-                [String none]
-
+                [Constant 10]
+                    [String none]
     [Match]
     - expression:
         [Variable index: 0, scope: local]
     - arms:
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                1
+            [Constant 11]
+                [Enum create]
+                    - enum
+                    [Load symbol 0 of module 0]
+                    - tag
+                    1
         - body:
             [Print]
-                [String circle]
+                [Constant 6]
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                0
+            [Constant 12]
+                [Enum create]
+                    - enum
+                    [Load symbol 0 of module 0]
+                    - tag
+                    0
         - body:
             [Print]
-                [String cross]
+                [Constant 8]
         - expr:
-            [Enum create]
-                - enum
-                [Load symbol 0]
-                - tag
-                2
+            [Constant 3]
         - body:
             [Print]
-                [String none]
-
+                [Constant 10]
     [Variable declaration index: 2, scope: local]
         [Match]
         - expression:
             [Variable index: 0, scope: local]
         - arms:
             - expr:
-                [Enum create]
-                    - enum
-                    [Load symbol 0]
-                    - tag
-                    1
+                [Constant 11]
             - body:
-                [Int 1]
+                [Constant 13]
+                    [Int 1]
             - expr:
-                [Enum create]
-                    - enum
-                    [Load symbol 0]
-                    - tag
-                    0
+                [Constant 12]
             - body:
-                [Int 2]
+                [Constant 14]
+                    [Int 2]
             - expr:
-                [Enum create]
-                    - enum
-                    [Load symbol 0]
-                    - tag
-                    2
+                [Constant 3]
             - body:
                 [Block pop count: 2, is_expr: true]
                     [Variable declaration index: 0, scope: local]
-                        [Int 4]
+                        [Constant 15]
+                            [Int 4]
                     [Variable declaration index: 1, scope: local]
-                        [Int 6]
+                        [Constant 16]
+                            [Int 6]
                     [Break depth: 0]
-                        [Int 3]
+                        [Constant 17]
+                            [Int 3]

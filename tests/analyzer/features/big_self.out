@@ -1,17 +1,16 @@
 [Structure declaration Foo]
     - default values
-    [Int 0]
-    [Int 0]
-
+    [Constant 3]
+        [Int 0]
+    [Constant 3]
     [Function declaration init, returns]
         [Return]
             [Structure literal]
                 - structure
                 [Load symbol 0]
                 - args
-                [Default field 0]
-                [Default field 1]
-
+                [Default field constant index 3]
+                [Default field constant index 3]
 [Structure declaration Bar]
     [Function declaration init, returns]
         [Return]
@@ -20,17 +19,17 @@
                 [Load symbol 2]
                 - args
                 [Array]
-                    [Bool true]
-
+                    [Constant 0]
+                        [Bool true]
 [Function declaration main]
     [Structure declaration Baz]
         - default values
-        [Bool true]
-
+        [Constant 0]
         [Function declaration init, returns]
             [Return]
                 [Structure literal]
                     - structure
                     [Load symbol 5]
                     - args
-                    [Bool false]
+                    [Constant 1]
+                        [Bool false]

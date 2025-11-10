@@ -1,4 +1,3 @@
-// math.r
 [Structure declaration Vec2]
     [Function declaration len, returns]
         [Return]
@@ -9,7 +8,8 @@
                     [Variable index: 0, scope: local]
 [Function declaration introduce]
     [Print]
-        [String This is a mathematical module]
+        [Constant 3]
+            [String This is a mathematical module]
 [Function declaration getVecFromPos, returns]
     [Return]
         [Structure literal]
@@ -20,15 +20,15 @@
             [Variable index: 1, scope: local]
 [Function declaration getInt, returns]
     [Return]
-        [Int 12]
+        [Constant 4]
+            [Int 12]
 [Function declaration getIntDefault, returns]
     - default params
-    [Int 9]
+    [Constant 5]
+        [Int 9]
     - body
     [Return]
         [Variable index: 0, scope: local]
-
-// geom.rv
 [Structure declaration Point]
     [Function declaration move]
         [Binop type: add_int]
@@ -54,7 +54,8 @@
                 [Variable index: 0, scope: local]
 [Function declaration introduce]
     [Print]
-        [String module for basic geometry]
+        [Constant 3]
+            [String module for basic geometry]
 [Structure declaration Square]
     [Function declaration moveCenter, returns]
         [Binop type: add_int]
@@ -89,19 +90,20 @@
     [Return]
         [Binop type: add_str]
             [Binop type: add_str]
-                [String ']
+                [Constant 3]
+                    [String ']
                 [Variable index: 0, scope: local]
-            [String ']
-
-// test.rv
+            [Constant 3]
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0 of module 1]
             - args
-            [Int 1]
-            [Int 90]
+            [Constant 3]
+                [Int 1]
+            [Constant 4]
+                [Int 90]
     [Fn call]
         [Method access 1]
             [Variable index: 0, scope: local]
@@ -110,7 +112,8 @@
             - structure
             [Load symbol 4 of module 1]
             - args
-            [Int 10]
+            [Constant 5]
+                [Int 10]
             [Incr rc]
                 [Variable index: 0, scope: local]
     [Print]
@@ -144,7 +147,8 @@
             [Fn call]
                 [Load symbol 1 of module 2]
                 - args
-                [String local import]
+                [Constant 6]
+                    [String local import]
         [Fn call]
             [Method access 1]
                 [Variable index: 0, scope: local]
@@ -152,8 +156,10 @@
             [Fn call]
                 [Load symbol 0 of module 2]
                 - args
-                [String just ]
-                [String concaneted]
+                [Constant 7]
+                    [String just ]
+                [Constant 8]
+                    [String concaneted]
     [Variable declaration index: 3, scope: local]
         [Fn call]
             [Method access 0]

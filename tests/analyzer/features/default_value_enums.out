@@ -1,23 +1,21 @@
 [Enum declaration Marker]
 [Structure declaration Cell]
     - default values
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        0
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
+    [Constant 3]
+        [Enum create]
+            - enum
+            [Load symbol 0]
+            - tag
+            0
+    [Constant 5]
+        [Enum create]
+            - enum
+            [Load symbol 0]
+            - tag
+            1
 [Function declaration markerStuff]
     - default params
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        1
+    [Constant 5]
     - body
     [Print]
         [Fn call]
@@ -25,11 +23,7 @@
                 [Variable index: 0, scope: local]
 [Function declaration markerStuff2]
     - default params
-    [Enum create]
-        - enum
-        [Load symbol 0]
-        - tag
-        0
+    [Constant 3]
     - body
     [Print]
         [Fn call]
@@ -41,8 +35,8 @@
             - structure
             [Load symbol 3]
             - args
-            [Default field 0]
-            [Default field 1]
+            [Default field constant index 3]
+            [Default field constant index 5]
     [Print]
         [Field access 0]
             [Variable index: 0, scope: local]
@@ -62,8 +56,8 @@
     [Fn call]
         [Load symbol 4]
         - args
-        [Default field 0]
+        [Default param constant index 5]
     [Fn call]
         [Load symbol 5]
         - args
-        [Default field 0]
+        [Default param constant index 3]

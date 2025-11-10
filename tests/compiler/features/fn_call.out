@@ -12,7 +12,7 @@ ret
 ret_naked
 
 -- add5 --
-constant index 0, value 1
+load_constant index 3, value 1
 get_local index 0
 get_local index 2
 add_int
@@ -24,8 +24,8 @@ load_sym index 0, <function add>
 call index 0
 
 load_sym index 1, <function add1>
-constant index 0, value 1
-constant index 1, value 2.5
+load_constant index 3, value 1
+load_constant index 4, value 2.5
 call index 2
 
 ret_naked

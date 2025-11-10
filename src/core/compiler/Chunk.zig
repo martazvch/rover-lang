@@ -41,10 +41,6 @@ pub const OpCode = enum(u8) {
     call,
     call_native,
     closure,
-
-    // TODO: remove
-    constant,
-
     def_global,
     div_float,
     div_int,
@@ -60,7 +56,6 @@ pub const OpCode = enum(u8) {
     ge_int,
     get_capt_frame,
     get_capt_local,
-    get_constant,
     get_field,
     get_field_cow,
     get_global,
@@ -86,8 +81,10 @@ pub const OpCode = enum(u8) {
     lt_int,
     lt_float,
     load_blk_val,
-    load_extern_sym,
+    load_constant,
+    load_ext_constant,
     load_sym,
+    load_ext_sym,
     load_builtin,
     loop,
     mul_float,

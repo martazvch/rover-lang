@@ -8,7 +8,8 @@
                     [Variable index: 0, scope: local]
 [Function declaration introduce]
     [Print]
-        [String This is a mathematical module]
+        [Constant 3]
+            [String This is a mathematical module]
 [Function declaration getVecFromPos, returns]
     [Return]
         [Structure literal]
@@ -19,90 +20,92 @@
             [Variable index: 1, scope: local]
 [Function declaration getInt, returns]
     [Return]
-        [Int 12]
+        [Constant 4]
+            [Int 12]
 [Function declaration getIntDefault, returns]
     - default params
-    [Int 9]
+    [Constant 5]
+        [Int 9]
     - body
     [Return]
         [Variable index: 0, scope: local]
-
-// -- main.rv
 [Structure declaration Foo]
     - default values
-    [Int 8]
-
+    [Constant 3]
+        [Int 8]
     [Function declaration static, returns]
         - default params
-        [Int 5]
+        [Constant 4]
+            [Int 5]
         - body
         [Return]
-            [Int 3]
-
+            [Constant 5]
+                [Int 3]
     [Function declaration method, returns]
         - default params
-        [Int 5]
+        [Constant 4]
         - body
         [Return]
             [Field access 0]
                 [Variable index: 0, scope: local]
-
 [Function declaration copy, returns]
     - default params
-    [Int 5]
+    [Constant 4]
     - body
     [Return]
-        [Int 5]
-
+        [Constant 4]
 [Function declaration default]
     - default params
-    [Int 7]
-    [Int 7]
-    [Bool false]
-    [Bool false]
-
+    [Constant 6]
+        [Int 7]
+    [Constant 6]
+    [Constant 1]
+        [Bool false]
+    [Constant 1]
 [Function declaration main]
     [Fn call]
         [Load symbol 4]
         - args
-        [String abcd]
-        [Int 8]
-        [Default field 1]
-        [Default field 2]
-        [Default field 3]
+        [Constant 7]
+            [String abcd]
+        [Constant 3]
+        [Default param constant index 6]
+        [Default param constant index 1]
+        [Default param constant index 1]
     [Fn call]
         [Load symbol 4]
         - args
-        [String abcd]
-        [Int 8]
-        [Default field 1]
-        [Default field 2]
-        [Bool true]
+        [Constant 7]
+        [Constant 3]
+        [Default param constant index 6]
+        [Default param constant index 1]
+        [Constant 0]
+            [Bool true]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0]
             - args
-            [Default field 0]
+            [Default field constant index 3]
     [Print]
         [Fn call]
             [Method access 0]
                 [Load symbol 0]
             - args
-            [Default field 0]
+            [Default param constant index 4]
     [Print]
         [Fn call]
             [Load symbol 3]
             - args
-            [Default field 0]
+            [Default param constant index 4]
     [Print]
         [Fn call]
             [Method access 1]
                 [Variable index: 0, scope: local]
             - args
-            [Default field 0]
+            [Default param constant index 4]
     [Print]
         [Fn call]
             [Load symbol 5 of module 0]
             - args
-            [Default field 0]
+            [Default param constant index 5, module 0]

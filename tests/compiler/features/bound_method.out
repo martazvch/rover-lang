@@ -17,8 +17,8 @@ ret
 
 -- main --
 load_sym index 0, <structure Human>
-constant index 0, value 5
-constant index 1, value Tom
+load_constant index 3, value 5
+load_constant index 4, value Tom
 struct_lit index 2
 push_null
 get_local index 0
@@ -31,7 +31,7 @@ closure index 1
 get_local index 2
 call index 0
 get_local index 4
-constant index 2, value 10
+load_constant index 5, value 10
 call index 1
 pop
 ret_naked

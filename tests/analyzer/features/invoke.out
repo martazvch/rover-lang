@@ -20,8 +20,10 @@
             - structure
             [Load symbol 0]
             - args
-            [Int 5]
-            [String Tom]
+            [Constant 3]
+                [Int 5]
+            [Constant 4]
+                [String Tom]
     [Variable declaration index: 1, scope: local]
         [Null]
     [Fn call]
@@ -32,4 +34,5 @@
             [Method access 1]
                 [Variable index: 0, scope: local]
             - args
-            [Int 10]
+            [Constant 5]
+                [Int 10]

@@ -20,22 +20,12 @@ prev_line: usize = 0,
 const Self = @This();
 pub const RenderMode = enum { none, normal, @"test" };
 
-pub fn initMod(chunk: *const Chunk, module: *const Module, render_mode: RenderMode) Self {
+pub fn init(chunk: *const Chunk, module: *const Module, render_mode: RenderMode) Self {
     return .{
         .chunk = chunk,
         .globals = module.globals,
         .symbols = module.symbols,
         .constants = module.constants,
-        .render_mode = render_mode,
-    };
-}
-
-pub fn init(chunk: *const Chunk, globals: []const Value, symbols: []const Value, constants: []const Value, render_mode: RenderMode) Self {
-    return .{
-        .chunk = chunk,
-        .globals = globals,
-        .symbols = symbols,
-        .constants = constants,
         .render_mode = render_mode,
     };
 }
@@ -80,7 +70,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .call => self.indexInstruction(writer, "call", offset),
         .call_native => self.indexInstruction(writer, "call_native", offset),
         .closure => self.indexInstruction(writer, "closure", offset),
-        .constant => self.constantInstruction(writer, "constant", offset),
         .def_global => self.indexInstruction(writer, "def_global", offset),
         .div_float => self.simpleInstruction(writer, "div_float", offset),
         .div_int => self.simpleInstruction(writer, "div_int", offset),
@@ -96,7 +85,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .ge_int => self.simpleInstruction(writer, "ge_int", offset),
         .get_capt_frame => self.indexInstruction(writer, "get_capt_frame", offset),
         .get_capt_local => self.indexInstruction(writer, "get_capt_local", offset),
-        .get_constant => self.constantInstruction(writer, "get_constant", offset),
         .get_field => self.getMember(writer, "get_field", offset),
         .get_field_cow => self.getMember(writer, "get_field_cow", offset),
         .get_global => self.getGlobal(writer, false, offset),
@@ -122,7 +110,9 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .lt_float => self.simpleInstruction(writer, "lt_float", offset),
         .lt_int => self.simpleInstruction(writer, "lt_int", offset),
         .load_blk_val => self.simpleInstruction(writer, "load_blk_val", offset),
-        .load_extern_sym => self.indexExternInstruction(writer, "load_extern_sym", offset),
+        .load_constant => self.constantInstruction(writer, "load_constant", offset),
+        .load_ext_constant => self.extConstantInstruction(writer, "load_ext_constant", offset),
+        .load_ext_sym => self.indexExternInstruction(writer, "load_extern_sym", offset),
         .load_builtin => self.indexInstruction(writer, "load_builtin", offset),
         .load_sym => self.loadSymbol(writer, offset),
         .loop => self.jumpInstruction(writer, "loop", -1, offset),
@@ -226,6 +216,19 @@ fn constantInstruction(self: *Self, writer: *Writer, name: []const u8, offset: u
     value.print(writer);
     try writer.print("\n", .{});
     return offset + 2;
+}
+
+fn extConstantInstruction(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writer.Error!usize {
+    const constant = self.chunk.code.items[offset + 1];
+    const mod = self.chunk.code.items[offset + 2];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, module {}\n", .{ name, constant, mod });
+    } else {
+        try writer.print("{s:<20} index {:>4}, mode {:>4}\n", .{ name, constant, mod });
+    }
+
+    return offset + 3;
 }
 
 fn jumpInstruction(self: *Self, writer: *Writer, name: []const u8, sign: isize, offset: usize) Writer.Error!usize {

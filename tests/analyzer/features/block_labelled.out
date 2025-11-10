@@ -4,44 +4,47 @@
             [Block pop count: 0, is_expr: false]
                 [If]
                 - condition:
-                    [Bool true]
+                    [Constant 0]
+                        [Bool true]
                 - then:
                     [Break depth: 0]
                 [If]
                 - condition:
-                    [Bool true]
+                    [Constant 0]
                 - then:
                     [Break depth: 2]
                 [If]
                 - condition:
-                    [Bool true]
+                    [Constant 0]
                 - then:
                     [Break depth: 1]
             [Break depth: 0]
-
     [Variable declaration index: 0, scope: local]
         [Block pop count: 0, is_expr: true]
             [Block pop count: 0, is_expr: false]
                 [If]
                 - condition:
-                    [Bool true]
+                    [Constant 0]
                 - then:
                     [Break depth: 1]
-                        [Float 4.5]
+                        [Constant 3]
+                            [Float 4.5]
             [Break depth: 0]
-                [Float 4.5]
-
+                [Constant 3]
     [Variable declaration index: 1, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Block pop count: 0, is_expr: true]
                 [Block pop count: 0, is_expr: false]
                     [Block pop count: 0, is_expr: false]
                         [Break depth: 2]
-                            [Int 1]
+                            [Constant 4]
+                                [Int 1]
                 [Break depth: 0]
-                    [Int 4]
+                    [Constant 5]
+                        [Int 4]
         - else:
-            [Int 3]
+            [Constant 6]
+                [Int 3]

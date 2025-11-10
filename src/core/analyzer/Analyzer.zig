@@ -20,9 +20,10 @@ const Instruction = ir.Instruction;
 const Span = @import("../parser/Lexer.zig").Span;
 const TokenTag = @import("../parser/Lexer.zig").Token.Tag;
 
-const Type = @import("types.zig").Type;
-const TypeInterner = @import("types.zig").TypeInterner;
-const TypeIds = @import("types.zig").TypeIds;
+const type_mod = @import("types.zig");
+const Type = type_mod.Type;
+const TypeInterner = type_mod.TypeInterner;
+const TypeIds = type_mod.TypeIds;
 
 const misc = @import("misc");
 const Interner = misc.Interner;
@@ -85,6 +86,8 @@ const TypeInfos = struct {
     heap: bool = false,
     is_sym: bool = false,
     comp_time: bool = false,
+    /// External module index where the symbol comes from
+    ext_mod: ?usize = null,
 };
 const InstrInfos = struct {
     type: *const Type,
@@ -121,6 +124,7 @@ irb: IrBuilder,
 main: ?usize,
 
 mod_name: InternerIdx,
+mod_index: usize,
 cached_names: struct { empty: usize, main: usize, std: usize, self: usize, Self: usize, init: usize },
 
 pub fn init(allocator: Allocator, pipeline: *Pipeline) Self {
@@ -142,6 +146,7 @@ pub fn init(allocator: Allocator, pipeline: *Pipeline) Self {
         .main = null,
 
         .mod_name = undefined,
+        .mod_index = pipeline.state.module_interner.analyzed.count(),
         .cached_names = .{
             .empty = pipeline.state.interner.intern(""),
             .main = pipeline.state.interner.intern("main"),
@@ -203,7 +208,7 @@ fn analyzeNode(self: *Self, node: *const Node, expect: ExprResKind, ctx: *Contex
         .print => |n| try self.print(n, ctx),
         .struct_decl => |*n| try self.structDecl(n, ctx),
         .use => |*n| b: {
-            try self.use(n, ctx);
+            try self.use(n);
             // TODO: replace with a error.Noop to skip it?
             break :b self.irb.addInstr(.noop, 0);
         },
@@ -216,9 +221,6 @@ fn analyzeNode(self: *Self, node: *const Node, expect: ExprResKind, ctx: *Contex
 }
 
 fn assignment(self: *Self, node: *const Ast.Assignment, ctx: *Context) StmtResult {
-    // TODO: check if not useless
-    const snapshot = ctx.snapshot();
-    defer snapshot.restore();
     const span = self.ast.getSpan(node.assigne);
 
     const maybe_assigne: ?InstrInfos = switch (node.assigne.*) {
@@ -277,19 +279,32 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
     // TODO: anonymus enums
     const name_tk = node.name orelse @panic("anonymus enums aren't supported yet");
     const name = try self.internIfNotInCurrentScope(name_tk);
-    const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
 
-    var ty: Type.Enum = .{
-        .loc = .{ .name = name, .container = container_name },
-        .tags = .empty,
-        .functions = .empty,
-    };
-    ty.tags.ensureTotalCapacity(self.allocator, @intCast(node.tags.len)) catch oom();
+    const interned = self.ti.newEnum(.{ .name = name, .container = container_name });
+    const ty = &interned.@"enum";
+
+    const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
+    sym.type = interned;
+
+    ctx.self_type = interned;
+    defer ctx.self_type = null;
 
     try self.openContainer(name_tk);
     defer self.closeContainer();
 
-    for (node.tags) |tag| {
+    try self.enumTags(node.tags, ty, ctx);
+    const funcs = try self.containerFnDecls(node.functions, &interned.@"enum".functions, ctx);
+
+    return self.irb.addInstr(
+        .{ .enum_decl = .{ .name = name, .sym_index = sym.index, .functions = funcs } },
+        self.ast.getSpan(node).start,
+    );
+}
+
+fn enumTags(self: *Self, tags: []const Ast.EnumDecl.Tag, ty: *Type.Enum, ctx: *Context) Error!void {
+    ty.tags.ensureTotalCapacity(self.allocator, @intCast(tags.len)) catch oom();
+
+    for (tags) |tag| {
         const tag_res = try self.enumTag(tag, ctx);
         const gop = ty.tags.getOrPut(self.allocator, tag_res.name) catch oom();
 
@@ -302,49 +317,30 @@ fn enumDeclaration(self: *Self, node: *const Ast.EnumDecl, ctx: *Context) StmtRe
             gop.value_ptr.* = tag_res.ty;
         }
     }
-
-    const funcs = try self.containerFnDecls(&ty, node.functions, sym, ctx);
-
-    return self.irb.addInstr(
-        .{ .enum_decl = .{ .name = name, .sym_index = sym.index, .functions = funcs } },
-        self.ast.getSpan(node).start,
-    );
-}
-
-/// Analyzes function declarations in a container (enum or structure)
-fn containerFnDecls(self: *Self, ty: anytype, decls: []const Ast.FnDecl, sym: *LexScope.Symbol, ctx: *Context) Error![]const InstrIndex {
-    ty.functions.ensureTotalCapacity(self.allocator, @intCast(decls.len)) catch oom();
-
-    // Create type before functions to allow 'self' to refer to the structure
-    // Can be either a structure or an enum
-    const tag_name = if (@TypeOf(ty) == *Type.Enum) "enum" else "structure";
-    const interned_type = self.ti.intern(@unionInit(Type, tag_name, ty.*));
-    const interned_kind = &@field(interned_type, tag_name);
-
-    sym.type = interned_type;
-    ctx.self_type = interned_type;
-    defer ctx.self_type = null;
-
-    var funcs: ArrayList(InstrIndex) = .empty;
-    funcs.ensureTotalCapacity(self.allocator, decls.len) catch oom();
-
-    for (decls) |*f| {
-        const fn_name = self.interner.intern(self.ast.toSource(f.name));
-        funcs.appendAssumeCapacity(try self.fnDeclaration(f, ctx));
-        // At this point, the symbol exists
-        const fn_type = self.scope.removeSymbolFromScope(fn_name).?.type;
-        interned_kind.functions.putAssumeCapacity(fn_name, fn_type);
-    }
-
-    sym.type = interned_type;
-
-    return funcs.toOwnedSlice(self.allocator) catch oom();
 }
 
 fn enumTag(self: *Self, tag: Ast.EnumDecl.Tag, ctx: *const Context) Error!struct { name: InternerIdx, ty: *const Type } {
     const name = self.interner.intern(self.ast.toSource(tag.name));
     const ty = if (tag.payload) |ty| try self.checkAndGetType(ty, ctx) else self.ti.cache.void;
     return .{ .name = name, .ty = ty };
+}
+
+/// Analyzes function declarations in a container (enum or structure)
+fn containerFnDecls(self: *Self, decls: []const Ast.FnDecl, funcs: *type_mod.MapNameType, ctx: *Context) Error![]const InstrIndex {
+    funcs.ensureTotalCapacity(self.allocator, @intCast(decls.len)) catch oom();
+
+    var func_instrs: ArrayList(InstrIndex) = .empty;
+    func_instrs.ensureTotalCapacity(self.allocator, decls.len) catch oom();
+
+    for (decls) |*f| {
+        const fn_name = self.interner.intern(self.ast.toSource(f.name));
+        func_instrs.appendAssumeCapacity(try self.fnDeclaration(f, ctx));
+        // At this point, the symbol exists
+        const fn_type = self.scope.removeSymbolFromScope(fn_name).?.type;
+        funcs.putAssumeCapacity(fn_name, fn_type);
+    }
+
+    return func_instrs.toOwnedSlice(self.allocator) catch oom();
 }
 
 fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult {
@@ -367,8 +363,6 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     defer _ = self.containers.pop();
 
     const captures = try self.loadFunctionCaptures(&node.meta.captures);
-    const is_closure = captures.len > 0;
-
     const param_res = try self.fnParams(node.params, ctx);
 
     var fn_type: Type.Function = .{
@@ -385,9 +379,8 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     _ = self.scope.close();
 
     // If it's a closure, it lives on the stack at runtime
-    if (is_closure) {
-        // _ = self.scope.removeSymbolFromScope(name);
-        _ = try self.declareVariable(name, interned_type, false, true, true, false, span);
+    if (captures.len > 0) {
+        _ = try self.declareVariable(name, interned_type, false, true, true, false, null, span);
     }
 
     if (name == self.cached_names.main and self.scope.isGlobal()) {
@@ -395,18 +388,15 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
     }
 
     return self.irb.addInstr(
-        .{
-            .fn_decl = .{
-                // .kind = if (is_closure) .closure else .{ .symbol = sym.index },
-                .kind = .{ .symbol = sym.index },
-                .type_id = self.ti.typeId(interned_type),
-                .name = name,
-                .body = body_instrs,
-                .defaults = param_res.defaults,
-                .captures = captures,
-                .returns = returns,
-            },
-        },
+        .{ .fn_decl = .{
+            .sym_index = sym.index,
+            .type_id = self.ti.typeId(interned_type),
+            .name = name,
+            .body = body_instrs,
+            .defaults = param_res.defaults,
+            .captures = captures,
+            .returns = returns,
+        } },
         span.start,
     );
 }
@@ -420,7 +410,7 @@ fn loadFunctionCaptures(self: *Self, captures_meta: *const Ast.FnDecl.Meta.Captu
         const name = capt.key_ptr.*;
         const capt_infos = capt.value_ptr.*;
         const variable, _ = self.scope.getVariable(name) orelse unreachable;
-        _ = try self.declareVariable(name, variable.type, true, true, false, false, .zero);
+        _ = try self.declareVariable(name, variable.type, true, true, false, false, null, .zero);
         captures.appendAssumeCapacity(.{ .index = capt_infos.index, .local = capt_infos.is_local });
     }
 
@@ -448,7 +438,7 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
             const self_type = ctx.self_type orelse return self.err(.self_outside_decl, span);
 
             is_method = true;
-            _ = try self.declareVariable(param_name, self_type, p.meta.captured, true, true, false, .zero);
+            _ = try self.declareVariable(param_name, self_type, p.meta.captured, true, true, false, null, .zero);
             decls.putAssumeCapacity(param_name, .{ .type = self_type, .default = null, .captured = false });
             continue;
         }
@@ -457,29 +447,23 @@ fn fnParams(self: *Self, params: []Ast.VarDecl, ctx: *Context) Error!Params {
             return self.err(.{ .already_declared_param = .{ .name = self.ast.toSource(p.name) } }, span);
         }
 
-        var instr: ?InstrIndex = null;
+        var const_index: ?usize = null;
         var param_type = try self.checkAndGetType(p.typ, ctx);
 
         if (p.value) |val| {
-            const value_res = try self.defaultValue(param_type, val, ctx);
+            const value_res, const constant = try self.defaultValue(param_type, val, .parameter, ctx);
 
-            if (!value_res.ti.comp_time) {
-                return self.err(.{ .non_comptime_default = .new(.parameter) }, self.ast.getSpan(val));
-            }
-
-            // instr = value_res.instr;
-            // TODO: WIP
-            instr = self.irb.instructions.items(.data)[value_res.instr].constant;
+            const_index = constant;
             param_type = value_res.type;
             defaults.append(self.allocator, value_res.instr) catch oom();
         }
 
         if (param_type.is(.void)) return self.err(.void_param, span);
 
-        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, false, span);
+        _ = try self.declareVariable(param_name, param_type, p.meta.captured, true, true, false, null, span);
         decls.putAssumeCapacity(param_name, .{
             .type = param_type,
-            .default = instr,
+            .default = const_index,
             .captured = p.meta.captured,
         });
     }
@@ -530,10 +514,18 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
     return .{ instrs.toOwnedSlice(self.allocator) catch oom(), returns };
 }
 
-fn defaultValue(self: *Self, decl_type: *const Type, default_value: *const Expr, ctx: *Context) Result {
-    var value_res = try self.analyzeExpr(default_value, .value, ctx);
-    value_res.type = try self.performTypeCoercion(decl_type, value_res.type, false, self.ast.getSpan(default_value));
-    return value_res;
+/// Kind has to be either `param` or `field`
+fn defaultValue(self: *Self, decl_type: *const Type, val: *const Expr, kind: anytype, ctx: *Context) Error!struct { InstrInfos, usize } {
+    var value_res = try self.analyzeExpr(val, .value, ctx);
+    value_res.type = try self.performTypeCoercion(decl_type, value_res.type, false, self.ast.getSpan(val));
+
+    if (!value_res.ti.comp_time) {
+        return self.err(.{ .non_comptime_default = .new(kind) }, self.ast.getSpan(val));
+    }
+
+    // TODO: see if this is safe enough with comp_time check above
+    const const_index = self.irb.instructions.items(.data)[value_res.instr].constant.index;
+    return .{ value_res, const_index };
 }
 
 fn print(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
@@ -541,7 +533,7 @@ fn print(self: *Self, expr: *const Expr, ctx: *Context) StmtResult {
     return self.irb.wrapInstr(.print, res.instr);
 }
 
-fn use(self: *Self, node: *const Ast.Use, _: *Context) Error!void {
+fn use(self: *Self, node: *const Ast.Use) Error!void {
     const name_token = if (node.alias) |alias| alias else node.names[node.names.len - 1];
     const module_name = self.interner.intern(self.ast.toSource(name_token));
 
@@ -638,27 +630,29 @@ fn varDeclaration(self: *Self, node: *const Ast.VarDecl, ctx: *Context) StmtResu
 
     ctx.decl_type = if (!checked_type.is(.void)) checked_type else null;
 
-    var comp_time = false;
-
-    const value_instr = if (node.value) |value| instr: {
-        const snapshot = ctx.snapshot();
-        defer snapshot.restore();
-
+    const value_res = if (node.value) |value| v: {
         var value_res = try self.expectAssignableValue(value, ctx);
-        comp_time = value_res.ti.comp_time;
-
         checked_type = try self.performTypeCoercion(checked_type, value_res.type, false, self.ast.getSpan(value));
         self.checkWrap(&value_res.instr, value_res.ti.heap);
 
-        break :instr value_res.instr;
+        break :v value_res;
     } else null;
 
-    const decl_index = try self.declareVariable(name, checked_type, node.meta.captured, value_instr != null, false, comp_time, span);
+    const decl_index = try self.declareVariable(
+        name,
+        checked_type,
+        node.meta.captured,
+        value_res != null,
+        false,
+        if (value_res) |v| v.ti.comp_time else false,
+        if (value_res) |v| v.ti.ext_mod else null,
+        span,
+    );
 
     return self.irb.addInstr(
         .{ .var_decl = .{
             .box = node.meta.captured,
-            .value = value_instr,
+            .value = if (value_res) |v| v.instr else null,
             .variable = .{ .index = decl_index, .scope = if (self.scope.isGlobal()) .global else .local },
         } },
         span.start,
@@ -686,19 +680,20 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
     var buf: [1024]u8 = undefined;
     const container_name = self.interner.internKeepRef(self.allocator, self.containers.renderWithSep(&buf, "."));
 
+    const interned = self.ti.newStruct(.{ .name = name, .container = container_name });
+    const ty = &interned.structure;
+
     const sym = self.scope.forwardDeclareSymbol(self.allocator, name);
-    var ty: Type.Structure = .{
-        .loc = .{ .name = name, .container = container_name },
-        .fields = .empty,
-        .functions = .empty,
-    };
-    ty.fields.ensureTotalCapacity(self.allocator, node.fields.len) catch oom();
+    sym.type = interned;
+
+    ctx.self_type = interned;
+    defer ctx.self_type = null;
 
     try self.openContainer(node.name);
     defer self.closeContainer();
 
-    const default_fields = try self.structureFields(node.fields, &ty, ctx);
-    const funcs = try self.containerFnDecls(&ty, node.functions, sym, ctx);
+    const default_fields = try self.structureFields(node.fields, ty, ctx);
+    const funcs = try self.containerFnDecls(node.functions, &ty.functions, ctx);
 
     return self.irb.addInstr(
         .{ .struct_decl = .{
@@ -712,13 +707,14 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
         span.start,
     );
 }
+
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error![]const InstrIndex {
     // TODO: make a list of constant index?
     var default_fields: ArrayList(InstrIndex) = .empty;
+    ty.fields.ensureTotalCapacity(self.allocator, fields.len) catch oom();
 
     for (fields) |*f| {
         const span = self.ast.getSpan(f.name);
-        var struct_field: Type.Structure.Field = undefined;
         const field_name = self.interner.intern(self.ast.toSource(f.name));
 
         if (ty.fields.get(field_name) != null) return self.err(
@@ -726,28 +722,19 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
             span,
         );
 
-        struct_field.type = try self.checkAndGetType(f.typ, ctx);
+        var struct_field: Type.Structure.Field = .{
+            .type = try self.checkAndGetType(f.typ, ctx),
+            .default = null,
+        };
 
         ctx.decl_type = struct_field.type;
 
         if (f.value) |value| {
-            const res = try self.analyzeExpr(value, .value, ctx);
+            const value_res, const constant = try self.defaultValue(struct_field.type, value, .field, ctx);
+            if (struct_field.type.is(.void)) struct_field.type = value_res.type;
 
-            if (!res.ti.comp_time) return self.err(.{ .non_comptime_default = .new(.field) }, self.ast.getSpan(value));
-
-            if (struct_field.type.is(.void)) struct_field.type = res.type;
-
-            _ = self.performTypeCoercion(struct_field.type, res.type, false, self.ast.getSpan(f.name)) catch {
-                return self.replacePrevErr(
-                    .{ .default_value_type_mismatch = .new(self.typeName(struct_field.type), self.typeName(res.type), .field) },
-                    self.ast.getSpan(f.name),
-                );
-            };
-
-            // struct_field.default = res.instr;
-            // TODO: WIP
-            struct_field.default = self.irb.instructions.items(.data)[res.instr].constant;
-            default_fields.append(self.allocator, res.instr) catch oom();
+            struct_field.default = constant;
+            default_fields.append(self.allocator, value_res.instr) catch oom();
         }
 
         ty.fields.putAssumeCapacity(field_name, struct_field);
@@ -1204,18 +1191,15 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     return .{
         .type = interned_type,
         .instr = self.irb.addInstr(
-            .{
-                .fn_decl = .{
-                    // .kind = .closure,
-                    .kind = .{ .symbol = sym.index },
-                    .type_id = self.ti.typeId(interned_type),
-                    .name = null,
-                    .body = body_instrs,
-                    .defaults = param_res.defaults,
-                    .captures = captures,
-                    .returns = returns,
-                },
-            },
+            .{ .fn_decl = .{
+                .sym_index = sym.index,
+                .type_id = self.ti.typeId(interned_type),
+                .name = null,
+                .body = body_instrs,
+                .defaults = param_res.defaults,
+                .captures = captures,
+                .returns = returns,
+            } },
             offset,
         ),
     };
@@ -1262,10 +1246,9 @@ fn enumLit(self: *Self, tag: Ast.TokenIndex, ctx: *Context) Result {
     return .{
         .type = decl,
         .ti = .{ .comp_time = enum_ty.tags.get(tag_name).?.is(.void) },
-        .instr = self.irb.addInstr(
-            // .{ .enum_create = .{ .lhs = sym.instr, .tag_index = tag_index } },
+        .instr = self.irb.addConstant(
             // TODO: protect the cast
-            .{ .enum_create = .{ .lhs = sym.instr, .tag_index = self.irb.addConstant(.{ .int = @intCast(tag_index) }, span.start) } },
+            .{ .enum_create = .{ .sym = .{ .module_index = 0, .symbol_index = @intCast(sym.sym.index) }, .tag_index = @intCast(tag_index) } },
             span.start,
         ),
     };
@@ -1280,7 +1263,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
             const ident = try self.identifier(e.idx, true, ctx);
             break :b .{
                 .type = ident.type,
-                .ti = .{ .heap = true, .is_sym = ident.kind != .variable },
+                .ti = .{ .heap = true, .is_sym = ident.kind != .variable, .ext_mod = ident.module },
                 .instr = ident.instr,
             };
         },
@@ -1322,6 +1305,7 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
         .ti = .{
             .heap = struct_res.ti.heap and field_res.type.isHeap(),
             .is_sym = field_res.kind == .function,
+            .ext_mod = struct_res.ti.ext_mod,
         },
         .instr = self.irb.addInstr(
             .{ .field = .{ .structure = struct_res.instr, .index = field_res.index, .kind = kind } },
@@ -1352,14 +1336,16 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
             return self.err(.enum_tag_access, span);
         }
 
-        return .{ .tag = .{
-            .type = self.ti.intern(.{ .@"enum" = ty }),
-            .ti = .{ .comp_time = ty.tags.get(tag_name).?.is(.void) },
-            .instr = self.irb.addInstr(
-                .{ .enum_create = .{ .lhs = enum_info.instr, .tag_index = index } },
-                self.ast.getSpan(tag_tk).start,
-            ),
-        } };
+        return .{
+            .tag = .{
+                .type = self.ti.intern(.{ .@"enum" = ty }),
+                .ti = .{ .comp_time = ty.tags.get(tag_name).?.is(.void) },
+                .instr = self.irb.addConstant(
+                    .{ .enum_create = .{ .sym = self.irb.data(enum_info.instr).load_symbol, .tag_index = index } },
+                    self.ast.getSpan(tag_tk).start,
+                ),
+            },
+        };
     } else if (ty.functions.get(tag_name)) |func| {
         return .{ .decl = .{ .type = func, .kind = .function, .index = ty.functions.getIndex(tag_name).? } };
     }
@@ -1411,7 +1397,7 @@ fn moduleAccess(self: *Self, field_tk: Ast.TokenIndex, module_idx: InternerIdx) 
     // TODO: protect the cast
     return .{
         .type = sym.type,
-        .ti = .{ .is_sym = true },
+        .ti = .{ .is_sym = true, .ext_mod = index },
         .instr = self.irb.addInstr(
             .{ .load_symbol = .{ .module_index = index, .symbol_index = @intCast(sym.index) } },
             span.start,
@@ -1439,7 +1425,7 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 
     // Restore state before arguments analyzis
     ctx.in_call = ctx_call;
-    const args_res = try self.fnArgsList(expr.args, &callee.type.function, span, ctx);
+    const args_res = try self.fnArgsList(expr.args, &callee.type.function, callee.ti.ext_mod, span, ctx);
 
     return .{
         .type = callee.type.function.return_type,
@@ -1455,7 +1441,14 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
     };
 }
 
-fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Function, err_span: Span, ctx: *Context) Error![]const Instruction.Arg {
+fn fnArgsList(
+    self: *Self,
+    args: []const Ast.FnCall.Arg,
+    ty: *const Type.Function,
+    ext_mod: ?usize,
+    err_span: Span,
+    ctx: *Context,
+) Error![]const Instruction.Arg {
     var proto = ty.proto(self.allocator);
     const param_count = proto.count();
     const params = ty.params.values()[@intFromBool(ty.kind == .method)..];
@@ -1467,9 +1460,7 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
 
     for (proto_values, 0..) |val, i| {
         if (val.default) |def| {
-            instrs[i] = .{ .default = def };
-        } else {
-            instrs[i] = undefined;
+            instrs[i] = .{ .default = .{ .const_index = def, .mod = ext_mod } };
         }
     }
 
@@ -1482,6 +1473,12 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
                 if (ty.kind == .bound) return self.err(.named_arg_in_bounded, self.ast.getSpan(param_name));
 
                 const name = self.interner.intern(self.ast.toSource(param_name));
+
+                param_info = ty.params.getPtr(name) orelse return self.err(
+                    .{ .unknown_param = .{ .name = self.ast.toSource(param_name) } },
+                    self.ast.getSpan(param_name),
+                );
+
                 const gop = proto.getOrPutAssumeCapacity(name);
 
                 if (gop.value_ptr.done) return self.err(
@@ -1489,11 +1486,6 @@ fn fnArgsList(self: *Self, args: []const Ast.FnCall.Arg, ty: *const Type.Functio
                     self.ast.getSpan(param_name),
                 );
                 gop.value_ptr.done = true;
-
-                param_info = ty.params.getPtr(name) orelse return self.err(
-                    .{ .unknown_param = .{ .name = self.ast.toSource(param_name) } },
-                    self.ast.getSpan(param_name),
-                );
 
                 break :value gop.index;
             } else {
@@ -1531,6 +1523,7 @@ const IdentRes = struct {
     kind: enum { variable, symbol, module },
     comp_time: bool = true,
     instr: InstrIndex,
+    module: ?usize = null,
 };
 
 /// Tries to find a match from variables and symbols and returns its type while emitting an instruction
@@ -1549,6 +1542,7 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
             .kind = .variable,
             .comp_time = res.variable.comp_time,
             .instr = res.instr,
+            .module = res.variable.ext_mod,
         };
     }
 
@@ -1566,7 +1560,7 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
     }
 
     if (self.externSymbolIdentifier(sym_name, span)) |res| {
-        return .{ .type = res.sym.type, .kind = .symbol, .instr = res.instr };
+        return .{ .type = res.sym.type, .kind = .symbol, .instr = res.instr, .module = res.mod_index };
     }
 
     if (self.builtinSymbol(sym_name, span)) |res| {
@@ -1627,12 +1621,13 @@ fn symbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *
 }
 
 /// Tries to find a symbol in scopes and returns it while emitting an instruction
-fn externSymbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *LexScope.Symbol, instr: InstrIndex } {
+fn externSymbolIdentifier(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *LexScope.Symbol, mod_index: usize, instr: InstrIndex } {
     const ext = self.scope.getExternSymbol(name) orelse return null;
 
     // TODO: protect cast
     return .{
         .sym = &ext.symbol,
+        .mod_index = ext.module_index,
         .instr = self.irb.addInstr(
             .{ .load_symbol = .{ .module_index = ext.module_index, .symbol_index = @intCast(ext.symbol.index) } },
             span.start,
@@ -1740,12 +1735,12 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
 
     const ty, const instr = b: {
         switch (expr.tag) {
-            .bool => break :b .{ self.ti.cache.bool, self.irb.addInstr(.{ .bool = self.ast.token_tags[expr.idx] == .true }, span.start) },
+            .bool => break :b .{ self.ti.cache.bool, self.irb.addConstant(.{ .bool = self.ast.token_tags[expr.idx] == .true }, span.start) },
             .identifier, .self => {
                 const res = try self.identifier(expr.idx, true, ctx);
                 return .{
                     .type = res.type,
-                    .ti = .{ .heap = res.type.isHeap(), .is_sym = res.kind == .symbol, .comp_time = res.comp_time },
+                    .ti = .{ .heap = res.type.isHeap(), .is_sym = res.kind == .symbol, .comp_time = res.comp_time, .ext_mod = res.module },
                     .instr = res.instr,
                 };
             },
@@ -1767,7 +1762,7 @@ fn literal(self: *Self, expr: *const Ast.Literal, ctx: *Context) Result {
 
                 break :b .{ self.ti.cache.float, self.irb.addConstant(.{ .float = value }, span.start) };
             },
-            .null => break :b .{ self.ti.cache.null, self.irb.addInstr(.null, span.start) },
+            .null => break :b .{ self.ti.cache.null, self.irb.addConstant(.null, span.start) },
             .string => {
                 const no_quotes = text[1 .. text.len - 1];
                 var final: ArrayList(u8) = .empty;
@@ -1923,9 +1918,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
 
     for (struct_type.fields.values(), 0..) |f, i| {
         if (f.default) |def| {
-            values[i] = .{ .default = def };
-        } else {
-            values[i] = undefined;
+            values[i] = .{ .default = .{ .const_index = def, .mod = struct_res.ti.ext_mod } };
         }
     }
 
@@ -1977,7 +1970,7 @@ fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Res
 
     return .{
         .type = struct_res.type,
-        .ti = .{ .comp_time = comp_time },
+        .ti = .{ .comp_time = comp_time, .ext_mod = struct_res.ti.ext_mod },
         .instr = self.irb.addInstr(
             .{ .struct_literal = .{ .structure = struct_res.instr, .values = values } },
             span.start,
@@ -2084,7 +2077,7 @@ fn whenArms(
         alias: {
             const alias = arm.alias orelse glob_alias orelse break :alias;
             const binding = try self.internIfNotInCurrentScope(alias);
-            _ = try self.declareVariable(binding, resolved_ty, false, true, true, false, self.ast.getSpan(alias));
+            _ = try self.declareVariable(binding, resolved_ty, false, true, true, false, null, self.ast.getSpan(alias));
         }
 
         const body = self.analyzeNode(&arm.body, expect, ctx) catch {
@@ -2430,6 +2423,7 @@ fn declareVariable(
     initialized: bool,
     constant: bool,
     comp_time: bool,
+    ext_mod: ?usize,
     span: Span,
 ) Error!usize {
     return self.scope.declareVar(
@@ -2440,6 +2434,7 @@ fn declareVariable(
         initialized,
         constant,
         comp_time,
+        ext_mod,
     ) catch return self.err(.too_many_locals, span);
 }
 
@@ -2453,6 +2448,6 @@ fn openContainer(self: *Self, name: Ast.TokenIndex) Error!void {
 }
 
 fn closeContainer(self: *Self) void {
-    defer _ = self.scope.close();
-    defer _ = self.containers.pop();
+    _ = self.scope.close();
+    _ = self.containers.pop();
 }

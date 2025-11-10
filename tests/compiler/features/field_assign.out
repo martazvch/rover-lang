@@ -1,9 +1,9 @@
 -- main --
 load_sym index 0, <structure Person>
-constant index 0, value Tom
+load_constant index 3, value Tom
 struct_lit index 1
 
-constant index 1, value Martin
+load_constant index 4, value Martin
 get_local_cow index 0
 set_field index 0
 ret_naked
@@ -11,4 +11,3 @@ ret_naked
 -- global scope --
 load_sym index 1, <function main>
 call index 0
-

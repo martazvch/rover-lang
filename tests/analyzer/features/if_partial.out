@@ -2,89 +2,100 @@
     [Variable declaration index: 0, scope: local]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
+                [Bool true]
         - then:
             [Block pop count: 0, is_expr: false]
                 [Return]
         - else:
-            [Int 4]
+            [Constant 3]
+                [Int 4]
     [Variable declaration index: 1, scope: local]
         [If]
         - condition:
-            [Bool false]
+            [Constant 1]
+                [Bool false]
         - then:
-            [Int 5]
+            [Constant 4]
+                [Int 5]
         - else:
             [Return]
     [Function declaration func, returns]
         [Print]
             [If]
             - condition:
-                [Bool true]
+                [Constant 0]
             - then:
-                [String str]
+                [Constant 5]
+                    [String str]
             - else:
                 [Return]
                     [Variable index: 0, scope: local]
         [Variable declaration index: 1, scope: local]
             [If]
             - condition:
-                [Bool true]
+                [Constant 0]
             - then:
                 [Return]
                     [Binop type: add_int]
                         [Variable index: 0, scope: local]
-                        [Int 2]
+                        [Constant 6]
+                            [Int 2]
             - else:
                 [Block pop count: 1, is_expr: true]
                     [Variable declaration index: 0, scope: local]
-                        [Float 56.4]
+                        [Constant 7]
+                            [Float 56.4]
                     [Break depth: 0]
-                        [String champ]
+                        [Constant 8]
+                            [String champ]
         [If]
         - condition:
-            [Bool true]
+            [Constant 0]
         - then:
             [Return]
-                [Int 8]
+                [Constant 9]
+                    [Int 8]
         [Return]
             [If]
             - condition:
-                [Bool true]
+                [Constant 0]
             - then:
                 [Block pop count: 0, is_expr: true]
                     [If]
                     - condition:
-                        [Bool true]
+                        [Constant 0]
                     - then:
                         [Block pop count: 0, is_expr: false]
                             [Pop]
                                 [Return]
                                     [Block pop count: 0, is_expr: true]
                                         [Break depth: 0]
-                                            [Int 1]
+                                            [Constant 10]
+                                                [Int 1]
                     - else:
                         [Break depth: 0]
-                            [Int 5]
+                            [Constant 4]
             - else:
                 [Block pop count: 0, is_expr: true]
                     [If]
                     - condition:
-                        [Bool false]
+                        [Constant 1]
                     - then:
                         [Block pop count: 0, is_expr: false]
                             [Pop]
                                 [Return]
                                     [If]
                                     - condition:
-                                        [Bool true]
+                                        [Constant 0]
                                     - then:
                                         [Block pop count: 0, is_expr: false]
                                             [Pop]
                                                 [Return]
-                                                    [Int 4]
+                                                    [Constant 3]
                                     - else:
-                                        [Int 3]
+                                        [Constant 11]
+                                            [Int 3]
                     - else:
                         [Break depth: 0]
-                            [Int 8]
+                            [Constant 9]

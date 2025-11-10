@@ -1,7 +1,8 @@
 [Structure declaration Point]
     [Function declaration display]
         [Print]
-            [String Point]
+            [Constant 3]
+                [String Point]
         [Print]
             [Field access 0]
                 [Variable index: 0, scope: local]
@@ -9,8 +10,8 @@
             [Field access 1]
                 [Variable index: 0, scope: local]
         [Print]
-            [String ]
-
+            [Constant 4]
+                [String ]
 [Structure declaration Poly]
     [Function declaration clone, returns]
         [Return]
@@ -22,22 +23,21 @@
                     - structure
                     [Load symbol 0]
                     - args
-                    [Int 1]
-                    [Int 2]
-
+                    [Constant 5]
+                        [Int 1]
+                    [Constant 6]
+                        [Int 2]
 [Structure declaration Structure]
-
 [Function declaration testFn]
-
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
             [Load symbol 0]
             - args
-            [Int 2]
-            [Int 6]
-
+            [Constant 6]
+            [Constant 7]
+                [Int 6]
     [Variable declaration index: 1, scope: local]
         [Structure literal]
             - structure
@@ -45,7 +45,6 @@
             - args
             [Incr rc]
                 [Variable index: 0, scope: local]
-
     [Variable declaration index: 2, scope: local]
         [Structure literal]
             - structure
@@ -56,81 +55,70 @@
             [Array]
                 [Incr rc]
                     [Variable index: 1, scope: local]
-
     [Variable declaration index: 3, scope: local]
         [Incr rc]
             [Variable index: 0, scope: local]
-
     [Variable declaration index: 4, scope: local]
         [Incr rc]
             [Field access 0]
                 [Variable index: 2, scope: local]
-
     [Variable declaration index: 5, scope: local]
         [Incr rc]
             [Field access 0]
                 [Field access 0]
                     [Variable index: 2, scope: local]
-
     [Variable declaration index: 6, scope: local]
         [Incr rc]
             [Field access 1]
                 [Variable index: 2, scope: local]
-
     [Variable declaration index: 7, scope: local]
         [Incr rc]
             [Array access]
                 - index
-                [Int 0]
+                [Constant 8]
+                    [Int 0]
                 - array
                 [Field access 1]
                     [Variable index: 2, scope: local]
-
     [Variable declaration index: 8, scope: local]
         [Incr rc]
             [Field access 0]
                 [Array access]
                     - index
-                    [Int 0]
+                    [Constant 8]
                     - array
                     [Field access 1]
                         [Variable index: 2, scope: local]
-
     [Variable declaration index: 9, scope: local]
         [Field access 0]
             [Field access 0]
                 [Array access]
                     - index
-                    [Int 0]
+                    [Constant 8]
                     - array
                     [Field access 1]
                         [Variable index: 2, scope: local]
-
     [Variable declaration index: 10, scope: local]
         [Array]
             [Incr rc]
                 [Variable index: 0, scope: local]
-
     [Variable declaration index: 11, scope: local]
         [Array]
             [Incr rc]
                 [Field access 0]
                     [Field access 0]
                         [Variable index: 2, scope: local]
-
     [Variable declaration index: 12, scope: local]
         [Fn call]
             [Method access 0]
                 [Field access 0]
                     [Variable index: 2, scope: local]
-
     [Variable declaration index: 13, scope: local]
         [Field access 0]
             [Fn call]
                 [Method access 0]
                     [Field access 0]
                         [Variable index: 2, scope: local]
-
     [Variable declaration index: 14, scope: local]
         [Field access 0]
             [Field access 0]
@@ -138,7 +126,6 @@
                     [Method access 0]
                         [Field access 0]
                             [Variable index: 2, scope: local]
-
     [Fn call]
         [Load symbol 5]
         - args

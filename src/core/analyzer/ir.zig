@@ -23,7 +23,7 @@ pub const Instruction = struct {
         bound_method: BoundMethod,
         @"break": Break,
         call: Call,
-        constant: usize,
+        constant: Constant,
         discard: Index,
         extractor: Index,
         enum_create: EnumCreate,
@@ -113,10 +113,16 @@ pub const Instruction = struct {
     pub const BoundMethod = struct { structure: Index, index: usize };
     pub const Break = struct { instr: ?Index, depth: usize };
     pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool, native: bool };
-    pub const Arg = union(enum) { instr: Index, default: usize };
+    pub const Arg = union(enum) {
+        instr: Index,
+        default: struct { const_index: usize, mod: ?usize },
+    };
+    pub const Constant = struct {
+        index: usize,
+        instr: Index,
+    };
     pub const EnumCreate = struct {
-        // TODO: just resolve to a load_sym?
-        lhs: Index,
+        sym: LoadSymbol,
         tag_index: usize,
     };
     pub const EnumDecl = struct {
@@ -125,7 +131,7 @@ pub const Instruction = struct {
         functions: []const Index,
     };
     pub const FnDecl = struct {
-        kind: Kind,
+        sym_index: SymbolIndex,
         type_id: TypeId,
         name: ?usize,
         body: []const Index,
@@ -133,7 +139,6 @@ pub const Instruction = struct {
         captures: []const Capture,
         returns: bool,
 
-        pub const Kind = union(enum) { closure, symbol: SymbolIndex };
         pub const Capture = struct { index: usize, local: bool };
     };
     pub const Field = struct {

@@ -1,66 +1,66 @@
 -- getIdx --
-constant index 0, value 1
+load_constant index 3, value 1
 ret
 
 -- main --
-constant index 0, value 1
-constant index 1, value 2
-constant index 2, value 3
+load_constant index 3, value 1
+load_constant index 4, value 2
+load_constant index 5, value 3
 array_new index 3
-constant index 3, value 4
-constant index 4, value 5
-constant index 5, value 6
+load_constant index 6, value 4
+load_constant index 7, value 5
+load_constant index 8, value 6
 array_new index 3
 array_new index 2
 
-constant index 6, value 1
-constant index 7, value 2
-constant index 8, value 33
+load_constant index 3, value 1
+load_constant index 4, value 2
+load_constant index 9, value 33
 array_new index 3
-constant index 9, value 3
-constant index 10, value 4
-constant index 11, value 55
+load_constant index 5, value 3
+load_constant index 6, value 4
+load_constant index 10, value 55
 array_new index 3
 array_new index 2
 
 load_sym index 0, <structure Foo>
-constant index 12, value 6
-constant index 13, value 7
+load_constant index 8, value 6
+load_constant index 11, value 7
 load_sym index 1, <function getIdx>
 call index 0
 array_new index 3
-constant index 14, value 8
-constant index 15, value 9
-constant index 16, value 1
+load_constant index 12, value 8
+load_constant index 13, value 9
+load_constant index 3, value 1
 add_int
-constant index 17, value 11
+load_constant index 14, value 11
 array_new index 3
 array_new index 2
 struct_lit index 1
 
 get_local index 0
-constant index 18, value 2
-constant index 19, value 1
+load_constant index 4, value 2
+load_constant index 3, value 1
 array_get_chain index 2
 print
 
 get_local index 0
-constant index 20, value 1
+load_constant index 3, value 1
 neg_int
-constant index 21, value 2
+load_constant index 4, value 2
 neg_int
 array_get_chain index 2
 print
 
-constant index 22, value 99
+load_constant index 15, value 99
 get_local_cow index 0
 load_sym index 1, <function getIdx>
 call index 0
-constant index 23, value 1
+load_constant index 3, value 1
 neg_int
 array_set_chain index 2
 
-constant index 24, value 1
+load_constant index 3, value 1
 array_new index 1
 get_local_cow index 2
 get_field_cow index 0
@@ -68,11 +68,11 @@ load_sym index 1, <function getIdx>
 call index 0
 array_set
 
-constant index 25, value 9
+load_constant index 13, value 9
 neg_int
 get_local_cow index 2
 get_field_cow index 0
-constant index 26, value 1
+load_constant index 3, value 1
 load_sym index 1, <function getIdx>
 call index 0
 array_set_chain index 2
@@ -86,7 +86,7 @@ print
 
 get_local index 2
 get_field index 0
-constant index 27, value 1
+load_constant index 3, value 1
 load_sym index 1, <function getIdx>
 call index 0
 array_get_chain index 2

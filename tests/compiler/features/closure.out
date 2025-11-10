@@ -1,5 +1,5 @@
 -- set --
-constant index 0, value updated
+load_constant index 4, value updated
 set_local_box index 0
 ret_naked
 
@@ -10,14 +10,14 @@ print
 ret_naked
 
 -- set_vars --
-constant index 0, value init
+load_constant index 3, value init
 box
 
-constant index 1, value <function set>
+load_sym index 1, <function set>
 get_capt_local index 0
 closure index 1
 
-constant index 2, value <function get>
+load_sym index 2, <function get>
 get_capt_local index 0
 closure index 1
 

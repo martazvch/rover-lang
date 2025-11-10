@@ -1,27 +1,27 @@
 -- main --
 load_sym index 0, <structure Human>
-constant index 0, value 5
-constant index 1, value Tom
+load_constant index 3, value 5
+load_constant index 4, value Tom
 struct_lit index 2
 
 load_sym index 0, <structure Human>
-constant index 2, value 5
-constant index 3, value Tom
+load_constant index 3, value 5
+load_constant index 4, value Tom
 struct_lit index 2
 set_local index 0
 
-constant index 4, value 95
+load_constant index 5, value 95
 
 load_sym index 0, <structure Human>
 get_local index 1
-constant index 5, value Tom
+load_constant index 4, value Tom
 struct_lit index 2
 set_local index 0
 
-constant index 6, value Tom
+load_constant index 4, value Tom
 
 load_sym index 0, <structure Human>
-constant index 7, value 6
+load_constant index 6, value 6
 get_local index 2
 struct_lit index 2
 set_local index 0
@@ -43,4 +43,3 @@ ret_naked
 -- global scope --
 load_sym index 1, <function main>
 call index 0
-

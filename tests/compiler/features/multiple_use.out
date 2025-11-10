@@ -9,7 +9,7 @@ add_int
 ret
 
 -- introduce --
-constant index 0, value This is a mathematical module
+load_constant index 3, value This is a mathematical module
 print
 ret_naked
 
@@ -21,11 +21,11 @@ struct_lit index 2
 ret
 
 -- getInt --
-constant index 0, value 12
+load_constant index 4, value 12
 ret
 
 -- getIntDef --
-constant index 0, value 12
+load_constant index 4, value 12
 ret
 
 -- global scope --
@@ -58,7 +58,7 @@ print
 ret_naked
 
 -- introduce --
-constant index 0, value module for basic geometry
+load_constant index 3, value module for basic geometry
 print
 ret_naked
 
@@ -98,10 +98,10 @@ str_cat
 ret
 
 -- quote --
-constant index 0, value '
+load_constant index 3, value '
 get_local index 0
 str_cat
-constant index 1, value '
+load_constant index 3, value '
 str_cat
 ret
 
@@ -112,8 +112,8 @@ exit_repl
 
 -- main --
 load_extern_sym index 0, module 1
-constant index 0, value 1
-constant index 1, value 90
+load_constant index 3, value 1
+load_constant index 4, value 90
 struct_lit index 2
 
 get_local index 0
@@ -121,7 +121,7 @@ invoke index 1
 call index 1
 
 load_extern_sym index 4, module 1
-constant index 2, value 10
+load_constant index 5, value 10
 get_local index 0
 incr_ref
 struct_lit index 2
@@ -157,7 +157,7 @@ get_field index 1
 print
 
 load_extern_sym index 1, module 2
-constant index 3, value local import
+load_constant index 6, value local import
 call index 1
 print
 
@@ -166,8 +166,8 @@ invoke index 1
 call index 1
 
 load_extern_sym index 0, module 2
-constant index 4, value just 
-constant index 5, value concaneted
+load_constant index 7, value just 
+load_constant index 8, value concaneted
 call index 2
 print
 

@@ -1,19 +1,21 @@
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
-        [Int 8]
+        [Constant 3]
+            [Int 8]
     [Variable declaration index: 1, scope: local]
-        [Null]
+        [Constant 2]
+            [Null]
     [If]
     - condition:
         [Binop type: eq_null]
             [Variable index: 1, scope: local]
-            [Null]
+            [Constant 2]
     - then:
         [Block pop count: 0, is_expr: false]
     [If]
     - condition:
         [Binop type: ne_null]
             [Variable index: 1, scope: local]
-            [Null]
+            [Constant 2]
     - then:
         [Block pop count: 0, is_expr: false]

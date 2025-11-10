@@ -21,7 +21,12 @@ roots: ArrayList(ir.Index),
 constants: ConstInterner,
 
 pub fn init(allocator: Allocator) Self {
-    return .{ .allocator = allocator, .instructions = .empty, .roots = .empty, .constants = .empty };
+    var constants: ConstInterner = .empty;
+    _ = constants.add(allocator, .{ .bool = true });
+    _ = constants.add(allocator, .{ .bool = false });
+    _ = constants.add(allocator, .{ .null = {} });
+
+    return .{ .allocator = allocator, .instructions = .empty, .roots = .empty, .constants = constants };
 }
 
 pub fn count(self: *const Self) usize {
@@ -38,7 +43,8 @@ pub fn addRootInstr(self: *Self, index: ir.Index) void {
 }
 
 pub fn addConstant(self: *Self, instr_data: Instruction.Data, offset: usize) usize {
-    return self.addInstr(.{ .constant = self.constants.add(self.allocator, instr_data) }, offset);
+    const gop = self.constants.add(self.allocator, instr_data);
+    return self.addInstr(.{ .constant = .{ .instr = self.addInstr(instr_data, offset), .index = gop.index } }, offset);
 }
 
 pub fn wrapPreviousInstr(self: *Self, comptime instr: std.meta.FieldEnum(Instruction.Data)) usize {
@@ -71,6 +77,10 @@ pub fn wrapInstrInplace(self: *Self, comptime instr: std.meta.FieldEnum(Instruct
 
 pub fn instrOffset(self: *const Self, instr: usize) usize {
     return self.instructions.items(.offset)[instr];
+}
+
+pub fn data(self: *const Self, instr: usize) Instruction.Data {
+    return self.instructions.items(.data)[instr];
 }
 
 /// Converts instructions offsets to line numbers
@@ -112,50 +122,39 @@ pub fn computeLineFromOffsets(self: *Self, source: [:0]const u8) []const usize {
 }
 
 const ConstInterner = struct {
-    // constants: misc.Set(u64),
-    constants: std.AutoArrayHashMapUnmanaged(u64, Instruction.Data),
+    constants: misc.Set(u64),
 
+    pub const AddRes = struct { found: bool, index: usize };
     pub const empty: ConstInterner = .{ .constants = .empty };
 
-    pub fn add(self: *ConstInterner, allocator: Allocator, instr_data: Instruction.Data) usize {
-        const hashed = self.hash(instr_data);
+    pub fn add(self: *ConstInterner, allocator: Allocator, instr_data: Instruction.Data) AddRes {
+        const hashed = hash(instr_data);
 
-        // if (self.constants.getIndex(hashed)) |index| {
-        //     return index;
-        // }
-
-        const gop = self.constants.getOrPut(allocator, hashed) catch oom();
-        if (!gop.found_existing) {
-            gop.value_ptr.* = instr_data;
+        if (self.constants.getIndex(hashed)) |index| {
+            return .{ .found = true, .index = index };
         }
 
-        return gop.index;
+        self.constants.add(allocator, hashed) catch oom();
+        return .{ .found = false, .index = self.constants.count() - 1 };
     }
 
-    fn hash(self: *ConstInterner, instr_data: Instruction.Data) u64 {
-        _ = self; // autofix
+    fn hash(instr_data: Instruction.Data) u64 {
         var hasher = std.hash.Wyhash.init(0);
         const asBytes = std.mem.asBytes;
 
         hasher.update(asBytes(&@intFromEnum(instr_data)));
 
         switch (instr_data) {
+            .bool => |*i| hasher.update(asBytes(i)),
             .int => |*i| hasher.update(asBytes(i)),
             .float => |*f| hasher.update(asBytes(f)),
             .string => |*s| hasher.update(asBytes(s)),
+            .null => {},
             .enum_create => |e| {
-                hasher.update(asBytes(&e.lhs));
+                hasher.update(asBytes(&e.sym.module_index));
+                hasher.update(asBytes(&e.sym.symbol_index));
                 hasher.update(asBytes(&e.tag_index));
             },
-            // .fn_decl => |*f| {
-            //     if (f.kind != .closure) {
-            //         @panic("Only closure are runtime constants");
-            //     }
-            //
-            //     // Closure are anyways unique, just add it at the end
-            //     const last = self.constants.keys()[self.constants.count() - 1];
-            //     return last + 1;
-            // },
             // TODO: error
             else => @panic("Not a constant"),
         }
