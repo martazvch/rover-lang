@@ -58,7 +58,7 @@
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
-            [Load symbol 0 of module 0]
+            [Load symbol 0 module 0]
             - args
             [Constant 3]
                 [Int 1]

@@ -176,28 +176,23 @@ ret_naked
 get_local index 1
 print
 
-load_sym index 1, <function func>
 load_constant index 4, value 5
-call index 1
+call_sym index 1, arity 1, <function func>
 print
 
-load_sym index 2, <function shortcut>
 load_constant index 14, value 8.5
-call index 1
+call_sym index 2, arity 1, <function shortcut>
 print
 
-load_sym index 3, <function shortcut_bis>
 load_constant index 16, value 18.5
 neg_float
-call index 1
+call_sym index 3, arity 1, <function shortcut_bis>
 print
 
-load_sym index 4, <function nested>
-call index 0
+call_sym index 4, arity 0, <function nested>
 print
 
 ret_naked
 
 -- global scope --
-load_sym index 0, <function main>
-call index 0
+call_sym index 0, arity 0, <function main>

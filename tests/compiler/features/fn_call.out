@@ -20,16 +20,13 @@ get_local index 1
 ret
 
 -- main --
-load_sym index 0, <function add>
-call index 0
+call_sym index 0, arity 0, <function add>
 
-load_sym index 1, <function add1>
 load_constant index 3, value 1
 load_constant index 4, value 2.5
-call index 2
+call_sym index 1, arity 2, <function add1>
 
 ret_naked
 
 -- global scope --
-load_sym index 5, <function main>
-call index 0
+call_sym index 5, arity 0, <function main>

@@ -14,10 +14,9 @@ print
 ret_naked
 
 -- getVecFromPos --
-load_sym index 0, <structure Vec2>
 get_local index 0
 get_local index 1
-struct_lit index 2
+struct_lit index 0, arity 2, <structure Vec2>
 ret
 
 -- getInt --
@@ -31,7 +30,7 @@ ret
 -- global scope --
 exit_repl
 
-// ---- main ----
+// ---- test.rv ----
 -- static --
 load_constant index 4, value 3
 ret
@@ -50,12 +49,10 @@ load_constant index 5, value 5
 ret
 
 -- main --
-load_sym index 0, <structure Foo>
 load_constant index 3, value 8
-struct_lit index 1
+struct_lit index 0, arity 1, <structure Foo>
 
-load_sym index 0, <structure Foo>
-get_fn index 0
+load_sym index 1, <function static>
 
 get_local index 1
 call index 0
@@ -69,8 +66,7 @@ call index 0
 print
 
 get_local index 0
-invoke index 1
-closure index 1
+bound_method index 2
 set_local index 1
 
 get_local index 1
@@ -85,9 +81,7 @@ call index 0
 print
 
 get_local index 0
-invoke index 2
-closure index 1
-
+bound_method index 3
 get_local index 2
 call index 0
 print
@@ -102,5 +96,4 @@ print
 ret_naked
 
 -- global scope --
-load_sym index 5, <function main>
-call index 0
+call_sym index 5, arity 0, <function main>

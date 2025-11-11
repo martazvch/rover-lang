@@ -19,8 +19,7 @@
                 [Constant 4]
                     [String yes]
         [Discard]
-            [Fn call]
-                [Load symbol 4]
+            [Call symbol 4]
                 - args
                 [Constant 5]
                     [Int 1]

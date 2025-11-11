@@ -16,18 +16,18 @@ get_field index 0
 ret
 
 -- main --
-load_sym index 0, <structure Human>
 load_constant index 3, value 5
 load_constant index 4, value Tom
-struct_lit index 2
+struct_lit index 0, arity 2, <structure Human>
+
 push_null
 get_local index 0
-invoke index 0
-closure index 1
+bound_method index 1
+
 push_null
 get_local index 0
-invoke index 1
-closure index 1
+bound_method index 2
+
 get_local index 2
 call index 0
 get_local index 4
@@ -37,5 +37,4 @@ pop
 ret_naked
 
 -- global scope --
-load_sym index 3, <function main>
-call index 0
+call_sym index 3, arity 0, <function main>

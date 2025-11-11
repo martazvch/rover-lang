@@ -46,5 +46,4 @@
                 [Constant 11]
                     [Int 2]
     [Variable declaration index: 15, scope: local]
-        [Fn call]
-            [Load symbol 0]
+        [Call symbol 0]

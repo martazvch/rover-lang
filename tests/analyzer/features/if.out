@@ -134,5 +134,4 @@
             [Constant 13]
                 [Int 2]
     [Discard]
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]

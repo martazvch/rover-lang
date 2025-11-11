@@ -15,5 +15,4 @@ ret_naked
 ret_naked
 
 -- global scope --
-load_sym index 3, <function main>
-call index 0
+call_sym index 3, arity 0, <function main>

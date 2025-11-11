@@ -203,7 +203,7 @@ fn analyzeNode(self: *Self, node: *const Node, expect: ExprResKind, ctx: *Contex
         .assignment => |*n| try self.assignment(n, ctx),
         .discard => |n| try self.discard(n, ctx),
         .enum_decl => |*n| try self.enumDeclaration(n, ctx),
-        .fn_decl => |*n| try self.fnDeclaration(n, ctx),
+        .fn_decl => |*n| (try self.fnDeclaration(n, ctx)).instr,
         .multi_var_decl => |*n| try self.multiVarDecl(n, ctx),
         .print => |n| try self.print(n, ctx),
         .struct_decl => |*n| try self.structDecl(n, ctx),
@@ -326,7 +326,12 @@ fn enumTag(self: *Self, tag: Ast.EnumDecl.Tag, ctx: *const Context) Error!struct
 }
 
 /// Analyzes function declarations in a container (enum or structure)
-fn containerFnDecls(self: *Self, decls: []const Ast.FnDecl, funcs: *type_mod.MapNameType, ctx: *Context) Error![]const InstrIndex {
+fn containerFnDecls(
+    self: *Self,
+    decls: []const Ast.FnDecl,
+    funcs: *AutoHashMapUnmanaged(InternerIdx, LexScope.Symbol),
+    ctx: *Context,
+) Error![]const InstrIndex {
     funcs.ensureTotalCapacity(self.allocator, @intCast(decls.len)) catch oom();
 
     var func_instrs: ArrayList(InstrIndex) = .empty;
@@ -334,16 +339,17 @@ fn containerFnDecls(self: *Self, decls: []const Ast.FnDecl, funcs: *type_mod.Map
 
     for (decls) |*f| {
         const fn_name = self.interner.intern(self.ast.toSource(f.name));
-        func_instrs.appendAssumeCapacity(try self.fnDeclaration(f, ctx));
-        // At this point, the symbol exists
-        const fn_type = self.scope.removeSymbolFromScope(fn_name).?.type;
-        funcs.putAssumeCapacity(fn_name, fn_type);
+        const fn_res = try self.fnDeclaration(f, ctx);
+        func_instrs.appendAssumeCapacity(fn_res.instr);
+        funcs.putAssumeCapacity(fn_name, fn_res.sym);
     }
 
     return func_instrs.toOwnedSlice(self.allocator) catch oom();
 }
 
-fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult {
+const FnDeclRes = struct { instr: usize, sym: LexScope.Symbol };
+
+fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) Error!FnDeclRes {
     const snapshot = ctx.snapshot();
     defer snapshot.restore();
 
@@ -387,18 +393,21 @@ fn fnDeclaration(self: *Self, node: *const Ast.FnDecl, ctx: *Context) StmtResult
         self.main = sym.index;
     }
 
-    return self.irb.addInstr(
-        .{ .fn_decl = .{
-            .sym_index = sym.index,
-            .type_id = self.ti.typeId(interned_type),
-            .name = name,
-            .body = body_instrs,
-            .defaults = param_res.defaults,
-            .captures = captures,
-            .returns = returns,
-        } },
-        span.start,
-    );
+    return .{
+        .instr = self.irb.addInstr(
+            .{ .fn_decl = .{
+                .sym_index = sym.index,
+                .type_id = self.ti.typeId(interned_type),
+                .name = name,
+                .body = body_instrs,
+                .defaults = param_res.defaults,
+                .captures = captures,
+                .returns = returns,
+            } },
+            span.start,
+        ),
+        .sym = sym.*,
+    };
 }
 
 fn loadFunctionCaptures(self: *Self, captures_meta: *const Ast.FnDecl.Meta.Captures) Error![]const Instruction.FnDecl.Capture {
@@ -492,7 +501,6 @@ fn fnBody(self: *Self, body: []Node, fn_type: *const Type.Function, name_span: S
         returns = res.cf == .@"return";
 
         // If last expression produced a value and that it wasn't the last one we pop it
-        // if (!last and !final_type.is(.void) and !res.ti.type.is(.never)) {
         if (!last and !final_type.is(.void) and !res.type.is(.never)) {
             instrs.appendAssumeCapacity(self.irb.wrapPreviousInstr(.pop));
         } else {
@@ -709,7 +717,6 @@ fn structDecl(self: *Self, node: *const Ast.StructDecl, ctx: *Context) StmtResul
 }
 
 fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure, ctx: *Context) Error![]const InstrIndex {
-    // TODO: make a list of constant index?
     var default_fields: ArrayList(InstrIndex) = .empty;
     ty.fields.ensureTotalCapacity(self.allocator, fields.len) catch oom();
 
@@ -1256,19 +1263,7 @@ fn enumLit(self: *Self, tag: Ast.TokenIndex, ctx: *Context) Result {
 
 fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
     const span = self.ast.getSpan(expr.structure);
-
-    const struct_res: InstrInfos = switch (expr.structure.*) {
-        .field => |*f| try self.field(f, ctx),
-        .literal => |e| b: {
-            const ident = try self.identifier(e.idx, true, ctx);
-            break :b .{
-                .type = ident.type,
-                .ti = .{ .heap = true, .is_sym = ident.kind != .variable, .ext_mod = ident.module },
-                .instr = ident.instr,
-            };
-        },
-        else => try self.analyzeExpr(expr.structure, .value, ctx),
-    };
+    const struct_res = try self.analyzeExpr(expr.structure, .any, ctx);
 
     const field_res = switch (struct_res.type.*) {
         .@"enum" => |ty| b: {
@@ -1287,14 +1282,9 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
         ),
     };
 
-    const kind: Instruction.Field.Kind = switch (field_res.kind) {
-        // TODO: create just a 'function'. For now we need this because we get static method from
-        // symbols that are loaded on stack, not in register so we need a separate logic
-        .function => if (struct_res.ti.is_sym) .static_method else .method,
-        else => .field,
-    };
+    const is_static = field_res.kind == .function and struct_res.ti.is_sym;
 
-    if (kind == .method and !ctx.in_call) {
+    if (!is_static and field_res.kind != .field and !ctx.in_call) {
         return self.boundMethod(field_res.type, field_res.index, struct_res.instr, span);
     }
 
@@ -1307,16 +1297,24 @@ fn field(self: *Self, expr: *const Ast.Field, ctx: *Context) Result {
             .is_sym = field_res.kind == .function,
             .ext_mod = struct_res.ti.ext_mod,
         },
-        .instr = self.irb.addInstr(
-            .{ .field = .{ .structure = struct_res.instr, .index = field_res.index, .kind = kind } },
-            span.start,
-        ),
+        // If it's a static function, we just call it
+        .instr = if (is_static)
+            self.irb.addInstr(
+                .{ .load_symbol = .{ .symbol_index = @intCast(field_res.index), .module_index = struct_res.ti.ext_mod } },
+                span.start,
+            )
+            // Other wise we still want to compute 'self' to call the method on it
+        else
+            self.irb.addInstr(
+                .{ .field = .{ .structure = struct_res.instr, .index = field_res.index, .kind = field_res.kind } },
+                span.start,
+            ),
     };
 }
 
 const AccessResult = struct {
     type: *const Type,
-    kind: enum { field, function },
+    kind: Instruction.Field.Kind,
     index: usize,
 };
 
@@ -1347,7 +1345,7 @@ fn enumAccess(self: *Self, enum_info: InstrInfos, ty: Type.Enum, tag_tk: Ast.Tok
             },
         };
     } else if (ty.functions.get(tag_name)) |func| {
-        return .{ .decl = .{ .type = func, .kind = .function, .index = ty.functions.getIndex(tag_name).? } };
+        return .{ .decl = .{ .type = func.type, .kind = .function, .index = func.index } };
     }
 
     return self.err(
@@ -1363,7 +1361,7 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Struct
     if (ty.fields.getPtr(field_name)) |f| {
         return .{ .type = f.type, .kind = .field, .index = ty.fields.getIndex(field_name).? };
     } else if (ty.functions.get(field_name)) |f| {
-        const function = &f.function;
+        const function = &f.type.function;
 
         if (in_call) {
             // Call method on type
@@ -1376,7 +1374,8 @@ fn structureAccess(self: *Self, field_tk: Ast.TokenIndex, ty: *const Type.Struct
             }
         }
 
-        return .{ .type = f, .kind = .function, .index = ty.functions.getIndex(field_name).? };
+        // TODO: can remove the 'Array' hashmap for a hashmap
+        return .{ .type = f.type, .kind = .function, .index = f.index };
     }
 
     return self.err(.{ .undeclared_field_access = .{ .name = text } }, self.ast.getSpan(field_tk));
@@ -1429,11 +1428,12 @@ fn call(self: *Self, expr: *const Ast.FnCall, ctx: *Context) Result {
 
     return .{
         .type = callee.type.function.return_type,
+        .ti = .{ .ext_mod = callee.ti.ext_mod },
         .instr = self.irb.addInstr(
             .{ .call = .{
                 .callee = callee.instr,
                 .args = args_res,
-                .implicit_first = callee.type.function.kind == .method,
+                .ext_mod = callee.ti.ext_mod,
                 .native = callee.type.function.kind == .native or callee.type.function.kind == .native_method,
             } },
             span.start,
@@ -1520,7 +1520,7 @@ fn fnArgsList(
 
 const IdentRes = struct {
     type: *const Type,
-    kind: enum { variable, symbol, module },
+    kind: enum { variable, symbol },
     comp_time: bool = true,
     instr: InstrIndex,
     module: ?usize = null,
@@ -1568,7 +1568,7 @@ fn identifier(self: *Self, token_name: Ast.TokenIndex, initialized: bool, ctx: *
     }
 
     if (self.scope.getModule(name)) |mod| {
-        return .{ .type = mod, .kind = .module, .instr = 0 };
+        return .{ .type = mod, .kind = .symbol, .instr = 0 };
     }
 
     return self.err(.{ .undeclared_var = .{ .name = text } }, self.ast.getSpan(token_name));

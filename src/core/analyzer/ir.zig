@@ -112,7 +112,12 @@ pub const Instruction = struct {
     };
     pub const BoundMethod = struct { structure: Index, index: usize };
     pub const Break = struct { instr: ?Index, depth: usize };
-    pub const Call = struct { callee: Index, args: []const Arg, implicit_first: bool, native: bool };
+    pub const Call = struct {
+        callee: Index,
+        args: []const Arg,
+        ext_mod: ?usize,
+        native: bool,
+    };
     pub const Arg = union(enum) {
         instr: Index,
         default: struct { const_index: usize, mod: ?usize },
@@ -130,6 +135,13 @@ pub const Instruction = struct {
         sym_index: SymbolIndex,
         functions: []const Index,
     };
+    pub const Field = struct {
+        structure: Index,
+        index: usize,
+        kind: Kind,
+
+        pub const Kind = enum { field, function };
+    };
     pub const FnDecl = struct {
         sym_index: SymbolIndex,
         type_id: TypeId,
@@ -140,13 +152,6 @@ pub const Instruction = struct {
         returns: bool,
 
         pub const Capture = struct { index: usize, local: bool };
-    };
-    pub const Field = struct {
-        structure: Index,
-        index: usize,
-        kind: Kind,
-
-        pub const Kind = enum { method, field, static_method, symbol };
     };
     pub const If = struct {
         cond: Index,

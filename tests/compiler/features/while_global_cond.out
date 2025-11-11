@@ -19,5 +19,4 @@ ret_naked
 load_constant index 3, value 0
 def_global index 0
 
-load_sym index 0, <function main>
-call index 0
+call_sym index 0, arity 0, <function main>

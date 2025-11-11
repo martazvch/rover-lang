@@ -193,12 +193,6 @@ pub fn forwardDeclareSymbol(self: *Self, allocator: Allocator, name: InternerIdx
     return self.current.symbols.getPtr(name).?;
 }
 
-/// Removes symbol name from **current** scope
-pub fn removeSymbolFromScope(self: *Self, name: InternerIdx) ?Symbol {
-    const sym = self.current.symbols.fetchOrderedRemove(name) orelse return null;
-    return sym.value;
-}
-
 pub fn getSymbol(self: *const Self, name: InternerIdx) ?*Symbol {
     var it = self.iterator();
     while (it.next()) |scope| {

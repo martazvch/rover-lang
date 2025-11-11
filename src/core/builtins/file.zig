@@ -23,13 +23,18 @@ const File = struct {
         .name = "File",
         .functions = &.{
             .init("readAll", readAll, "", &.{}),
+            .init("deinit", deinit, "", &.{}),
         },
     };
 
     fn readAll(self: *Self, vm: *Vm) []const u8 {
         _ = self; // autofix
         _ = vm; // autofix
-        return "";
+        return "abcd";
+    }
+
+    fn deinit(self: *Self, vm: *Vm) void {
+        vm.allocator.destroy(self);
     }
 };
 
@@ -39,7 +44,7 @@ fn open(vm: *Vm, path: []const u8) *File {
         .fd = std.fs.cwd().openFile(path, .{}) catch unreachable,
     };
 
-    const obj = Obj.NativeObj.create(vm, "File", self);
+    const obj = Obj.NativeObj.create(vm, "File", self, File.zig_struct.getFunctions());
 
     return @ptrCast(@alignCast(&obj.child));
 }

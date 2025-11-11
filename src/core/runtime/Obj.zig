@@ -190,16 +190,6 @@ pub fn log(self: *Obj) void {
     }
 }
 
-pub fn getFn(self: *Obj, index: usize) Value {
-    return switch (self.kind) {
-        .@"enum" => self.as(Enum).functions[index],
-        .enum_instance => self.as(EnumInstance).parent.functions[index],
-        .structure => self.as(Structure).functions[index],
-        .instance => self.as(Instance).parent.functions[index],
-        else => unreachable,
-    };
-}
-
 pub fn structLiteral(self: *Obj, vm: *Vm) *Instance {
     return switch (self.kind) {
         .structure => Instance.create(vm, self.as(Structure)),
@@ -456,15 +446,13 @@ pub const Structure = struct {
     obj: Obj,
     name: []const u8,
     field_count: usize,
-    functions: []Value,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize, functions: []Value) *Self {
+    pub fn create(allocator: Allocator, name: []const u8, type_id: TypeId, field_count: usize) *Self {
         const obj = Obj.allocateComptime(allocator, Self, type_id);
         obj.name = allocator.dupe(u8, name) catch oom();
         obj.field_count = field_count;
-        obj.functions = functions;
 
         return obj;
     }
@@ -476,7 +464,6 @@ pub const Structure = struct {
     // Functions aren't freed because they are on the main linked list of objects in the VM
     // The memory of the array is owned though
     pub fn deinit(self: *Self, vm: *Vm) void {
-        vm.allocator.free(self.functions);
         vm.gc_alloc.destroy(self);
     }
 };
@@ -532,15 +519,13 @@ pub const Enum = struct {
     obj: Obj,
     name: []const u8,
     // tags: []const []const u8,
-    functions: []Value,
 
     const Self = @This();
 
-    pub fn create(allocator: Allocator, name: []const u8, functions: []Value) *Self {
+    pub fn create(allocator: Allocator, name: []const u8) *Self {
         const obj = Obj.allocateComptime(allocator, Self, undefined);
         obj.name = allocator.dupe(u8, name) catch oom();
         // obj.tags = tags;
-        obj.functions = functions;
 
         return obj;
     }
@@ -556,7 +541,6 @@ pub const Enum = struct {
         //     vm.allocator.free(tag);
         // }
         // vm.allocator.free(self.tags);
-        // vm.allocator.free(self.functions);
         vm.gc_alloc.destroy(self);
     }
 };
@@ -591,18 +575,18 @@ pub const NativeObj = struct {
     obj: Obj,
     name: []const u8,
     child: *anyopaque,
-    // info: ffi.ZigStruct,
+    funcs: []const ffi.ZigFn,
 
     const Self = @This();
 
     // pub fn create(vm: *Vm, name: []const u8, child: *anyopaque, info: ffi.ZigStruct) *Self {
-    pub fn create(vm: *Vm, name: []const u8, child: *anyopaque) *Self {
+    pub fn create(vm: *Vm, name: []const u8, child: *anyopaque, funcs: []const ffi.ZigFn) *Self {
         // Fields first for GC because other wise allocating fields after creation
         // of the instance may trigger GC in between
         const obj = Obj.allocate(vm, Self, undefined);
         obj.name = name;
         obj.child = child;
-        // obj.info = info;
+        obj.funcs = funcs;
 
         if (options.log_gc) obj.asObj().log();
 

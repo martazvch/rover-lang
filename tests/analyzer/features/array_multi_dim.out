@@ -41,8 +41,7 @@
                     [Constant 8]
                     [Constant 11]
                         [Int 7]
-                    [Fn call]
-                        [Load symbol 1]
+                    [Call symbol 1]
                 [Array]
                     [Constant 12]
                         [Int 8]
@@ -72,8 +71,7 @@
         [Int 99]
     [Array assignment]
         - index
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]
         [Unary minus]
             [Constant 4]
         - array
@@ -83,8 +81,7 @@
     [Array assignment]
         [Cow]
         - index
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]
         - array
         [Field access 0]
             [Variable index: 2, scope: local]
@@ -93,16 +90,14 @@
     [Array assignment]
         - index
         [Constant 4]
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]
         - array
         [Field access 0]
             [Variable index: 2, scope: local]
     [Print]
         [Array access]
             - index
-            [Fn call]
-                [Load symbol 1]
+            [Call symbol 1]
             - array
             [Field access 0]
                 [Variable index: 2, scope: local]
@@ -110,8 +105,7 @@
         [Array access]
             - index
             [Constant 4]
-            [Fn call]
-                [Load symbol 1]
+            [Call symbol 1]
             - array
             [Field access 0]
                 [Variable index: 2, scope: local]

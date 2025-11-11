@@ -67,8 +67,10 @@ fn registerStruct(self: *Self, allocator: Allocator, S: type, interner: *Interne
         @compileError("zig_struct constant must be of type: " ++ @typeName(ffi.ZigStructMeta));
     }
 
+    // TODO: handle container name properly
+    const struct_name = interner.intern(zig_struct.name);
     var s: Type.Structure = .{
-        .loc = null,
+        .loc = .{ .name = struct_name, .container = interner.intern("std") },
         .fields = .empty,
         .functions = .empty,
     };
@@ -80,11 +82,16 @@ fn registerStruct(self: *Self, allocator: Allocator, S: type, interner: *Interne
 
     inline for (zig_struct.functions) |*func| {
         const f = self.fnZigToRover(allocator, func, interner, ti);
-        ty.structure.functions.putAssumeCapacity(interner.intern(func.name), f);
+        const interned_name = interner.intern(func.name);
+        if (ty.structure.functions.contains(interned_name)) {
+            // TODO: error
+            @panic("Already declared function");
+        }
+        ty.structure.functions.putAssumeCapacity(interned_name, f);
     }
 
     // TODO: use assume capacity (check all the 'put')
-    self.structs_meta.put(allocator, interner.intern(zig_struct.name), ty) catch oom();
+    self.structs_meta.put(allocator, struct_name, ty) catch oom();
 }
 
 // We can use pointers here because we refer to comptime declarations in Module
@@ -92,8 +99,6 @@ fn registerFn(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, int
     self.funcs_meta.put(allocator, interner.intern(func.name), self.fnZigToRover(allocator, func, interner, ti)) catch oom();
     const value = Value.makeObj(Obj.NativeFunction.create(allocator, func.name, func.function).asObj());
 
-    // self.funcs.append(allocator, .{ .name = func.name, .func = func.function }) catch oom();
-    // self.funcs.append(allocator, .{ .name = func.name, .func = value }) catch oom();
     self.funcs.append(allocator, value) catch oom();
 }
 
@@ -115,9 +120,10 @@ fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, i
         );
     }
 
+    // TODO: handle container name properly
     const ty: Type.Function = .{
         .kind = if (offset == 2) .native_method else .native,
-        .loc = null,
+        .loc = .{ .name = interner.intern(func.name), .container = interner.intern("std") },
         .return_type = self.zigToRover(allocator, func.info.return_type.?, interner, ti),
         .params = params,
     };
@@ -129,6 +135,7 @@ fn zigToRover(self: *Self, allocator: Allocator, ty: type, interner: *Interner, 
     return switch (ty) {
         i64 => ti.getCached(.int),
         f64 => ti.getCached(.float),
+        void => ti.getCached(.void),
         []const u8 => ti.getCached(.str),
         else => switch (@typeInfo(ty)) {
             .@"union" => |u| {

@@ -19,5 +19,4 @@ set_global index 1
 load_constant index 7, value Best software
 set_global index 2
 
-load_sym index 0, <function main>
-call index 0
+call_sym index 0, arity 0, <function main>

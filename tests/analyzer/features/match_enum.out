@@ -5,14 +5,14 @@
         [Constant 3]
             [Enum create]
                 - enum
-                [Load symbol 0 of module 0]
+                [Load symbol 0 module 0]
                 - tag
                 2
     [Variable declaration index: 1, scope: local]
         [Constant 4]
             [Enum create]
                 - enum
-                [Load symbol 1 of module 0]
+                [Load symbol 1 module 0]
                 - tag
                 0
     [Match]
@@ -60,7 +60,7 @@
             [Constant 11]
                 [Enum create]
                     - enum
-                    [Load symbol 0 of module 0]
+                    [Load symbol 0 module 0]
                     - tag
                     1
         - body:
@@ -70,7 +70,7 @@
             [Constant 12]
                 [Enum create]
                     - enum
-                    [Load symbol 0 of module 0]
+                    [Load symbol 0 module 0]
                     - tag
                     0
         - body:

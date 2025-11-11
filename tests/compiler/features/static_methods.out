@@ -1,40 +1,32 @@
 //---- test.rv ----
 
 -- new --
-load_sym index 0, <structure Vec1>
 get_local index 0
-struct_lit index 1
+struct_lit index 0, arity 1, <structure Vec1>
 ret
 
 -- new --
-load_sym index 4, <structure Vec2>
 get_local index 0
 get_local index 1
-struct_lit index 2
+struct_lit index 4, arity 2, <structure Vec2>
 ret
 
 -- main --
-load_sym index 0, <structure Vec1>
-get_fn index 0
 load_constant index 3, value 5
-call index 1
+call_sym index 1, arity 1, <function new>
 
-load_sym index 0, <structure Vec1>
-get_fn index 0
+load_sym index 1, <function new>
 
 get_local index 1
 load_constant index 4, value 65
 call index 1
 set_local index 0
 
-load_sym index 4, <structure Vec2>
-get_fn index 0
 load_constant index 5, value 12
 load_constant index 6, value 99
-call index 2
+call_sym index 5, arity 2, <function new>
 
-load_sym index 4, <structure Vec2>
-get_fn index 0
+load_sym index 5, <function new>
 
 get_local index 3
 load_constant index 7, value 56
@@ -45,5 +37,4 @@ set_local index 2
 ret_naked
 
 -- global scope --
-load_sym index 2, <function main>
-call index 0
+call_sym index 2, arity 0, <function main>

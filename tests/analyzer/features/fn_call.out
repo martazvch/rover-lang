@@ -1,19 +1,16 @@
 [Function declaration add]
 [Function declaration mul]
 [Function declaration main]
-    [Fn call]
-        [Load symbol 0]
+    [Call symbol 0]
         - args
         [Constant 3]
             [Int 2]
     [Function declaration sub]
-    [Fn call]
-        [Load symbol 3]
+    [Call symbol 3]
         - args
         [Constant 3]
     [Function declaration div]
-    [Fn call]
-        [Load symbol 4]
+    [Call symbol 4]
         - args
         [Constant 4]
             [Float 2]
@@ -25,8 +22,7 @@
             [Float 67]
         [Constant 8]
             [String yup]
-    [Fn call]
-        [Load symbol 1]
+    [Call symbol 1]
         - args
         [Constant 3]
         [Constant 9]

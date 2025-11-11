@@ -110,7 +110,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
     const stdout = &stdout_writer.interface;
 
     var frame = try self.frame_stack.new();
-    frame.initCall(entry_point.asObj(), &self.stack, 0, self.modules);
+    frame.call(entry_point, &self.stack, 0, self.modules);
 
     while (true) {
         if (comptime options.print_stack) {
@@ -119,7 +119,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
         }
 
         if (comptime options.print_instr) {
-            var dis = Disassembler.initMod(&frame.function.chunk, frame.module, .normal);
+            var dis = Disassembler.init(&frame.function.chunk, frame.module, .normal);
             const instr_nb = self.instructionNb();
             _ = dis.disInstruction(stdout, instr_nb);
         }
@@ -206,6 +206,18 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 array.values.items[index] = self.stack.peek(depth + 1);
                 self.stack.top -= depth + 2;
             },
+            .bound_method => {
+                const sym_index = frame.readByte();
+
+                const closure = Obj.Closure.create(
+                    self,
+                    frame.module.symbols[sym_index].obj.as(Obj.Function),
+                    (self.stack.top - 1)[0..1],
+                );
+                // Discard the function
+                self.stack.top -= 1;
+                self.stack.push(Value.makeObj(closure.asObj()));
+            },
             .box => {
                 const to_box = self.stack.pop();
                 const boxed = Value.makeObj(Obj.Box.create(self, to_box).asObj());
@@ -214,11 +226,22 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .call => {
                 const args_count = frame.readByte();
                 frame = try self.frame_stack.newKeepMod();
-                frame.initCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
+                frame.runtimeCall(self.stack.peekRef(args_count).obj, &self.stack, args_count, self.modules);
+            },
+            .call_sym => {
+                const index = frame.readByte();
+                const arity = frame.readByte();
+                frame = try self.frame_stack.newKeepMod();
+                frame.call(frame.module.symbols[index].obj.as(Obj.Function), &self.stack, arity, self.modules);
+            },
+            .call_sym_ext => {
+                const index = frame.readByte();
+                const module = frame.readByte();
+                const arity = frame.readByte();
+                frame = try self.frame_stack.newKeepMod();
+                frame.call(self.modules[module].symbols[index].obj.as(Obj.Function), &self.stack, arity, self.modules);
             },
             .call_native => {
-                // TODO: auto push to stack? maybe two op code for knowing if
-                // builtin returns or not to don't check at runtime
                 const args_count = frame.readByte();
                 const native = self.stack.peekRef(args_count).obj.as(Obj.NativeFunction).function;
                 const result = native(self, (self.stack.top - args_count)[0..args_count]);
@@ -310,20 +333,10 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 value.obj = self.cow(value.obj);
                 self.stack.push(value.*);
             },
-            .get_fn => {
-                const index = frame.readByte();
-                self.stack.peekRef(0).* = self.stack.peekRef(0).obj.getFn(index);
-            },
             .get_tag => self.stack.peekRef(0).* = .makeInt(self.stack.peek(0).obj.as(Obj.EnumInstance).tag_id),
             .gt_float => self.stack.push(Value.makeBool(self.stack.pop().float < self.stack.pop().float)),
             .gt_int => self.stack.push(Value.makeBool(self.stack.pop().int < self.stack.pop().int)),
             .incr_ref => self.stack.peekRef(0).obj.ref_count += 1,
-            .invoke => {
-                const index = frame.readByte();
-                // Puts 'self' on as first arg
-                self.stack.push(self.stack.peek(0));
-                self.stack.peekRef(1).* = self.stack.peekRef(0).obj.getFn(index);
-            },
             .is_bool => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .bool),
             .is_float => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .float),
             .is_int => self.stack.peekRef(0).* = .makeBool(self.stack.peek(0) == .int),
@@ -352,9 +365,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .lt_int => self.stack.push(Value.makeBool(self.stack.pop().int > self.stack.pop().int)),
             .le_float => self.stack.push(Value.makeBool(self.stack.pop().float >= self.stack.pop().float)),
             .le_int => self.stack.push(Value.makeBool(self.stack.pop().int >= self.stack.pop().int)),
-
             .load_blk_val => self.stack.push(frame.blk_val),
-
             .load_constant => self.stack.push(frame.readConstant()),
             .load_ext_constant => {
                 const const_index = frame.readByte();
@@ -376,7 +387,6 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const symbol_idx = frame.readByte();
                 self.stack.push(frame.module.symbols[symbol_idx]);
             },
-
             .loop => {
                 const jump = frame.readShort();
                 frame.ip -= jump;
@@ -420,7 +430,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                     break;
                 }
 
-                self.stack.top = frame.slots - 1;
+                self.stack.top = frame.slots;
                 self.stack.push(result);
 
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
@@ -436,7 +446,7 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                     break;
                 }
 
-                self.stack.top = frame.slots - 1;
+                self.stack.top = frame.slots;
                 frame = &self.frame_stack.frames[self.frame_stack.count - 1];
             },
             .set_field => {
@@ -454,22 +464,21 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
                 const index = frame.readByte();
                 frame.slots[index].obj.as(Obj.Box).value = self.stack.pop();
             },
-
             .store_blk_val => frame.blk_val = self.stack.pop(),
-
             .str_cat => self.strConcat(),
             .str_mul => self.strMul(self.stack.peekRef(0).obj.as(Obj.String), self.stack.peekRef(1).int),
             .struct_lit => {
+                const index = frame.readByte();
                 const arity = frame.readByte();
-                // PERF: do we need a function call?
-                var instance = self.stack.peekRef(arity).obj.structLiteral(self);
-
-                for (0..arity) |i| {
-                    instance.fields[i] = self.stack.peek(arity - i - 1);
-                }
-
-                self.stack.peekRef(arity).* = Value.makeObj(instance.asObj());
-                self.stack.top -= arity;
+                const instance = Obj.Instance.create(self, frame.module.symbols[index].obj.as(Obj.Structure));
+                structLit(instance, arity, &self.stack);
+            },
+            .struct_lit_ext => {
+                const index = frame.readByte();
+                const module = frame.readByte();
+                const arity = frame.readByte();
+                const instance = Obj.Instance.create(self, self.modules[module].symbols[index].obj.as(Obj.Structure));
+                structLit(instance, arity, &self.stack);
             },
             .sub_float => {
                 const rhs = self.stack.pop().float;
@@ -486,6 +495,15 @@ fn execute(self: *Self, entry_point: *Obj.Function) !void {
             .unbox => self.stack.peekRef(0).* = self.stack.peekRef(0).obj.as(Obj.Box).value,
         }
     }
+}
+
+fn structLit(instance: *Obj.Instance, arity: usize, stack: *Stack) void {
+    for (0..arity) |i| {
+        instance.fields[i] = stack.peek(arity - i - 1);
+    }
+
+    stack.top -= arity;
+    stack.push(Value.makeObj(instance.asObj()));
 }
 
 /// Checks clone on write
@@ -575,7 +593,7 @@ const Stack = struct {
 
         while (value != self.top) : (value += 1) {
             // Start of call frame
-            if (value == frame.slots - 1) try writer.writeAll(">");
+            if (value == frame.slots) try writer.writeAll(">");
 
             try writer.writeAll("[");
             value[0].print(writer);
@@ -611,25 +629,42 @@ pub const CallFrame = struct {
         return (@as(u16, part1) << 8) | part2;
     }
 
-    // PERF: preshot the closure or function?
-    pub fn initCall(self: *CallFrame, callee: *Obj, stack: *Stack, args_count: usize, modules: []CompiledModule) void {
+    /// Sets the call to the provided function
+    pub fn call(self: *CallFrame, func: *Obj.Function, stack: *Stack, args_count: usize, modules: []CompiledModule) void {
         self.slots = stack.top - args_count;
+        self.module = &modules[func.module_index];
+        self.function = func;
+        self.ip = func.chunk.code.items.ptr;
+    }
+
+    /// Calls a function bounded to a runtime value. Checks what kind of function it is before calling
+    pub fn runtimeCall(self: *CallFrame, callee: *Obj, stack: *Stack, args_count: usize, modules: []CompiledModule) void {
+        // As it's a runtime value containing the function, it's on top of stack. We got one slot behind to override it
+        self.slots = stack.top - args_count - 1;
 
         const function = switch (callee.kind) {
             .closure => b: {
                 const closure = callee.as(Obj.Closure);
                 const capt_len = closure.captures.len;
 
-                std.mem.copyBackwards(Value, self.slots[capt_len .. capt_len + args_count], self.slots[0..args_count]);
+                // Moves arguments after captures that are in the first local slots of the call frame
+                std.mem.copyBackwards(Value, self.slots[capt_len .. capt_len + args_count], self.slots[1 .. 1 + args_count]);
+                // Copy the captures at the beginning of the call frame
                 @memcpy(self.slots, closure.captures);
-                stack.top += capt_len;
-
+                // -1 because we moved the slots back 1 cell already
+                if (capt_len > 0) stack.top += capt_len - 1;
                 self.captures = closure.captures;
                 break :b closure.function;
             },
             .function => b: {
                 const function = callee.as(Obj.Function);
                 self.module = &modules[function.module_index];
+                // Moves all arguments one slot back to override the runtime variable containing the function
+                // Not ideal regarding performance but allow the return address to be in the right place
+                // It comes from the fact that runtime calls are handled the same way as comptime resolved
+                // symbol calls and as they don't live on stack the return address is the first argument's slot
+                std.mem.copyForwards(Value, self.slots[0..args_count], self.slots[1 .. 1 + args_count]);
+                stack.top -= 1;
                 break :b function;
             },
             else => unreachable,

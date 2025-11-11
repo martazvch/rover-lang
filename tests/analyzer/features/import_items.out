@@ -85,7 +85,7 @@
     [Variable declaration index: 0, scope: local]
         [Structure literal]
             - structure
-            [Load symbol 0 of module 0]
+            [Load symbol 0 module 0]
             - args
             [Constant 3]
                 [Int 3]
@@ -94,7 +94,7 @@
     [Variable declaration index: 1, scope: local]
         [Structure literal]
             - structure
-            [Load symbol 0 of module 1]
+            [Load symbol 0 module 1]
             - args
             [Constant 5]
                 [Int 5]
@@ -104,11 +104,10 @@
         [Variable declaration index: 0, scope: local]
             [Structure literal]
                 - structure
-                [Load symbol 0 of module 0]
+                [Load symbol 0 module 0]
                 - args
                 [Constant 7]
                     [Int 55]
                 [Constant 8]
                     [Int 333]
-    [Fn call]
-        [Load symbol 2 of module 0]
+    [Call symbol 2 module 0]

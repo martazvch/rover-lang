@@ -7,8 +7,7 @@ ret
 
 -- mul --
 get_local index 0
-load_sym index 1, <function sub>
-call index 0
+call_sym index 1, arity 0, <function sub>
 mul_int
 ret
 
@@ -16,5 +15,4 @@ ret
 ret_naked
 
 -- global scope --
-load_sym index 3, <function main>
-call index 0
+call_sym index 3, arity 0, <function main>

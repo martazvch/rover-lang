@@ -6,8 +6,7 @@
     [If]
     - condition:
         [Extractor]
-            [Fn call]
-                [Load symbol 0]
+            [Call symbol 0]
     - then:
         [Block pop count: 1, is_expr: false]
             [Print]
@@ -15,8 +14,7 @@
     [While]
     - condition:
         [Extractor]
-            [Fn call]
-                [Load symbol 0]
+            [Call symbol 0]
     - body:
         [Block pop count: 1, is_expr: false]
             [Print]

@@ -55,6 +55,17 @@ pub const ZigStructMeta = struct {
         desc: []const u8,
         offset: usize,
     };
+
+    pub fn getFunctions(self: *const ZigStructMeta) []const ZigFn {
+        comptime var funcs: [self.functions.len]ZigFn = undefined;
+
+        inline for (self.functions, 0..) |func, i| {
+            funcs[i] = func.function;
+        }
+
+        const copy = funcs;
+        return &copy;
+    }
 };
 
 pub const ZigStruct = struct {
@@ -81,7 +92,7 @@ pub fn makeNative(func: anytype) ZigFn {
                 }
             }
 
-            if (@typeInfo(@TypeOf(func)).@"fn".return_type != null) {
+            if (@typeInfo(@TypeOf(func)).@"fn".return_type.? != void) {
                 const res = @call(.auto, func, args);
                 return toValue(vm, res);
             } else {

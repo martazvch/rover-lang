@@ -66,8 +66,11 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .array_get_chain_cow => self.indexInstruction(writer, "array_get_chain_cow", offset),
         .array_set => self.simpleInstruction(writer, "array_set", offset),
         .array_set_chain => self.indexInstruction(writer, "array_set_chain", offset),
+        .bound_method => self.indexInstruction(writer, "bound_method", offset),
         .box => self.simpleInstruction(writer, "box", offset),
         .call => self.indexInstruction(writer, "call", offset),
+        .call_sym => self.callSym(writer, offset),
+        .call_sym_ext => self.callExtSym(writer, offset),
         .call_native => self.indexInstruction(writer, "call_native", offset),
         .closure => self.indexInstruction(writer, "closure", offset),
         .def_global => self.indexInstruction(writer, "def_global", offset),
@@ -91,8 +94,6 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .get_global_cow => self.getGlobal(writer, true, offset),
         .get_local => self.indexInstruction(writer, "get_local", offset),
         .get_local_cow => self.indexInstruction(writer, "get_local_cow", offset),
-        .invoke => self.indexInstruction(writer, "invoke", offset),
-        .get_fn => self.getMember(writer, "get_fn", offset),
         .get_tag => self.simpleInstruction(writer, "get_tag", offset),
         .gt_float => self.simpleInstruction(writer, "gt_float", offset),
         .gt_int => self.simpleInstruction(writer, "gt_int", offset),
@@ -141,7 +142,8 @@ pub fn disInstruction(self: *Self, writer: *Writer, offset: usize) usize {
         .store_blk_val => self.simpleInstruction(writer, "store_blk_val", offset),
         .str_cat => self.simpleInstruction(writer, "str_cat", offset),
         .str_mul => self.simpleInstruction(writer, "str_mul", offset),
-        .struct_lit => self.indexInstruction(writer, "struct_lit", offset),
+        .struct_lit => self.structLiteral(writer, offset),
+        .struct_lit_ext => self.structLiteralExt(writer, offset),
         .sub_float => self.simpleInstruction(writer, "sub_float", offset),
         .sub_int => self.simpleInstruction(writer, "sub_int", offset),
         .swap_pop => self.simpleInstruction(writer, "swap_pop", offset),
@@ -273,4 +275,70 @@ fn getMember(self: *Self, writer: *Writer, name: []const u8, offset: usize) Writ
     }
 
     return offset + 2;
+}
+
+fn callSym(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
+    const text = "call_sym";
+    const index = self.chunk.code.items[offset + 1];
+    const arity = self.chunk.code.items[offset + 2];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, arity {}, ", .{ text, index, arity });
+    } else {
+        try writer.print("{s:<20} index {:>4}, arity {:>4}, ", .{ text, index, arity });
+    }
+
+    const symbol = self.symbols[index];
+    symbol.print(writer);
+    try writer.print("\n", .{});
+
+    return offset + 3;
+}
+
+fn callExtSym(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
+    const text = "call_sym_ext";
+    const index = self.chunk.code.items[offset + 1];
+    const module = self.chunk.code.items[offset + 2];
+    const arity = self.chunk.code.items[offset + 3];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, module {}, arity {}\n", .{ text, index, module, arity });
+    } else {
+        try writer.print("{s:<20} index {:>4}, module {:>4}, arity {:>4}\n", .{ text, index, module, arity });
+    }
+
+    return offset + 4;
+}
+
+fn structLiteral(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
+    const text = "struct_lit";
+    const index = self.chunk.code.items[offset + 1];
+    const arity = self.chunk.code.items[offset + 2];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, arity {}, ", .{ text, index, arity });
+    } else {
+        try writer.print("{s:<20} index {:>4}, arity {:>4}, ", .{ text, index, arity });
+    }
+
+    const symbol = self.symbols[index];
+    symbol.print(writer);
+    try writer.print("\n", .{});
+
+    return offset + 3;
+}
+
+fn structLiteralExt(self: *Self, writer: *Writer, offset: usize) Writer.Error!usize {
+    const text = "struct_lit_ext";
+    const index = self.chunk.code.items[offset + 1];
+    const module = self.chunk.code.items[offset + 2];
+    const arity = self.chunk.code.items[offset + 3];
+
+    if (self.render_mode == .@"test") {
+        try writer.print("{s} index {}, module {}, arity {}\n", .{ text, index, module, arity });
+    } else {
+        try writer.print("{s:<20} index {:>4}, module {:>4}, arity {:>4}\n", .{ text, index, module, arity });
+    }
+
+    return offset + 4;
 }

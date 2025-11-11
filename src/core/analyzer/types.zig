@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayMap = std.AutoArrayHashMapUnmanaged;
 const Map = std.AutoHashMapUnmanaged;
 
+const LexScope = @import("LexicalScope.zig");
 const InstrIndex = @import("ir.zig").Index;
 const misc = @import("misc");
 const Interner = misc.Interner;
@@ -72,7 +73,7 @@ pub const Type = union(enum) {
     pub const Enum = struct {
         loc: ?Loc,
         tags: Tags,
-        functions: MapNameType,
+        functions: Map(InternerIdx, LexScope.Symbol),
 
         pub const empty: Enum = .{ .loc = null, .tags = .empty };
         pub const Tags = MapNameType;
@@ -147,7 +148,7 @@ pub const Type = union(enum) {
     pub const Structure = struct {
         loc: ?Loc,
         fields: FieldsMap,
-        functions: MapNameType,
+        functions: Map(InternerIdx, LexScope.Symbol),
 
         pub const FieldsMap = ArrayMap(InternerIdx, Field);
         pub const Field = struct {

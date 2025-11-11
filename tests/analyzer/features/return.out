@@ -8,6 +8,5 @@
     [Return]
         [Binop type: mul_int]
             [Variable index: 0, scope: local]
-            [Fn call]
-                [Load symbol 1]
+            [Call symbol 1]
 [Function declaration main]

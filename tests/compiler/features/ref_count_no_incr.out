@@ -1,33 +1,28 @@
 -- clone --
-load_sym index 1, <structure Poly>
-load_sym index 0, <structure Point>
 load_constant index 3, value 1
 load_constant index 4, value 2
-struct_lit index 2
-struct_lit index 1
+struct_lit index 0, arity 2, <structure Point>
+struct_lit index 1, arity 1, <structure Poly>
 ret
 
 -- testFn --
 ret_naked
 
 -- main --
-load_sym index 0, <structure Point>
 load_constant index 4, value 2
 load_constant index 5, value 6
-struct_lit index 2
+struct_lit index 0, arity 2, <structure Point>
 
-load_sym index 1, <structure Poly>
 get_local index 0
 incr_ref
-struct_lit index 1
+struct_lit index 1, arity 1, <structure Poly>
 
-load_sym index 3, <structure Structure>
 get_local index 1
 incr_ref
 get_local index 1
 incr_ref
 array_new index 1
-struct_lit index 2
+struct_lit index 3, arity 2, <structure Structure>
 
 get_local index 2
 get_field index 1
@@ -38,87 +33,78 @@ get_field index 0
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 get_field index 0
 set_local index 3
 
-load_sym index 4, <function testFn>
 get_local index 0
 get_local index 2
 get_field index 0
 get_local index 2
-call index 3
+call_sym index 4, arity 3, <function testFn>
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 set_local index 5
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 
 store_blk_val
-jump 105 -> 108
+jump 96 -> 99
 load_blk_val
 store_blk_val
-jump 110 -> 113
+jump 101 -> 104
 load_blk_val
 
 set_local index 5
 
 get_local index 2
 get_field index 0
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 
 store_blk_val
-jump 127 -> 130
+jump 117 -> 120
 load_blk_val
 store_blk_val
-jump 132 -> 135
+jump 122 -> 125
 load_blk_val
 
 set_local index 5
 
 push_true
-jump_false 139 -> 147
+jump_false 129 -> 137
 pop
 ret_naked
-jump 144 -> 156
+jump 134 -> 145
 pop
 get_local index 1
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
 set_local index 5
 
 push_true
-jump_false 159 -> 174
+jump_false 148 -> 162
 pop
 get_local index 1
-invoke index 0
-call index 1
+call_sym index 2, arity 1, <function clone>
 get_field index 0
-jump 171 -> 176
+jump 159 -> 164
 pop
 ret_naked
 set_local index 5
@@ -126,5 +112,4 @@ set_local index 5
 ret_naked
 
 -- global scope --
-load_sym index 5, <function main>
-call index 0
+call_sym index 5, arity 0, <function main>

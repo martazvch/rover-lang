@@ -71,5 +71,4 @@ set_local_box index 7
 ret_naked
 
 -- global scope --
-load_sym index 0, <function main>
-call index 0
+call_sym index 0, arity 0, <function main>

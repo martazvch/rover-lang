@@ -188,7 +188,7 @@ fn boolInstr(self: *Self, value: bool) void {
 }
 
 fn boundMethod(self: *Self, data: Instruction.BoundMethod) void {
-    self.indentAndPrintSlice("[Bound method, method index: {}]", .{data.index});
+    self.indentAndPrintSlice("[Bound method, symbol index: {}]", .{data.index});
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr(data.structure);
@@ -222,11 +222,39 @@ fn floatInstr(self: *Self, value: f64) void {
 }
 
 fn fnCall(self: *Self, data: *const Instruction.Call) void {
-    self.indentAndAppendSlice(if (data.native) "[Native fn call]" else "[Fn call]");
+    callee: {
+        switch (self.instrs[data.callee]) {
+            .field => |f| {
+                if (f.kind == .function) {
+                    self.parseInstr(data.callee);
+
+                    if (data.ext_mod) |mod| {
+                        self.indentAndPrintSlice("[Invoke symbol {} module {}]", .{ f.index, mod });
+                    } else {
+                        self.indentAndPrintSlice("[Invoke symbol {}]", .{f.index});
+                    }
+                    break :callee;
+                }
+            },
+            .load_symbol => |sym| {
+                if (data.ext_mod) |mod| {
+                    self.indentAndPrintSlice("[Call symbol {} module {}]", .{ sym.symbol_index, mod });
+                } else {
+                    self.indentAndPrintSlice("[Call symbol {}]", .{sym.symbol_index});
+                }
+                break :callee;
+            },
+            else => {},
+        }
+
+        self.indentAndAppendSlice(if (data.native) "[Native fn call]" else "[Fn call]");
+        self.indent_level += 1;
+        defer self.indent_level -= 1;
+        self.parseInstr(data.callee);
+    }
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
-    self.parseInstr(data.callee);
     self.argsList("param", data.args);
 }
 
@@ -277,10 +305,11 @@ fn enumDecl(self: *Self, data: *const Instruction.EnumDecl) void {
 }
 
 fn getField(self: *Self, data: Instruction.Field, cow: bool) void {
-    self.indentAndPrintSlice(
-        "[{s} access {}{s}]",
-        .{ if (data.kind == .field) "Field" else "Method", data.index, if (cow) ", cow" else "" },
-    );
+    // if (data.kind == .field) {
+    self.indentAndPrintSlice("[Field access {}{s}]", .{ data.index, if (cow) ", cow" else "" });
+    // } else {
+    //     self.indentAndPrintSlice("[Invoke symbol {}{s}]", .{ data.index, if (cow) ", cow" else "" });
+    // }
 
     self.indent_level += 1;
     defer self.indent_level -= 1;
@@ -349,7 +378,7 @@ fn intInstr(self: *Self, data: isize) void {
 
 fn loadSymbol(self: *Self, data: *const Instruction.LoadSymbol) void {
     if (data.module_index) |mod| {
-        self.indentAndPrintSlice("[Load symbol {} of module {}]", .{ data.symbol_index, mod });
+        self.indentAndPrintSlice("[Load symbol {} module {}]", .{ data.symbol_index, mod });
     } else {
         self.indentAndPrintSlice("[Load symbol {}]", .{data.symbol_index});
     }

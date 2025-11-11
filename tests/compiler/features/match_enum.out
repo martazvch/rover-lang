@@ -125,5 +125,4 @@ swap_pop
 ret_naked
 
 -- global scope --
-load_sym index 2, <function main>
-call index 0
+call_sym index 2, arity 0, <function main>

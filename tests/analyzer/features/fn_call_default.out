@@ -63,8 +63,7 @@
         [Bool false]
     [Constant 1]
 [Function declaration main]
-    [Fn call]
-        [Load symbol 4]
+    [Call symbol 4]
         - args
         [Constant 7]
             [String abcd]
@@ -72,8 +71,7 @@
         [Default param constant index 6]
         [Default param constant index 1]
         [Default param constant index 1]
-    [Fn call]
-        [Load symbol 4]
+    [Call symbol 4]
         - args
         [Constant 7]
         [Constant 3]
@@ -88,24 +86,20 @@
             - args
             [Default field constant index 3]
     [Print]
-        [Fn call]
-            [Method access 0]
-                [Load symbol 0]
+        [Call symbol 1]
             - args
             [Default param constant index 4]
     [Print]
-        [Fn call]
-            [Load symbol 3]
+        [Call symbol 3]
             - args
             [Default param constant index 4]
     [Print]
-        [Fn call]
-            [Method access 1]
-                [Variable index: 0, scope: local]
+        [Field access 2]
+            [Variable index: 0, scope: local]
+        [Invoke symbol 2]
             - args
             [Default param constant index 4]
     [Print]
-        [Fn call]
-            [Load symbol 5 of module 0]
+        [Call symbol 5 module 0]
             - args
             [Default param constant index 5, module 0]

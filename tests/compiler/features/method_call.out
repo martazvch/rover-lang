@@ -18,24 +18,20 @@ get_field index 0
 ret
 
 -- main --
-load_sym index 0, <structure Human>
 load_constant index 3, value 5
 load_constant index 4, value Tom
-struct_lit index 2
+struct_lit index 0, arity 2, <structure Human>
 
 push_null
 get_local index 0
-invoke index 0
-call index 1
+call_sym index 1, arity 1, <function speak>
 
 get_local index 0
-invoke index 1
 load_constant index 5, value 10
-call index 2
+call_sym index 2, arity 2, <function getOld>
 
 pop
 ret_naked
 
 -- global scope --
-load_sym index 3, <function main>
-call index 0
+call_sym index 3, arity 0, <function main>

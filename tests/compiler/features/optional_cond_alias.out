@@ -3,30 +3,28 @@ load_constant index 3, value 5
 ret
 
 -- main --
-load_sym index 0, <function getValue>
-call index 0
+call_sym index 0, arity 0, <function getValue>
 ne_null_push
-jump_false 5 -> 16
+jump_false 4 -> 15
 pop
 get_local index 0
 print
 pop
-jump 13 -> 18
+jump 12 -> 17
 
 // Pops if condition and lhs of extractor
 pop
 pop
 
 // While
-load_sym index 0, <function getValue>
-call index 0
+call_sym index 0, arity 0, <function getValue>
 ne_null_push
-jump_false 23 -> 34
+jump_false 21 -> 32
 pop
 get_local index 0
 print
 pop
-loop 31 -> 18
+loop 29 -> 17
 
 // Pops if condition and lhs of extractor
 pop
@@ -35,5 +33,4 @@ pop
 ret_naked
 
 -- global scope --
-load_sym index 1, <function main>
-call index 0
+call_sym index 1, arity 0, <function main>

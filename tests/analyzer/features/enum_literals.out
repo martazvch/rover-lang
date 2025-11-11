@@ -10,7 +10,7 @@
     [Constant 7]
         [Enum create]
             - enum
-            [Load symbol 0 of module 0]
+            [Load symbol 0 module 0]
             - tag
             1
 [Function declaration markerStuff]
@@ -18,9 +18,9 @@
     [Constant 3]
     - body
     [Print]
-        [Fn call]
-            [Method access 0]
-                [Variable index: 0, scope: local]
+        [Field access 1]
+            [Variable index: 0, scope: local]
+        [Invoke symbol 1]
 [Function declaration markerStuff2]
     - default params
     [Constant 5]
@@ -31,15 +31,15 @@
             1
     - body
     [Print]
-        [Fn call]
-            [Method access 0]
-                [Variable index: 0, scope: local]
+        [Field access 1]
+            [Variable index: 0, scope: local]
+        [Invoke symbol 1]
 [Function declaration main]
     [Variable declaration index: 0, scope: local]
         [Constant 8]
             [Enum create]
                 - enum
-                [Load symbol 0 of module 0]
+                [Load symbol 0 module 0]
                 - tag
                 2
     [Print]
@@ -48,17 +48,15 @@
     [Assignment index: 0, scope: local, cow]
     [Print]
         [Variable index: 0, scope: local]
-    [Fn call]
-        [Load symbol 3]
+    [Call symbol 3]
         - args
         [Constant 7]
-    [Fn call]
-        [Load symbol 4]
+    [Call symbol 4]
         - args
         [Constant 9]
             [Enum create]
                 - enum
-                [Load symbol 0 of module 0]
+                [Load symbol 0 module 0]
                 - tag
                 0
     [Variable declaration index: 1, scope: local]

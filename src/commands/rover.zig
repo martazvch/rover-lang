@@ -12,7 +12,7 @@ pub fn run(allocator: Allocator, file_path: []const u8, config: State.Config) !v
 
     var state: State = .new(arena_alloc, config);
     state.registerNatives(arena_alloc, @import("../core/builtins/builtins.zig"));
-    state.registerNatives(arena_alloc, @import("../core/builtins/file.zig"));
+    // state.registerNatives(arena_alloc, @import("../core/builtins/file.zig"));
     // state.registerNatives(arena_alloc, @import("../core/builtins/array.zig"));
 
     var vm: Vm = undefined;

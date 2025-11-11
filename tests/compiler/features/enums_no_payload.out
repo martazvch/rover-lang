@@ -63,17 +63,12 @@ get_tag
 ne_int
 pop
 
-load_sym index 1, <enum Bar>
-get_fn index 0
-call index 0
-
+call_sym index 2, arity 0, <function init>
 get_local index 2
-invoke index 1
-call index 1
+call_sym index 3, arity 1, <function toStr>
 print
 
 ret_naked
 
 -- global scope --
-load_sym index 4, <function main>
-call index 0
+call_sym index 4, arity 0, <function main>

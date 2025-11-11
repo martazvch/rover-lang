@@ -21,5 +21,4 @@ ret_naked
 -- global scope --
 load_constant index 3, value sneaky
 def_global index 0
-load_sym index 0, <function main>
-call index 0
+call_sym index 0, arity 0, <function main>

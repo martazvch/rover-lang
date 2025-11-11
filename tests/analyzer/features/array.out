@@ -25,8 +25,7 @@
                     [Int 6]
                 [Constant 7]
                     [Int 7]
-                [Fn call]
-                    [Load symbol 1]
+                [Call symbol 1]
     [Print]
         [Array access]
             - index
@@ -44,8 +43,7 @@
         [Int 99]
     [Array assignment]
         - index
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]
         - array
         [Variable index: 0, scope: local]
     [Unary minus]
@@ -53,16 +51,14 @@
             [Int 9]
     [Array assignment]
         - index
-        [Fn call]
-            [Load symbol 1]
+        [Call symbol 1]
         - array
         [Field access 0]
             [Variable index: 2, scope: local]
     [Print]
         [Array access]
             - index
-            [Fn call]
-                [Load symbol 1]
+            [Call symbol 1]
             - array
             [Field access 0]
                 [Variable index: 2, scope: local]
