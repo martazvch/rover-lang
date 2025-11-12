@@ -1,4 +1,4 @@
-//---- default_val.rv ----
+//---- default_val.ray ----
 
 -- staticFn --
 get_local index 0
@@ -29,7 +29,7 @@ ret
 -- global scope --
 exit_repl
 
-//---- test.rv ----
+//---- test.ray ----
 
 -- function --
 get_local index 0

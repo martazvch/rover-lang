@@ -42,7 +42,7 @@ pub fn runPipeline(self: *Self, allocator: Allocator, args: anytype) !void {
     };
 
     const file_content = std.fs.cwd().readFileAllocOptions(allocator, file_path, 100_000, null, .of(u8), 0) catch |err| {
-        // TODO: Rover error
+        // TODO: Ray error
         std.debug.print("Error: {}, unable to open file at: {s}\n", .{ err, file_path });
         std.process.exit(0);
     };

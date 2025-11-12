@@ -95,7 +95,7 @@ ret
 -- global scope --
 exit_repl
 
-//---- test.rv ----
+//---- test.ray ----
 
 -- main --
 load_constant index 3, value 3

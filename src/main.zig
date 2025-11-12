@@ -7,7 +7,7 @@ const Arg = clarg.Arg;
 
 const oom = @import("misc").oom;
 const State = @import("core/pipeline/State.zig");
-const rover = @import("commands/rover.zig");
+const ray = @import("commands/ray.zig");
 const compile = @import("commands/compile.zig");
 
 const Args = struct {
@@ -22,7 +22,7 @@ const Args = struct {
     help: Arg(bool) = .{ .desc = "Prints this help and exit", .short = 'h' },
 
     pub const description: []const u8 =
-        \\Interpreter for Rover language. You can either run a file with the available options
+        \\Interpreter for Ray language. You can either run a file with the available options
         \\or run a command.
         \\If no arguments are provided, runs the REPL.
     ;
@@ -45,7 +45,7 @@ pub fn main() !void {
     defer iter.deinit();
 
     var diag: clarg.Diag = undefined;
-    const parsed = clarg.parse("rover", Args, &iter, &diag, .{}) catch |e| {
+    const parsed = clarg.parse("ray", Args, &iter, &diag, .{}) catch |e| {
         try diag.reportToFile(.stderr());
         return e;
     };
@@ -65,7 +65,7 @@ pub fn main() !void {
     if (parsed.compile) |cmd| {
         try compile.run(allocator, cmd);
     } else if (parsed.file) |f| {
-        try rover.run(allocator, f, config);
+        try ray.run(allocator, f, config);
     } else {
         // var repl: Repl = undefined;
         // defer repl.deinit(allocator);

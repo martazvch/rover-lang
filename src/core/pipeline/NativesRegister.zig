@@ -18,14 +18,14 @@ const oom = misc.oom;
 /// Native functions used at runtime
 // funcs: ArrayList(struct { name: []const u8, func: ffi.ZigFn }),
 funcs: ArrayList(Value),
-/// Native functions translated to Rover's type system for compilation
+/// Native functions translated to Ray's type system for compilation
 funcs_meta: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
 
 /// Native structures used at runtime
 structs: ArrayList(struct { name: []const u8, func: Value }),
-/// Native structures translated to Rover's type system for compilation
+/// Native structures translated to Ray's type system for compilation
 structs_meta: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
-/// Native structures translated to Rover's type system used here for self references
+/// Native structures translated to Ray's type system used here for self references
 scratch_structs: std.AutoArrayHashMapUnmanaged(Interner.Index, *const Type),
 
 const Self = @This();
@@ -81,7 +81,7 @@ fn registerStruct(self: *Self, allocator: Allocator, S: type, interner: *Interne
     self.scratch_structs.put(allocator, interner.intern(@typeName(S)), ty) catch oom();
 
     inline for (zig_struct.functions) |*func| {
-        const f = self.fnZigToRover(allocator, func, interner, ti);
+        const f = self.fnZigToRay(allocator, func, interner, ti);
         const interned_name = interner.intern(func.name);
         if (ty.structure.functions.contains(interned_name)) {
             // TODO: error
@@ -96,13 +96,13 @@ fn registerStruct(self: *Self, allocator: Allocator, S: type, interner: *Interne
 
 // We can use pointers here because we refer to comptime declarations in Module
 fn registerFn(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, interner: *Interner, ti: *TypeInterner) void {
-    self.funcs_meta.put(allocator, interner.intern(func.name), self.fnZigToRover(allocator, func, interner, ti)) catch oom();
+    self.funcs_meta.put(allocator, interner.intern(func.name), self.fnZigToRay(allocator, func, interner, ti)) catch oom();
     const value = Value.makeObj(Obj.NativeFunction.create(allocator, func.name, func.function).asObj());
 
     self.funcs.append(allocator, value) catch oom();
 }
 
-fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, interner: *Interner, ti: *TypeInterner) *const Type {
+fn fnZigToRay(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, interner: *Interner, ti: *TypeInterner) *const Type {
     var params: Type.Function.ParamsMap = .empty;
 
     // We don't take into account param *Vm and if it's in second place, it means 'self' is in first and we skip it too
@@ -111,7 +111,7 @@ fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, i
     params.ensureTotalCapacity(allocator, func.info.params.len - offset) catch oom();
 
     inline for (func.info.params[offset..], 0..) |*p, i| {
-        const param_ty = self.zigToRover(allocator, p.type.?, interner, ti);
+        const param_ty = self.zigToRay(allocator, p.type.?, interner, ti);
 
         const param_index = if (i == 0) i else i - 1;
         params.putAssumeCapacity(
@@ -124,14 +124,14 @@ fn fnZigToRover(self: *Self, allocator: Allocator, func: *const ffi.ZigFnMeta, i
     const ty: Type.Function = .{
         .kind = if (offset == 2) .native_method else .native,
         .loc = .{ .name = interner.intern(func.name), .container = interner.intern("std") },
-        .return_type = self.zigToRover(allocator, func.info.return_type.?, interner, ti),
+        .return_type = self.zigToRay(allocator, func.info.return_type.?, interner, ti),
         .params = params,
     };
 
     return ti.intern(.{ .function = ty });
 }
 
-fn zigToRover(self: *Self, allocator: Allocator, ty: type, interner: *Interner, ti: *TypeInterner) *const Type {
+fn zigToRay(self: *Self, allocator: Allocator, ty: type, interner: *Interner, ti: *TypeInterner) *const Type {
     return switch (ty) {
         i64 => ti.getCached(.int),
         f64 => ti.getCached(.float),
@@ -141,13 +141,13 @@ fn zigToRover(self: *Self, allocator: Allocator, ty: type, interner: *Interner, 
             .@"union" => |u| {
                 var childs = ArrayList(*const Type).initCapacity(allocator, u.fields.len) catch oom();
                 inline for (u.fields) |f| {
-                    childs.appendAssumeCapacity(self.zigToRover(allocator, f.type, interner, ti));
+                    childs.appendAssumeCapacity(self.zigToRay(allocator, f.type, interner, ti));
                 }
                 return ti.intern(.{ .@"union" = .{ .types = childs.toOwnedSlice(allocator) catch oom() } });
             },
             .pointer => |ptr| switch (ptr.child) {
                 Obj => unreachable,
-                else => |C| self.zigToRover(allocator, C, interner, ti),
+                else => |C| self.zigToRay(allocator, C, interner, ti),
             },
             .@"struct" => {
                 if (self.scratch_structs.get(interner.intern(@typeName(ty)))) |t| {
@@ -158,7 +158,7 @@ fn zigToRover(self: *Self, allocator: Allocator, ty: type, interner: *Interner, 
                 // like a static function returning a type not declared in the structures of the module
                 unreachable;
             },
-            else => @compileError("Zig to Rover type conversion not supported for type: " ++ @typeName(ty)),
+            else => @compileError("Zig to Ray type conversion not supported for type: " ++ @typeName(ty)),
         },
     };
 }

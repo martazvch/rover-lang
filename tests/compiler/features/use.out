@@ -30,7 +30,7 @@ ret
 -- global scope --
 exit_repl
 
-//---- test.rv ----
+//---- test.ray ----
 
 -- main --
 call_sym_ext index 2, module 0, arity 0

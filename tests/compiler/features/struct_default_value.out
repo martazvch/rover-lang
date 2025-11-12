@@ -1,4 +1,4 @@
-//---- test.rv ----
+//---- test.ray ----
 
 -- main --
 load_constant index 5, value 1

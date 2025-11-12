@@ -34,7 +34,7 @@ const Config = struct {
 };
 
 const Args = struct {
-    file: Arg(.string) = .{ .desc = "File to test (without '.rv' extension)", .short = 'f' },
+    file: Arg(.string) = .{ .desc = "File to test (without '.ray' extension)", .short = 'f' },
     stage: Arg(Stage.all) = .{ .desc = "Specific stage to test", .short = 's' },
     diff: Arg(bool) = .{ .desc = "Prints a colored diff in case of error", .short = 'd' },
     got: Arg(bool) = .{ .desc = "Prints what we got in stdout", .short = 'g' },
@@ -74,7 +74,7 @@ pub fn main() !u8 {
     defer allocator.free(tester_dir);
 
     const exe_path = try std.fs.path.join(allocator, &[_][]const u8{
-        tester_dir, if (builtin.os.tag == .windows) "rover.exe" else "rover",
+        tester_dir, if (builtin.os.tag == .windows) "ray.exe" else "ray",
     });
     defer allocator.free(exe_path);
 
@@ -213,7 +213,7 @@ const Tester = struct {
             defer cwd = cwd.openDir("..", .{}) catch unreachable;
 
             var buf: [1024]u8 = undefined;
-            self.testFile(&cwd, .standalone, try std.fmt.bufPrint(&buf, "{s}.rv", .{entry.basename}), "features") catch {
+            self.testFile(&cwd, .standalone, try std.fmt.bufPrint(&buf, "{s}.ray", .{entry.basename}), "features") catch {
                 err = true;
                 continue;
             };
@@ -245,12 +245,12 @@ const Tester = struct {
             var specific_tested = false;
 
             while (try walker.next()) |entry| {
-                // File ending with .rv and not a child of current directory
-                if (std.mem.endsWith(u8, entry.basename, ".rv") and entry.dir.fd == cwd.fd) {
+                // File ending with .ray and not a child of current directory
+                if (std.mem.endsWith(u8, entry.basename, ".ray") and entry.dir.fd == cwd.fd) {
                     // If specific file asked
                     if (self.config.file) |f| {
                         // Check without extension
-                        if (!std.mem.eql(u8, entry.basename[0 .. entry.basename.len - 3], f)) {
+                        if (!std.mem.eql(u8, entry.basename[0 .. entry.basename.len - 4], f)) {
                             continue;
                         }
                         specific_tested = true;
@@ -288,7 +288,7 @@ const Tester = struct {
             .cwd = path,
             .argv = argv,
         }) catch |e| {
-            print("Error launching rover process: {t}, with args:\n", .{e});
+            print("Error launching ray process: {t}, with args:\n", .{e});
             for (argv) |arg| print("\t{s}\n", .{arg});
             return e;
         };

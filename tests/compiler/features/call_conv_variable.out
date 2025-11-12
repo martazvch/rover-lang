@@ -1,4 +1,4 @@
-// ---- math.rv ----
+// ---- math.ray ----
 
 -- len --
 get_local index 0
@@ -30,7 +30,7 @@ ret
 -- global scope --
 exit_repl
 
-// ---- test.rv ----
+// ---- test.ray ----
 -- static --
 load_constant index 4, value 3
 ret

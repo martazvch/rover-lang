@@ -42,9 +42,9 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
         const name = ast.toSource(part);
 
         if (i == path_chunks.len - 1) {
-            const file_name = allocator.alloc(u8, name.len + 3) catch oom();
+            const file_name = allocator.alloc(u8, name.len + 4) catch oom();
             @memcpy(file_name[0..name.len], name);
-            @memcpy(file_name[name.len..], ".rv");
+            @memcpy(file_name[name.len..], ".ray");
 
             const file = cwd.openFile(file_name, .{}) catch {
                 const owned_name = allocator.dupe(u8, file_name) catch oom();
@@ -54,9 +54,9 @@ fn fetchRelative(allocator: Allocator, ast: *const Ast, path_chunks: []const Ast
             defer file.close();
 
             // The file has a new line inserted by default
-            const size = file.getEndPos() catch @panic("Rover internal error: wrong import file end position");
+            const size = file.getEndPos() catch @panic("Ray internal error: wrong import file end position");
             const buf = allocator.allocSentinel(u8, size, 0) catch oom();
-            _ = file.readAll(buf) catch @panic("Rover internal error: error while reading imported file");
+            _ = file.readAll(buf) catch @panic("Ray internal error: error while reading imported file");
 
             sb.append(allocator, ".");
             sb.append(allocator, file_name);

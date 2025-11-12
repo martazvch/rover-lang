@@ -2,7 +2,7 @@
 
 ## Intro
 
-**Rover** is an interpreted language written in **Zig** that runs on an embeddable stack-based VM.
+**Ray** is an interpreted language written in **Zig** that runs on an embeddable stack-based VM.
 It's strictly typed but thanks to type inference you rarely write types.
 
 There is no implicit reference to heap allocated objects.
@@ -27,10 +27,10 @@ print(&arr2) // 0x000324565
 
 ### Entry point
 
-Each program written in **Rover** must define a `main` function that serves as an entry point.
+Each program written in **Ray** must define a `main` function that serves as an entry point.
 It is planned to have some sort of package manager and a project configuration file that
-will know where the `main` is so that the project can be launched with `rover run`.
-You can also give a file path like so: `rover main.rv`.
+will know where the `main` is so that the project can be launched with `ray run`.
+You can also give a file path like so: `ray main.ray`.
 
 Having to define an entry point disallow writting declarative code in file global scope
 that would be executed each time the file is read/imported.
@@ -244,7 +244,7 @@ Language should support list comprehension because it's too powerfull
 
 ### Pattern matching
 
-A powerfull feature of Rover is pattern matching. You can either match on **values** with the keyword `match` or on types
+A powerfull feature of Ray is pattern matching. You can either match on **values** with the keyword `match` or on types
 with the keyword `when`.
 
 - You can match on ranges
@@ -627,4 +627,3 @@ fn add(v1: T, v2: $T) -> T { ... }
 // trait constraint
 fn add(v1: $T[Add, Sub], v2: T) -> T { ... }
 ```
-

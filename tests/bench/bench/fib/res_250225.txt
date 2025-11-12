@@ -1,11 +1,11 @@
 Benchmark 1: python3 tests/bench/fib/fib.py
   Time (mean ± σ):     652.0 ms ±  10.3 ms    [User: 639.7 ms, System: 9.2 ms]
   Range (min … max):   632.6 ms … 670.9 ms    10 runs
- 
-Benchmark 2: zig-out/bin/rover tests/bench/fib/fib.rv
+
+Benchmark 2: zig-out/bin/ray tests/bench/fib/fib.ray
   Time (mean ± σ):     430.1 ms ±  14.0 ms    [User: 426.6 ms, System: 2.5 ms]
   Range (min … max):   424.0 ms … 469.7 ms    10 runs
- 
+
 Summary
-  zig-out/bin/rover tests/bench/fib/fib.rv ran
+  zig-out/bin/ray tests/bench/fib/fib.ray ran
     1.52 ± 0.05 times faster than python3 tests/bench/fib/fib.py

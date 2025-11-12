@@ -69,7 +69,7 @@ pub fn deinit(self: *Self, allocator: Allocator) void {
 }
 
 pub fn logInfos(self: *Self) Error!void {
-    _ = self.stdout.write("\t\tRover language REPL\n  Type 'quit' or Ctrl+C to exit\n\n") catch return error.BadWrite;
+    _ = self.stdout.write("\t\tRay language REPL\n  Type 'quit' or Ctrl+C to exit\n\n") catch return error.BadWrite;
 }
 
 pub fn run(self: *Self) !void {

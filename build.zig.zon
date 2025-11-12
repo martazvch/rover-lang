@@ -1,5 +1,5 @@
 .{
-    .name = .rover,
+    .name = .ray,
     .version = "0.0.0",
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
@@ -8,7 +8,7 @@
             .hash = "clarg-0.0.0-g4b0SYdoAAAPjw0yQPGi5p6g1ueFkEzu6acNShYKjGOD",
         },
     },
-    .fingerprint = 0xd08838f793247dc8,
+    .fingerprint = 0xfd0bf6528c70519c,
     .paths = .{
         "build.zig",
         "build.zig.zon",

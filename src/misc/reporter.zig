@@ -143,7 +143,7 @@ fn display(Report: type, report: *const GenReport(Report), writer: *Writer, file
         const left_padding = buf2[0 .. written.len + 2];
 
         // Prints file name and location infos
-        //  ╭─[file_name.rv:1:5]
+        //  ╭─[file_name.ray:1:5]
         try writer.print(
             "{s}{s}{s}[{s}{s}{s}:{}:{}]\n",
             .{
@@ -239,7 +239,7 @@ fn print_line(writer: *Writer, line_nb: usize, line: []const u8, digit_count: us
     };
 }
 
-/// Error report used en each step of the Rover language:
+/// Error report used en each step of the Ray language:
 /// lexing, parsing, compiling, executing, ...
 /// It has:
 ///  - report: structure that has the message data

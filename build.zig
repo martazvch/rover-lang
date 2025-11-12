@@ -21,15 +21,15 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const rover_mod = b.addModule("rover", .{
+    const ray_mod = b.addModule("ray", .{
         .optimize = optimize,
         .target = target,
         .root_source_file = b.path("src/main.zig"),
     });
 
     const exe = b.addExecutable(.{
-        .name = "rover",
-        .root_module = rover_mod,
+        .name = "ray",
+        .root_module = ray_mod,
     });
 
     const misc_mod = b.createModule(.{
@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) !void {
     // --------
     const exe_check = b.addExecutable(.{
         .name = "foo",
-        .root_module = rover_mod,
+        .root_module = ray_mod,
     });
     exe_check.root_module.addImport("clarg", clarg.module("clarg"));
     exe_check.root_module.addOptions("options", options);
@@ -93,7 +93,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("tests/tester.zig"),
     });
     const tester_exe = b.addExecutable(.{
-        .name = "rover-tester",
+        .name = "ray-tester",
         .root_module = tester_mod,
     });
 
