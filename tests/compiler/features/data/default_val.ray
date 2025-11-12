@@ -1,0 +1,19 @@
+struct Def {
+    fn staticFn(a: str, b = 0, c, d = false) {
+        print a
+        print b
+        print c
+        print d
+    }
+
+    fn method(self, a: str, b = 10, c, d = true) {
+        print a
+        print b
+        print c
+        print d
+    }
+}
+
+fn getInt(a=56) -> int { return a }
+
+
