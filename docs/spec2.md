@@ -206,8 +206,8 @@ TODO: multiline strings
 
 ### Null
 
-The `null` value can only be used with optional types. They are defined with a `?` preceding the type like `?int` or `?[]float`.
-It means that the variable of type `?T` holds either `null` or a value of type `T` and is used for [null safety](#Null%20safety).
+The `null` value can only be used with optional types. They are defined with a `?` preceding the type like `?int` or `?[float]`.
+It means that the variable of type `?T` holds either `null` or a value of type `T`.
 A variable of type `?T` will be initialized with `null` if no value is provided.
 
 ```zig
@@ -215,10 +215,26 @@ var id: ?int
 assert(id == null)
 ```
 
-As providing a value of type `T` will infer the variable's type to `T`, you have to explicitly annotate the type to declare an optional.
+As providing a value of type `T` will infer the variable's type to `T`, you have to explicitly annotate the type to declare a nullable value.
 
 ```zig
 var id: ?int = 5
+```
+
+Expressions returning nullable values can be chained with `?`. Then chain breaks at the first `null` encountered and resolves as `null`.
+
+```rust
+let name = getUser()?.informations?.getName()
+```
+
+Here, if `getUser` or `informations` is `null`, it breaks the chain and return `null`.
+
+When using a nullable value, you can provide a fallback value with `??` operator:
+
+```zig
+fn getId() -> ?int { ... }
+
+let id = getId() ?? 0
 ```
 
 ### References
@@ -281,6 +297,20 @@ var data = [3.14, 6.18]
 assert(data[1] == 6.18)
 data[0] = 1.41
 assert(data[0] == 1.41)
+```
+
+You can use ranges to index an array as well as a step with the syntax: `<first>..<last> :<step>`. If `first` is omitted, it will start at index `0`, if `last` is omitted, it will continue until last index. You have to provide at least one of the two bounds.
+Index can be negative.
+
+```rust
+var arr = [1, 2, 3, 4, 5, 6, 7]
+print(arr[3..]) // [4, 5, 6, 7]
+print(arr[..2]) // [1, 2]
+print(arr[4..6]) // [5, 6]
+print(arr[2.. :3]) // [3, 6]
+print(arr[:2]) // [1, 3, 5, 7]
+
+print(arr[-4]) // 4
 ```
 
 Arrays' size are dynamic so you can add/remove elements at runtime. To get the length of the array you can use `len()` method. Add/removing is done with respectively methods `push()` and `pop()`.
@@ -505,17 +535,9 @@ let mul = fn(x: int) -> int { return x * factor }
 mul(4) // 12
 ```
 
-#### Null chaining
-
-Calls returning nullable values can be chained with `?`. Then chain breaks at the first `null` encountered and resolves as `null`.
-
-```rust
-let name = getUser()?.getName()?
-```
-
 #### Error chaining
 
-When chaining calls that return error unions, it behaves like [null chaining](#Null%20chaining), meaning that at the first error the chain breaks and resolves as the error encountered. 
+When chaining calls that return error unions, it behaves like [null chaining](#Null%20chaining), meaning that at the first error the chain breaks and resolves to the error encountered. 
 
 In this exmaple, `parseInt` method on strings returns `int!ParseErr` and `toBase` on integers returns `int!IntErr`:
 
@@ -550,6 +572,32 @@ fn compute() {
     let x = getInput()!.parseInt("12")!.toBase(2)
     // Here x is of type int but function `compute` now returns an error on fail
     let x = getInput()!.parseInt("12")!.toBase(2)!
+}
+```
+
+#### Error to null
+
+Errors can be converted to `null` if `?` is used at the end of an expression that could produce an error:
+
+```rust
+// Here, x is of type: int!(InputErr & ParseErr & IntErr)
+let x = getInput()!.parseInt("12")!.toBase(2)
+// Here x is of type ?int
+let x = getInput()!.parseInt("12")!.toBase(2)?
+```
+
+It's a useful pattern to handle several errors in a unified way as well as using `if let` constructs:
+
+```rust
+fn getData(path: str) -> ?Data {
+    if let data = try? fetchDataFromDisk() {
+        return data
+    }
+    if let data = try? fetchDataFromServer() {
+        return data
+    }
+
+    return null
 }
 ```
 
@@ -1037,46 +1085,119 @@ else
 
 #### If-let / if-var
 
-When used with nullable types, the `if let` or `if var` syntaxes can be used to bind to the value if not `null`:
+Ray supports *pattern-matching inside conditions* through two related constructs:
+- `if let` — binds only immutable values
+- `if var` — binds a mutable variable when destructuring
 
-```zig
-var id: ?int = 8
+Both are shorthand for a `match` expression with a single arm and an implicit `else {}`.
+
+You may destructure any value directly inside the `if let` condition. This is useful for inspecting structures, enums, unions, and nested patterns without writing a full `match`.
+
+```rust
+struct User { id: ?int, name: str }
+
+fn verify(user: User) -> bool {
+    if let .{ id: !null, name: "Tom" } = user {
+        return true
+    }
+
+    ...
+}
+```
+
+It allow powerful and short way to test for patterns instead of the full `match` syntax. The code above could also be written:
+
+```rust
+fn verify(user: User) -> bool {
+    match user {
+        .{ id: !null, name: "Tom" } => return true
+        else => {}
+    }
+
+    ...
+}
+```
+
+When the right-hand side is a nullable type (`?T`), the `if let` expression automatically tests for `null`.
+
+```rust
+let id: ?int = 8
 
 if let i = id {
     // Here `i` is of type int
 }
 ```
 
-#### If-match
+## Errors
 
-Can be used to test a pattern matching clause inside an `if` condition:
+In Ray, an error can be any structure / enum as long as it implements the `Error` [trait](#Traits).
+Ray uses typed error unions and treats errors as *first-class values*. Any structure, enum, or inline declaration can act as an error type as long as it implements the `Error` [trait](#Traits).
 
 ```rust
-struct User { id: ?int, name: str }
+enum ConfigErr {
+    invalidPath: str,
+    accessDenied: int,
+}
 
-fn verify(user: User) -> bool {
-    if match user { id != null, name = "Tom" } {
-        return true
-    }
+impl Error for ConfigErr {}
+```
+
+Ray provides a convenience `error` keyword:
+
+```zig
+error ParserErr {
+    invalidToken,
+    typeMismatch: (expected: str, found: str),
     ...
-
-    return false
 }
 ```
 
-It allow powerful and short way to test otherwise pretty verbose condition. Without this, we would have written:
+This expands to:
+- an enum declaration
+- automatic implementation of the Error trait
 
-```rust
-fn verify(user: User) -> bool {
+It is ideal for tightly scoped or inline error definitions:
 
+```zig
+fn parseConfig(path: str) Config!error{ invalidPath: str, accessDenied: int} { ... }
+```
+
+> [!NOTE]
+> You can also define a `structure` as an error
+> ```rust
+> struct ConfigErr {
+>     path: str,
+> }
+> 
+> impl Error for ConfigErr {}
+> ```
+
+### Mixing errors
+
+Ray supports logical combination of multiple error types using the `&` operator, forming error union sets.
+
+```zig
+error FileErr{ ... }
+error ParserErr { ... }
+error ConfigErr { ... } & ParserErr & FileErr
+
+fn openConfig(path: str) -> str!FileErr { ... }
+fn parseFields(content: str) -> [Config.Field]!ParserErr { ... }
+
+fn parseConfig(path: str) Config!ConfigErr {
+    let content = openConfig(path)!     // propagates FileErr
+    let fields = parseFields(content)!  // propagates ParserErr
+    ...
 }
 ```
 
+You may combine error sets directly in the function signature:
 
+```zig
+fn parseInt(text: str) int!(ParserErr & IntBaseErr) { ... }
+```
 
-## Error unions
-
-## Patterns
+## Pattern matching
 
 ## Null safety
 
