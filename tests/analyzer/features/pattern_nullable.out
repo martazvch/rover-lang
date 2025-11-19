@@ -5,7 +5,7 @@
 [Function declaration main]
     [If]
     - condition:
-        [Extractor]
+        [Nullable pattern]
             [Call symbol 0]
     - then:
         [Block pop count: 1, is_expr: false]
@@ -13,7 +13,7 @@
                 [Variable index: 0, scope: local]
     [While]
     - condition:
-        [Extractor]
+        [Nullable pattern]
             [Call symbol 0]
     - body:
         [Block pop count: 1, is_expr: false]

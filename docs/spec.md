@@ -1428,7 +1428,7 @@ Patterns recurse automatically:
 let pair = (10, (20, 30))
 
 match pair {
-    (10, (20, var x)) => print(x)   // prints 30
+    (10, (20, x)) => print(x)   // prints 30
     else => {}
 }
 ```
@@ -1455,6 +1455,28 @@ match value {
 
 > [!NOTE]
 > You should use pattern `if let/ if var` even if this one is valid
+
+### Aliasing
+
+It's sometimes useful to be able to refer to the matched value. You can do so by aliasing it with `@<name>` synatx like:
+
+```rust
+match getValue() @v {
+    // Small values not used
+    0..9 => {}
+    else => processId(v)
+}
+```
+
+Or with inline unions:
+
+```rust
+let obj: Vec|Point = getValue()
+match obj @v {
+    Vec => print("x: {v.x}, y: {v.y}")
+    Point => ...
+}
+```
 
 ### Guard
 

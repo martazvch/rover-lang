@@ -30,13 +30,11 @@ const Context = struct {
     panic_mode: bool,
     in_cond: bool,
     in_group: bool,
-    can_extract: bool,
 
     pub const empty: Context = .{
         .panic_mode = false,
         .in_cond = false,
         .in_group = false,
-        .can_extract = false,
     };
 
     pub fn setAndGetPrevious(self: *Context, comptime f: FieldEnum(Context), value: @FieldType(Context, @tagName(f))) @TypeOf(value) {
@@ -656,7 +654,7 @@ fn use(self: *Self) Error!Node {
         var items: ArrayList(Ast.Use.ItemAndAlias) = .empty;
 
         while (self.match(.identifier)) {
-            items.append(self.allocator, .{ .item = self.token_idx - 1, .alias = try self.getAlias() }) catch oom();
+            items.append(self.allocator, .{ .item = self.token_idx - 1, .alias = try self.getAlias(.as) }) catch oom();
 
             if (self.match(.comma)) continue;
             // In case of trailing comma
@@ -667,7 +665,7 @@ fn use(self: *Self) Error!Node {
         break :b items.toOwnedSlice(self.allocator) catch oom();
     } else null;
 
-    const alias = try self.getAlias();
+    const alias = try self.getAlias(.as);
 
     if (alias != null and items != null) {
         return self.errAtPrev(.import_alias_with_items);
@@ -680,8 +678,8 @@ fn use(self: *Self) Error!Node {
     } };
 }
 
-fn getAlias(self: *Self) Error!?TokenIndex {
-    if (self.match(.as)) {
+fn getAlias(self: *Self, token: Token.Tag) Error!?TokenIndex {
+    if (self.match(token)) {
         try self.expect(.identifier, .non_ident_alias);
         return self.token_idx - 1;
     }
@@ -740,14 +738,11 @@ fn print(self: *Self) Error!Node {
 fn whileStmt(self: *Self) Error!Node {
     const cond = cond: {
         const save_in_cond = self.ctx.setAndGetPrevious(.in_cond, true);
-        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
         defer {
             self.ctx.in_cond = save_in_cond;
-            self.ctx.can_extract = save_extract;
         }
-        break :cond try self.parsePrecedenceExpr(0);
+        break :cond try self.pattern();
     };
-    const alias = try self.getAlias();
 
     const body = if (self.isAtBlock())
         try self.blockExpr()
@@ -755,9 +750,46 @@ fn whileStmt(self: *Self) Error!Node {
         return self.errAtCurrent(.expect_brace_after_while_cond);
 
     return .{ .@"while" = .{
-        .condition = cond,
-        .alias = alias,
+        .pattern = cond,
         .body = body.block,
+    } };
+}
+
+fn pattern(self: *Self) Error!Ast.Pattern {
+    // Any structural pattern like:
+    //  if let [x, y] = value {}
+    //  if let Point{x, ..} = value {}
+    //  if let nonNull = nullableValue {}
+    if (self.match(.let) or self.match(.@"var")) {
+        const decl_token = self.token_idx - 1;
+
+        if (self.match(.identifier)) {
+            return self.structPattern(decl_token, self.token_idx - 1);
+        } else {
+            @panic("TODO");
+        }
+    }
+    // Basic pattern meaning just an expression and maybe an alias
+    else {
+        const expr = try self.parsePrecedenceExpr(0);
+        const alias = try self.getAlias(.at);
+        return .{ .value = .{ .expr = expr, .alias = alias } };
+    }
+}
+
+fn structPattern(self: *Self, decl_token: TokenIndex, structure: TokenIndex) Error!Ast.Pattern {
+    if (self.match(.equal)) {
+        return self.nullablePattern(decl_token, structure);
+    }
+
+    @panic("TODO");
+}
+
+fn nullablePattern(self: *Self, decl_token: TokenIndex, binding: TokenIndex) Error!Ast.Pattern {
+    return .{ .nullable = .{
+        .token = decl_token,
+        .binding = binding,
+        .expr = try self.parsePrecedenceExpr(0),
     } };
 }
 
@@ -1000,17 +1032,17 @@ fn enumLit(self: *Self) Error!*Expr {
 fn ifExpr(self: *Self) Error!*Expr {
     const tk = self.token_idx - 1;
 
-    const condition = condition: {
+    const pat = pat: {
         const save_cond = self.ctx.setAndGetPrevious(.in_cond, true);
-        const save_extract = self.ctx.setAndGetPrevious(.can_extract, true);
         defer {
             self.ctx.in_cond = save_cond;
-            self.ctx.can_extract = save_extract;
         }
 
-        break :condition try self.parsePrecedenceExpr(0);
+        break :pat try self.pattern();
     };
-    const alias = try self.getAlias();
+
+    // TODO: remove
+    const alias = try self.getAlias(.as);
 
     self.skipNewLines();
 
@@ -1039,7 +1071,7 @@ fn ifExpr(self: *Self) Error!*Expr {
 
     const expr = self.allocator.create(Expr) catch oom();
     expr.* = .{ .@"if" = .{
-        .condition = condition,
+        .pattern = pat,
         .alias = alias,
         .then = then,
         .@"else" = else_body,
@@ -1088,9 +1120,6 @@ fn literal(self: *Self, tag: Ast.Literal.Tag) Error!*Expr {
 fn matchExpr(self: *Self) Error!*Expr {
     const start = try self.patternMatchStart();
 
-    // TODO: error
-    if (start.alias != null) @panic("Can't alias match value");
-
     var arms: ArrayList(Ast.Match.Arm) = .empty;
 
     while (!self.check(.eof) and !self.check(.right_brace)) {
@@ -1113,7 +1142,7 @@ fn matchExpr(self: *Self) Error!*Expr {
 
 fn matchArm(self: *Self) Error!Ast.Match.Arm {
     const expr = try self.parsePrecedenceExpr(0);
-    const alias = try self.getAlias();
+    const alias = try self.getAlias(.at);
     try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
 
     return .{
@@ -1171,20 +1200,18 @@ fn when(self: *Self) Error!*Expr {
 
 fn whenArm(self: *Self) Error!Ast.When.Arm {
     const ty = try self.parseType();
-    const alias = try self.getAlias();
     try self.expect(.arrow_big, .expect_arrow_before_pm_arm_body);
 
     return .{
         .type = ty,
-        .alias = alias,
         .body = try self.statement(),
     };
 }
 
 const PatternMatchStart = struct {
     token: TokenIndex,
-    value: *Expr,
     alias: ?TokenIndex,
+    value: *Expr,
     open_brace: TokenIndex,
 };
 
@@ -1197,7 +1224,7 @@ fn patternMatchStart(self: *Self) Error!PatternMatchStart {
         break :value try self.parsePrecedenceExpr(0);
     };
 
-    const alias = try self.getAlias();
+    const alias = try self.getAlias(.at);
 
     self.skipNewLines();
     try self.expectOrErrAtPrev(.left_brace, .expect_brace_before_when_body);
@@ -1237,13 +1264,6 @@ fn postfix(self: *Self, prefixExpr: *Expr) Error!*Expr {
     }
 
     return expr;
-}
-
-fn extractor(self: *Self, expr: *Expr) Error!*Expr {
-    const res = self.allocator.create(Expr) catch oom();
-    try self.expect(.identifier, .expect_name_after_extract);
-    res.* = .{ .extractor = .{ .expr = expr, .alias = self.token_idx - 1 } };
-    return res;
 }
 
 fn arrayAccess(self: *Self, expr: *Expr) Error!*Expr {

@@ -316,11 +316,6 @@ const Compiler = struct {
             .constant => |data| self.constant(data, true),
             .discard => |index| self.wrappedInstr(.pop, index),
 
-            // In case of an extractor, we don't replace top of stack with the bool result of
-            // comparison because if it's true, it's gonna be popped and so last value on stack
-            // will be the one extracted, it acts as if we just declared the value in scope
-            .extractor => |index| self.wrappedInstr(.ne_null_push, index),
-
             .enum_create => |*data| self.enumCreate(data),
             .enum_decl => |*data| self.enumDecl(data),
             .field => |*data| self.field(data),
@@ -333,6 +328,12 @@ const Compiler = struct {
             .load_symbol => |*data| self.loadSymbol(data),
             .match => |*data| self.match(data),
             .multiple_var_decl => |*data| self.multipleVarDecl(data),
+
+            // In case of nullable pattern, we don't replace top of stack with the bool result of
+            // comparison because if it's true, it's gonna be popped and so last value on stack
+            // will be the one extracted, it acts as if we just declared the value in scope
+            .pat_nullable => |index| self.wrappedInstr(.ne_null_push, index),
+
             .pop => |index| self.wrappedInstr(.pop, index),
             .print => |index| self.wrappedInstr(.print, index),
             .@"return" => |*data| self.returnInstr(data),
@@ -734,7 +735,7 @@ const Compiler = struct {
     }
 
     fn ifInstr(self: *Self, data: *const Instruction.If) Error!void {
-        const is_extractor = self.manager.instr_data[data.cond] == .extractor;
+        const is_null_pat = self.manager.instr_data[data.cond] == .pat_nullable;
         try self.compileInstr(data.cond);
 
         const then_jump = self.emitJump(.jump_false);
@@ -750,9 +751,9 @@ const Compiler = struct {
 
         // If we go in the else branch, we pop the condition too
         self.writeOp(.pop);
-        // If the condition was an extractor, the variable tested against `null` is still on
-        // top of stack so we have to remove it (see `extractor` function)
-        if (is_extractor) self.writeOp(.pop);
+        // If the condition was a nullable pattern, the variable tested against `null` is still on
+        // top of stack so we have to remove it
+        if (is_null_pat) self.writeOp(.pop);
 
         // We insert a jump in the then body to be able to jump over the else branch
         // Otherwise, we just patch the then_jump
@@ -954,7 +955,7 @@ const Compiler = struct {
     }
 
     fn whileInstr(self: *Self, data: Instruction.While) Error!void {
-        const is_extractor = self.manager.instr_data[data.cond] == .extractor;
+        const is_null_pat = self.manager.instr_data[data.cond] == .pat_nullable;
         self.block_stack.open(self.manager.allocator);
 
         const loop_start = self.function.chunk.code.items.len;
@@ -980,9 +981,9 @@ const Compiler = struct {
         try self.patchJump(exit_jump);
         // If false
         self.writeOp(.pop);
-        // If the condition was an extractor, the variable tested against `null` is still on
-        // top of stack so we have to remove it (see `extractor` function)
-        if (is_extractor) self.writeOp(.pop);
+        // If the condition was null pattern, the variable tested against `null` is still on
+        // top of stack so we have to remove it
+        if (is_null_pat) self.writeOp(.pop);
 
         for (self.block_stack.close().items) |b| {
             try self.patchJump(b);

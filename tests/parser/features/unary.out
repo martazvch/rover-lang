@@ -53,8 +53,10 @@
         "op": "not",
         "expr": {
             "if": {
-                "condition": {
-                    "literal": "true"
+                "pattern: value": {
+                    "expr": {
+                        "literal": "true"
+                    }
                 },
                 "then": {
                     "literal": "yes"

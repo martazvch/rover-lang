@@ -12,10 +12,9 @@
         "arms": [
             {
                 "type": "int",
-                "alias": "i",
                 "body": {
                     "print": {
-                        "literal": "i"
+                        "literal": "v"
                     }
                 }
             },

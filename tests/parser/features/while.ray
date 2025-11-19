@@ -3,3 +3,4 @@ while {true} {
     var tmp = 1+5
 }
 
+while let a = nullable { }

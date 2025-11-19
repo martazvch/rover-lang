@@ -751,11 +751,8 @@ fn structureFields(self: *Self, fields: []const Ast.VarDecl, ty: *Type.Structure
 }
 
 fn whileStmt(self: *Self, node: *const Ast.While, ctx: *Context) StmtResult {
-    const span = self.ast.getSpan(node.condition);
-    const cond_res = if (node.alias) |alias|
-        try self.aliasOptional(node.condition, alias, ctx)
-    else
-        try self.analyzeExpr(node.condition, .value, ctx);
+    const span = self.ast.getSpan(node.pattern);
+    const cond_res = try self.pattern(node.pattern, ctx);
 
     if (!cond_res.type.is(.bool)) return self.err(
         .{ .non_bool_cond = .{ .what = "while", .found = self.typeName(cond_res.type) } },
@@ -789,6 +786,7 @@ fn analyzeExpr(self: *Self, expr: *const Expr, expect: ExprResKind, ctx: *Contex
         .@"if" => |*e| self.ifExpr(e, expect, ctx),
         .literal => |*e| self.literal(e, ctx),
         .match => |*e| self.match(e, expect, ctx),
+        .pattern => |e| self.pattern(e, ctx),
         .@"return" => |*e| self.returnExpr(e, ctx),
         .struct_literal => |*e| self.structLiteral(e, ctx),
         .unary => |*e| self.unary(e, ctx),
@@ -1212,25 +1210,6 @@ fn closure(self: *Self, expr: *const Ast.FnDecl, ctx: *Context) Result {
     };
 }
 
-fn aliasOptional(self: *Self, expr: *const Ast.Expr, alias: Ast.TokenIndex, ctx: *Context) Result {
-    const span = self.ast.getSpan(expr);
-    const expr_ty = try self.analyzeExpr(expr, .value, ctx);
-
-    const ty = expr_ty.type.as(.optional) orelse return self.err(
-        .{ .cond_alias_non_optional = .{ .found = self.typeName(expr_ty.type) } },
-        span,
-    );
-
-    // TODO: be sure that it's in the correct scope
-    const binding = try self.internIfNotInCurrentScope(alias);
-    _ = try self.forwardDeclareVariable(binding, ty, false, self.ast.getSpan(alias));
-
-    return .{
-        .type = self.ti.cache.bool,
-        .instr = self.irb.addInstr(.{ .extractor = expr_ty.instr }, span.start),
-    };
-}
-
 fn enumLit(self: *Self, tag: Ast.TokenIndex, ctx: *Context) Result {
     const span = self.ast.getSpan(tag);
     const decl = ctx.decl_type orelse return self.err(.enum_lit_no_type, span);
@@ -1650,13 +1629,9 @@ fn builtinSymbol(self: *Self, name: InternerIdx, span: Span) ?struct { sym: *Lex
 //  var a = if true do 4 else null // results in a ?int
 // When the branches are scopes, types are checked by the block expression
 fn ifExpr(self: *Self, expr: *const Ast.If, expect: ExprResKind, ctx: *Context) Result {
-    const span = self.ast.getSpan(expr.condition);
+    const span = self.ast.getSpan(expr.pattern);
 
-    const cond_res = if (expr.alias) |alias|
-        try self.aliasOptional(expr.condition, alias, ctx)
-    else
-        try self.analyzeExpr(expr.condition, .value, ctx);
-
+    const cond_res = try self.pattern(expr.pattern, ctx);
     var pure = cond_res.ti.comp_time;
 
     // We can continue to analyze if the condition isn't a bool
@@ -1844,14 +1819,14 @@ fn matchArms(
         defer ctx.decl_type = prev_decl_type;
 
         // TODO: error
-        const tag, const pattern = switch (arm.expr.*) {
+        const tag, const pat = switch (arm.expr.*) {
             .enum_lit => |e| .{ e, try self.enumLit(e, ctx) },
             .field => |*e| .{ e.field, try self.field(e, ctx) },
-            else => @panic("Should pattern match enums with either full name or enum lit"),
+            else => @panic("Should pat match enums with either full name or enum lit"),
         };
 
-        if (pattern.type != ty) return self.err(
-            .{ .match_arm_type_mismatch = .{ .expect = self.typeName(ty), .found = self.typeName(pattern.type) } },
+        if (pat.type != ty) return self.err(
+            .{ .match_arm_type_mismatch = .{ .expect = self.typeName(ty), .found = self.typeName(pat.type) } },
             arm_span,
         );
 
@@ -1876,7 +1851,7 @@ fn matchArms(
         };
 
         types.add(self.allocator, body.type) catch oom();
-        arms.appendAssumeCapacity(.{ .expr = pattern.instr, .body = body.instr });
+        arms.appendAssumeCapacity(.{ .expr = pat.instr, .body = body.instr });
     }
 
     return if (had_err) error.Err else .{ types.toOwned(), arms.toOwnedSlice(self.allocator) catch oom() };
@@ -1899,6 +1874,46 @@ fn matchValidation(self: *Self, proto: *const Type.Enum.Proto, span: Span) Error
         .{ .pattern_match_non_exhaustive = .{ .kind = "match", .missing = missing.toOwnedSlice(self.allocator) catch oom() } },
         span,
     );
+}
+
+const Pattern = struct {
+    bindings: []const struct { name: InternerIdx, type: *const Type },
+};
+
+fn pattern(self: *Self, pat: Ast.Pattern, ctx: *Context) Result {
+    switch (pat) {
+        .value => |v| {
+            const value_res = try self.analyzeExpr(v.expr, .value, ctx);
+            if (v.alias) |alias| {
+                const binding = try self.internIfNotInCurrentScope(alias);
+                _ = try self.forwardDeclareVariable(binding, value_res.type, false, self.ast.getSpan(alias));
+            }
+
+            return value_res;
+        },
+        .nullable => |v| {
+            return self.nullablePattern(v, ctx);
+        },
+    }
+}
+
+fn nullablePattern(self: *Self, pat: Ast.Pattern.Nullable, ctx: *Context) Result {
+    const span = self.ast.getSpan(pat.expr);
+    const expr_ty = try self.analyzeExpr(pat.expr, .value, ctx);
+
+    const ty = expr_ty.type.as(.optional) orelse return self.err(
+        .{ .pat_null_non_optional = .{ .found = self.typeName(expr_ty.type) } },
+        span,
+    );
+
+    // TODO: be sure that it's in the correct scope
+    const binding = try self.internIfNotInCurrentScope(pat.binding);
+    _ = try self.forwardDeclareVariable(binding, ty, false, self.ast.getSpan(pat.binding));
+
+    return .{
+        .type = self.ti.cache.bool,
+        .instr = self.irb.addInstr(.{ .pat_nullable = expr_ty.instr }, span.start),
+    };
 }
 
 fn structLiteral(self: *Self, expr: *const Ast.StructLiteral, ctx: *Context) Result {
@@ -2075,7 +2090,7 @@ fn whenArms(
         defer _ = self.scope.close();
 
         alias: {
-            const alias = arm.alias orelse glob_alias orelse break :alias;
+            const alias = glob_alias orelse break :alias;
             const binding = try self.internIfNotInCurrentScope(alias);
             _ = try self.declareVariable(binding, resolved_ty, false, true, true, false, null, self.ast.getSpan(alias));
         }

@@ -1,5 +1,5 @@
-when getValue() as v {
-    int as i => print i
+when getValue() @v {
+    int => print v
     float => {
         print "im a float"
     }

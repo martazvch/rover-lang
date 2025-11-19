@@ -79,7 +79,6 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .discard => |index| self.indexInstr("Discard", index),
         .enum_create => |data| self.enumCreate(data),
         .enum_decl => |*data| self.enumDecl(data),
-        .extractor => |index| self.indexInstr("Extractor", index),
         .field => |data| self.getField(data, false),
         .float => |data| self.floatInstr(data),
         .fn_decl => |*data| self.fnDeclaration(data),
@@ -92,6 +91,7 @@ fn parseInstr(self: *Self, instr: ir.Index) void {
         .match => |*data| self.match(data),
         .multiple_var_decl => |*data| self.multipleVarDecl(data),
         .null => self.indentAndAppendSlice("[Null]"),
+        .pat_nullable => |index| self.indexInstr("Nullable pattern", index),
         .pop => |index| self.indexInstr("Pop", index),
         .print => |index| self.indexInstr("Print", index),
         .@"return" => |*data| self.returnInstr(data),
@@ -205,13 +205,6 @@ fn breakInstr(self: *Self, data: Instruction.Break) void {
 
 fn discard(self: *Self) void {
     self.indentAndAppendSlice("[Discard]");
-    self.indent_level += 1;
-    defer self.indent_level -= 1;
-    self.parseInstr();
-}
-
-fn extractor(self: *Self) void {
-    self.indentAndAppendSlice("[Extractor]");
     self.indent_level += 1;
     defer self.indent_level -= 1;
     self.parseInstr();

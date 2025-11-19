@@ -18,13 +18,9 @@
         [Variable index: 0, scope: local]
     - arms:
     [Types id: 10]
-        [Field access 1]
-            [Variable index: 1, scope: local]
-        [Invoke symbol 1]
+        [Block pop count: 0, is_expr: false]
     [Types id: 12]
-        [Field access 3]
-            [Variable index: 1, scope: local]
-        [Invoke symbol 3]
+        [Block pop count: 0, is_expr: false]
     [When]
     - expression:
         [Variable index: 0, scope: local]

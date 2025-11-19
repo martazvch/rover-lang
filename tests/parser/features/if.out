@@ -1,7 +1,9 @@
 {
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "block": [
@@ -12,8 +14,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "block": [
@@ -24,8 +28,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "block": [
@@ -41,8 +47,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "block": [
@@ -60,13 +68,15 @@
         },
     },
     "if": {
-        "condition": {
-            "block": [
-                "print": {
-                    "literal": "in cond"
-                },
-                "literal": "false"
-            ]
+        "pattern: value": {
+            "expr": {
+                "block": [
+                    "print": {
+                        "literal": "in cond"
+                    },
+                    "literal": "false"
+                ]
+            }
         },
         "then": {
             "block": [
@@ -77,8 +87,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "print": {
@@ -87,8 +99,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "print": {
@@ -102,8 +116,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "print": {
@@ -119,8 +135,10 @@
         },
     },
     "if": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "then": {
             "print": {
@@ -129,8 +147,10 @@
         },
         "else": {
             "if": {
-                "condition": {
-                    "literal": "true"
+                "pattern: value": {
+                    "expr": {
+                        "literal": "true"
+                    }
                 },
                 "then": {
                     "print": {
@@ -150,8 +170,10 @@
         "type": {},
         "value": {
             "if": {
-                "condition": {
-                    "literal": "true"
+                "pattern: value": {
+                    "expr": {
+                        "literal": "true"
+                    }
                 },
                 "then": {
                     "literal": "5"

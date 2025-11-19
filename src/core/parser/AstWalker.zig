@@ -180,7 +180,7 @@ fn captureFromNode(self: *Self, node: *Ast.Node, ctx: *CaptureCtx) void {
             ctx.declareLocal(self.allocator, interned, n);
         },
         .@"while" => |*n| {
-            self.captureFromExpr(n.condition, ctx);
+            self.captureFromPattern(n.pattern, ctx);
             for (n.body.nodes) |*subn| {
                 self.captureFromNode(subn, ctx);
             }
@@ -219,7 +219,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
         .field => |*e| self.captureFromExpr(e.structure, ctx),
         .grouping => |e| self.captureFromExpr(e.expr, ctx),
         .@"if" => |*e| {
-            self.captureFromExpr(e.condition, ctx);
+            self.captureFromPattern(e.pattern, ctx);
             self.captureFromNode(&e.then, ctx);
             if (e.@"else") |*n| self.captureFromNode(n, ctx);
         },
@@ -235,6 +235,7 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
                 self.captureFromNode(&arm.body, ctx);
             }
         },
+        .pattern => |e| self.captureFromPattern(e, ctx),
         .@"return" => |e| if (e.expr) |val| self.captureFromExpr(val, ctx),
         .struct_literal => |e| {
             self.captureFromExpr(e.structure, ctx);
@@ -248,6 +249,17 @@ fn captureFromExpr(self: *Self, expr: *Ast.Expr, ctx: *CaptureCtx) void {
             for (e.arms) |*arm| {
                 self.captureFromNode(&arm.body, ctx);
             }
+        },
+    }
+}
+
+fn captureFromPattern(self: *Self, pat: Ast.Pattern, ctx: *CaptureCtx) void {
+    switch (pat) {
+        .value => |v| {
+            self.captureFromExpr(v.expr, ctx);
+        },
+        .nullable => |v| {
+            self.captureFromExpr(v.expr, ctx);
         },
     }
 }

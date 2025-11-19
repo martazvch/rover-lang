@@ -98,6 +98,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
             }
 
             try self.renderFnDecls(n.functions);
+
             try self.closeKey(.block, comma);
         },
         .use => |n| {
@@ -134,7 +135,7 @@ fn renderNode(self: *Self, node: *const Ast.Node, comma: bool) Error!void {
         },
         .@"while" => |*n| {
             try self.openKey("while", .block);
-            try self.renderSingleExpr("condition", n.condition, .block, true);
+            try self.pattern(n.pattern, true);
             try self.renderBlock(&n.body, false);
             try self.closeKey(.block, comma);
         },
@@ -341,7 +342,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
         },
         .@"if" => |e| {
             try self.openKey(@tagName(expr.*), .block);
-            try self.renderSingleExpr("condition", e.condition, .block, true);
+            try self.pattern(e.pattern, true);
             try self.renderSingleNode("then", &e.then, .block, true);
             if (e.@"else") |*data| {
                 try self.renderSingleNode("else", data, .block, comma);
@@ -371,6 +372,7 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
 
             try self.closeKey(.block, comma);
         },
+        .pattern => |n| try self.pattern(n, comma),
         .@"return" => |e| {
             if (e.expr) |data| {
                 try self.renderSingleExpr(@tagName(expr.*), data, .block, comma);
@@ -415,9 +417,6 @@ fn renderExpr(self: *Self, expr: *const Ast.Expr, comma: bool) Error!void {
             for (n.arms, 0..) |arm, i| {
                 try self.openAnonKey(.block);
                 try self.pushKeyValue("type", try self.renderType(arm.type), true);
-                if (arm.alias) |alias| {
-                    try self.pushKeyValue("alias", self.ast.toSource(alias), true);
-                }
                 try self.renderSingleNode("body", &arm.body, .block, false);
                 try self.closeKey(.block, i < n.arms.len - 1);
             }
@@ -453,6 +452,27 @@ fn renderBlock(self: *Self, block: *const Ast.Block, comma: bool) !void {
         }
         try self.closeKey(.list, comma);
     }
+}
+
+fn pattern(self: *Self, pat: Ast.Pattern, comma: bool) !void {
+    switch (pat) {
+        .value => |v| {
+            try self.openKey("pattern: value", .block);
+
+            try self.renderSingleExpr("expr", v.expr, .block, v.alias != null);
+            if (v.alias) |alias| {
+                try self.pushKeyValue("alias", self.ast.toSource(alias), false);
+            }
+        },
+        .nullable => |v| {
+            try self.openKey("pattern: nullable", .block);
+            try self.pushKeyValue("binding", self.ast.toSource(v.binding), true);
+            try self.renderSingleExpr("expr", v.expr, .block, true);
+            try self.pushKeyValue("constant", if (self.ast.token_tags[v.token] == .let) "true" else "false", false);
+        },
+    }
+
+    try self.closeKey(.block, comma);
 }
 
 const KeyTag = enum {

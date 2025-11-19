@@ -118,8 +118,7 @@ pub const VarDecl = struct {
 };
 
 pub const While = struct {
-    condition: *Expr,
-    alias: ?TokenIndex,
+    pattern: Pattern,
     body: Block,
 };
 
@@ -137,6 +136,7 @@ pub const Expr = union(enum) {
     @"if": If,
     literal: Literal,
     match: Match,
+    pattern: Pattern,
     @"return": Return,
     struct_literal: StructLiteral,
     unary: Unary,
@@ -193,7 +193,7 @@ pub const Grouping = struct {
 };
 
 pub const If = struct {
-    condition: *Expr,
+    pattern: Pattern,
     alias: ?TokenIndex,
     then: Node,
     @"else": ?Node,
@@ -234,6 +234,22 @@ pub const Match = struct {
     };
 };
 
+pub const Pattern = union(enum) {
+    value: Value,
+    nullable: Nullable,
+
+    pub const Value = struct {
+        expr: *Expr,
+        alias: ?TokenIndex,
+    };
+
+    pub const Nullable = struct {
+        token: TokenIndex,
+        binding: TokenIndex,
+        expr: *Expr,
+    };
+};
+
 pub const Unary = struct {
     op: TokenIndex,
     expr: *Expr,
@@ -247,7 +263,6 @@ pub const When = struct {
 
     pub const Arm = struct {
         type: *Type,
-        alias: ?TokenIndex,
         body: Node,
     };
 };
@@ -311,7 +326,7 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
             .start = self.token_spans[node.names[0]].start,
             .end = self.token_spans[node.names[node.names.len - 1]].end,
         },
-        While => self.getSpan(node.condition.*),
+        While => self.getSpan(node.pattern),
         Expr => switch (node) {
             inline else => |*e| self.getSpan(e.*),
         },
@@ -343,6 +358,16 @@ pub fn getSpan(self: *const Self, anynode: anytype) Span {
         Match => .{
             .start = self.token_spans[node.kw].start,
             .end = self.getSpan(node.expr).end,
+        },
+        Pattern => switch (node) {
+            .value => |e| if (e.alias) |alias|
+                .{ .start = self.getSpan(e.expr).start, .end = self.token_spans[alias].end }
+            else
+                self.getSpan(e.expr),
+            .nullable => |e| .{
+                .start = self.token_spans[e.token].start,
+                .end = self.getSpan(e.expr).end,
+            },
         },
         Return => self.token_spans[node.kw],
         StructLiteral => self.getSpan(node.structure),

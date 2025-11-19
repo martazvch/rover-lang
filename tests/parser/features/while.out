@@ -1,15 +1,19 @@
 {
     "while": {
-        "condition": {
-            "literal": "true"
+        "pattern: value": {
+            "expr": {
+                "literal": "true"
+            }
         },
         "block": []
     },
     "while": {
-        "condition": {
-            "block": [
-                "literal": "true"
-            ]
+        "pattern: value": {
+            "expr": {
+                "block": [
+                    "literal": "true"
+                ]
+            }
         },
         "block": [
             "var_decl": {
@@ -28,5 +32,15 @@
                 }
             }
         ]
+    },
+    "while": {
+        "pattern: nullable": {
+            "binding": "a",
+            "expr": {
+                "literal": "nullable"
+            },
+            "constant": "true"
+        },
+        "block": []
     }
 }

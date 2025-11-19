@@ -16,7 +16,7 @@ pub const AnalyzerMsg = union(enum) {
     call_method_on_type: struct { name: []const u8 },
     call_static_on_instance: struct { name: []const u8 },
     cant_infer_array_type,
-    cond_alias_non_optional: struct { found: []const u8 },
+    pat_null_non_optional: struct { found: []const u8 },
     dead_code,
     dot_type_on_non_mod: struct { found: []const u8 },
     duplicate_field: struct { name: []const u8 },
@@ -99,10 +99,7 @@ pub const AnalyzerMsg = union(enum) {
             .call_method_on_type => |e| writer.print("method '{s}' called on a type", .{e.name}),
             .call_static_on_instance => |e| writer.print("static function '{s}' called on an instance", .{e.name}),
             .cant_infer_array_type => writer.writeAll("can't infer array type with empty array and not declared type"),
-            .cond_alias_non_optional => |e| writer.print(
-                "can't alias non-optional types in 'if' and 'while' conditions, found '{s}'",
-                .{e.found},
-            ),
+            .pat_null_non_optional => |e| writer.print("can't use the 'if let' / 'if var' pattern on a non nullable type, found: '{s}", .{e.found}),
             .dead_code => writer.writeAll("unreachable code"),
             .dot_type_on_non_mod => |e| writer.print("can't use a non-module member as a type, found '{s}'", .{e.found}),
             .duplicate_field => |e| writer.print("field '{s}' is already present in structure literal", .{e.name}),
@@ -177,7 +174,7 @@ pub const AnalyzerMsg = union(enum) {
             .break_val_in_non_val_block => writer.writeAll("can't have this expression"),
             .call_method_on_type, .call_static_on_instance => writer.writeAll("wrong calling convention"),
             .cant_infer_array_type => writer.writeAll("empty arrays don't convey any type information"),
-            .cond_alias_non_optional => writer.writeAll("this isn't an optional"),
+            .pat_null_non_optional => writer.writeAll("this isn't a nullable type"),
             .dead_code => writer.writeAll("code after this expression can't be reached"),
             .dot_type_on_non_mod => writer.writeAll("this is not a module"),
             .duplicate_field, .duplicate_param => writer.writeAll("this one"),
@@ -253,7 +250,7 @@ pub const AnalyzerMsg = union(enum) {
                 \\signature like: 'var arr: []int = []' or initialize the array with at least one value (not possible every time).
                 \\Also, doing 'var arr: []int = []' is equivalent to 'var arr: []int'.
             ),
-            .cond_alias_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
+            .pat_null_non_optional => writer.writeAll("refer to value's defnintion to see its type or use a regular control flow"),
             .dead_code => writer.writeAll("remove unreachable code"),
             .dot_type_on_non_mod => writer.writeAll("check variable declaration to see it's type"),
             .duplicate_field => writer.writeAll("fields can be defined only once in structure literals"),

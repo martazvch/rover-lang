@@ -9,18 +9,18 @@ struct Point {
 fn main() {
     var a: Vec|Point = Point{}
 
-    when a as b {
+    when a {
+        Vec => {}
+        Point => {}
+    }
+
+    when a @b {
         Vec => b.foo()
         Point => b.bar()
     }
 
-    when a as b {
-        Vec as v => v.foo()
-        Point as p => p.bar()
-    }
-
-    var b = when a as b {
-        Vec as v => 1
-        Point as p => 2
+    var b = when a @b {
+        Vec => 1
+        Point => 2
     }
 }

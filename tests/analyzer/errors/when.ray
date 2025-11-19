@@ -5,26 +5,25 @@ struct Point {
     fn bar(self) { print "from Point" }
 }
 
-
 fn main() {
     var a: Vec|Point = Point{}
 
-    var b = when a as b {
+    var b = when a {
         Vec => 1
         Point => {}
     }
 
-    when a as b {
+    when a @b {
         Vec => b.foo()
     }
 
-    var b = when a as b {
+    var b = when a {
         Vec => 1
         int => 2
         Point => 3
     }
 
-    var c = when a as b {
+    var c = when a {
         Vec => 1
         Vec => 1
         Point => 2
